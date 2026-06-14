@@ -20,7 +20,6 @@ app.use(express.json());
 app.get('/health', healthCheck);
 
 // Error handler (must be last)
-app.errorHandler = errorHandler;
 app.use(errorHandler);
 
 async function start(): Promise<void> {

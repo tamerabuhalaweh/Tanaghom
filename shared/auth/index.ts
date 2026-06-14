@@ -3,7 +3,6 @@ import bcrypt from 'bcrypt';
 import { UnauthorizedError, ForbiddenError } from '../errors';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
 const BCRYPT_ROUNDS = 12;
 
 export interface JwtPayload {
@@ -22,7 +21,7 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+  return jwt.sign(payload as object, JWT_SECRET, { expiresIn: 86400 });
 }
 
 export function verifyToken(token: string): JwtPayload {

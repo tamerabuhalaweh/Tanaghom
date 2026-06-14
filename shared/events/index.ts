@@ -1,6 +1,6 @@
-type EventHandler<T = unknown> = (data: T) => void | Promise<void>;
+export type EventHandler<T = unknown> = (data: T) => void | Promise<void>;
 
-class EventBus {
+export class EventBus {
   private handlers = new Map<string, EventHandler[]>();
 
   on<T>(event: string, handler: EventHandler<T>): void {

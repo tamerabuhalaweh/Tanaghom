@@ -7,8 +7,9 @@ import {
   createCampaign,
   updateCampaign,
   transitionCampaign,
-} from '../service';
-import { validateCreateCampaign, validateUpdateCampaign, validateTransition } from '../validators';
+} from './service';
+import { validateCreateCampaign, validateUpdateCampaign, validateTransition } from './validators';
+import type { ContentState } from './types';
 
 export const campaignsRouter = Router();
 
@@ -23,9 +24,9 @@ campaignsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
     const payload = getPayload(req);
     const campaigns = await listCampaigns(
       payload.role,
-      req.query.requesterId as string,
-      req.query.status as string,
-      req.query.platform as string,
+      req.query.requesterId as string | undefined,
+      req.query.status as ContentState | undefined,
+      req.query.platform as string | undefined,
     );
     res.json(campaigns);
   } catch (err) {
@@ -36,7 +37,7 @@ campaignsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
 campaignsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const campaign = await getCampaign(payload.role, req.params.id);
+    const campaign = await getCampaign(payload.role, req.params.id as string);
     res.json(campaign);
   } catch (err) {
     next(err);
@@ -58,7 +59,7 @@ campaignsRouter.put('/:id', async (req: Request, res: Response, next: NextFuncti
   try {
     const payload = getPayload(req);
     const input = validateUpdateCampaign(req.body);
-    const campaign = await updateCampaign(payload.role, payload.sub, req.params.id, input);
+    const campaign = await updateCampaign(payload.role, payload.sub, req.params.id as string, input);
     res.json(campaign);
   } catch (err) {
     next(err);
@@ -72,7 +73,7 @@ campaignsRouter.post('/:id/transition', async (req: Request, res: Response, next
     const campaign = await transitionCampaign(
       payload.role,
       payload.sub,
-      req.params.id,
+      req.params.id as string,
       input.toState,
       input.reason,
     );

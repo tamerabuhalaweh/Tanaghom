@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
-import { generateDrafts, reviseDraft } from '../service';
-import { validateGenerateDraft, validateReviseDraft } from '../validators';
+import { generateDrafts, reviseDraft } from './service';
+import { validateGenerateDraft, validateReviseDraft } from './validators';
 
 export const aiGenerationRouter = Router();
 

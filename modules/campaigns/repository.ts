@@ -20,7 +20,7 @@ export async function listCampaigns(
     orderBy: { created_at: 'desc' },
   });
 
-  return campaigns.map(mapCampaign);
+  return campaigns.map((c) => mapCampaign(c));
 }
 
 export async function getCampaignById(id: string): Promise<CampaignSummary> {
@@ -39,7 +39,6 @@ export async function createCampaign(
   channel: string,
   input: CreateCampaignInput,
 ): Promise<CampaignSummary> {
-  // Validate department exists
   const dept = await prisma.department.findUnique({ where: { id: input.ownerDepartmentId } });
   if (!dept) throw new ValidationError('Department not found', { ownerDepartmentId: `Department ${input.ownerDepartmentId} does not exist` });
 
@@ -70,7 +69,6 @@ export async function updateCampaign(id: string, input: UpdateCampaignInput): Pr
   const existing = await prisma.contentRequest.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError('Campaign', id);
 
-  // Validate department exists if being changed
   if (input.ownerDepartmentId !== undefined) {
     const dept = await prisma.department.findUnique({ where: { id: input.ownerDepartmentId } });
     if (!dept) throw new ValidationError('Department not found', { ownerDepartmentId: `Department ${input.ownerDepartmentId} does not exist` });
@@ -110,49 +108,27 @@ export async function updateCampaignStatus(id: string, toState: ContentState): P
   return mapCampaign(campaign);
 }
 
-// ============================================================
-// Mapper
-// ============================================================
-
-interface CampaignWithRequester {
-  id: string;
-  requester_id: string;
-  requester: { name: string } | null;
-  channel: string;
-  raw_message: string;
-  objective: string;
-  audience: string | null;
-  target_platforms: string[];
-  deadline: Date | null;
-  cta: string | null;
-  media_refs: { requirements?: string } | null;
-  owner_department_id: string | null;
-  content_type: string;
-  risk_category: string;
-  status: string;
-  created_at: Date;
-  updated_at: Date;
-}
-
-function mapCampaign(c: CampaignWithRequester): CampaignSummary {
+function mapCampaign(c: Record<string, unknown>): CampaignSummary {
+  const requester = c.requester as { name: string } | null;
+  const mediaRefs = c.media_refs as { requirements?: string } | null;
   return {
-    id: c.id,
-    requesterId: c.requester_id,
-    requesterName: c.requester?.name || null,
-    channel: c.channel,
-    topic: c.raw_message,
-    objective: c.objective,
-    audience: c.audience || '',
-    targetPlatforms: c.target_platforms,
-    deadline: c.deadline,
-    cta: c.cta,
-    mediaRequirements: c.media_refs?.requirements || null,
-    ownerDepartmentId: c.owner_department_id || '',
+    id: c.id as string,
+    requesterId: c.requester_id as string,
+    requesterName: requester?.name || null,
+    channel: c.channel as string,
+    topic: c.raw_message as string,
+    objective: c.objective as string,
+    audience: (c.audience as string) || '',
+    targetPlatforms: c.target_platforms as string[],
+    deadline: c.deadline as Date | null,
+    cta: c.cta as string | null,
+    mediaRequirements: mediaRefs?.requirements || null,
+    ownerDepartmentId: (c.owner_department_id as string) || '',
     ownerDepartmentName: null,
-    contentType: c.content_type,
-    riskCategory: c.risk_category,
-    status: c.status,
-    createdAt: c.created_at,
-    updatedAt: c.updated_at,
+    contentType: c.content_type as CampaignSummary['contentType'],
+    riskCategory: c.risk_category as CampaignSummary['riskCategory'],
+    status: c.status as CampaignSummary['status'],
+    createdAt: c.created_at as Date,
+    updatedAt: c.updated_at as Date,
   };
 }

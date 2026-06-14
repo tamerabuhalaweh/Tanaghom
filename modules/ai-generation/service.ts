@@ -18,6 +18,7 @@ import type {
   DraftMetadata,
   Platform,
   Tone,
+  DraftContentType,
 } from './types';
 import { PLATFORM_CONSTRAINTS } from './types';
 
