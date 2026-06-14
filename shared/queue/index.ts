@@ -32,15 +32,16 @@ export function checkRedisHealth(): Promise<boolean> {
 }
 
 export function createQueue(name: string): Queue {
-  return new Queue(name, { connection: getRedisConnection() });
+  return new Queue(name, { connection: getRedisConnection() as unknown as import('bullmq').ConnectionOptions });
 }
 
 export function createWorker(
   name: string,
   processor: (job: unknown) => Promise<unknown>,
 ): Worker {
-  return new Worker(name, processor, {
-    connection: getRedisConnection(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Worker(name, processor as any, {
+    connection: getRedisConnection() as unknown as import('bullmq').ConnectionOptions,
     concurrency: 5,
   });
 }

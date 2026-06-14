@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",
+    "bcrypt": "^6.0.0",
     "bullmq": "^5.25.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
@@ -43,6 +44,7 @@
   "devDependencies": {
     "@eslint/js": "^9.28.0",
     "@playwright/test": "^1.52.0",
+    "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.18",
     "@types/express": "^5.0.2",
     "@types/jsonwebtoken": "^9.0.9",

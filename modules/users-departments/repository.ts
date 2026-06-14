@@ -3,10 +3,6 @@ import { ConflictError, NotFoundError } from '@shared/errors';
 import { hashPassword } from '@shared/auth';
 import type { CreateUserInput, UpdateUserInput, CreateDepartmentInput, UpdateDepartmentInput, UserSummary, DepartmentSummary } from './types';
 
-// ============================================================
-// User Repository
-// ============================================================
-
 export async function listUsers(departmentId?: string, role?: string): Promise<UserSummary[]> {
   const where: Record<string, unknown> = {};
   if (departmentId) where.department_id = departmentId;
@@ -18,7 +14,7 @@ export async function listUsers(departmentId?: string, role?: string): Promise<U
     orderBy: { created_at: 'desc' },
   });
 
-  return users.map(mapUser);
+  return users.map((u) => mapUser(u));
 }
 
 export async function getUserById(id: string): Promise<UserSummary> {
@@ -66,16 +62,12 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
   return mapUser(user);
 }
 
-// ============================================================
-// Department Repository
-// ============================================================
-
 export async function listDepartments(): Promise<DepartmentSummary[]> {
   const departments = await prisma.department.findMany({
     include: { _count: { select: { users: true } } },
     orderBy: { name: 'asc' },
   });
-  return departments.map(mapDepartment);
+  return departments.map((d) => mapDepartment(d));
 }
 
 export async function getDepartmentById(id: string): Promise<DepartmentSummary> {
@@ -105,8 +97,6 @@ export async function updateDepartment(id: string, input: UpdateDepartmentInput)
   const data: Record<string, unknown> = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.description !== undefined) data.description = input.description;
-  if (input.primaryApproverId !== undefined) data.primary_approver_id = input.primaryApproverId;
-  if (input.backupApproverId !== undefined) data.backup_approver_id = input.backupApproverId;
 
   const dept = await prisma.department.update({
     where: { id },
@@ -116,52 +106,29 @@ export async function updateDepartment(id: string, input: UpdateDepartmentInput)
   return mapDepartment(dept);
 }
 
-// ============================================================
-// Mappers
-// ============================================================
-
-interface UserWithDepartment {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  department_id: string | null;
-  department: { name: string } | null;
-  is_active: boolean;
-  created_at: Date;
-}
-
-interface DepartmentWithCount {
-  id: string;
-  name: string;
-  description: string | null;
-  primary_approver_id: string | null;
-  backup_approver_id: string | null;
-  _count: { users: number };
-  created_at: Date;
-}
-
-function mapUser(user: UserWithDepartment): UserSummary {
+function mapUser(u: Record<string, unknown>): UserSummary {
+  const dept = u.department as { name: string } | null;
   return {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    departmentId: user.department_id,
-    departmentName: user.department?.name || null,
-    isActive: user.is_active,
-    createdAt: user.created_at,
+    id: u.id as string,
+    email: u.email as string,
+    name: u.name as string,
+    role: u.role as UserSummary['role'],
+    departmentId: u.department_id as string | null,
+    departmentName: dept?.name || null,
+    isActive: u.is_active as boolean,
+    createdAt: u.created_at as Date,
   };
 }
 
-function mapDepartment(dept: DepartmentWithCount): DepartmentSummary {
+function mapDepartment(d: Record<string, unknown>): DepartmentSummary {
+  const count = d._count as { users: number } | undefined;
   return {
-    id: dept.id,
-    name: dept.name,
-    description: dept.description,
-    primaryApproverId: dept.primary_approver_id,
-    backupApproverId: dept.backup_approver_id,
-    userCount: dept._count?.users || 0,
-    createdAt: dept.created_at,
+    id: d.id as string,
+    name: d.name as string,
+    description: d.description as string | null,
+    primaryApproverId: null,
+    backupApproverId: null,
+    userCount: count?.users || 0,
+    createdAt: d.created_at as Date,
   };
 }

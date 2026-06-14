@@ -1,5 +1,5 @@
 import { prisma } from '@shared/database';
-import type { SessionUser } from '../types';
+import type { SessionUser } from './types';
 
 export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({

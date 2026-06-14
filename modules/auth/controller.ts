@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { login, getSession } from '../service';
-import { validateLoginInput } from '../validators';
+import { login, getSession } from './service';
+import { validateLoginInput } from './validators';
 
 export const authRouter = Router();
 
