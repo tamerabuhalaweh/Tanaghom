@@ -72,10 +72,4 @@ npm run ci
 - [Sprint Plan](docs/sprints/)
 - [Architecture Decisions](docs/adr/)
 
-## Repository Rules
 
-- Read [CONTEXT.md](CONTEXT.md).
-- Follow [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md) for coding conventions
-- One module per sprint — never edit unrelated modules
-- Tests mandatory for every module
-- No secrets in source code or documentation
