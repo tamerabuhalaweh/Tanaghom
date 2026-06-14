@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { ForbiddenError } from '@shared/errors';
 import { validateCreateUser, validateUpdateUser, validateCreateDepartment, validateUpdateDepartment } from '../validators';
 import { ValidationError } from '@shared/errors';
 

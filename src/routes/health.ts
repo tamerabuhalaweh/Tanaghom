@@ -1,8 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { checkDatabaseHealth } from '@shared/database';
 import { checkRedisHealth } from '@shared/queue';
-import { logger } from '@shared/logging';
-import { AppError } from '@shared/errors';
 
 export async function healthCheck(_req: Request, res: Response): Promise<void> {
   const dbHealthy = await checkDatabaseHealth();

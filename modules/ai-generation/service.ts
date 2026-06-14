@@ -211,7 +211,7 @@ export async function reviseDraft(
   return {
     contentItemId: input.contentItemId,
     platform: item.platform as Platform,
-    contentType: item.content_type as any,
+    contentType: item.content_type as DraftContentType,
     draftText: revisedText,
     versionNo: newVersionNo,
     metadata: {
@@ -233,9 +233,20 @@ export async function reviseDraft(
 // Internal Helpers
 // ============================================================
 
+interface CampaignData {
+  id: string;
+  raw_message: string;
+  objective: string;
+  audience: string | null;
+  cta: string | null;
+  content_type: string;
+  risk_category: string;
+  target_platforms: string[];
+}
+
 async function generateSingleDraft(
   requesterId: string,
-  campaign: any,
+  campaign: CampaignData,
   platform: Platform,
   tone: Tone,
 ): Promise<DraftResult> {
@@ -272,7 +283,7 @@ async function generateSingleDraft(
   return result;
 }
 
-function buildGenerationPrompt(campaign: any, platform: Platform, maxLength: number, tone: Tone): string {
+function buildGenerationPrompt(campaign: CampaignData, platform: Platform, maxLength: number, tone: Tone): string {
   const constraints = PLATFORM_CONSTRAINTS[platform];
   return `You are a social media content writer for SmartLabs, a health-tech company.
 
@@ -328,7 +339,7 @@ Revise the draft based on the feedback while maintaining brand voice and platfor
 Output the revised draft text only.`;
 }
 
-function buildMetadata(campaign: any, platform: Platform, tone: Tone): DraftMetadata {
+function buildMetadata(campaign: CampaignData, platform: Platform, tone: Tone): DraftMetadata {
   return {
     objective: campaign.objective,
     audience: campaign.audience || 'General health-conscious audience',
@@ -341,7 +352,7 @@ function buildMetadata(campaign: any, platform: Platform, tone: Tone): DraftMeta
   };
 }
 
-function generateHashtags(platform: Platform, contentType: string): string[] {
+function generateHashtags(platform: Platform, _contentType: string): string[] {
   const base = ['#SmartLabs', '#HealthTech', '#Wellness'];
   const platformSpecific: Record<Platform, string[]> = {
     linkedin: ['#Healthcare', '#Diagnostics', '#B2B'],
@@ -362,7 +373,7 @@ function generateMediaSuggestions(platform: Platform, format: string): string[] 
   return ['Native image with brand colors', 'Text overlay with key stat or CTA'];
 }
 
-function assessRisk(campaign: any): string {
+function assessRisk(campaign: CampaignData): string {
   const risks: string[] = [];
   if (campaign.risk_category === 'high') risks.push('High-risk content — requires compliance review');
   if (campaign.content_type === 'announcement') risks.push('Announcement — verify claims before publishing');

@@ -34,7 +34,8 @@ describe('campaigns/validators', () => {
     });
 
     it('rejects missing topic', () => {
-      const { topic, ...noTopic } = validCreate;
+      const noTopic = { ...validCreate };
+      delete (noTopic as Record<string, unknown>).topic;
       expect(() => validateCreateCampaign(noTopic)).toThrow(ValidationError);
     });
 

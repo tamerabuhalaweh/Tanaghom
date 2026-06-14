@@ -7,7 +7,7 @@ export async function listCampaigns(
   status?: ContentState,
   platform?: string,
 ): Promise<CampaignSummary[]> {
-  const where: any = {};
+  const where: Record<string, unknown> = {};
   if (requesterId) where.requester_id = requesterId;
   if (status) where.status = status;
   if (platform) where.target_platforms = { has: platform };
@@ -76,7 +76,7 @@ export async function updateCampaign(id: string, input: UpdateCampaignInput): Pr
     if (!dept) throw new ValidationError('Department not found', { ownerDepartmentId: `Department ${input.ownerDepartmentId} does not exist` });
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   if (input.topic !== undefined) data.raw_message = input.topic;
   if (input.objective !== undefined) data.objective = input.objective;
   if (input.audience !== undefined) data.audience = input.audience;
@@ -114,7 +114,27 @@ export async function updateCampaignStatus(id: string, toState: ContentState): P
 // Mapper
 // ============================================================
 
-function mapCampaign(c: any): CampaignSummary {
+interface CampaignWithRequester {
+  id: string;
+  requester_id: string;
+  requester: { name: string } | null;
+  channel: string;
+  raw_message: string;
+  objective: string;
+  audience: string | null;
+  target_platforms: string[];
+  deadline: Date | null;
+  cta: string | null;
+  media_refs: { requirements?: string } | null;
+  owner_department_id: string | null;
+  content_type: string;
+  risk_category: string;
+  status: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function mapCampaign(c: CampaignWithRequester): CampaignSummary {
   return {
     id: c.id,
     requesterId: c.requester_id,

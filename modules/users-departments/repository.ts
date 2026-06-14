@@ -8,7 +8,7 @@ import type { CreateUserInput, UpdateUserInput, CreateDepartmentInput, UpdateDep
 // ============================================================
 
 export async function listUsers(departmentId?: string, role?: string): Promise<UserSummary[]> {
-  const where: any = {};
+  const where: Record<string, unknown> = {};
   if (departmentId) where.department_id = departmentId;
   if (role) where.role = role;
 
@@ -52,7 +52,7 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError('User', id);
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.role !== undefined) data.role = input.role;
   if (input.departmentId !== undefined) data.department_id = input.departmentId;
@@ -102,7 +102,7 @@ export async function updateDepartment(id: string, input: UpdateDepartmentInput)
   const existing = await prisma.department.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError('Department', id);
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.description !== undefined) data.description = input.description;
   if (input.primaryApproverId !== undefined) data.primary_approver_id = input.primaryApproverId;
@@ -120,7 +120,28 @@ export async function updateDepartment(id: string, input: UpdateDepartmentInput)
 // Mappers
 // ============================================================
 
-function mapUser(user: any): UserSummary {
+interface UserWithDepartment {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  department_id: string | null;
+  department: { name: string } | null;
+  is_active: boolean;
+  created_at: Date;
+}
+
+interface DepartmentWithCount {
+  id: string;
+  name: string;
+  description: string | null;
+  primary_approver_id: string | null;
+  backup_approver_id: string | null;
+  _count: { users: number };
+  created_at: Date;
+}
+
+function mapUser(user: UserWithDepartment): UserSummary {
   return {
     id: user.id,
     email: user.email,
@@ -133,7 +154,7 @@ function mapUser(user: any): UserSummary {
   };
 }
 
-function mapDepartment(dept: any): DepartmentSummary {
+function mapDepartment(dept: DepartmentWithCount): DepartmentSummary {
   return {
     id: dept.id,
     name: dept.name,

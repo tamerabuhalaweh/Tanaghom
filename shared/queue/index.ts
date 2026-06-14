@@ -1,4 +1,4 @@
-import { Queue, Worker, QueueEvents } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { logger } from '../logging';
 
@@ -37,7 +37,7 @@ export function createQueue(name: string): Queue {
 
 export function createWorker(
   name: string,
-  processor: (job: any) => Promise<any>,
+  processor: (job: unknown) => Promise<unknown>,
 ): Worker {
   return new Worker(name, processor, {
     connection: getRedisConnection(),

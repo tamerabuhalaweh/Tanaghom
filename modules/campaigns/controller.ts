@@ -24,7 +24,7 @@ campaignsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
     const campaigns = await listCampaigns(
       payload.role,
       req.query.requesterId as string,
-      req.query.status as any,
+      req.query.status as string,
       req.query.platform as string,
     );
     res.json(campaigns);

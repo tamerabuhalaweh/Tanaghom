@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { PLATFORM_CONSTRAINTS } from '../types';
-import type { Platform } from '../types';
 
 describe('Platform Adaptation', () => {
   it('all 7 platforms have constraints defined', () => {

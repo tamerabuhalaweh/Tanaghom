@@ -43,11 +43,11 @@ function deterministicHash(text: string, seed: number): number {
 }
 
 export class MockLLMProvider implements LLMProvider {
-  async generateText(prompt: string, options?: LLMOptions): Promise<string> {
+  async generateText(prompt: string, _options?: LLMOptions): Promise<string> {
     return `[MOCK] Generated text for prompt: ${prompt.substring(0, 50)}...`;
   }
 
-  async generateStructured<T>(prompt: string, schema: Record<string, unknown>): Promise<T> {
+  async generateStructured<T>(_prompt: string, _schema: Record<string, unknown>): Promise<T> {
     return {} as T;
   }
 
@@ -77,7 +77,7 @@ export class MockPostizProvider implements PostizProvider {
     };
   }
 
-  async schedulePost(postId: string, scheduledAt: Date, timezone: string): Promise<ScheduleResult> {
+  async schedulePost(postId: string, scheduledAt: Date, _timezone: string): Promise<ScheduleResult> {
     return {
       success: true,
       postId,
@@ -139,7 +139,7 @@ export class MockMessagingProvider implements MessagingProvider {
     this.sentApprovals.push({ channel, request });
   }
 
-  onMessage(channel: string, handler: MessageHandler): void {
+  onMessage(_channel: string, _handler: MessageHandler): void {
     // No-op in mock
   }
 }
@@ -164,11 +164,11 @@ export class MockCRMProvider implements CRMProvider {
     };
   }
 
-  async tagContact(contactId: string, tags: string[]): Promise<void> {
+  async tagContact(_contactId: string, _tags: string[]): Promise<void> {
     // No-op in mock
   }
 
-  async routeToWhatsApp(leadId: string, message: string): Promise<void> {
+  async routeToWhatsApp(_leadId: string, _message: string): Promise<void> {
     // No-op in mock
   }
 }

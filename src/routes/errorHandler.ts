@@ -1,8 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
-import { AppError } from '@shared/errors';
+import { Request, Response } from 'express';
+import { AppError, ValidationError } from '@shared/errors';
 import { logger } from '@shared/logging';
 
-export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
+export function errorHandler(err: Error, _req: Request, res: Response, _next: unknown): void {
   if (err instanceof AppError) {
     logger.warn(
       { statusCode: err.statusCode, code: err.code, message: err.message },
@@ -26,6 +26,3 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     },
   });
 }
-
-// Re-export for convenience
-import { ValidationError } from '@shared/errors';

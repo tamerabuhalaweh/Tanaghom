@@ -91,8 +91,6 @@ export async function updateCampaign(
 ): Promise<CampaignSummary> {
   checkPermission(requesterRole, 'campaigns:update');
 
-  const existing = await repo.getCampaignById(id);
-
   const campaign = await repo.updateCampaign(id, input);
 
   auditLog(
