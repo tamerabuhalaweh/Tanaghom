@@ -1,0 +1,352 @@
+// Prisma Schema — Tanaghum AI Commercial Automation Platform
+//
+// PROVISIONAL DRAFT — This schema is a foundation draft based on DATA_MODEL.md.
+// It is expected to evolve sprint by sprint as business modules are implemented.
+// Each sprint will add, modify, or refine models and enums as needed.
+// Do NOT treat this schema as final until all sprints are complete.
+//
+// Current status: Sprint 0B — foundational schema, no business logic implemented yet.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Auth & Users
+// ============================================================
+
+enum Role {
+  admin
+  cco
+  department_head
+  specialist
+  reviewer
+  viewer
+}
+
+model Department {
+  id                  String   @id @default(uuid()) @db.Uuid
+  name                String   @unique
+  description         String?
+  primary_approver_id String?  @db.Uuid
+  backup_approver_id  String?  @db.Uuid
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  primary_approver User? @relation("PrimaryApprover", fields: [primary_approver_id], references: [id])
+  backup_approver  User? @relation("BackupApprover", fields: [backup_approver_id], references: [id])
+  users            User[]
+
+  @@map("departments")
+}
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  name          String
+  password_hash String
+  department_id String?  @db.Uuid
+  role          Role     @default(reviewer)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  department         Department?         @relation(fields: [department_id], references: [id])
+  content_requests   ContentRequest[]    @relation("Requester")
+  approval_events    ApprovalEvent[]     @relation("Reviewer")
+
+  @@map("users")
+}
+
+// ============================================================
+// Content & Campaigns
+// ============================================================
+
+enum ContentType {
+  campaign
+  announcement
+  thought_leadership
+  product_update
+  hiring
+  event
+  evergreen
+  reactive
+}
+
+enum RiskCategory {
+  low
+  medium
+  high
+}
+
+enum ContentState {
+  idea
+  drafting
+  pending_review
+  needs_edits
+  approved
+  scheduled
+  published
+  analytics_pending
+  analyzed
+  archived
+  recycle_candidate
+  failed
+  expired
+  rejected
+  cancelled
+}
+
+model ContentRequest {
+  id                 String        @id @default(uuid()) @db.Uuid
+  requester_id       String        @db.Uuid
+  channel            String
+  raw_message        String        @db.Text
+  objective          String
+  audience           String?
+  campaign_id        String?       @db.Uuid
+  owner_department_id String?      @db.Uuid
+  content_type       ContentType   @default(campaign)
+  risk_category      RiskCategory  @default(low)
+  target_platforms   String[]
+  deadline           DateTime?
+  cta                String?
+  media_refs         Json?
+  status             ContentState  @default(idea)
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+
+  requester     User           @relation(fields: [requester_id], references: [id])
+  content_items ContentItem[]
+
+  @@map("content_requests")
+}
+
+model ContentItem {
+  id               String       @id @default(uuid()) @db.Uuid
+  request_id       String       @db.Uuid
+  platform         String
+  content_type     String       @default("post")
+  draft_text       String       @db.Text
+  media_refs       Json?
+  risk_score       Int          @default(0)
+  risk_reason      String?
+  reach_score      Int          @default(0)
+  reach_breakdown  Json?
+  status           ContentState @default(drafting)
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+
+  request          ContentRequest   @relation(fields: [request_id], references: [id])
+  draft_versions   DraftVersion[]
+  approval_events  ApprovalEvent[]
+  schedule_events  ScheduleEvent[]
+
+  @@map("content_items")
+}
+
+model DraftVersion {
+  id              String   @id @default(uuid()) @db.Uuid
+  content_item_id String   @db.Uuid
+  version_no      Int
+  text            String   @db.Text
+  model_used      String?
+  prompt_hash     String?
+  created_at      DateTime @default(now())
+
+  content_item ContentItem @relation(fields: [content_item_id], references: [id])
+
+  @@map("draft_versions")
+}
+
+// ============================================================
+// Approvals
+// ============================================================
+
+enum ApprovalDecision {
+  approved
+  rejected
+  needs_changes
+}
+
+model ApprovalEvent {
+  id              String           @id @default(uuid()) @db.Uuid
+  content_item_id String           @db.Uuid
+  reviewer_id     String           @db.Uuid
+  department      String
+  decision        ApprovalDecision
+  comments        String?
+  timestamp       DateTime         @default(now())
+
+  content_item ContentItem @relation(fields: [content_item_id], references: [id])
+  reviewer     User        @relation(fields: [reviewer_id], references: [id])
+
+  @@map("approval_events")
+}
+
+// ============================================================
+// Publishing
+// ============================================================
+
+enum ScheduleStatus {
+  pending
+  scheduled
+  published
+  failed
+  cancelled
+}
+
+model ScheduleEvent {
+  id              String         @id @default(uuid()) @db.Uuid
+  content_item_id String         @db.Uuid
+  postiz_post_id  String?
+  integration_id  String?
+  scheduled_at    DateTime
+  timezone        String         @default("UTC")
+  status          ScheduleStatus @default(pending)
+  retry_count     Int            @default(0)
+  last_error      String?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  content_item ContentItem @relation(fields: [content_item_id], references: [id])
+
+  @@map("schedule_events")
+}
+
+// ============================================================
+// Analytics
+// ============================================================
+
+enum MetricWindow {
+  h48
+  d7
+  d30
+}
+
+model AnalyticsSnapshot {
+  id              String       @id @default(uuid()) @db.Uuid
+  postiz_post_id  String
+  platform        String
+  collected_at    DateTime     @default(now())
+  metric_name     String
+  metric_value    Float
+  metric_window   MetricWindow
+
+  @@map("analytics_snapshots")
+}
+
+// ============================================================
+// Learning
+// ============================================================
+
+enum InsightType {
+  content_type
+  hook
+  cta
+  timing
+  format
+  topic
+}
+
+enum Confidence {
+  low
+  medium
+  high
+}
+
+model LearningInsight {
+  id                String      @id @default(uuid()) @db.Uuid
+  platform          String
+  insight_type      InsightType
+  evidence_summary  String      @db.Text
+  confidence        Confidence  @default(low)
+  recommendation    String      @db.Text
+  created_at        DateTime    @default(now())
+
+  @@map("learning_insights")
+}
+
+// ============================================================
+// Platform Rules
+// ============================================================
+
+enum SourceType {
+  official_docs
+  official_policy
+  internal_benchmark
+  team_decision
+}
+
+model PlatformRule {
+  id               String     @id @default(uuid()) @db.Uuid
+  platform         String
+  rule_type        String
+  rule_value       String     @db.Text
+  source_url       String?
+  source_type      SourceType @default(team_decision)
+  confidence       Confidence @default(low)
+  owner            String?
+  last_reviewed_at DateTime?
+  next_review_at   DateTime?
+  agent_instruction String?   @db.Text
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+
+  @@map("platform_rules")
+}
+
+// ============================================================
+// Audit
+// ============================================================
+
+model AuditLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  actor           String
+  action          String
+  object_type     String
+  object_id       String?  @db.Uuid
+  input_hash      String?
+  output_hash     String?
+  result          String?
+  policy_decision String?
+  timestamp       DateTime @default(now())
+
+  @@index([actor])
+  @@index([action])
+  @@index([object_type, object_id])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// Algorithm Intelligence
+// ============================================================
+
+enum RuleSource {
+  official_docs
+  third_party_research
+  internal_analytics
+}
+
+model ReachOptimizationRule {
+  id               String     @id @default(uuid()) @db.Uuid
+  platform         String
+  rule_type        String
+  rule_value       String     @db.Text
+  source_url       String?
+  source_type      RuleSource @default(official_docs)
+  confidence       Confidence @default(low)
+  owner            String?
+  last_reviewed_at DateTime?
+  next_review_at   DateTime?
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+
+  @@map("reach_optimization_rules")
+}

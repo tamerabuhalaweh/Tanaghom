@@ -1,0 +1,609 @@
+openapi: 3.1.0
+info:
+  title: Tanaghum AI Commercial Automation Platform API
+  version: 0.1.0
+  description: REST API for campaign management, content generation, approval workflow, publishing, analytics, and administration.
+  contact:
+    name: Tanaghum Engineering
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+tags:
+  - name: auth
+    description: Authentication and session management
+  - name: users
+    description: User management
+  - name: departments
+    description: Department management
+  - name: campaigns
+    description: Campaign requests and content items
+  - name: drafts
+    description: Draft generation and versioning
+  - name: approvals
+    description: Approval workflow
+  - name: publishing
+    description: Post scheduling and publishing
+  - name: analytics
+    description: Post and platform analytics
+  - name: learning
+    description: Learning insights
+  - name: admin
+    description: Administration and configuration
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Authenticate user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Invalidate session
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Logged out
+
+  /auth/session:
+    get:
+      tags: [auth]
+      summary: Get current session
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current session info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /users:
+    get:
+      tags: [users]
+      summary: List users
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: role
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /departments:
+    get:
+      tags: [departments]
+      summary: List departments
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Department list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Department'
+
+  /campaigns:
+    get:
+      tags: [campaigns]
+      summary: List campaign requests
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [idea, drafting, pending_review, needs_edits, approved, scheduled, published, analytics_pending, analyzed, archived, recycle_candidate, failed, expired, rejected, cancelled]
+        - name: platform
+          in: query
+          schema:
+            type: string
+        - name: requesterId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campaign list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignSummary'
+    post:
+      tags: [campaigns]
+      summary: Create campaign request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+      responses:
+        '201':
+          description: Campaign created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignSummary'
+
+  /campaigns/{id}:
+    get:
+      tags: [campaigns]
+      summary: Get campaign details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignSummary'
+    put:
+      tags: [campaigns]
+      summary: Update campaign request
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignRequest'
+      responses:
+        '200':
+          description: Campaign updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignSummary'
+
+  /campaigns/{id}/transition:
+    post:
+      tags: [campaigns]
+      summary: Transition campaign status
+      description: Change campaign status following the strict state machine. Only admin, cco, and department_head roles can transition.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toState]
+              properties:
+                toState:
+                  type: string
+                  enum: [idea, drafting, pending_review, needs_edits, approved, scheduled, published, analytics_pending, analyzed, archived, recycle_candidate, failed, expired, rejected, cancelled]
+                reason:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Campaign status changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignSummary'
+        '422':
+          description: Invalid state transition
+
+  /content-items/{id}/approve:
+    post:
+      tags: [approvals]
+      summary: Approve content item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+      responses:
+        '200':
+          description: Approval recorded
+
+  /content-items/{id}/reject:
+    post:
+      tags: [approvals]
+      summary: Reject content item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Rejection recorded
+
+  /content-items/{id}/request-changes:
+    post:
+      tags: [approvals]
+      summary: Request changes to content item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comments]
+              properties:
+                comments:
+                  type: string
+      responses:
+        '200':
+          description: Change request recorded
+
+  /analytics/posts/{postId}:
+    get:
+      tags: [analytics]
+      summary: Get post analytics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: window
+          in: query
+          schema:
+            type: string
+            enum: [48h, 7d, 30d]
+      responses:
+        '200':
+          description: Post analytics
+
+  /analytics/platforms/{platform}:
+    get:
+      tags: [analytics]
+      summary: Get platform analytics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+      responses:
+        '200':
+          description: Platform analytics
+
+  /learning/insights:
+    get:
+      tags: [learning]
+      summary: Get learning insights
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: platform
+          in: query
+          schema:
+            type: string
+        - name: confidence
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high]
+      responses:
+        '200':
+          description: Learning insights list
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        department_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [admin, marketing_owner, reviewer, analyst, agent_operator]
+        is_active:
+          type: boolean
+
+    Department:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        primary_approver_id:
+          type: string
+          format: uuid
+        backup_approver_id:
+          type: string
+          format: uuid
+
+    CampaignRequest:
+      type: object
+      required: [objective, target_platforms]
+      properties:
+        objective:
+          type: string
+        content_type:
+          type: string
+          enum: [campaign, announcement, thought_leadership, product_update, hiring, event, evergreen, reactive]
+        target_platforms:
+          type: array
+          items:
+            type: string
+        audience:
+          type: string
+        deadline:
+          type: string
+          format: date-time
+        cta:
+          type: string
+        media_refs:
+          type: array
+          items:
+            type: string
+
+    CreateCampaignRequest:
+      type: object
+      required: [topic, objective, audience, targetPlatforms, ownerDepartmentId, contentType, riskCategory]
+      properties:
+        topic:
+          type: string
+          maxLength: 500
+        objective:
+          type: string
+          maxLength: 2000
+        audience:
+          type: string
+          maxLength: 1000
+        targetPlatforms:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        deadline:
+          type: string
+          format: date-time
+        cta:
+          type: string
+          maxLength: 500
+        mediaRequirements:
+          type: string
+          maxLength: 2000
+        ownerDepartmentId:
+          type: string
+          format: uuid
+        contentType:
+          type: string
+          enum: [campaign, announcement, thought_leadership, product_update, hiring, event, evergreen, reactive]
+        riskCategory:
+          type: string
+          enum: [low, medium, high]
+
+    UpdateCampaignRequest:
+      type: object
+      properties:
+        topic:
+          type: string
+          maxLength: 500
+        objective:
+          type: string
+          maxLength: 2000
+        audience:
+          type: string
+          maxLength: 1000
+        targetPlatforms:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        deadline:
+          type: string
+          format: date-time
+          nullable: true
+        cta:
+          type: string
+          maxLength: 500
+          nullable: true
+        mediaRequirements:
+          type: string
+          maxLength: 2000
+          nullable: true
+        ownerDepartmentId:
+          type: string
+          format: uuid
+        contentType:
+          type: string
+          enum: [campaign, announcement, thought_leadership, product_update, hiring, event, evergreen, reactive]
+        riskCategory:
+          type: string
+          enum: [low, medium, high]
+
+    CampaignSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        requesterId:
+          type: string
+          format: uuid
+        requesterName:
+          type: string
+          nullable: true
+        channel:
+          type: string
+        topic:
+          type: string
+        objective:
+          type: string
+        audience:
+          type: string
+        targetPlatforms:
+          type: array
+          items:
+            type: string
+        deadline:
+          type: string
+          format: date-time
+          nullable: true
+        cta:
+          type: string
+          nullable: true
+        mediaRequirements:
+          type: string
+          nullable: true
+        ownerDepartmentId:
+          type: string
+          format: uuid
+        ownerDepartmentName:
+          type: string
+          nullable: true
+        contentType:
+          type: string
+          enum: [campaign, announcement, thought_leadership, product_update, hiring, event, evergreen, reactive]
+        riskCategory:
+          type: string
+          enum: [low, medium, high]
+        status:
+          type: string
+          enum: [idea, drafting, pending_review, needs_edits, approved, scheduled, published, analytics_pending, analyzed, archived, recycle_candidate, failed, expired, rejected, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
