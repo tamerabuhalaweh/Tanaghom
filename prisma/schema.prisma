@@ -33,14 +33,10 @@ model Department {
   id                  String   @id @default(uuid()) @db.Uuid
   name                String   @unique
   description         String?
-  primary_approver_id String?  @db.Uuid
-  backup_approver_id  String?  @db.Uuid
   created_at          DateTime @default(now())
   updated_at          DateTime @updatedAt
 
-  primary_approver User? @relation("PrimaryApprover", fields: [primary_approver_id], references: [id])
-  backup_approver  User? @relation("BackupApprover", fields: [backup_approver_id], references: [id])
-  users            User[]
+  users User[]
 
   @@map("departments")
 }
@@ -56,9 +52,9 @@ model User {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  department         Department?         @relation(fields: [department_id], references: [id])
-  content_requests   ContentRequest[]    @relation("Requester")
-  approval_events    ApprovalEvent[]     @relation("Reviewer")
+  department       Department?      @relation(fields: [department_id], references: [id])
+  content_requests ContentRequest[]
+  approval_events  ApprovalEvent[]
 
   @@map("users")
 }
