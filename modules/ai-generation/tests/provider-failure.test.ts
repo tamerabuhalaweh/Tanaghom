@@ -15,7 +15,21 @@ describe('Mock LLM Provider', () => {
     expect(result).toEqual({});
   });
 
-  it('returns random embeddings', async () => {
+  it('returns deterministic embeddings', async () => {
+    const llm = new MockLLMProvider();
+    const result1 = await llm.embeddings('test text');
+    const result2 = await llm.embeddings('test text');
+    expect(result1).toEqual(result2);
+  });
+
+  it('returns different embeddings for different inputs', async () => {
+    const llm = new MockLLMProvider();
+    const result1 = await llm.embeddings('hello');
+    const result2 = await llm.embeddings('world');
+    expect(result1).not.toEqual(result2);
+  });
+
+  it('returns 1536-dimensional embeddings', async () => {
     const llm = new MockLLMProvider();
     const result = await llm.embeddings('test text');
     expect(result).toHaveLength(1536);

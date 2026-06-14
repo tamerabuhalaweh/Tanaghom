@@ -34,6 +34,14 @@ import type {
 // MockLLMProvider
 // ============================================================
 
+function deterministicHash(text: string, seed: number): number {
+  let hash = seed;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
+
 export class MockLLMProvider implements LLMProvider {
   async generateText(prompt: string, options?: LLMOptions): Promise<string> {
     return `[MOCK] Generated text for prompt: ${prompt.substring(0, 50)}...`;
@@ -44,7 +52,12 @@ export class MockLLMProvider implements LLMProvider {
   }
 
   async embeddings(text: string): Promise<number[]> {
-    return Array(1536).fill(0).map(() => Math.random());
+    const result: number[] = [];
+    for (let i = 0; i < 1536; i++) {
+      const hash = deterministicHash(text, i);
+      result.push((hash % 10000) / 10000);
+    }
+    return result;
   }
 }
 
