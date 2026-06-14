@@ -1,6 +1,6 @@
 # Tanaghum AI Commercial Automation Platform
 
-Agent-assisted social media operations platform for SmartLabs. Plans, drafts, reviews, schedules, publishes, measures, and improves social content across selected channels with minimal manual coordination and strong human oversight.
+Agent-assisted social media operations platform . Plans, drafts, reviews, schedules, publishes, measures, and improves social content across selected channels with minimal manual coordination and strong human oversight.
 
 ## Tech Stack
 
