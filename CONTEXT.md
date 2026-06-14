@@ -4,33 +4,34 @@
 
 ## Current Sprint
 
-**Sprint**: 3 — AI Draft Generation
+**Sprint**: 4 — Algorithm Intelligence MCP
 **Status**: Complete (pending review)
-**Goal**: AI draft generation module with platform-specific drafts, versioning, mock LLM, brand voice, revision support.
+**Goal**: Reach Readiness Score calculation, platform-specific scoring, stale rule detection, spam detection, optimization suggestions.
 
 ## Active Module
 
-- `modules/ai-generation/` — draft generation, platform adaptation, revision support
+- `modules/algorithm-intelligence/` — scoring engine, platform rules, stale detection, spam detection
 
 ## Allowed Files
 
-- `modules/ai-generation/**` — ai-generation module implementation
-- `src/index.ts` — register ai-generation route
-- `docs/` — updates where Sprint 3 changes require
+- `modules/algorithm-intelligence/**` — algorithm-intelligence module implementation
+- `docs/api/openapi.yaml` — add algorithm endpoints
+- `docs/sprints/SPRINT-04-algorithm-intelligence.md` — sprint report
+- `modules/ai-generation/types.ts` — import PLATFORM_CONSTRAINTS (read-only)
 
 ## Locked Files
 
 - `modules/auth/` — stable
 - `modules/users-departments/` — stable
 - `modules/campaigns/` — stable
-- `modules/algorithm-intelligence/` — not yet
+- `modules/ai-generation/` — stable
 - `modules/approvals/` — not yet
 - `modules/publishing/` — not yet
 - `modules/analytics/` — not yet
 - `modules/learning-engine/` — not yet
 - `modules/crm-conversion/` — not yet
 - `modules/production-requests/` — not yet
-- No approval, algorithm scoring, publishing, analytics, learning, CRM, or production workflow
+- No approval, publishing, analytics, learning, CRM, or production workflow
 
 ## Sprint Acceptance Criteria
 

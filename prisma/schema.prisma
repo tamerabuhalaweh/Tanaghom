@@ -277,6 +277,8 @@ enum SourceType {
   official_policy
   internal_benchmark
   team_decision
+  third_party_research
+  internal_analytics
 }
 
 model PlatformRule {
