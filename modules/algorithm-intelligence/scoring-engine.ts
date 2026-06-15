@@ -14,6 +14,24 @@ import { PLATFORM_CONSTRAINTS } from '../ai-generation/types';
 import type { Platform } from '../ai-generation/types';
 
 // ============================================================
+// Medical Claim Terms (explicit block list)
+// ============================================================
+
+const MEDICAL_CLAIM_TERMS = [
+  'diagnose', 'diagnosis', 'diagnostic',
+  'treat', 'treatment', 'treating',
+  'cure', 'curing',
+  'miracle', 'miraculous',
+  'guarantee', 'guaranteed',
+  '100% effective',
+  'clinically proven',
+  'fda approved',
+  'eliminates',
+  'reverses',
+  'heals',
+];
+
+// ============================================================
 // Main Scoring Function
 // ============================================================
 
@@ -44,8 +62,8 @@ export function calculateReachScore(
   const spamFlags = detectSpamTactics(input);
   const totalScore = calculateTotalScore(components);
   const band = getScoringBand(totalScore);
-  const optimizationSuggestions = generateSuggestions(components, constraints);
-  const blockReasons = getBlockReasons(spamFlags, staleWarnings, band);
+  const optimizationSuggestions = generateSuggestions(components, constraints, rules);
+  const blockReasons = getBlockReasons(spamFlags, staleWarnings, band, input.draftText);
 
   return {
     contentItemId: input.contentItemId,
@@ -263,15 +281,15 @@ function scoreComplianceRisk(riskCategory: string, text: string): ScoreComponent
     explanations.push('Low-risk content');
   }
 
-  const medicalClaims = ['cure', 'treat', 'diagnose', 'guarantee', 'miracle', '100% effective'];
-  const hasMedicalClaim = medicalClaims.some((c) => text.toLowerCase().includes(c));
+  const lowerText = text.toLowerCase();
+  const hasMedicalClaim = MEDICAL_CLAIM_TERMS.some((c) => lowerText.includes(c));
   if (hasMedicalClaim) {
     score = Math.min(score, 20);
     explanations.push('Medical claims detected — requires compliance review');
   }
 
   const superlatives = ['best', 'greatest', 'unmatched', 'revolutionary', 'breakthrough'];
-  const hasSuperlative = superlatives.some((s) => text.toLowerCase().includes(s));
+  const hasSuperlative = superlatives.some((s) => lowerText.includes(s));
   if (hasSuperlative) {
     score -= 15;
     explanations.push('Superlative claims detected — verify substantiation');
@@ -497,6 +515,16 @@ function detectSpamTactics(input: ScoreDraftInput): SpamFlag[] {
 }
 
 // ============================================================
+// Medical Claim Detection (explicit blocking)
+// ============================================================
+
+function detectMedicalClaims(text: string): { detected: boolean; terms: string[] } {
+  const lowerText = text.toLowerCase();
+  const foundTerms = MEDICAL_CLAIM_TERMS.filter((term) => lowerText.includes(term));
+  return { detected: foundTerms.length > 0, terms: foundTerms };
+}
+
+// ============================================================
 // Scoring Helpers
 // ============================================================
 
@@ -516,13 +544,16 @@ function getScoringBand(score: number): ScoringBandAction {
 function generateSuggestions(
   components: ScoreComponentResult[],
   constraints: { recommendedFormat: string; maxHashtags: number; hookRequired: boolean },
+  rules: PlatformRuleRecord[],
 ): OptimizationSuggestion[] {
   const suggestions: OptimizationSuggestion[] = [];
+  const now = new Date();
 
   for (const c of components) {
     if (c.score >= 80) continue;
 
-    const suggestion = getSuggestionForComponent(c.component, c.score, constraints);
+    const relatedRule = rules.find((r) => r.ruleType === c.component);
+    const suggestion = getSuggestionForComponent(c.component, c.score, constraints, now, relatedRule);
     if (suggestion) {
       suggestions.push(suggestion);
     }
@@ -535,60 +566,97 @@ function getSuggestionForComponent(
   component: ScoringComponent,
   score: number,
   constraints: { recommendedFormat: string; maxHashtags: number; hookRequired: boolean },
+  now: Date,
+  relatedRule?: PlatformRuleRecord,
 ): OptimizationSuggestion | null {
   const improvement = 80 - score;
+  const baseMetadata = {
+    source: 'scoring-engine',
+    sourceType: 'scoring_engine' as const,
+    checkedAt: now,
+    confidence: 'medium' as const,
+    relatedRuleId: relatedRule?.id,
+  };
 
   switch (component) {
     case 'hookStrength':
       return {
+        ...baseMetadata,
         component,
         priority: improvement > 30 ? 'high' : 'medium',
         suggestion: constraints.hookRequired
           ? 'Add a strong opening hook — question, bold statement, or surprising statistic'
           : 'Consider adding an engaging opening line',
         expectedImprovement: Math.min(improvement, 25),
+        source: relatedRule?.sourceUrl || 'platform-best-practices',
+        sourceType: relatedRule ? 'platform_rules' : 'scoring_engine',
+        confidence: (relatedRule?.confidence as 'low' | 'medium' | 'high') || 'medium',
       };
     case 'formatFit':
       return {
+        ...baseMetadata,
         component,
         priority: 'medium',
         suggestion: `Consider using ${constraints.recommendedFormat} format for better platform performance`,
         expectedImprovement: Math.min(improvement, 20),
+        source: relatedRule?.sourceUrl || 'platform-format-rules',
+        sourceType: relatedRule ? 'platform_rules' : 'scoring_engine',
+        confidence: (relatedRule?.confidence as 'low' | 'medium' | 'high') || 'medium',
       };
     case 'hashtagHygiene':
       return {
+        ...baseMetadata,
         component,
         priority: 'medium',
         suggestion: `Use ${constraints.maxHashtags} relevant, niche-specific hashtags instead of generic ones`,
         expectedImprovement: Math.min(improvement, 15),
+        source: relatedRule?.sourceUrl || 'platform-hashtag-guidelines',
+        sourceType: relatedRule ? 'platform_rules' : 'scoring_engine',
+        confidence: (relatedRule?.confidence as 'low' | 'medium' | 'high') || 'medium',
       };
     case 'ctaClarity':
       return {
+        ...baseMetadata,
         component,
         priority: 'high',
         suggestion: 'Add a clear call-to-action with action verbs (Book, Discover, Learn More)',
         expectedImprovement: Math.min(improvement, 20),
+        source: 'conversion-optimization',
+        sourceType: 'internal_analytics',
+        confidence: 'high',
       };
     case 'complianceRisk':
       return {
+        ...baseMetadata,
         component,
         priority: 'high',
         suggestion: 'Remove medical claims, superlatives, or unverified statements',
         expectedImprovement: Math.min(improvement, 30),
+        source: 'compliance-policy',
+        sourceType: 'official_docs',
+        confidence: 'high',
       };
     case 'platformFit':
       return {
+        ...baseMetadata,
         component,
         priority: 'high',
         suggestion: 'Shorten content to fit platform character limit',
         expectedImprovement: Math.min(improvement, 30),
+        source: relatedRule?.sourceUrl || 'platform-character-limits',
+        sourceType: relatedRule ? 'platform_rules' : 'scoring_engine',
+        confidence: (relatedRule?.confidence as 'low' | 'medium' | 'high') || 'high',
       };
     default:
       return {
+        ...baseMetadata,
         component,
         priority: 'low',
         suggestion: `Improve ${component} for better reach`,
         expectedImprovement: Math.min(improvement, 10),
+        source: 'scoring-engine',
+        sourceType: 'scoring_engine',
+        confidence: 'low',
       };
   }
 }
@@ -597,8 +665,15 @@ function getBlockReasons(
   spamFlags: SpamFlag[],
   staleWarnings: StaleWarning[],
   band: ScoringBandAction,
+  draftText: string,
 ): string[] {
   const reasons: string[] = [];
+
+  // Medical claims explicitly block scheduling
+  const medicalClaims = detectMedicalClaims(draftText);
+  if (medicalClaims.detected) {
+    reasons.push(`Medical claims detected (${medicalClaims.terms.join(', ')}) — requires compliance review before scheduling`);
+  }
 
   const blockSpam = spamFlags.filter((f) => f.severity === 'block');
   if (blockSpam.length > 0) {
@@ -608,6 +683,11 @@ function getBlockReasons(
   const blockStale = staleWarnings.filter((w) => w.severity === 'block');
   if (blockStale.length > 0) {
     reasons.push(`Stale platform rules: ${blockStale.map((w) => w.ruleType).join(', ')}`);
+  }
+
+  // Revise band blocks scheduling (no manual override workflow implemented yet)
+  if (band === 'revise') {
+    reasons.push('Reach Readiness Score in revise range (60-74) — requires revision before scheduling');
   }
 
   if (band === 'block') {

@@ -140,6 +140,11 @@ export interface OptimizationSuggestion {
   priority: 'high' | 'medium' | 'low';
   suggestion: string;
   expectedImprovement: number;
+  source: string;
+  sourceType: 'official_docs' | 'internal_analytics' | 'platform_rules' | 'scoring_engine';
+  checkedAt: Date;
+  confidence: 'low' | 'medium' | 'high';
+  relatedRuleId?: string;
 }
 
 export interface StaleWarning {
