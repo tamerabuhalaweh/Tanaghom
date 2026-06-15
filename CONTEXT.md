@@ -4,20 +4,20 @@
 
 ## Current Sprint
 
-**Sprint**: 4 — Algorithm Intelligence MCP
+**Sprint**: 5 — Approval Workflow
 **Status**: Complete (pending review)
-**Goal**: Reach Readiness Score calculation, platform-specific scoring, stale rule detection, spam detection, optimization suggestions.
+**Goal**: Approval routing, decision recording, SLA compliance, audit trail, permission checks.
 
 ## Active Module
 
-- `modules/algorithm-intelligence/` — scoring engine, platform rules, stale detection, spam detection
+- `modules/approvals/` — approval routing, decisions, status, SLA
 
 ## Allowed Files
 
-- `modules/algorithm-intelligence/**` — algorithm-intelligence module implementation
-- `docs/api/openapi.yaml` — add algorithm endpoints
-- `docs/sprints/SPRINT-04-algorithm-intelligence.md` — sprint report
-- `modules/ai-generation/types.ts` — import PLATFORM_CONSTRAINTS (read-only)
+- `modules/approvals/**` — approvals module implementation
+- `src/index.ts` — mount approvals route
+- `docs/api/openapi.yaml` — add approval endpoints
+- `docs/sprints/SPRINT-05-approval-workflow.md` — sprint report
 
 ## Locked Files
 
@@ -25,13 +25,13 @@
 - `modules/users-departments/` — stable
 - `modules/campaigns/` — stable
 - `modules/ai-generation/` — stable
-- `modules/approvals/` — not yet
+- `modules/algorithm-intelligence/` — stable
 - `modules/publishing/` — not yet
 - `modules/analytics/` — not yet
 - `modules/learning-engine/` — not yet
 - `modules/crm-conversion/` — not yet
 - `modules/production-requests/` — not yet
-- No approval, publishing, analytics, learning, CRM, or production workflow
+- No publishing, scheduling, analytics, learning, CRM, or production workflow
 
 ## Sprint Acceptance Criteria
 
