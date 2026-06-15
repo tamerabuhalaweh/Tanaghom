@@ -6,6 +6,11 @@ import { connectDatabase, disconnectDatabase } from '@shared/database';
 import { closeQueue } from '@shared/queue';
 import { healthCheck } from './routes/health';
 import { errorHandler } from './routes/errorHandler';
+import { authRouter } from '../modules/auth/controller';
+import { usersDepartmentsRouter } from '../modules/users-departments/controller';
+import { campaignsRouter } from '../modules/campaigns/controller';
+import { aiGenerationRouter } from '../modules/ai-generation/controller';
+import { algoRouter } from '../modules/algorithm-intelligence/controller';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
@@ -18,6 +23,11 @@ app.use(express.json());
 
 // Routes
 app.get('/health', healthCheck);
+app.use('/auth', authRouter);
+app.use('/', usersDepartmentsRouter);
+app.use('/campaigns', campaignsRouter);
+app.use('/ai-generation', aiGenerationRouter);
+app.use('/algo', algoRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
