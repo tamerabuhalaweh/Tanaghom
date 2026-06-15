@@ -11,6 +11,7 @@ import { usersDepartmentsRouter } from '../modules/users-departments/controller'
 import { campaignsRouter } from '../modules/campaigns/controller';
 import { aiGenerationRouter } from '../modules/ai-generation/controller';
 import { algoRouter } from '../modules/algorithm-intelligence/controller';
+import { approvalsRouter } from '../modules/approvals/controller';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
@@ -28,6 +29,7 @@ app.use('/', usersDepartmentsRouter);
 app.use('/campaigns', campaignsRouter);
 app.use('/ai-generation', aiGenerationRouter);
 app.use('/algo', algoRouter);
+app.use('/approvals', approvalsRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
