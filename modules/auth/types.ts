@@ -15,6 +15,7 @@ export interface LoginResult {
     name: string;
     role: string;
     departmentId: string | null;
+    agentRepId: string | null;
   };
 }
 
@@ -25,4 +26,5 @@ export interface SessionUser {
   role: string;
   departmentId: string | null;
   isActive: boolean;
+  agentRepId: string | null;
 }

@@ -16,6 +16,19 @@ const DEPARTMENTS = [
   { name: 'Revenue Operations', description: 'CRM management, reporting, attribution, dashboards, analytics, pipeline visibility' },
 ];
 
+const FUNCTIONAL_AGENTS = [
+  { name: 'Content_Strategy_Agent', capability: 'content_strategy', description: 'Creates themes, calendars, topic angles, weekly plans' },
+  { name: 'Algorithm_Intelligence_Agent', capability: 'algorithm_intelligence', description: 'Reach Readiness Score, trend rules, platform optimization' },
+  { name: 'Analytics_KPI_Agent', capability: 'analytics_kpi', description: 'Pulls analytics, writes structured insights' },
+  { name: 'Graphic_Design_Agent', capability: 'graphic_design', description: 'Creates visual assets for social media content' },
+];
+
+const GOVERNANCE_AGENTS = [
+  { name: 'CCO_Governance_Agent', policyScope: ['approval', 'strategic_content'], vetoAuthority: true, description: 'CCO oversight for sensitive content' },
+  { name: 'Compliance_Governance_Agent', policyScope: ['compliance', 'brand_safety'], vetoAuthority: true, description: 'Compliance and brand safety enforcement' },
+  { name: 'Approval_Governance_Agent', policyScope: ['approval_workflow'], vetoAuthority: false, description: 'Approval workflow governance' },
+];
+
 async function seed() {
   console.log('Seeding database...');
 
@@ -31,7 +44,7 @@ async function seed() {
 
   // Seed admin user
   const adminPassword = await hashPassword('admin123');
-  await prisma.user.upsert({
+  const adminUser = await prisma.user.upsert({
     where: { email: 'admin@tanaghum.com' },
     update: {},
     create: {
@@ -43,6 +56,19 @@ async function seed() {
     },
   });
   console.log('  User: admin@tanaghum.com (role: admin)');
+
+  // Create AgentRep for admin
+  const adminAgentRep = await prisma.agentRep.upsert({
+    where: { user_id: adminUser.id },
+    update: {},
+    create: {
+      user_id: adminUser.id,
+      name: 'Admin AgentRep',
+      agent_type: 'functional',
+      status: 'active',
+    },
+  });
+  console.log('  AgentRep: Admin AgentRep (for admin@tanaghum.com)');
 
   // Seed sample users for each department role
   const sampleUsers = [
@@ -57,7 +83,7 @@ async function seed() {
   const defaultPassword = await hashPassword('password123');
   for (const user of sampleUsers) {
     const dept = user.deptName ? await prisma.department.findUnique({ where: { name: user.deptName } }) : null;
-    await prisma.user.upsert({
+    const createdUser = await prisma.user.upsert({
       where: { email: user.email },
       update: {},
       create: {
@@ -70,6 +96,57 @@ async function seed() {
       },
     });
     console.log(`  User: ${user.email} (role: ${user.role}, dept: ${user.deptName ?? 'executive authority'})`);
+
+    // Create AgentRep for each user
+    const agentRepName = `${user.name} AgentRep`;
+    const agentRep = await prisma.agentRep.upsert({
+      where: { user_id: createdUser.id },
+      update: {},
+      create: {
+        user_id: createdUser.id,
+        name: agentRepName,
+        agent_type: user.role === 'cco' ? 'governance' : 'functional',
+        status: 'active',
+      },
+    });
+    console.log(`  AgentRep: ${agentRepName} (for ${user.email})`);
+
+    // Assign functional agents to non-CCO users
+    if (user.role !== 'cco') {
+      for (const fa of FUNCTIONAL_AGENTS) {
+        await prisma.functionalAgent.upsert({
+          where: { id: `${agentRep.id}-${fa.name}` },
+          update: {},
+          create: {
+            agent_rep_id: agentRep.id,
+            name: fa.name,
+            capability: fa.capability,
+            description: fa.description,
+            status: 'active',
+          },
+        });
+      }
+      console.log(`    FunctionalAgents: ${FUNCTIONAL_AGENTS.length} agents assigned`);
+    }
+
+    // Assign governance agents to CCO
+    if (user.role === 'cco') {
+      for (const ga of GOVERNANCE_AGENTS) {
+        await prisma.governanceAgent.upsert({
+          where: { id: `${agentRep.id}-${ga.name}` },
+          update: {},
+          create: {
+            agent_rep_id: agentRep.id,
+            name: ga.name,
+            policy_scope: ga.policyScope,
+            veto_authority: ga.vetoAuthority,
+            description: ga.description,
+            status: 'active',
+          },
+        });
+      }
+      console.log(`    GovernanceAgents: ${GOVERNANCE_AGENTS.length} agents assigned`);
+    }
   }
 
   console.log('Seeding complete.');

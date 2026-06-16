@@ -3,7 +3,7 @@ import { comparePassword, signToken, verifyToken, type JwtPayload } from '@share
 import { auditLog } from '@shared/logging';
 import { eventBus } from '@shared/events';
 import { AUTH_EVENTS, type UserAuthenticatedEvent, type UserLoginFailedEvent } from './events';
-import { findUserByEmail, findUserById } from './repository';
+import { findUserByEmail, findUserById, findAgentRepByUserId } from './repository';
 import type { LoginInput, LoginResult, SessionUser } from './types';
 
 export async function login(input: LoginInput): Promise<LoginResult> {
@@ -28,11 +28,15 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     throw new UnauthorizedError('Invalid email or password');
   }
 
+  // Resolve AgentRep for session context
+  const agentRep = await findAgentRepByUserId(user.id);
+
   const payload: JwtPayload = {
     sub: user.id,
     email: user.email,
     role: user.role,
     departmentId: user.department_id || undefined,
+    agentRepId: agentRep?.id,
   };
 
   const token = signToken(payload);
@@ -53,6 +57,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
       name: user.name,
       role: user.role,
       departmentId: user.department_id,
+      agentRepId: agentRep?.id || null,
     },
   };
 }

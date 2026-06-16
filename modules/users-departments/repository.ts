@@ -1,7 +1,8 @@
 import { prisma } from '@shared/database';
 import { ConflictError, NotFoundError } from '@shared/errors';
 import { hashPassword } from '@shared/auth';
-import type { CreateUserInput, UpdateUserInput, CreateDepartmentInput, UpdateDepartmentInput, UserSummary, DepartmentSummary } from './types';
+import type { Prisma } from '@prisma/client';
+import type { CreateUserInput, UpdateUserInput, CreateDepartmentInput, UpdateDepartmentInput, UserSummary, DepartmentSummary, CreateAgentRepInput, UpdateAgentRepInput, CreateFunctionalAgentInput, CreateGovernanceAgentInput, AgentRepSummary, FunctionalAgentSummary, GovernanceAgentSummary } from './types';
 
 export async function listUsers(departmentId?: string, role?: string): Promise<UserSummary[]> {
   const where: Record<string, unknown> = {};
@@ -130,5 +131,200 @@ function mapDepartment(d: Record<string, unknown>): DepartmentSummary {
     backupApproverId: null,
     userCount: count?.users || 0,
     createdAt: d.created_at as Date,
+  };
+}
+
+// ============================================================
+// AgentRep Repository
+// ============================================================
+
+export async function getAgentRepByUserId(userId: string): Promise<AgentRepSummary | null> {
+  const agentRep = await prisma.agentRep.findUnique({
+    where: { user_id: userId },
+    include: {
+      user: true,
+      functional_agents: true,
+      governance_agents: true,
+    },
+  });
+  if (!agentRep) return null;
+  return mapAgentRep(agentRep);
+}
+
+export async function getAgentRepById(id: string): Promise<AgentRepSummary> {
+  const agentRep = await prisma.agentRep.findUnique({
+    where: { id },
+    include: {
+      user: true,
+      functional_agents: true,
+      governance_agents: true,
+    },
+  });
+  if (!agentRep) throw new NotFoundError('AgentRep', id);
+  return mapAgentRep(agentRep);
+}
+
+export async function createAgentRep(input: CreateAgentRepInput): Promise<AgentRepSummary> {
+  const existing = await prisma.agentRep.findUnique({ where: { user_id: input.userId } });
+  if (existing) throw new ConflictError(`AgentRep already exists for user ${input.userId}`);
+
+  const agentRep = await prisma.agentRep.create({
+    data: {
+      user_id: input.userId,
+      name: input.name,
+      agent_type: input.agentType,
+      permissions_context: input.permissionsContext as Prisma.InputJsonValue | undefined,
+      metadata: input.metadata as Prisma.InputJsonValue | undefined,
+    },
+    include: {
+      user: true,
+      functional_agents: true,
+      governance_agents: true,
+    },
+  });
+  return mapAgentRep(agentRep);
+}
+
+export async function updateAgentRep(id: string, input: UpdateAgentRepInput): Promise<AgentRepSummary> {
+  const existing = await prisma.agentRep.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError('AgentRep', id);
+
+  const data: Record<string, unknown> = {};
+  if (input.name !== undefined) data.name = input.name;
+  if (input.status !== undefined) data.status = input.status;
+  if (input.permissionsContext !== undefined) data.permissions_context = input.permissionsContext as Prisma.InputJsonValue;
+  if (input.metadata !== undefined) data.metadata = input.metadata as Prisma.InputJsonValue;
+
+  const agentRep = await prisma.agentRep.update({
+    where: { id },
+    data,
+    include: {
+      user: true,
+      functional_agents: true,
+      governance_agents: true,
+    },
+  });
+  return mapAgentRep(agentRep);
+}
+
+export async function listAgentReps(): Promise<AgentRepSummary[]> {
+  const agentReps = await prisma.agentRep.findMany({
+    include: {
+      user: true,
+      functional_agents: true,
+      governance_agents: true,
+    },
+    orderBy: { created_at: 'desc' },
+  });
+  return agentReps.map((ar) => mapAgentRep(ar));
+}
+
+// ============================================================
+// FunctionalAgent Repository
+// ============================================================
+
+export async function createFunctionalAgent(input: CreateFunctionalAgentInput): Promise<FunctionalAgentSummary> {
+  const agentRep = await prisma.agentRep.findUnique({ where: { id: input.agentRepId } });
+  if (!agentRep) throw new NotFoundError('AgentRep', input.agentRepId);
+
+  const agent = await prisma.functionalAgent.create({
+    data: {
+      agent_rep_id: input.agentRepId,
+      name: input.name,
+      description: input.description,
+      capability: input.capability,
+      config: input.config as Prisma.InputJsonValue | undefined,
+    },
+  });
+  return mapFunctionalAgent(agent);
+}
+
+export async function listFunctionalAgents(agentRepId: string): Promise<FunctionalAgentSummary[]> {
+  const agents = await prisma.functionalAgent.findMany({
+    where: { agent_rep_id: agentRepId },
+    orderBy: { created_at: 'desc' },
+  });
+  return agents.map((a) => mapFunctionalAgent(a));
+}
+
+// ============================================================
+// GovernanceAgent Repository
+// ============================================================
+
+export async function createGovernanceAgent(input: CreateGovernanceAgentInput): Promise<GovernanceAgentSummary> {
+  const agentRep = await prisma.agentRep.findUnique({ where: { id: input.agentRepId } });
+  if (!agentRep) throw new NotFoundError('AgentRep', input.agentRepId);
+
+  const agent = await prisma.governanceAgent.create({
+    data: {
+      agent_rep_id: input.agentRepId,
+      name: input.name,
+      description: input.description,
+      policy_scope: input.policyScope,
+      veto_authority: input.vetoAuthority,
+      config: input.config as Prisma.InputJsonValue | undefined,
+    },
+  });
+  return mapGovernanceAgent(agent);
+}
+
+export async function listGovernanceAgents(agentRepId: string): Promise<GovernanceAgentSummary[]> {
+  const agents = await prisma.governanceAgent.findMany({
+    where: { agent_rep_id: agentRepId },
+    orderBy: { created_at: 'desc' },
+  });
+  return agents.map((a) => mapGovernanceAgent(a));
+}
+
+// ============================================================
+// Mappers
+// ============================================================
+
+function mapAgentRep(ar: Record<string, unknown>): AgentRepSummary {
+  const user = ar.user as { id: string; name: string; email: string } | null;
+  const functionalAgents = (ar.functional_agents as Record<string, unknown>[] || []).map(mapFunctionalAgent);
+  const governanceAgents = (ar.governance_agents as Record<string, unknown>[] || []).map(mapGovernanceAgent);
+
+  return {
+    id: ar.id as string,
+    userId: ar.user_id as string,
+    userName: user?.name || 'Unknown',
+    userEmail: user?.email || 'Unknown',
+    name: ar.name as string,
+    agentType: ar.agent_type as AgentRepSummary['agentType'],
+    status: ar.status as AgentRepSummary['status'],
+    permissionsContext: ar.permissions_context as Record<string, unknown> | null,
+    metadata: ar.metadata as Record<string, unknown> | null,
+    functionalAgents,
+    governanceAgents,
+    createdAt: ar.created_at as Date,
+    updatedAt: ar.updated_at as Date,
+  };
+}
+
+function mapFunctionalAgent(a: Record<string, unknown>): FunctionalAgentSummary {
+  return {
+    id: a.id as string,
+    agentRepId: a.agent_rep_id as string,
+    name: a.name as string,
+    description: a.description as string | null,
+    capability: a.capability as string,
+    status: a.status as FunctionalAgentSummary['status'],
+    config: a.config as Record<string, unknown> | null,
+    createdAt: a.created_at as Date,
+  };
+}
+
+function mapGovernanceAgent(a: Record<string, unknown>): GovernanceAgentSummary {
+  return {
+    id: a.id as string,
+    agentRepId: a.agent_rep_id as string,
+    name: a.name as string,
+    description: a.description as string | null,
+    policyScope: a.policy_scope as string[],
+    vetoAuthority: a.veto_authority as boolean,
+    status: a.status as GovernanceAgentSummary['status'],
+    config: a.config as Record<string, unknown> | null,
+    createdAt: a.created_at as Date,
   };
 }

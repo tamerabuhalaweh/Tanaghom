@@ -10,6 +10,14 @@ export interface JwtPayload {
   email: string;
   role: string;
   departmentId?: string;
+  agentRepId?: string;
+}
+
+export interface SessionContext {
+  humanUserId: string;
+  agentRepId: string;
+  role: string;
+  departmentId?: string;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -37,6 +45,18 @@ export function requireRole(...allowedRoles: string[]) {
     if (!allowedRoles.includes(payload.role)) {
       throw new ForbiddenError(`Role '${payload.role}' is not authorized. Required: ${allowedRoles.join(', ')}`);
     }
+  };
+}
+
+export function resolveSessionContext(payload: JwtPayload): SessionContext {
+  if (!payload.agentRepId) {
+    throw new UnauthorizedError('Session context incomplete: agentRepId missing');
+  }
+  return {
+    humanUserId: payload.sub,
+    agentRepId: payload.agentRepId,
+    role: payload.role,
+    departmentId: payload.departmentId,
   };
 }
 
