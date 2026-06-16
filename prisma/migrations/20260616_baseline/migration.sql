@@ -1764,7 +1764,7 @@ ALTER TABLE "publishing_package_items" ADD CONSTRAINT "publishing_package_items_
 ALTER TABLE "publishing_targets" ADD CONSTRAINT "publishing_targets_publishing_package_id_fkey" FOREIGN KEY ("publishing_package_id") REFERENCES "publishing_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "publishing_readiness checks" ADD CONSTRAINT "publishing_readiness_checks_publishing_package_id_fkey" FOREIGN KEY ("publishing_package_id") REFERENCES "publishing_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "publishing_readiness_checks" ADD CONSTRAINT "publishing_readiness_checks_publishing_package_id_fkey" FOREIGN KEY ("publishing_package_id") REFERENCES "publishing_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "publishing_manifests" ADD CONSTRAINT "publishing_manifests_publishing_package_id_fkey" FOREIGN KEY ("publishing_package_id") REFERENCES "publishing_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
