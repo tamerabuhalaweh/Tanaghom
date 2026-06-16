@@ -9,14 +9,11 @@ const prisma = new PrismaClient();
 // be created through the admin API or a separate provisioning process.
 
 const DEPARTMENTS = [
-  { name: 'CCO', description: 'Final visibility and approval for sensitive, high-budget, public, strategic campaigns' },
-  { name: 'Brand & Positioning', description: 'Voice, identity, positioning, PR sensitivity, visual/message alignment' },
-  { name: 'Acquisition', description: 'Reach, SEO, algorithm fit, hashtags, timing, amplification' },
-  { name: 'Conversion & Closing', description: 'CTA, WhatsApp flow, landing pages, objection handling, sales route' },
-  { name: 'Growth & Retention', description: 'Upsell, re-engagement, community, loyalty, alumni, B2B nurturing' },
-  { name: 'Commercial Operations', description: 'CRM tagging, reporting, attribution, dashboards, analytics, pipeline visibility' },
-  { name: 'Production & Design', description: 'Creative assets, reels, carousels, videos, campaign visuals, asset delivery' },
-  { name: 'Event Operations & Logistics', description: 'Event content, venue, scheduling, logistics' },
+  { name: 'Brand & Market Intelligence', description: 'Brand voice, positioning, market research, competitive intelligence, trend analysis' },
+  { name: 'Demand Generation', description: 'Content strategy, SEO, algorithm optimization, reach, hashtag strategy, amplification' },
+  { name: 'Conversion', description: 'CTA optimization, landing pages, WhatsApp flow, objection handling, sales routing' },
+  { name: 'Customer Growth & Retention', description: 'Upsell, re-engagement, community, loyalty, nurturing, retention campaigns' },
+  { name: 'Revenue Operations', description: 'CRM management, reporting, attribution, dashboards, analytics, pipeline visibility' },
 ];
 
 async function seed() {
@@ -49,16 +46,17 @@ async function seed() {
 
   // Seed sample users for each department role
   const sampleUsers = [
-    { email: 'cco@tanaghum.com', name: 'CCO User', role: 'cco' as const, deptName: 'CCO' },
-    { email: 'brand.head@tanaghum.com', name: 'Brand Head', role: 'department_head' as const, deptName: 'Brand & Positioning' },
-    { email: 'acquisition.specialist@tanaghum.com', name: 'Acquisition Specialist', role: 'specialist' as const, deptName: 'Acquisition' },
-    { email: 'conversion.reviewer@tanaghum.com', name: 'Conversion Reviewer', role: 'reviewer' as const, deptName: 'Conversion & Closing' },
-    { email: 'growth.viewer@tanaghum.com', name: 'Growth Viewer', role: 'viewer' as const, deptName: 'Growth & Retention' },
+    { email: 'cco@tanaghum.com', name: 'CCO', role: 'cco' as const, deptName: null },
+    { email: 'brand.head@tanaghum.com', name: 'Brand Head', role: 'department_head' as const, deptName: 'Brand & Market Intelligence' },
+    { email: 'demand.specialist@tanaghum.com', name: 'Demand Specialist', role: 'specialist' as const, deptName: 'Demand Generation' },
+    { email: 'conversion.reviewer@tanaghum.com', name: 'Conversion Reviewer', role: 'reviewer' as const, deptName: 'Conversion' },
+    { email: 'growth.viewer@tanaghum.com', name: 'Growth Viewer', role: 'viewer' as const, deptName: 'Customer Growth & Retention' },
+    { email: 'revops.head@tanaghum.com', name: 'RevOps Head', role: 'department_head' as const, deptName: 'Revenue Operations' },
   ];
 
   const defaultPassword = await hashPassword('password123');
   for (const user of sampleUsers) {
-    const dept = await prisma.department.findUnique({ where: { name: user.deptName } });
+    const dept = user.deptName ? await prisma.department.findUnique({ where: { name: user.deptName } }) : null;
     await prisma.user.upsert({
       where: { email: user.email },
       update: {},
@@ -71,7 +69,7 @@ async function seed() {
         is_active: true,
       },
     });
-    console.log(`  User: ${user.email} (role: ${user.role}, dept: ${user.deptName})`);
+    console.log(`  User: ${user.email} (role: ${user.role}, dept: ${user.deptName ?? 'executive authority'})`);
   }
 
   console.log('Seeding complete.');

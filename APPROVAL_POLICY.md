@@ -2,6 +2,7 @@
 
 > **Purpose**: Define when human approval is required, who approves, and escalation rules.
 > **Rule**: No post may be published without explicit human approval in MVP.
+> **Updated**: Sprint 4.5 — STITCH Alignment (department names aligned to RevOps structure)
 
 ## Approval Principles
 
@@ -31,9 +32,9 @@
 - Partnership announcements
 - Platform-specific campaigns with paid amplification
 
-**Required approvals**: 2 (Department Head + Brand & Positioning)
+**Required approvals**: 2 (Department Head + Brand & Market Intelligence)
 
-### High Risk — Route to CCO + Brand + Compliance
+### High Risk — Route to CCO (Executive Authority) + Brand + Compliance
 
 - Medical/health claims (diagnostic, treatment-related)
 - Legal statements, disclaimers, terms
@@ -43,20 +44,18 @@
 - Regulatory or compliance-related content
 - Content involving patient data or testimonials with identifiable information
 
-**Required approvals**: 3 (CCO + Brand & Positioning + Compliance/Legal)
+**Required approvals**: 3 (CCO + Brand & Market Intelligence + Compliance/Legal)
 
 ## Department Approval Matrix
 
-| Department | Reviews | Cannot |
+| Entity | Reviews | Cannot |
 |---|---|---|
-| CCO | Final visibility for sensitive, high-budget, public, strategic campaigns | Bypass any department review |
-| Brand & Positioning | Voice, identity, positioning, PR sensitivity, visual/message alignment | Approve technical claims |
-| Acquisition | Reach, SEO, algorithm fit, hashtags, timing, amplification | Approve brand messaging |
-| Conversion & Closing | CTA, WhatsApp flow, landing pages, objection handling | Approve content strategy |
-| Growth & Retention | Upsell, re-engagement, community, loyalty | Approve new campaigns |
-| Commercial Operations | CRM tagging, reporting, attribution, dashboards | Approve content |
-| Production & Design | Creative assets, reels, carousels, videos, visuals | Approve commercial strategy |
-| Event Operations & Logistics | Event content, venue, scheduling, logistics | Approve brand messaging |
+| CCO (Executive Authority) | Final visibility for sensitive, high-budget, public, strategic campaigns | Bypass any department review |
+| Brand & Market Intelligence | Voice, identity, positioning, PR sensitivity, visual/message alignment, market research | Approve technical claims |
+| Demand Generation | Reach, SEO, algorithm fit, hashtags, timing, amplification, content strategy | Approve brand messaging |
+| Conversion | CTA, landing pages, objection handling, sales routing | Approve content strategy |
+| Customer Growth & Retention | Upsell, re-engagement, community, loyalty, nurturing | Approve new campaigns |
+| Revenue Operations | CRM, reporting, attribution, dashboards, analytics, pipeline visibility | Approve content |
 
 ## Approval Workflow
 
@@ -94,7 +93,7 @@ Audit Log Entry Created
 |---|---|
 | Approval pending > 24h | Send reminder to approver via messaging channel |
 | Approval pending > 48h | Escalate to department head |
-| Approval pending > 72h | Escalate to CCO |
+| Approval pending > 72h | Escalate to CCO (Executive Authority) |
 | Campaign deadline approaching (< 24h) | Priority alert to all pending approvers |
 | Approver unavailable | Backup approver designated per department |
 
@@ -116,17 +115,16 @@ Each department should designate a backup approver. If the primary approver is u
 
 | Department | Primary | Backup |
 |---|---|---|
-| CCO | TBD | TBD |
-| Brand & Positioning | TBD | TBD |
-| Acquisition | TBD | TBD |
-| Conversion & Closing | TBD | TBD |
-| Growth & Retention | TBD | TBD |
-| Commercial Operations | TBD | TBD |
-| Production & Design | TBD | TBD |
-| Event Operations & Logistics | TBD | TBD |
+| CCO (Executive Authority) | TBD | TBD |
+| Brand & Market Intelligence | TBD | TBD |
+| Demand Generation | TBD | TBD |
+| Conversion | TBD | TBD |
+| Customer Growth & Retention | TBD | TBD |
+| Revenue Operations | TBD | TBD |
 
 ## Revision History
 
 | Date | Change | Author |
 |---|---|---|
 | 2026-06-14 | Initial creation from SmartLabs requirements | Sprint 0A |
+| 2026-06-16 | Department names aligned to RevOps structure | Sprint 4.5 |
