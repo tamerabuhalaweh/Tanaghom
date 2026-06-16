@@ -4,56 +4,40 @@
 
 ## Current Sprint
 
-**Sprint**: 6 — SAIF Decision Records & DKS Foundation
+**Sprint**: 7 — Governance / Approval Workflow
 **Status**: Complete
-**Goal**: Implement the SAIF v1.2 decision-record foundation and DKS foundation so future approval, governance, publishing, MCP mediation, and execution can be tied to auditable, bounded, knowledge-backed decisions.
+**Goal**: Implement the governed approval workflow on top of HumanUser, AgentRep, SAIF Decision Records, DKS, identity lineage, and RevOps department routing.
 
 ## Active Module
 
-- `modules/saif-decisions/` — SAIF Decision Record types, repository, service
-- `modules/dks/` — DKS Entry types, repository, service
-- `prisma/schema.prisma` — SAIF and DKS models
-
-## Allowed Files
-
-- `modules/saif-decisions/**` — SAIF Decision module
-- `modules/dks/**` — DKS module
-- `prisma/schema.prisma` — Schema updates
-- `docs/architecture/SAIF.md` — SAIF reference
-- `docs/architecture/DATA_MODEL.md` — Data model updates
-- `docs/architecture/MODULE_BOUNDARIES.md` — Module boundaries updates
-- `docs/sprints/SPRINT-06-saif-decision-dks.md` — Sprint report
-- `CONTEXT.md` — This file
-
-## Locked Files
-
-- `modules/auth/` — stable
-- `modules/users-departments/` — stable
-- `modules/campaigns/` — stable
-- `modules/ai-generation/` — stable
-- `modules/algorithm-intelligence/` — stable
-- `modules/approvals/` — not yet
-- `modules/publishing/` — not yet
+- `modules/approvals/` — Approval types, repository, service, tests
+- `prisma/schema.prisma` — Approval model
+- `prisma/migrations/` — Approval migration
 
 ## Sprint Acceptance Criteria
 
-- [x] SAIF Decision Records can be created and retrieved
-- [x] Decision records include HumanUser and AgentRep lineage
-- [x] SAIF roles are represented distinctly
-- [x] Parent-child and cascading decision relationships are supported
-- [x] The 10 evaluation dimensions are supported
-- [x] Security Posture, Human Oversight, and Compliance are enforced as critical dimensions
-- [x] DKS entries can be created and linked to decisions
-- [x] Execution handoff fields exist but do not execute anything
-- [x] Existing 311 tests still pass
-- [x] New tests cover decision creation, role assignment, DKS linking, critical dimension enforcement, parent-child composition, permissions, and audit lineage
+- [x] Approval requests can be created for eligible targets
+- [x] Approval requests can reference SAIF Decision Records
+- [x] Authorized HumanUsers can approve, reject, request changes, escalate, or cancel
+- [x] Approval actions include HumanUser and AgentRep lineage
+- [x] Session Context Lock applies to all approval actions
+- [x] FunctionalAgent cannot approve
+- [x] GovernanceAgent cannot replace human authority
+- [x] High-risk approvals route to CCO or designated senior authority
+- [x] Department routing follows the new RevOps structure
+- [x] Approval cannot proceed when SAIF critical dimensions are unresolved
+- [x] Approval actions are audit logged
+- [x] Approval state transitions use strict state machine
+- [x] No publishing, scheduling, analytics, learning, CRM, Paperclip, ResourceSpace, or MCP integration implemented
+- [x] Existing 337 tests still pass
+- [x] New approval tests added (45 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (337 tests)
+- [x] npm run test passes (382 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 7
+- [ ] Open PR and stop for review before Sprint 8
 
 ## Next Sprint (Planned)
 
-**Sprint 7**: TBD — Awaiting review of Sprint 6 before proceeding.
+**Sprint 8**: TBD — Awaiting review of Sprint 7 before proceeding.

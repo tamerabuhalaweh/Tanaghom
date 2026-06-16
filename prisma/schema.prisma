@@ -70,6 +70,8 @@ model User {
   decisions_as_human      SaifDecisionRecord[]     @relation("DecisionHumanUser")
   decisions_as_authority  SaifDecisionRecord[]     @relation("DecisionAuthorityUser")
   role_assignments_as_human DecisionRoleAssignment[] @relation("RoleHumanUser")
+  approvals_as_requester  Approval[]               @relation("ApprovalRequesterUser")
+  approvals_as_approver   Approval[]               @relation("ApprovalApproverUser")
 
   @@map("users")
 }
@@ -92,6 +94,8 @@ model AgentRep {
   decisions_as_authority   SaifDecisionRecord[]       @relation("DecisionAuthorityAgentRep")
   role_assignments_as_agent DecisionRoleAssignment[]  @relation("RoleAgentRep")
   handoffs                 DecisionExecutionHandoff[] @relation("HandoffAgentRep")
+  approvals_as_requester   Approval[]                 @relation("ApprovalRequesterAgentRep")
+  approvals_as_approver    Approval[]                 @relation("ApprovalApproverAgentRep")
 
   @@map("agent_reps")
 }
@@ -512,6 +516,7 @@ model SaifDecisionRecord {
   evaluations       DecisionEvaluation[]
   execution_handoff DecisionExecutionHandoff?
   dks_links         DecisionDksLink[]
+  approvals         Approval[]
 
   @@index([human_user_id])
   @@index([agent_rep_id])
@@ -633,4 +638,75 @@ model DecisionDksLink {
   @@index([decision_id])
   @@index([dks_entry_id])
   @@map("decision_dks_links")
+}
+
+// ============================================================
+// Approval Workflow
+// ============================================================
+
+enum ApprovalTargetType {
+  campaign
+  content_item
+  draft_version
+  saif_decision_record
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  changes_requested
+  escalated
+  expired
+  cancelled
+}
+
+enum ApprovalType {
+  department_review
+  brand_review
+  compliance_review
+  cco_review
+  demand_generation_review
+  conversion_review
+  customer_growth_review
+  revenue_operations_review
+}
+
+model Approval {
+  id                       String            @id @default(uuid()) @db.Uuid
+  target_type              ApprovalTargetType
+  target_id                String            @db.Uuid
+  saif_decision_record_id  String?           @db.Uuid
+  requester_user_id        String            @db.Uuid
+  requester_agent_rep_id   String            @db.Uuid
+  approver_user_id         String?           @db.Uuid
+  approver_agent_rep_id    String?           @db.Uuid
+  approval_type            ApprovalType      @default(department_review)
+  approval_status          ApprovalStatus    @default(pending)
+  decision                 String?
+  comment                  String?           @db.Text
+  rationale                String?           @db.Text
+  risk_category            String            @default("low")
+  required_department      String?
+  required_role            String?
+  requested_at             DateTime          @default(now())
+  decided_at               DateTime?
+  expires_at               DateTime?
+  escalated_at             DateTime?
+  created_at               DateTime          @default(now())
+  updated_at               DateTime          @updatedAt
+
+  requester_user      User                @relation("ApprovalRequesterUser", fields: [requester_user_id], references: [id])
+  requester_agent_rep AgentRep            @relation("ApprovalRequesterAgentRep", fields: [requester_agent_rep_id], references: [id])
+  approver_user       User?               @relation("ApprovalApproverUser", fields: [approver_user_id], references: [id])
+  approver_agent_rep  AgentRep?           @relation("ApprovalApproverAgentRep", fields: [approver_agent_rep_id], references: [id])
+  saif_decision       SaifDecisionRecord? @relation(fields: [saif_decision_record_id], references: [id])
+
+  @@index([target_type, target_id])
+  @@index([approval_status])
+  @@index([requester_user_id])
+  @@index([approver_user_id])
+  @@index([required_department])
+  @@index([risk_category])
+  @@map("approvals")
 }
