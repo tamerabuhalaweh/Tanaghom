@@ -80,7 +80,7 @@ CREATE TABLE "learning_signals" (
     "saif_decision_record_id" UUID,
     "dks_entry_id" UUID,
     "signal_summary" TEXT,
-    "confidence" "Confidence" NOT NULL DEFAULT 'low',
+    "confidence" TEXT NOT NULL DEFAULT 'low',
     "strength" DOUBLE PRECISION,
     "observed_outcome" TEXT,
     "expected_outcome" TEXT,
