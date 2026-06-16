@@ -236,6 +236,19 @@ export async function resolveCapability(input: ResolveCapabilityInput): Promise<
     throw new ForbiddenError('Implementation does not belong to the specified Capability');
   }
 
+  // Validate required resources are available for this implementation
+  const implementationResources = await prisma.implementationResource.findMany({
+    where: { implementation_id: input.implementationId },
+    include: { resource: true },
+  });
+
+  // Check all required resources are accessible
+  for (const ir of implementationResources) {
+    if (!ir.resource) {
+      throw new ForbiddenError(`Required resource not found for implementation '${implementation.name}'`);
+    }
+  }
+
   // Block M5 implementations
   if (implementation.m5_allowed && !implementation.m4_allowed) {
     throw new ForbiddenError('M5 write-enabled implementations are blocked in this sprint');

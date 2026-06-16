@@ -314,3 +314,50 @@ describe('HumanUser + AgentRep Lineage', () => {
     expect(resolution.agentRepId).toBe('rep-1');
   });
 });
+
+describe('Resource Validation Before Implementation', () => {
+  interface Implementation {
+    id: string;
+    name: string;
+    resources: { id: string; name: string; available: boolean }[];
+  }
+
+  function validateResourcesBeforeImplementation(impl: Implementation): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    for (const resource of impl.resources) {
+      if (!resource.available) {
+        errors.push(`Required resource '${resource.name}' is not available for implementation '${impl.name}'`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  it('validates all resources are available', () => {
+    const impl: Implementation = {
+      id: '1',
+      name: 'MockLLM',
+      resources: [
+        { id: 'r1', name: 'CampaignRequest', available: true },
+        { id: 'r2', name: 'PlatformRules', available: true },
+      ],
+    };
+    const result = validateResourcesBeforeImplementation(impl);
+    expect(result.valid).toBe(true);
+  });
+
+  it('blocks when required resource is unavailable', () => {
+    const impl: Implementation = {
+      id: '1',
+      name: 'PostizPublisher',
+      resources: [
+        { id: 'r1', name: 'ApprovedContentArtifact', available: true },
+        { id: 'r2', name: 'ExternalPlatformAccountReference', available: false },
+      ],
+    };
+    const result = validateResourcesBeforeImplementation(impl);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('ExternalPlatformAccountReference');
+  });
+});
