@@ -74,6 +74,8 @@ model User {
   approvals_as_approver   Approval[]               @relation("ApprovalApproverUser")
   intents_created         Intent[]
   resolutions             CapabilityResolution[]
+  mcp_mediation_requests  McpMediationRequest[]
+  mcp_decisions_made      McpMediationDecision[]
 
   @@map("users")
 }
@@ -100,6 +102,8 @@ model AgentRep {
   approvals_as_approver    Approval[]                 @relation("ApprovalApproverAgentRep")
   intents_created          Intent[]
   resolutions              CapabilityResolution[]
+  mcp_mediation_requests   McpMediationRequest[]
+  mcp_decisions_made       McpMediationDecision[]
 
   @@map("agent_reps")
 }
@@ -522,6 +526,7 @@ model SaifDecisionRecord {
   dks_links         DecisionDksLink[]
   approvals         Approval[]
   resolutions       CapabilityResolution[]
+  mcp_requests      McpMediationRequest[]
 
   @@index([human_user_id])
   @@index([agent_rep_id])
@@ -706,6 +711,7 @@ model Approval {
   approver_user       User?               @relation("ApprovalApproverUser", fields: [approver_user_id], references: [id])
   approver_agent_rep  AgentRep?           @relation("ApprovalApproverAgentRep", fields: [approver_agent_rep_id], references: [id])
   saif_decision       SaifDecisionRecord? @relation(fields: [saif_decision_record_id], references: [id])
+  mcp_requests        McpMediationRequest[]
 
   @@index([target_type, target_id])
   @@index([approval_status])
@@ -807,6 +813,7 @@ model Capability {
   execution_patterns ExecutionPattern[]
   implementations    Implementation[]
   resolutions        CapabilityResolution[]
+  mcp_bindings       McpCapabilityBinding[]
 
   @@index([category])
   @@index([risk_level])
@@ -868,6 +875,7 @@ model Implementation {
   capability                Capability                @relation(fields: [capability_id], references: [id])
   implementation_resources  ImplementationResource[]
   resolutions               CapabilityResolution[]
+  mcp_bindings              McpCapabilityBinding[]
 
   @@index([capability_id])
   @@index([status])
@@ -913,6 +921,7 @@ model CapabilityResolution {
   saif_decision     SaifDecisionRecord? @relation(fields: [saif_decision_record_id], references: [id])
   human_user        User               @relation(fields: [human_user_id], references: [id])
   agent_rep         AgentRep           @relation(fields: [agent_rep_id], references: [id])
+  mcp_requests      McpMediationRequest[]
 
   @@index([intent_id])
   @@index([objective_id])
@@ -920,4 +929,178 @@ model CapabilityResolution {
   @@index([resolution_status])
   @@index([human_user_id])
   @@map("capability_resolutions")
+}
+
+// ============================================================
+// MCP Mediation Boundary
+// ============================================================
+
+enum McpConnectorStatus {
+  active
+  inactive
+  suspended
+  planned
+}
+
+enum McpMediationRequestStatus {
+  pending
+  approved
+  denied
+  deferred
+  escalated
+  blocked
+}
+
+enum McpMediationDecisionType {
+  allow
+  deny
+  defer
+  escalate
+  blocked_m5
+  blocked_missing_approval
+  blocked_missing_saif
+  blocked_direct_access
+  blocked_inactive_connector
+  blocked_suspended_credential
+}
+
+enum McpCredentialStatus {
+  active
+  inactive
+  suspended
+  placeholder
+}
+
+model McpConnector {
+  id                 String             @id @default(uuid()) @db.Uuid
+  name               String             @unique
+  description        String?            @db.Text
+  connector_type     String
+  target_system      String
+  status             McpConnectorStatus @default(planned)
+  is_external        Boolean            @default(true)
+  supports_read      Boolean            @default(true)
+  supports_write     Boolean            @default(false)
+  m4_allowed         Boolean            @default(true)
+  m5_allowed         Boolean            @default(false)
+  credential_required Boolean           @default(true)
+  owner_substrate    String?
+  created_at         DateTime           @default(now())
+  updated_at         DateTime           @updatedAt
+
+  capability_bindings McpCapabilityBinding[]
+  mediation_requests  McpMediationRequest[]
+  credential_bindings McpCredentialBinding[]
+
+  @@index([status])
+  @@index([connector_type])
+  @@map("mcp_connectors")
+}
+
+model McpCapabilityBinding {
+  id                     String   @id @default(uuid()) @db.Uuid
+  capability_id          String   @db.Uuid
+  implementation_id      String?  @db.Uuid
+  mcp_connector_id       String   @db.Uuid
+  allowed_operation      String   @default("read")
+  requires_approval      Boolean  @default(false)
+  requires_saif_decision Boolean  @default(false)
+  requires_m5_authorization Boolean @default(false)
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  capability     Capability     @relation(fields: [capability_id], references: [id])
+  implementation Implementation? @relation(fields: [implementation_id], references: [id])
+  mcp_connector  McpConnector   @relation(fields: [mcp_connector_id], references: [id])
+
+  @@unique([capability_id, implementation_id, mcp_connector_id])
+  @@index([capability_id])
+  @@index([mcp_connector_id])
+  @@map("mcp_capability_bindings")
+}
+
+model McpMediationRequest {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  capability_resolution_id String?                @db.Uuid
+  mcp_connector_id         String                 @db.Uuid
+  requested_operation      String
+  resource_ids             String[]
+  human_user_id            String                 @db.Uuid
+  agent_rep_id             String                 @db.Uuid
+  acting_agent_type        String
+  acting_agent_id          String?
+  saif_decision_record_id  String?                @db.Uuid
+  approval_id              String?                @db.Uuid
+  request_status           McpMediationRequestStatus @default(pending)
+  requested_at             DateTime               @default(now())
+  created_at               DateTime               @default(now())
+  updated_at               DateTime               @updatedAt
+
+  capability_resolution  CapabilityResolution?  @relation(fields: [capability_resolution_id], references: [id])
+  mcp_connector          McpConnector           @relation(fields: [mcp_connector_id], references: [id])
+  human_user             User                   @relation(fields: [human_user_id], references: [id])
+  agent_rep              AgentRep               @relation(fields: [agent_rep_id], references: [id])
+  saif_decision          SaifDecisionRecord?    @relation(fields: [saif_decision_record_id], references: [id])
+  approval               Approval?              @relation(fields: [approval_id], references: [id])
+  decisions              McpMediationDecision[]
+
+  @@index([mcp_connector_id])
+  @@index([request_status])
+  @@index([human_user_id])
+  @@map("mcp_mediation_requests")
+}
+
+model McpMediationDecision {
+  id                    String               @id @default(uuid()) @db.Uuid
+  mediation_request_id  String               @db.Uuid
+  decision              McpMediationDecisionType
+  rationale             String?              @db.Text
+  policy_matched        String?
+  decided_by_user_id    String?              @db.Uuid
+  decided_by_agent_rep_id String?            @db.Uuid
+  decided_at            DateTime             @default(now())
+  created_at            DateTime             @default(now())
+
+  mediation_request     McpMediationRequest  @relation(fields: [mediation_request_id], references: [id])
+  decided_by_user       User?                @relation(fields: [decided_by_user_id], references: [id])
+  decided_by_agent_rep  AgentRep?            @relation(fields: [decided_by_agent_rep_id], references: [id])
+
+  @@index([mediation_request_id])
+  @@index([decision])
+  @@map("mcp_mediation_decisions")
+}
+
+model McpAccessPolicy {
+  id                     String   @id @default(uuid()) @db.Uuid
+  name                   String   @unique
+  description            String?  @db.Text
+  connector_type         String?
+  operation_type         String?
+  allowed                Boolean  @default(true)
+  requires_m4            Boolean  @default(true)
+  requires_m5            Boolean  @default(false)
+  requires_saif_decision Boolean  @default(false)
+  requires_approval      Boolean  @default(false)
+  conditions             Json?
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@index([connector_type])
+  @@map("mcp_access_policies")
+}
+
+model McpCredentialBinding {
+  id                  String            @id @default(uuid()) @db.Uuid
+  mcp_connector_id    String            @db.Uuid
+  scope               String?
+  status              McpCredentialStatus @default(placeholder)
+  secret_ref_placeholder String?        @db.Text
+  created_at          DateTime          @default(now())
+  updated_at          DateTime          @updatedAt
+
+  mcp_connector McpConnector @relation(fields: [mcp_connector_id], references: [id])
+
+  @@index([mcp_connector_id])
+  @@index([status])
+  @@map("mcp_credential_bindings")
 }

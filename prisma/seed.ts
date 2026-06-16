@@ -223,6 +223,115 @@ async function seed() {
     console.log(`  Capability: ${cap.name}`);
   }
 
+  // Seed mock MCP connectors (future/planned only)
+  console.log('Seeding mock MCP connectors...');
+  const MOCK_CONNECTORS = [
+    {
+      name: 'future_postiz_mcp',
+      description: 'Future MCP connector for Postiz publishing platform',
+      connectorType: 'publishing',
+      targetSystem: 'Postiz',
+      status: 'planned',
+      isExternal: true,
+      supportsRead: true,
+      supportsWrite: false,
+      m4Allowed: true,
+      m5Allowed: false,
+      credentialRequired: true,
+    },
+    {
+      name: 'future_resourcespace_mcp',
+      description: 'Future MCP connector for ResourceSpace DAM',
+      connectorType: 'asset_management',
+      targetSystem: 'ResourceSpace',
+      status: 'planned',
+      isExternal: true,
+      supportsRead: true,
+      supportsWrite: false,
+      m4Allowed: true,
+      m5Allowed: false,
+      credentialRequired: true,
+    },
+    {
+      name: 'future_analytics_social_mcp',
+      description: 'Future MCP connector for social media analytics',
+      connectorType: 'analytics',
+      targetSystem: 'Social Platforms',
+      status: 'planned',
+      isExternal: true,
+      supportsRead: true,
+      supportsWrite: false,
+      m4Allowed: true,
+      m5Allowed: false,
+      credentialRequired: true,
+    },
+    {
+      name: 'future_rendering_mcp',
+      description: 'Future MCP connector for rendering tools',
+      connectorType: 'rendering',
+      targetSystem: 'Rendering Tools',
+      status: 'planned',
+      isExternal: true,
+      supportsRead: true,
+      supportsWrite: false,
+      m4Allowed: true,
+      m5Allowed: false,
+      credentialRequired: true,
+    },
+    {
+      name: 'future_crm_whatsapp_mcp',
+      description: 'Future MCP connector for CRM and WhatsApp',
+      connectorType: 'crm_messaging',
+      targetSystem: 'CRM/WhatsApp',
+      status: 'planned',
+      isExternal: true,
+      supportsRead: true,
+      supportsWrite: false,
+      m4Allowed: true,
+      m5Allowed: false,
+      credentialRequired: true,
+    },
+    {
+      name: 'future_spine_postgres_mcp',
+      description: 'Future MCP connector for SPINE PostgreSQL database',
+      connectorType: 'database',
+      targetSystem: 'PostgreSQL',
+      status: 'planned',
+      isExternal: false,
+      supportsRead: true,
+      supportsWrite: false,
+      m4Allowed: true,
+      m5Allowed: false,
+      credentialRequired: true,
+    },
+  ];
+
+  for (const connector of MOCK_CONNECTORS) {
+    await prisma.mcpConnector.upsert({
+      where: { name: connector.name },
+      update: {
+        description: connector.description,
+        connector_type: connector.connectorType,
+        target_system: connector.targetSystem,
+        status: connector.status as 'planned',
+      },
+      create: {
+        name: connector.name,
+        description: connector.description,
+        connector_type: connector.connectorType,
+        target_system: connector.targetSystem,
+        status: connector.status as 'planned',
+        is_external: connector.isExternal,
+        supports_read: connector.supportsRead,
+        supports_write: connector.supportsWrite,
+        m4_allowed: connector.m4Allowed,
+        m5_allowed: connector.m5Allowed,
+        credential_required: connector.credentialRequired,
+      },
+    });
+    console.log(`  MCP Connector: ${connector.name}`);
+  }
+
   console.log('Seeding complete.');
 }
 

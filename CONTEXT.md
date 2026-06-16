@@ -4,36 +4,41 @@
 
 ## Current Sprint
 
-**Sprint**: 8 — Capability Registry & Resolution
+**Sprint**: 9 — MCP Mediation Boundary
 **Status**: Complete
-**Goal**: Implement the STITCH capability registry and capability-resolution foundation. The system must resolve work through the canonical chain before any tool, API, MCP, or external implementation is used.
+**Goal**: Implement the MCP Mediation Boundary foundation. The system must represent and enforce the rule that agents, capabilities, and implementations cannot directly access external systems.
 
 ## Active Module
 
-- `modules/capability-registry/` — Capability registry types, repository, service, tests
-- `prisma/schema.prisma` — Capability registry models
-- `prisma/seed.ts` — Core capability seed data
+- `modules/mcp-mediation/` — MCP mediation types, repository, service, tests
+- `prisma/schema.prisma` — MCP mediation models
+- `prisma/seed.ts` — Mock connector seed data
 
 ## Sprint Acceptance Criteria
 
-- [x] Intent, Objective, Capability, ExecutionPattern, Resource, Implementation, and CapabilityResolution models exist
-- [x] Capability resolution follows the canonical chain
-- [x] Resolution records include HumanUser and AgentRep lineage
-- [x] Resolution can link to SAIF Decision Records
-- [x] Resolution can require approval where needed
-- [x] M5/write-enabled implementations are blocked
-- [x] MCP-required implementations are recorded but not executed
-- [x] Core seed capabilities exist
+- [x] MCP connector models exist
+- [x] Capability-to-MCP binding exists
+- [x] Mediation requests can be created
+- [x] Mediation decisions can be recorded
+- [x] Direct access attempts are blocked
+- [x] M5/write-enabled operations are blocked
+- [x] Missing SAIF decision blocks connector use where required
+- [x] Missing approval blocks connector use where required
+- [x] Session Context Lock applies to mediation requests
+- [x] FunctionalAgent cannot bypass mediation
+- [x] GovernanceAgent cannot replace human authority
+- [x] Credential binding is placeholder-only and contains no real secrets
+- [x] Mock/future connector seed records exist
 - [x] No external systems are called
-- [x] Existing 382 tests still pass
-- [x] New registry/resolution tests are added (31 tests)
+- [x] Existing 415 tests still pass
+- [x] New MCP mediation tests are added (43 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (413 tests)
+- [x] npm run test passes (458 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 9
+- [ ] Open PR and stop for review before Sprint 10
 
 ## Next Sprint (Planned)
 
-**Sprint 9**: TBD — Awaiting review of Sprint 8 before proceeding.
+**Sprint 10**: TBD — Awaiting review of Sprint 9 before proceeding.
