@@ -46,6 +46,7 @@ async function seed() {
 
   // Seed sample users for each department role
   const sampleUsers = [
+    { email: 'cco@tanaghum.com', name: 'CCO', role: 'cco' as const, deptName: null },
     { email: 'brand.head@tanaghum.com', name: 'Brand Head', role: 'department_head' as const, deptName: 'Brand & Market Intelligence' },
     { email: 'demand.specialist@tanaghum.com', name: 'Demand Specialist', role: 'specialist' as const, deptName: 'Demand Generation' },
     { email: 'conversion.reviewer@tanaghum.com', name: 'Conversion Reviewer', role: 'reviewer' as const, deptName: 'Conversion' },
@@ -55,7 +56,7 @@ async function seed() {
 
   const defaultPassword = await hashPassword('password123');
   for (const user of sampleUsers) {
-    const dept = await prisma.department.findUnique({ where: { name: user.deptName } });
+    const dept = user.deptName ? await prisma.department.findUnique({ where: { name: user.deptName } }) : null;
     await prisma.user.upsert({
       where: { email: user.email },
       update: {},
@@ -68,7 +69,7 @@ async function seed() {
         is_active: true,
       },
     });
-    console.log(`  User: ${user.email} (role: ${user.role}, dept: ${user.deptName})`);
+    console.log(`  User: ${user.email} (role: ${user.role}, dept: ${user.deptName ?? 'executive authority'})`);
   }
 
   console.log('Seeding complete.');

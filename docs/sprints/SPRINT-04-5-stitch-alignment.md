@@ -76,11 +76,8 @@ Intent → Objective → Capability → ExecutionPattern → Resource → Implem
 - All access goes through MCP translator/provider boundaries
 
 ### Department Seed (RevOps)
-- Brand & Market Intelligence
-- Demand Generation
-- Conversion
-- Customer Growth & Retention
-- Revenue Operations
+- 5 departments: Brand & Market Intelligence, Demand Generation, Conversion, Customer Growth & Retention, Revenue Operations
+- CCO as executive authority/role (not a department)
 
 ### Adjacent Surfaces (Not Canonical Ownership)
 - Production/Design, Paperclip, ResourceSpace, Grafana, Rendering Tools

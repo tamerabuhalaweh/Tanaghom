@@ -34,7 +34,7 @@
 
 **Required approvals**: 2 (Department Head + Brand & Market Intelligence)
 
-### High Risk — Route to Senior Leadership + Brand + Compliance
+### High Risk — Route to CCO (Executive Authority) + Brand + Compliance
 
 - Medical/health claims (diagnostic, treatment-related)
 - Legal statements, disclaimers, terms
@@ -44,17 +44,18 @@
 - Regulatory or compliance-related content
 - Content involving patient data or testimonials with identifiable information
 
-**Required approvals**: 3 (Revenue Operations Head + Brand & Market Intelligence + Compliance/Legal)
+**Required approvals**: 3 (CCO + Brand & Market Intelligence + Compliance/Legal)
 
 ## Department Approval Matrix
 
-| Department | Reviews | Cannot |
+| Entity | Reviews | Cannot |
 |---|---|---|
+| CCO (Executive Authority) | Final visibility for sensitive, high-budget, public, strategic campaigns | Bypass any department review |
 | Brand & Market Intelligence | Voice, identity, positioning, PR sensitivity, visual/message alignment, market research | Approve technical claims |
 | Demand Generation | Reach, SEO, algorithm fit, hashtags, timing, amplification, content strategy | Approve brand messaging |
 | Conversion | CTA, landing pages, objection handling, sales routing | Approve content strategy |
 | Customer Growth & Retention | Upsell, re-engagement, community, loyalty, nurturing | Approve new campaigns |
-| Revenue Operations | CRM, reporting, attribution, dashboards, analytics, pipeline visibility, final oversight | Bypass any department review |
+| Revenue Operations | CRM, reporting, attribution, dashboards, analytics, pipeline visibility | Approve content |
 
 ## Approval Workflow
 
@@ -92,7 +93,7 @@ Audit Log Entry Created
 |---|---|
 | Approval pending > 24h | Send reminder to approver via messaging channel |
 | Approval pending > 48h | Escalate to department head |
-| Approval pending > 72h | Escalate to Revenue Operations Head |
+| Approval pending > 72h | Escalate to CCO (Executive Authority) |
 | Campaign deadline approaching (< 24h) | Priority alert to all pending approvers |
 | Approver unavailable | Backup approver designated per department |
 
@@ -114,6 +115,7 @@ Each department should designate a backup approver. If the primary approver is u
 
 | Department | Primary | Backup |
 |---|---|---|
+| CCO (Executive Authority) | TBD | TBD |
 | Brand & Market Intelligence | TBD | TBD |
 | Demand Generation | TBD | TBD |
 | Conversion | TBD | TBD |

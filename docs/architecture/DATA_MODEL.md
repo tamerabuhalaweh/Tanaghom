@@ -298,12 +298,14 @@
 
 ## Content & Campaign Entities
 
-### departments (RevOps Structure)
+### departments (RevOps Structure — 5 departments + CCO executive authority)
 | Field | Type | Description |
 |---|---|---|
 | id | UUID | Primary key |
 | name | String | Unique — Brand & Market Intelligence, Demand Generation, Conversion, Customer Growth & Retention, Revenue Operations |
 | description | String | |
+
+**Note**: CCO (Chief Commercial Officer) is an executive authority/role, not a department. The CCO holds `cco` system role and final approval authority for sensitive campaigns.
 
 ### content_requests
 | Field | Type | Description |

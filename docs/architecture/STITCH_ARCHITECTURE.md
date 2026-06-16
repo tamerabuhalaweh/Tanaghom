@@ -527,7 +527,11 @@ External System (Postiz, LLM, CRM, Analytics, File Storage)
 
 ## 8. Department Seed (RevOps Structure)
 
-The Tanaghum department structure aligns with the customer's RevOps organization.
+The Tanaghum department structure aligns with the customer's RevOps organization: 5 departments + CCO as executive authority.
+
+### CCO (Executive Authority)
+
+The CCO (Chief Commercial Officer) is an executive role, not a department. The CCO holds final approval authority for sensitive, high-budget, public, and strategic campaigns. The CCO role can be assigned to an AgentRep via RoleBinding.
 
 ### Departments
 
