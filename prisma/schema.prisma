@@ -1275,3 +1275,155 @@ model SpineArtifactLink {
   @@index([relationship_type])
   @@map("spine_artifact_links")
 }
+
+// ============================================================
+// Observability Substrate
+// ============================================================
+
+enum EventSeverity {
+  info
+  warning
+  error
+  critical
+}
+
+enum AuditResult {
+  success
+  failure
+  blocked
+  denied
+  deferred
+  escalated
+  cancelled
+}
+
+enum LearningSignalType {
+  performance
+  quality
+  compliance
+  efficiency
+  risk
+  pattern
+}
+
+enum LearningSignalStatus {
+  observed
+  under_review
+  accepted
+  rejected
+  superseded
+}
+
+model ObservabilityEvent {
+  id                       String        @id @default(uuid()) @db.Uuid
+  event_type               String
+  event_category           String
+  severity                 EventSeverity @default(info)
+  human_user_id            String?       @db.Uuid
+  agent_rep_id             String?       @db.Uuid
+  acting_agent_type        String?
+  acting_agent_id          String?
+  source_substrate         String?
+  source_module            String?
+  target_object_type       String?
+  target_object_id         String?
+  run_id                   String?       @db.Uuid
+  artifact_id              String?       @db.Uuid
+  saif_decision_record_id  String?       @db.Uuid
+  approval_id              String?       @db.Uuid
+  capability_resolution_id String?       @db.Uuid
+  mcp_mediation_request_id String?       @db.Uuid
+  payload_summary          String?       @db.Text
+  occurred_at              DateTime      @default(now())
+  created_at               DateTime      @default(now())
+
+  @@index([event_type])
+  @@index([event_category])
+  @@index([severity])
+  @@index([human_user_id])
+  @@index([agent_rep_id])
+  @@index([target_object_type, target_object_id])
+  @@index([saif_decision_record_id])
+  @@index([approval_id])
+  @@index([capability_resolution_id])
+  @@index([mcp_mediation_request_id])
+  @@index([run_id])
+  @@index([artifact_id])
+  @@index([occurred_at])
+  @@map("observability_events")
+}
+
+model AuditRecord {
+  id                       String      @id @default(uuid()) @db.Uuid
+  audit_type               String
+  action                   String
+  result                   AuditResult
+  human_user_id            String?     @db.Uuid
+  agent_rep_id             String?     @db.Uuid
+  acting_agent_type        String?
+  acting_agent_id          String?
+  target_object_type       String?
+  target_object_id         String?
+  source_substrate         String?
+  source_module            String?
+  reason                   String?     @db.Text
+  rationale                String?     @db.Text
+  before_state             Json?
+  after_state              Json?
+  risk_category            String?
+  policy_matched           String?
+  saif_decision_record_id  String?     @db.Uuid
+  approval_id              String?     @db.Uuid
+  capability_resolution_id String?     @db.Uuid
+  mcp_mediation_decision_id String?    @db.Uuid
+  spine_run_id             String?     @db.Uuid
+  spine_artifact_id        String?     @db.Uuid
+  created_at               DateTime    @default(now())
+
+  @@index([audit_type])
+  @@index([action])
+  @@index([result])
+  @@index([human_user_id])
+  @@index([agent_rep_id])
+  @@index([target_object_type, target_object_id])
+  @@index([saif_decision_record_id])
+  @@index([approval_id])
+  @@index([capability_resolution_id])
+  @@index([spine_run_id])
+  @@index([created_at])
+  @@map("audit_records")
+}
+
+model LearningSignal {
+  id                       String             @id @default(uuid()) @db.Uuid
+  signal_type              LearningSignalType
+  signal_category          String?
+  source_event_id          String?            @db.Uuid
+  source_audit_record_id   String?            @db.Uuid
+  source_run_id            String?            @db.Uuid
+  source_artifact_id       String?            @db.Uuid
+  saif_decision_record_id  String?            @db.Uuid
+  dks_entry_id             String?            @db.Uuid
+  signal_summary           String?            @db.Text
+  confidence               Confidence         @default(low)
+  strength                 Float?
+  observed_outcome         String?            @db.Text
+  expected_outcome         String?            @db.Text
+  variance                 String?            @db.Text
+  recommendation           String?            @db.Text
+  status                   LearningSignalStatus @default(observed)
+  created_at               DateTime           @default(now())
+  reviewed_at              DateTime?
+  reviewed_by_user_id      String?            @db.Uuid
+  reviewed_by_agent_rep_id String?            @db.Uuid
+
+  @@index([signal_type])
+  @@index([signal_category])
+  @@index([status])
+  @@index([saif_decision_record_id])
+  @@index([dks_entry_id])
+  @@index([source_event_id])
+  @@index([source_run_id])
+  @@index([created_at])
+  @@map("learning_signals")
+}
