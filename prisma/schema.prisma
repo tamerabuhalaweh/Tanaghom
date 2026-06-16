@@ -5,7 +5,7 @@
 // Each sprint will add, modify, or refine models and enums as needed.
 // Do NOT treat this schema as final until all sprints are complete.
 //
-// Current status: Sprint 0B — foundational schema, no business logic implemented yet.
+// Current status: Sprint 6 — SAIF Decision Records & DKS Foundation.
 
 generator client {
   provider = "prisma-client-js"
@@ -63,28 +63,35 @@ model User {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  department       Department?      @relation(fields: [department_id], references: [id])
-  content_requests ContentRequest[]
-  approval_events  ApprovalEvent[]
-  agent_reps       AgentRep[]
+  department              Department?              @relation(fields: [department_id], references: [id])
+  content_requests        ContentRequest[]
+  approval_events         ApprovalEvent[]
+  agent_reps              AgentRep[]
+  decisions_as_human      SaifDecisionRecord[]     @relation("DecisionHumanUser")
+  decisions_as_authority  SaifDecisionRecord[]     @relation("DecisionAuthorityUser")
+  role_assignments_as_human DecisionRoleAssignment[] @relation("RoleHumanUser")
 
   @@map("users")
 }
 
 model AgentRep {
-  id             String      @id @default(uuid()) @db.Uuid
-  user_id        String      @unique @db.Uuid
-  name           String
-  agent_type     AgentType   @default(functional)
-  status         AgentStatus @default(active)
-  permissions_context Json?
-  metadata       Json?
-  created_at     DateTime    @default(now())
-  updated_at     DateTime    @updatedAt
+  id                   String      @id @default(uuid()) @db.Uuid
+  user_id              String      @unique @db.Uuid
+  name                 String
+  agent_type           AgentType   @default(functional)
+  status               AgentStatus @default(active)
+  permissions_context  Json?
+  metadata             Json?
+  created_at           DateTime    @default(now())
+  updated_at           DateTime    @updatedAt
 
-  user                User                @relation(fields: [user_id], references: [id])
-  functional_agents   FunctionalAgent[]
-  governance_agents   GovernanceAgent[]
+  user                     User                       @relation(fields: [user_id], references: [id])
+  functional_agents        FunctionalAgent[]
+  governance_agents        GovernanceAgent[]
+  decisions_as_rep         SaifDecisionRecord[]       @relation("DecisionAgentRep")
+  decisions_as_authority   SaifDecisionRecord[]       @relation("DecisionAuthorityAgentRep")
+  role_assignments_as_agent DecisionRoleAssignment[]  @relation("RoleAgentRep")
+  handoffs                 DecisionExecutionHandoff[] @relation("HandoffAgentRep")
 
   @@map("agent_reps")
 }
@@ -100,7 +107,8 @@ model FunctionalAgent {
   created_at    DateTime    @default(now())
   updated_at    DateTime    @updatedAt
 
-  agent_rep AgentRep @relation(fields: [agent_rep_id], references: [id])
+  agent_rep        AgentRep                  @relation(fields: [agent_rep_id], references: [id])
+  role_assignments DecisionRoleAssignment[]
 
   @@map("functional_agents")
 }
@@ -117,7 +125,8 @@ model GovernanceAgent {
   created_at     DateTime    @default(now())
   updated_at     DateTime    @updatedAt
 
-  agent_rep AgentRep @relation(fields: [agent_rep_id], references: [id])
+  agent_rep        AgentRep                  @relation(fields: [agent_rep_id], references: [id])
+  role_assignments DecisionRoleAssignment[]
 
   @@map("governance_agents")
 }
@@ -162,23 +171,23 @@ enum ContentState {
 }
 
 model ContentRequest {
-  id                 String        @id @default(uuid()) @db.Uuid
-  requester_id       String        @db.Uuid
-  channel            String
-  raw_message        String        @db.Text
-  objective          String
-  audience           String?
-  campaign_id        String?       @db.Uuid
-  owner_department_id String?      @db.Uuid
-  content_type       ContentType   @default(campaign)
-  risk_category      RiskCategory  @default(low)
-  target_platforms   String[]
-  deadline           DateTime?
-  cta                String?
-  media_refs         Json?
-  status             ContentState  @default(idea)
-  created_at         DateTime      @default(now())
-  updated_at         DateTime      @updatedAt
+  id                  String        @id @default(uuid()) @db.Uuid
+  requester_id        String        @db.Uuid
+  channel             String
+  raw_message         String        @db.Text
+  objective           String
+  audience            String?
+  campaign_id         String?       @db.Uuid
+  owner_department_id String?       @db.Uuid
+  content_type        ContentType   @default(campaign)
+  risk_category       RiskCategory  @default(low)
+  target_platforms    String[]
+  deadline            DateTime?
+  cta                 String?
+  media_refs          Json?
+  status              ContentState  @default(idea)
+  created_at          DateTime      @default(now())
+  updated_at          DateTime      @updatedAt
 
   requester     User           @relation(fields: [requester_id], references: [id])
   content_items ContentItem[]
@@ -410,4 +419,218 @@ model ReachOptimizationRule {
   updated_at       DateTime   @updatedAt
 
   @@map("reach_optimization_rules")
+}
+
+// ============================================================
+// SAIF Decision Records
+// ============================================================
+
+enum DecisionStatus {
+  draft
+  context_gathering
+  proposed
+  evaluating
+  authority_review
+  accepted
+  rejected
+  deferred
+  execution_ready
+  superseded
+  audited
+}
+
+enum DecisionRole {
+  context
+  proposer
+  evaluator
+  authority
+}
+
+enum EvaluationDimension {
+  capability_impact
+  security_posture
+  cost
+  latency
+  maintainability
+  reversibility
+  human_oversight
+  compliance
+  observability
+  learning_potential
+}
+
+enum RatingValue {
+  positive
+  neutral
+  negative
+}
+
+enum FreshnessStatus {
+  fresh
+  stale
+  expired
+  unknown
+}
+
+enum HandoffStatus {
+  pending
+  acknowledged
+  in_progress
+  completed
+  cancelled
+}
+
+model SaifDecisionRecord {
+  id                      String         @id @default(uuid()) @db.Uuid
+  title                   String
+  description             String?        @db.Text
+  decision_scope          String
+  complexity              String?        @default("medium")
+  status                  DecisionStatus @default(draft)
+  parent_decision_id      String?        @db.Uuid
+  human_user_id           String         @db.Uuid
+  agent_rep_id            String         @db.Uuid
+  authority_user_id       String?        @db.Uuid
+  authority_agent_rep_id  String?        @db.Uuid
+  rationale               String?        @db.Text
+  alternatives_considered String?        @db.Text
+  confidence              Confidence     @default(low)
+  risk_acceptance         String?        @db.Text
+  execution_readiness     Boolean        @default(false)
+  success_criteria        String?        @db.Text
+  created_at              DateTime       @default(now())
+  updated_at              DateTime       @updatedAt
+
+  human_user          User                    @relation("DecisionHumanUser", fields: [human_user_id], references: [id])
+  agent_rep           AgentRep                @relation("DecisionAgentRep", fields: [agent_rep_id], references: [id])
+  authority_user      User?                   @relation("DecisionAuthorityUser", fields: [authority_user_id], references: [id])
+  authority_agent_rep AgentRep?               @relation("DecisionAuthorityAgentRep", fields: [authority_agent_rep_id], references: [id])
+  parent_decision     SaifDecisionRecord?     @relation("DecisionHierarchy", fields: [parent_decision_id], references: [id])
+  child_decisions     SaifDecisionRecord[]    @relation("DecisionHierarchy")
+
+  roles             DecisionRoleAssignment[]
+  evaluations       DecisionEvaluation[]
+  execution_handoff DecisionExecutionHandoff?
+  dks_links         DecisionDksLink[]
+
+  @@index([human_user_id])
+  @@index([agent_rep_id])
+  @@index([status])
+  @@index([parent_decision_id])
+  @@map("saif_decision_records")
+}
+
+model DecisionRoleAssignment {
+  id                  String       @id @default(uuid()) @db.Uuid
+  decision_id         String       @db.Uuid
+  role                DecisionRole
+  human_user_id       String?      @db.Uuid
+  agent_rep_id        String?      @db.Uuid
+  functional_agent_id String?      @db.Uuid
+  governance_agent_id String?      @db.Uuid
+  assigned_at         DateTime     @default(now())
+
+  decision          SaifDecisionRecord @relation(fields: [decision_id], references: [id])
+  human_user        User?              @relation("RoleHumanUser", fields: [human_user_id], references: [id])
+  agent_rep         AgentRep?          @relation("RoleAgentRep", fields: [agent_rep_id], references: [id])
+  functional_agent  FunctionalAgent?   @relation(fields: [functional_agent_id], references: [id])
+  governance_agent  GovernanceAgent?   @relation(fields: [governance_agent_id], references: [id])
+
+  @@index([decision_id])
+  @@index([role])
+  @@map("decision_role_assignments")
+}
+
+model DecisionEvaluation {
+  id           String              @id @default(uuid()) @db.Uuid
+  decision_id  String              @db.Uuid
+  dimension    EvaluationDimension
+  rating       RatingValue
+  assessment   String?             @db.Text
+  notes        String?             @db.Text
+  mitigation   String?             @db.Text
+  evaluated_by String?             @db.Uuid
+  evaluated_at DateTime            @default(now())
+
+  decision SaifDecisionRecord @relation(fields: [decision_id], references: [id])
+
+  @@unique([decision_id, dimension])
+  @@index([decision_id])
+  @@map("decision_evaluations")
+}
+
+model DecisionExecutionHandoff {
+  id                       String        @id @default(uuid()) @db.Uuid
+  decision_id              String        @unique @db.Uuid
+  implementation_spec      String?       @db.Text
+  constraints              String?       @db.Text
+  acceptance_criteria      String?       @db.Text
+  expected_outcome         String?       @db.Text
+  handoff_status           HandoffStatus @default(pending)
+  handoff_to_agent_rep_id  String?       @db.Uuid
+  acknowledged_at          DateTime?
+  created_at               DateTime      @default(now())
+  updated_at               DateTime      @updatedAt
+
+  decision             SaifDecisionRecord @relation(fields: [decision_id], references: [id])
+  handoff_to_agent_rep AgentRep?          @relation("HandoffAgentRep", fields: [handoff_to_agent_rep_id], references: [id])
+
+  @@map("decision_execution_handoffs")
+}
+
+// ============================================================
+// Domain Knowledge Substrate (DKS)
+// ============================================================
+
+enum DksSourceType {
+  official_docs
+  official_policy
+  internal_benchmark
+  team_decision
+  third_party_research
+  internal_analytics
+  saif_decision
+  platform_rule
+  learning_insight
+}
+
+model DksEntry {
+  id               String           @id @default(uuid()) @db.Uuid
+  title            String
+  description      String?          @db.Text
+  source           String?
+  source_type      DksSourceType    @default(team_decision)
+  version          String?          @default("1.0")
+  confidence       Confidence       @default(low)
+  last_reviewed_at DateTime?
+  freshness_status FreshnessStatus  @default(unknown)
+  owner            String?
+  tags             String[]
+  summary          String?          @db.Text
+  content          Json?
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+
+  decision_links DecisionDksLink[]
+
+  @@index([source_type])
+  @@index([freshness_status])
+  @@index([owner])
+  @@map("dks_entries")
+}
+
+model DecisionDksLink {
+  id            String   @id @default(uuid()) @db.Uuid
+  decision_id   String   @db.Uuid
+  dks_entry_id  String   @db.Uuid
+  link_context  String   @default("evaluation")
+  created_at    DateTime @default(now())
+
+  decision  SaifDecisionRecord @relation(fields: [decision_id], references: [id])
+  dks_entry DksEntry           @relation(fields: [dks_entry_id], references: [id])
+
+  @@unique([decision_id, dks_entry_id])
+  @@index([decision_id])
+  @@index([dks_entry_id])
+  @@map("decision_dks_links")
 }
