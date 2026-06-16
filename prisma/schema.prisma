@@ -1803,3 +1803,185 @@ model SurfaceSyncPolicy {
   @@index([policy_type])
   @@map("surface_sync_policies")
 }
+
+// ============================================================
+// Publishing Preparation Package
+// ============================================================
+
+enum PackageStatus {
+  draft
+  validating
+  ready_for_future_execution
+  blocked
+  superseded
+  cancelled
+}
+
+enum PackageType {
+  single_post
+  multi_platform_campaign
+  carousel
+  video_post
+  story
+  thread
+}
+
+enum PackageItemStatus {
+  pending
+  validated
+  blocked
+  excluded
+}
+
+enum PackageItemType {
+  platform_caption
+  asset_reference
+  hashtag_set
+  cta
+  link_reference
+  compliance_note
+  approval_evidence
+  saif_evidence
+  asset_cognition_evidence
+}
+
+enum TargetStatus {
+  pending
+  validated
+  blocked
+  ready
+}
+
+enum CheckStatus {
+  pending
+  passed
+  failed
+  skipped
+  blocked
+}
+
+enum CheckSeverity {
+  info
+  warning
+  error
+  critical
+}
+
+enum ManifestStatus {
+  draft
+  generated
+  validated
+  superseded
+}
+
+model PublishingPackage {
+  id                       String        @id @default(uuid()) @db.Uuid
+  package_status           PackageStatus @default(draft)
+  package_type             PackageType   @default(single_post)
+  campaign_id              String?       @db.Uuid
+  content_item_id          String?       @db.Uuid
+  draft_version_id         String?       @db.Uuid
+  saif_decision_record_id  String?       @db.Uuid
+  approval_id              String?       @db.Uuid
+  capability_resolution_id String?       @db.Uuid
+  mcp_mediation_request_id String?       @db.Uuid
+  spine_run_id             String?       @db.Uuid
+  spine_artifact_id        String?       @db.Uuid
+  created_by_user_id       String        @db.Uuid
+  created_by_agent_rep_id  String        @db.Uuid
+  readiness_score          Float?
+  readiness_summary        String?       @db.Text
+  blocked_reasons          String[]
+  created_at               DateTime      @default(now())
+  updated_at               DateTime      @updatedAt
+
+  items           PublishingPackageItem[]
+  targets         PublishingTarget[]
+  readiness_checks PublishingReadinessCheck[]
+  manifest        PublishingManifest?
+
+  @@index([package_status])
+  @@index([campaign_id])
+  @@index([content_item_id])
+  @@index([created_by_user_id])
+  @@map("publishing_packages")
+}
+
+model PublishingPackageItem {
+  id                    String          @id @default(uuid()) @db.Uuid
+  publishing_package_id String          @db.Uuid
+  item_type             PackageItemType
+  item_status           PackageItemStatus @default(pending)
+  source_object_type    String?
+  source_object_id      String?
+  platform              String?
+  content_summary       String?         @db.Text
+  metadata              Json?
+  created_at            DateTime        @default(now())
+  updated_at            DateTime        @updatedAt
+
+  publishing_package PublishingPackage @relation(fields: [publishing_package_id], references: [id])
+
+  @@index([publishing_package_id])
+  @@index([item_type])
+  @@map("publishing_package_items")
+}
+
+model PublishingTarget {
+  id                      String       @id @default(uuid()) @db.Uuid
+  publishing_package_id   String       @db.Uuid
+  platform                String
+  account_reference       String?
+  target_status           TargetStatus @default(pending)
+  proposed_publish_at     DateTime?
+  timezone                String?
+  platform_format         String?
+  platform_constraints    Json?
+  requires_mcp            Boolean      @default(false)
+  future_connector_reference String?
+  created_at              DateTime     @default(now())
+  updated_at              DateTime     @updatedAt
+
+  publishing_package PublishingPackage @relation(fields: [publishing_package_id], references: [id])
+
+  @@index([publishing_package_id])
+  @@index([platform])
+  @@map("publishing_targets")
+}
+
+model PublishingReadinessCheck {
+  id                    String       @id @default(uuid()) @db.Uuid
+  publishing_package_id String       @db.Uuid
+  check_type            String
+  check_status          CheckStatus  @default(pending)
+  severity              CheckSeverity @default(info)
+  message               String?      @db.Text
+  source_object_type    String?
+  source_object_id      String?
+  created_at            DateTime     @default(now())
+
+  publishing_package PublishingPackage @relation(fields: [publishing_package_id], references: [id])
+
+  @@index([publishing_package_id])
+  @@index([check_type])
+  @@index([check_status])
+  @@map("publishing_readiness_checks")
+}
+
+model PublishingManifest {
+  id                    String         @id @default(uuid()) @db.Uuid
+  publishing_package_id String         @unique @db.Uuid
+  manifest_version      Int            @default(1)
+  manifest_status       ManifestStatus @default(draft)
+  package_hash          String?
+  manifest_summary      String?        @db.Text
+  generated_at          DateTime       @default(now())
+  generated_by_user_id  String         @db.Uuid
+  generated_by_agent_rep_id String     @db.Uuid
+  created_at            DateTime       @default(now())
+  updated_at            DateTime       @updatedAt
+
+  publishing_package PublishingPackage @relation(fields: [publishing_package_id], references: [id])
+
+  @@map("publishing_manifests")
+}
