@@ -1,7 +1,8 @@
 # SECURITY_MODEL.md — Auth, Permissions & AI Safety
 
-> **Version**: 1.0
-> **Date**: 2026-06-14
+> **Version**: 2.0
+> **Date**: 2026-06-16
+> **Sprint**: 4.5 — STITCH Alignment
 > **Update Rule**: With security decisions
 
 ## Authentication
@@ -10,27 +11,41 @@
 - Session tokens with configurable expiry (default: 24h)
 - Refresh token rotation for persistent sessions
 - Password hashing: bcrypt with minimum 12 rounds
-- MFA: Recommended for admin and marketing owner roles (future phase)
+- MFA: Recommended for admin and department head roles (future phase)
 
-## Authorization
+## Authorization (STITCH Identity Model)
 
-Role-based access control (RBAC) with department-level scoping:
+Role-based access control (RBAC) with department-level scoping, mediated through the STITCH identity model:
 
 ```
-Request → JWT Verification → Role Check → Department Scope → Permission Check → Handler
+HumanUser → AgentRep → RoleBinding → PermissionGrant → Handler
 ```
+
+All agent actions are performed by AgentReps bound to HumanUsers. See `STITCH_ARCHITECTURE.md` §1 for full identity model.
 
 ### Permission Levels
 
 | Level | Description | Example |
 |---|---|---|
-| Read | View data only | Analyst viewing analytics |
-| Write | Create/edit own data | Content Reviewer editing drafts |
-| Approve | Make approval decisions | Marketing Owner approving posts |
-| Admin | Configure system | Security Admin rotating keys |
-| System | Automated agent actions | AI Agent creating drafts (scoped) |
+| Read | View data only | Viewer viewing analytics |
+| Write | Create/edit own data | Specialist editing drafts |
+| Approve | Make approval decisions | Department Head approving posts |
+| Admin | Configure system | Admin rotating keys |
+| System | Automated agent actions | FunctionalAgent creating drafts (scoped via AgentRep) |
 
-## Agent Security
+### Session Context Lock
+
+When a HumanUser starts a session, the system resolves their AgentRep(s), RoleBindings, and PermissionGrants, then locks the session context. This lock is immutable for the session duration. See `STITCH_ARCHITECTURE.md` §2.
+
+## Agent Security (STITCH)
+
+### MCP Mediation
+
+All external access is mediated through MCP provider boundaries. Agents must not directly access files, databases, analytics APIs, renderers, or enterprise APIs. See `STITCH_ARCHITECTURE.md` §7.
+
+### M4/M5 Runtime Separation
+
+FunctionalAgents (M4) and GovernanceAgents (M5) run in separate runtime contexts. GovernanceAgents can veto FunctionalAgent actions. See ADR-007.
 
 ### Threat Model
 
@@ -89,3 +104,4 @@ Every security-relevant action must be logged:
 | Date | Change | Author |
 |---|---|---|
 | 2026-06-14 | Initial creation | Sprint 0A |
+| 2026-06-16 | STITCH alignment — identity model, Session Context Lock, MCP mediation, M4/M5 | Sprint 4.5 |

@@ -1,19 +1,31 @@
 # ARCHITECTURE.md — System Architecture
 
-> **Version**: 1.0
-> **Date**: 2026-06-14
+> **Version**: 2.0
+> **Date**: 2026-06-16
+> **Sprint**: 4.5 — STITCH Alignment
 > **Update Rule**: Only by architecture decision (ADR)
+
+## Overview
+
+Tanaghum is built on **STITCH** — a governed, capability-led, AgentRep-centered operating substrate. STITCH is not merely a social/content automation stack; it is an agent-native operating layer that governs identity, capability resolution, execution lineage, observability, and asset cognition.
+
+See `STITCH_ARCHITECTURE.md` for the full STITCH specification.
 
 ## Tech Stack
 
 | Layer | Technology | Purpose |
 |---|---|---|
+| Operating Substrate | STITCH | Agent identity, capability resolution, lineage, observability |
 | Runtime | Node.js + TypeScript | Application server |
 | Database | PostgreSQL + Prisma | Operational data store, schema migrations |
 | Queue/Scheduler | Redis + BullMQ | Background jobs, retries, scheduled tasks |
-| Publishing | Postiz CLI/Public API | Social media publishing and analytics |
-| Agent Runtime | OpenClaw | Autonomous agent orchestration |
-| LLM | Provider-neutral interface | Text generation, embeddings |
+| Publishing | Postiz (adjacent surface) | Social media publishing and analytics |
+| Agent Runtime | OpenClaw (adjacent surface) | Autonomous agent orchestration |
+| LLM | MCP-mediated provider | Text generation, embeddings |
+| Asset Management | ResourceSpace (adjacent surface) | Asset storage/retrieval (not identity owner) |
+| Observability | Grafana (adjacent surface) | Dashboards and monitoring |
+| Rendering | Rendering tools (adjacent surface) | Image/video production pipelines |
+| Editorial | Paperclip (adjacent surface) | Content management workflow |
 | Vector Store | pgvector or Qdrant | Semantic search for brand knowledge and learnings |
 | Frontend | React + Vite | Dashboard for campaign, approval, analytics |
 | Testing | Vitest + Playwright | Unit/integration + E2E tests |
@@ -23,33 +35,53 @@
 ## High-Level Architecture
 
 ```
-User / Marketing Team
+HumanUser
+    ↓ (authenticates, Session Context Lock)
+AgentRep (canonical delegated identity)
+    ↓ (resolves capability)
+Intent → Objective → Capability → ExecutionPattern → Resource → Implementation
+    ↓ (MCP mediation boundary)
+┌──────────────────────────────────────────────────────────┐
+│ FunctionalAgents          │ GovernanceAgents              │
+│ - content-writer          │ - security-sentinel           │
+│ - brand-reviewer          │ - compliance-guardian          │
+│ - analytics-puller        │                                │
+│ - scheduler               │                                │
+└──────────────────────────────────────────────────────────┘
+    ↓ (SPINE records)
+Run → Artifact (lineage, replay index)
     ↓
-Messaging Interface (Slack / WhatsApp / Telegram)
+┌──────────────────────────────────────────────────────────┐
+│ PostgreSQL          │ Redis + BullMQ                      │
+│ - identity model    │ - analytics pull jobs               │
+│ - capability graph  │ - weekly report jobs                │
+│ - SPINE records     │ - retry jobs                        │
+│ - asset cognition   │ - heartbeat tasks                   │
+│ - observability     │ - approval reminders                │
+└──────────────────────────────────────────────────────────┘
+    ↓ (MCP provider boundaries)
+┌──────────────────────────────────────────────────────────┐
+│ Adjacent Surfaces (not canonical ownership)               │
+│ Postiz · ResourceSpace · Paperclip · Grafana · Renderers │
+└──────────────────────────────────────────────────────────┘
     ↓
-OpenClaw Agent Runtime (sandboxed, allowlisted tools)
-    ├── Content Strategy Agent
-    ├── Content Writer Agent
-    ├── Brand & Compliance Review Agent
-    ├── Scheduler Agent
-    ├── Analytics & Learning Agent
-    └── Security Sentinel
-    ↓
-Workflow Orchestrator / API Service (Node.js + TypeScript)
-    ↓
-┌───────────────────────────────────────────────┐
-│ PostgreSQL          │ Redis + BullMQ          │
-│ - content items     │ - analytics pull jobs   │
-│ - approvals         │ - weekly report jobs    │
-│ - analytics         │ - retry jobs            │
-│ - audit logs        │ - heartbeat tasks       │
-│ - platform rules    │ - approval reminders    │
-└───────────────────────────────────────────────┘
-    ↓
-Postiz CLI / Public API
-    ↓
-Connected Social Platforms (LinkedIn, Instagram, X)
+Connected Platforms (LinkedIn, Instagram, X, etc.)
 ```
+
+## Adjacent Surfaces vs Canonical Ownership
+
+STITCH distinguishes between canonical ownership and adjacent surfaces:
+
+| Entity | Canonical Owner | Adjacent Surface |
+|---|---|---|
+| Agent Identity | AgentRep (Tanaghum DB) | — |
+| Capability Resolution | Capability graph (Tanaghum DB) | — |
+| Execution Lineage | SPINE (Tanaghum DB) | — |
+| Asset Identity | Asset (Tanaghum DB) | ResourceSpace (storage only) |
+| Observability | Event/AuditRecord (Tanaghum DB) | Grafana (dashboards) |
+| Publishing | Publishing module (Tanaghum) | Postiz (execution) |
+| Editorial Workflow | — | Paperclip (surface) |
+| Rendering | — | Rendering tools (surface) |
 
 ## Folder Structure
 
@@ -140,17 +172,21 @@ Every module follows the same structure:
 
 ## Design Principles
 
-1. **Postiz is the authoritative publishing system** — stores connected platform integrations
-2. **OpenClaw is an orchestrator** — not the source of truth for operational state
-3. **Database stores workflow state** — approvals, analytics, audit logs
-4. **Markdown files store agent behavior** — not secrets or raw analytics
-5. **Human approval is mandatory** — until system earns production trust
-6. **Every external action is logged** — actor, timestamp, input, output, policy decision
-7. **Provider interfaces for all external services** — mock first, real implementations after security review
-8. **Strict state machines** — campaign and approval states cannot be bypassed
+1. **AgentRep is the canonical delegated identity** — all agent actions are performed by AgentReps bound to HumanUsers (ADR-005)
+2. **Capabilities are resolved before tools are invoked** — Intent → Objective → Capability → ExecutionPattern → Resource → Implementation → Execution (ADR-006)
+3. **M4/M5 runtime separation** — functional agents (M4) and governance agents (M5) operate in separate runtime contexts (ADR-007)
+4. **Asset Cognition owns canonical asset identity** — ResourceSpace is an adjacent surface, not the source of truth (ADR-008)
+5. **Paperclip and ResourceSpace are adjacent surfaces** — they provide execution capabilities but do not own canonical data (ADR-009)
+6. **MCP mediates all external access** — agents never directly access files, databases, analytics APIs, renderers, or enterprise APIs
+7. **SPINE records all execution** — every Run produces Artifacts with lineage and replay index
+8. **Observability is first-class** — Events, AuditRecords, and LearningSignals are structural, not afterthoughts
+9. **Human approval is mandatory** — until system earns production trust
+10. **Every external action is logged** — actor, timestamp, input, output, policy decision
+11. **Strict state machines** — campaign and approval states cannot be bypassed
 
 ## Revision History
 
 | Date | Change | Author |
 |---|---|---|
 | 2026-06-14 | Initial creation | Sprint 0A |
+| 2026-06-16 | STITCH alignment — operating substrate, adjacent surfaces, design principles | Sprint 4.5 |

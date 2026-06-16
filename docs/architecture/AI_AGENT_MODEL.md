@@ -1,29 +1,56 @@
 # AI_AGENT_MODEL.md — AI Agents, Prompts & Guardrails
 
-> **Version**: 1.0
-> **Date**: 2026-06-14
+> **Version**: 2.0
+> **Date**: 2026-06-16
+> **Sprint**: 4.5 — STITCH Alignment
 > **Update Rule**: When agent behavior changes
 
-## Agent Roles
+## Identity Model (STITCH)
 
-| Agent | Purpose | Allowed Tools |
+All agent actions in Tanaghum are performed through the STITCH identity model. See `STITCH_ARCHITECTURE.md` §1 for full entity definitions.
+
+### Key Entities
+
+| Entity | Purpose |
+|---|---|
+| **HumanUser** | Real person authenticated to the platform |
+| **AgentRep** | Canonical delegated identity — every agent action is performed by an AgentRep bound to exactly one HumanUser |
+| **FunctionalAgent** | Specialized agent that performs a specific capability (e.g., content-writer, brand-reviewer) |
+| **GovernanceAgent** | Policy enforcement agent with veto authority (e.g., security-sentinel, compliance-guardian) |
+| **RoleBinding** | Maps AgentRep to a system role within a department scope |
+| **PermissionGrant** | Fine-grained permission attached to an AgentRep |
+| **ConnectorBinding** | Binds AgentRep to an external connector (Postiz, messaging, CRM) |
+| **CredentialBinding** | Securely associates credentials with a ConnectorBinding (refs only, no secrets) |
+
+### Agent Types
+
+| Type | Runtime | Purpose | Examples |
+|---|---|---|---|
+| FunctionalAgent | M4 (functional) | Perform specific capabilities | content-writer, brand-reviewer, analytics-puller, scheduler |
+| GovernanceAgent | M5 (governance) | Enforce policies, veto actions | security-sentinel, compliance-guardian |
+
+## Functional Agents (M4 Runtime)
+
+| Agent | Capability | Allowed Resources |
 |---|---|---|
-| Coordinator | Routes requests, enforces workflow state, delegates tasks | Messaging, database, sub-agent calls |
-| Content Strategist | Creates themes, calendars, topic angles, weekly plans | Memory/vector search, trend search, database read |
-| Content Writer | Creates platform-native drafts and revisions | LLM, platform rules, brand guide, database write |
-| Brand & Compliance Reviewer | Checks tone, risks, claims, restricted topics, platform fit | Rules KB, brand guide, policy checklist |
-| Scheduler Agent | Creates drafts/schedules in Postiz after approval only | Postiz CLI/API, database, logging |
-| Analytics Agent | Pulls analytics, writes structured insights | Postiz analytics API/CLI, database, memory writer |
-| Security Sentinel | Checks permissions, skill changes, abnormal actions, failed policies | Logs, config, alerting. No publishing tools. |
+| Content Strategist | content_strategy | Memory/vector search, trend search, database read (via MCP) |
+| Content Writer | content_generation | LLM (via MCP), platform rules, brand guide (via MCP) |
+| Brand & Compliance Reviewer | compliance_review | Rules KB (via MCP), brand guide, policy checklist |
+| Scheduler Agent | publishing | Postiz (via MCP), database (via MCP), logging |
+| Analytics Agent | analytics_pull | Postiz analytics (via MCP), database (via MCP) |
+
+## Governance Agents (M5 Runtime)
+
+| Agent | Policy Scope | Veto Authority |
+|---|---|---|
+| Security Sentinel | Permission checks, skill changes, abnormal actions, failed policies | Yes — can block any action |
+| Compliance Guardian | Brand safety, medical claims, legal constraints | Yes — can block content publishing |
 
 ## Provider Interfaces
 
-All external integrations use provider interfaces. This enables:
-- Mock providers for development and testing
-- Easy provider swapping without business logic changes
-- Security review before activating real implementations
+All external integrations go through MCP-mediated provider interfaces. See `STITCH_ARCHITECTURE.md` §7 for MCP mediation rules.
 
-### LLMProvider
+### LLMProvider (MCP-mediated)
 
 ```typescript
 interface LLMProvider {
@@ -33,7 +60,7 @@ interface LLMProvider {
 }
 ```
 
-### PostizProvider
+### PostizProvider (MCP-mediated)
 
 ```typescript
 interface PostizProvider {
@@ -45,7 +72,7 @@ interface PostizProvider {
 }
 ```
 
-### MessagingProvider
+### MessagingProvider (MCP-mediated)
 
 ```typescript
 interface MessagingProvider {
@@ -55,7 +82,7 @@ interface MessagingProvider {
 }
 ```
 
-### CRMProvider
+### CRMProvider (MCP-mediated)
 
 ```typescript
 interface CRMProvider {
@@ -65,7 +92,7 @@ interface CRMProvider {
 }
 ```
 
-### AnalyticsProvider
+### AnalyticsProvider (MCP-mediated)
 
 ```typescript
 interface AnalyticsProvider {
@@ -73,6 +100,18 @@ interface AnalyticsProvider {
   getPlatformMetrics(platform: string, period: Period): Promise<PlatformMetrics>;
 }
 ```
+
+## Session Context Lock
+
+When a HumanUser starts a session, the system:
+
+1. Authenticates the HumanUser
+2. Resolves their AgentRep(s)
+3. Resolves RoleBinding + PermissionGrant for each AgentRep
+4. Resolves ConnectorBindings + CredentialBindings
+5. Locks session context (immutable for session duration)
+
+**Critical constraint**: AgentRep A (bound to HumanUser X) cannot invoke, delegate to, or modify AgentRep B (bound to HumanUser Y). Cross-human agent delegation is prohibited.
 
 ## Context Management
 
@@ -86,7 +125,7 @@ Every AI coding session receives:
 
 ### Agent Runtime Context
 
-The OpenClaw agent runtime maintains:
+The agent runtime maintains:
 1. `SOUL.md` — brand voice (loaded for content generation)
 2. `MEMORY.md` — learned patterns (loaded for strategy and writing)
 3. `PLATFORM_RULES.md` — platform constraints (loaded for generation and validation)
@@ -96,9 +135,10 @@ The OpenClaw agent runtime maintains:
 ### Context Boundaries
 
 - Agent NEVER sees other modules' implementation code during a sprint
-- Agent NEVER has access to raw credentials
+- Agent NEVER has access to raw credentials — credentials are mediated through CredentialBindings
 - Fetched web content is marked as UNTRUSTED and cannot override instructions
 - Agent memory is updated only through the learning engine, not directly
+- AgentRep context is locked at session start and immutable for session duration
 
 ## Prompt Templates
 
@@ -153,9 +193,14 @@ Output: JSON with risk_score (0-100), risk_category (low/medium/high), risk_reas
 6. Agent must not claim algorithm certainty — outputs are probability-based
 7. Agent-generated content must be traceable to campaign, draft version, approver, publishing job
 8. Agent coding sessions must summarize changed files, tests, risks, remaining work
+9. **AgentRep is the canonical delegated identity** — no agent action without an AgentRep
+10. **Capabilities must be resolved before tools are invoked** — no direct tool calls
+11. **MCP mediates all external access** — no direct file/database/API access
+12. **Session Context Lock is immutable** — no cross-human agent delegation
 
 ## Revision History
 
 | Date | Change | Author |
 |---|---|---|
 | 2026-06-14 | Initial creation | Sprint 0A |
+| 2026-06-16 | STITCH alignment — identity model, Session Context Lock, MCP mediation, guardrails | Sprint 4.5 |

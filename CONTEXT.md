@@ -4,20 +4,29 @@
 
 ## Current Sprint
 
-**Sprint**: 4 — Algorithm Intelligence MCP
-**Status**: Complete (pending review)
-**Goal**: Reach Readiness Score calculation, platform-specific scoring, stale rule detection, spam detection, optimization suggestions.
+**Sprint**: 4.5 — STITCH Alignment
+**Status**: In Progress
+**Goal**: Architecture and data-model alignment to reflect STITCH as a governed, capability-led, AgentRep-centered operating substrate. No new business workflows.
 
 ## Active Module
 
-- `modules/algorithm-intelligence/` — scoring engine, platform rules, stale detection, spam detection
+- `docs/architecture/` — STITCH architecture documentation
+- `docs/adr/` — New ADRs (005–009)
+- `prisma/seed.ts` — Department seed update to RevOps structure
 
 ## Allowed Files
 
-- `modules/algorithm-intelligence/**` — algorithm-intelligence module implementation
-- `docs/api/openapi.yaml` — add algorithm endpoints
-- `docs/sprints/SPRINT-04-algorithm-intelligence.md` — sprint report
-- `modules/ai-generation/types.ts` — import PLATFORM_CONSTRAINTS (read-only)
+- `docs/architecture/STITCH_ARCHITECTURE.md` — new STITCH architecture doc
+- `docs/architecture/ARCHITECTURE.md` — updated to reference STITCH
+- `docs/architecture/AI_AGENT_MODEL.md` — updated identity model
+- `docs/architecture/DATA_MODEL.md` — updated with STITCH entities
+- `docs/architecture/MODULE_BOUNDARIES.md` — updated for STITCH
+- `docs/architecture/SECURITY_MODEL.md` — updated for STITCH
+- `docs/adr/005-*.md` through `docs/adr/009-*.md` — new ADRs
+- `docs/sprints/SPRINT-04-5-stitch-alignment.md` — sprint report
+- `prisma/seed.ts` — department seed update
+- `CONTEXT.md` — this file
+- `AGENTS.md` — updated for STITCH
 
 ## Locked Files
 
@@ -25,6 +34,7 @@
 - `modules/users-departments/` — stable
 - `modules/campaigns/` — stable
 - `modules/ai-generation/` — stable
+- `modules/algorithm-intelligence/` — stable
 - `modules/approvals/` — not yet
 - `modules/publishing/` — not yet
 - `modules/analytics/` — not yet
@@ -32,23 +42,18 @@
 - `modules/crm-conversion/` — not yet
 - `modules/production-requests/` — not yet
 - No approval, publishing, analytics, learning, CRM, or production workflow
+- No real MCP servers, Paperclip, ResourceSpace integrations
 
 ## Sprint Acceptance Criteria
 
-- [x] Project directory structure created
-- [x] AGENTS.md, CLAUDE.md, CONTEXT.md, README.md written
-- [x] SOUL.md, MEMORY.md, HEARTBEAT.md created
-- [x] PLATFORM_RULES.md, APPROVAL_POLICY.md, SECURITY_POLICY.md created
-- [ ] docs/product/ — PRD.md, SRS.md, USER_ROLES.md, WORKFLOWS.md
-- [ ] docs/architecture/ — ARCHITECTURE.md, MODULE_BOUNDARIES.md, DATA_MODEL.md, SECURITY_MODEL.md, AI_AGENT_MODEL.md, STATE_MACHINES.md
-- [ ] docs/api/openapi.yaml — initial API contract skeleton
-- [ ] docs/adr/ — template + initial decisions (001–004)
-- [ ] docs/sprints/SPRINT-00-foundation.md — full sprint 0 plan
-- [ ] docs/quality/ — TESTING_STRATEGY.md, RELEASE_CHECKLIST.md, AI_SESSION_PROTOCOL.md
-- [ ] docs/prompts/ — AI_CODING_SESSION_PROMPT.md, PR_REVIEW_PROMPT.md
-- [ ] modules/*/README.md — all 12 module boundary docs
-- [ ] Provider interface definitions (types only, no implementation)
+- [ ] Documentation reflects the new STITCH architecture
+- [ ] Prisma schema is updated only if needed for provisional canonical objects
+- [ ] Department names align with the new customer RevOps org
+- [ ] Previous completed modules still compile and tests pass
+- [ ] CI remains green
+- [ ] No business feature scope is added
+- [ ] Open PR and stop for review before Sprint 5
 
 ## Next Sprint (Planned)
 
-**Sprint 0B**: Technical Foundation — Docker Compose, PostgreSQL, Prisma, Redis, BullMQ, CI, linting, testing setup.
+**Sprint 5**: Approval Workflow — department-based approval routing, approve/reject/request changes, reviewer comments, SLA, audit trail, permission checks, state transition enforcement. Awaiting review of Sprint 4.5 before proceeding.

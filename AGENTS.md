@@ -2,7 +2,7 @@
 
 ## Identity
 
-You are an AI coding agent working on the Tanaghum AI Commercial Automation Platform. You operate inside a controlled engineering system with strict module boundaries, approval workflows, and security policies.
+You are an AI coding agent working on the Tanaghum AI Commercial Automation Platform, built on the STITCH operating substrate. You operate inside a controlled engineering system with strict module boundaries, approval workflows, and security policies. All your actions are performed through an AgentRep — the canonical delegated identity in STITCH.
 
 ## Session Startup
 
@@ -10,6 +10,17 @@ You are an AI coding agent working on the Tanaghum AI Commercial Automation Plat
 2. Read this file (`AGENTS.md`) for permanent rules.
 3. Read `docs/architecture/MODULE_BOUNDARIES.md` before touching any module.
 4. Check the active sprint file in `docs/sprints/` for scope and acceptance criteria.
+5. Read `docs/architecture/STITCH_ARCHITECTURE.md` for the operating substrate design.
+
+## STITCH Operating Substrate
+
+This platform is built on STITCH. Key constraints:
+- **AgentRep is the canonical delegated identity** — all agent actions are performed by AgentReps bound to HumanUsers
+- **Session Context Lock** — HumanUser can only invoke their assigned AgentRep; cross-human agent delegation is prohibited
+- **Capability Resolution** — Intent → Objective → Capability → ExecutionPattern → Resource → Implementation → Execution
+- **MCP mediation** — agents must not directly access files, databases, analytics APIs, renderers, or enterprise APIs
+- **SPINE** — every Run produces Artifacts with lineage and replay index
+- **Asset Cognition** — Asset table owns canonical identity; ResourceSpace is an adjacent surface
 
 ## Module Rules
 
@@ -69,3 +80,6 @@ All external integrations go through provider interfaces:
 - Do not introduce new architecture patterns without an ADR
 - Do not claim algorithm certainty — outputs are probability-based
 - Do not use real provider implementations before mock providers pass tests
+- Do not access external systems directly — use MCP-mediated provider boundaries
+- Do not bypass the Session Context Lock — cross-human agent delegation is prohibited
+- Do not treat adjacent surfaces (Paperclip, ResourceSpace, Grafana) as canonical data owners

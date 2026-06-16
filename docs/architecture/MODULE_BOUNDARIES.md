@@ -1,12 +1,13 @@
 # MODULE_BOUNDARIES.md — Module Responsibilities
 
-> **Version**: 1.0
-> **Date**: 2026-06-14
+> **Version**: 2.0
+> **Date**: 2026-06-16
+> **Sprint**: 4.5 — STITCH Alignment
 > **Update Rule**: Before coding new modules
 
 ## Core Rule
 
-Each module owns a single business capability. It must NOT do work that belongs to another module. Modules communicate via domain events, not direct imports.
+Each module owns a single business capability. It must NOT do work that belongs to another module. Modules communicate via domain events, not direct imports. All agent actions flow through the STITCH identity model (AgentRep → Capability Resolution → MCP-mediated execution). See `STITCH_ARCHITECTURE.md`.
 
 ## Module Definitions
 
@@ -16,7 +17,7 @@ Each module owns a single business capability. It must NOT do work that belongs 
 - **Entry point**: `controller.ts` → REST endpoints
 
 ### users-departments
-- **Owns**: Users, departments, roles, permissions, approval authority mapping
+- **Owns**: HumanUsers, AgentReps, departments, RoleBindings, PermissionGrants, ConnectorBindings, CredentialBindings
 - **Must NOT**: Create campaign content, publish posts
 - **Entry point**: `controller.ts` → REST endpoints
 
@@ -121,3 +122,4 @@ Each module owns a single business capability. It must NOT do work that belongs 
 | Date | Change | Author |
 |---|---|---|
 | 2026-06-14 | Initial creation | Sprint 0A |
+| 2026-06-16 | STITCH alignment — identity model, STITCH reference, RevOps departments | Sprint 4.5 |
