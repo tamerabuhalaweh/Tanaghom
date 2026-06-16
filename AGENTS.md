@@ -22,6 +22,16 @@ This platform is built on STITCH. Key constraints:
 - **SPINE** — every Run produces Artifacts with lineage and replay index
 - **Asset Cognition** — Asset table owns canonical identity; ResourceSpace is an adjacent surface
 
+## SAIF Decision Framework
+
+This platform uses SAIF v1.2 as the normative decision framework. Key requirements:
+- **All significant AI decisions must use the SAIF Decision Record template** (ADR-010+)
+- **10 mandatory evaluation dimensions** must be assessed: Capability Impact, Security Posture, Cost, Latency, Maintainability, Reversibility, Human Oversight, Compliance, Observability, Learning Potential
+- **3 Critical dimensions** (Security Posture, Human Oversight, Compliance) must be positive or have explicit mitigation
+- **Cost-benefit analysis is required** for decisions with resource implications
+- **Execution handoffs must be explicit** with testable acceptance criteria
+- See `docs/architecture/SAIF.md` for the full specification
+
 ## Module Rules
 
 - Each module follows: `controller.ts` / `service.ts` / `repository.ts` / `types.ts` / `validators.ts` / `events.ts` / `tests/`

@@ -16,25 +16,27 @@ Architecture and documentation alignment only. No new business workflows, no imp
 | File | Purpose |
 |---|---|
 | `docs/architecture/STITCH_ARCHITECTURE.md` | Full STITCH operating substrate specification |
+| `docs/architecture/SAIF.md` | SAIF v1.2 normative decision framework |
 | `docs/adr/005-agentrep-as-canonical-delegated-identity.md` | ADR: AgentRep as canonical delegated identity |
 | `docs/adr/006-capability-resolution-before-tool-implementation.md` | ADR: Capability resolution pipeline |
 | `docs/adr/007-m4-m5-runtime-separation.md` | ADR: M4/M5 runtime separation |
 | `docs/adr/008-asset-cognition-owning-canonical-asset-identity.md` | ADR: Asset Cognition owns canonical asset identity |
 | `docs/adr/009-paperclip-resourcespace-as-adjacent-surfaces.md` | ADR: Adjacent surfaces, not source-of-truth |
+| `docs/adr/010-adopt-saif-v1-2-as-normative-decision-framework.md` | ADR: SAIF v1.2 adoption |
 
 ### Updated Files
 
 | File | Change |
 |---|---|
-| `docs/architecture/ARCHITECTURE.md` | v2.0 — STITCH operating substrate, adjacent surfaces, design principles |
+| `docs/architecture/ARCHITECTURE.md` | v2.0 — STITCH operating substrate, adjacent surfaces, design principles, SAIF reference |
 | `docs/architecture/AI_AGENT_MODEL.md` | v2.0 — Identity model (HumanUser, AgentRep, FunctionalAgent, GovernanceAgent), Session Context Lock, MCP mediation |
 | `docs/architecture/DATA_MODEL.md` | v2.0 — Full STITCH entity set (identity, capability resolution, SPINE, observability, asset cognition, RevOps departments) |
 | `docs/architecture/MODULE_BOUNDARIES.md` | v2.0 — STITCH reference, identity model in users-departments |
 | `docs/architecture/SECURITY_MODEL.md` | v2.0 — STITCH identity model, Session Context Lock, MCP mediation, M4/M5 |
 | `CONTEXT.md` | Sprint 4.5 active |
-| `AGENTS.md` | STITCH operating substrate section, updated guardrails |
+| `AGENTS.md` | STITCH operating substrate section, SAIF framework section, updated guardrails |
 | `APPROVAL_POLICY.md` | Department names aligned to RevOps structure |
-| `prisma/seed.ts` | Department seed updated to RevOps structure (5 departments) |
+| `prisma/seed.ts` | Department seed updated to RevOps structure (5 departments + CCO executive authority) |
 
 ## STITCH Architecture Summary
 
@@ -91,6 +93,7 @@ Intent → Objective → Capability → ExecutionPattern → Resource → Implem
 | 007 | M4/M5 Runtime Separation | Accepted |
 | 008 | Asset Cognition Owning Canonical Asset Identity | Accepted |
 | 009 | Paperclip and ResourceSpace as Adjacent Surfaces | Accepted |
+| 010 | Adopt SAIF v1.2 as Normative Decision Framework | Accepted |
 
 ## Acceptance Criteria
 
