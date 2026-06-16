@@ -11,9 +11,11 @@ export async function findUserByEmail(email: string) {
 export async function findUserById(id: string): Promise<SessionUser | null> {
   const user = await prisma.user.findUnique({
     where: { id },
-    include: { department: true },
+    include: { department: true, agent_reps: true },
   });
   if (!user) return null;
+
+  const agentRep = user.agent_reps?.[0] || null;
 
   return {
     id: user.id,
@@ -22,5 +24,12 @@ export async function findUserById(id: string): Promise<SessionUser | null> {
     role: user.role,
     departmentId: user.department_id,
     isActive: user.is_active,
+    agentRepId: agentRep?.id || null,
   };
+}
+
+export async function findAgentRepByUserId(userId: string) {
+  return prisma.agentRep.findUnique({
+    where: { user_id: userId },
+  });
 }
