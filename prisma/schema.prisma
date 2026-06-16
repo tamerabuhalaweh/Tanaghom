@@ -78,6 +78,8 @@ model User {
   mcp_decisions_made      McpMediationDecision[]
   spine_runs              SpineRun[]
   spine_artifacts_created SpineArtifact[]
+  assets_created          Asset[]
+  asset_lineage_created   AssetLineage[]
 
   @@map("users")
 }
@@ -108,6 +110,8 @@ model AgentRep {
   mcp_decisions_made       McpMediationDecision[]
   spine_runs               SpineRun[]
   spine_artifacts_created  SpineArtifact[]
+  assets_created           Asset[]
+  asset_lineage_created    AssetLineage[]
 
   @@map("agent_reps")
 }
@@ -1426,4 +1430,177 @@ model LearningSignal {
   @@index([source_run_id])
   @@index([created_at])
   @@map("learning_signals")
+}
+
+// ============================================================
+// Asset Cognition
+// ============================================================
+
+enum AssetType {
+  image
+  video
+  document
+  audio
+  template
+  carousel
+  thumbnail
+  brand_guideline
+  creative_brief
+  publishing_package
+  other
+}
+
+enum AssetStatus {
+  draft
+  pending_review
+  approved
+  rejected
+  archived
+  superseded
+}
+
+enum CognitionType {
+  brand_alignment
+  compliance_status
+  usage_context
+  performance_data
+  platform_fit
+  audience_fit
+  quality_assessment
+}
+
+enum ExternalReferenceType {
+  resourcespace_asset
+  rendering_output
+  design_tool_link
+  storage_object
+  dam_reference
+}
+
+enum ExternalSyncStatus {
+  synced
+  pending
+  conflict
+  stale
+  unknown
+}
+
+enum AssetLineageType {
+  derived_from
+  variant_of
+  approved_version_of
+  rendered_from
+  used_in
+  supports
+  replaces
+  references
+}
+
+model Asset {
+  id                       String      @id @default(uuid()) @db.Uuid
+  asset_type               AssetType
+  asset_status             AssetStatus @default(draft)
+  title                    String
+  description              String?     @db.Text
+  canonical_owner          String?
+  sensitivity              String?
+  classification           String?
+  source_object_type       String?
+  source_object_id         String?
+  created_by_user_id       String      @db.Uuid
+  created_by_agent_rep_id  String      @db.Uuid
+  spine_artifact_id        String?     @db.Uuid
+  saif_decision_record_id  String?     @db.Uuid
+  approval_id              String?     @db.Uuid
+  capability_resolution_id String?     @db.Uuid
+  content_hash             String?
+  version                  Int         @default(1)
+  metadata                 Json?
+  created_at               DateTime    @default(now())
+  updated_at               DateTime    @updatedAt
+
+  created_by_user      User      @relation(fields: [created_by_user_id], references: [id])
+  created_by_agent_rep AgentRep  @relation(fields: [created_by_agent_rep_id], references: [id])
+
+  cognition_records    AssetCognitionRecord[]
+  external_references  ExternalAssetReference[]
+  source_lineage       AssetLineage[] @relation("SourceAsset")
+  target_lineage       AssetLineage[] @relation("TargetAsset")
+
+  @@index([asset_type])
+  @@index([asset_status])
+  @@index([created_by_user_id])
+  @@index([source_object_type, source_object_id])
+  @@index([content_hash])
+  @@map("assets")
+}
+
+model AssetCognitionRecord {
+  id                   String       @id @default(uuid()) @db.Uuid
+  asset_id             String       @db.Uuid
+  cognition_type       CognitionType
+  summary              String?      @db.Text
+  tags                 String[]
+  detected_topics      String[]
+  brand_fit_score      Float?
+  compliance_risk      String?
+  usage_guidance       String?      @db.Text
+  platform_fit         Json?
+  audience_fit         Json?
+  source_method        String?
+  confidence           Confidence   @default(low)
+  reviewed_by_user_id  String?      @db.Uuid
+  reviewed_by_agent_rep_id String?  @db.Uuid
+  reviewed_at          DateTime?
+  created_at           DateTime     @default(now())
+  updated_at           DateTime     @updatedAt
+
+  asset            Asset   @relation(fields: [asset_id], references: [id])
+
+  @@index([asset_id])
+  @@index([cognition_type])
+  @@index([confidence])
+  @@map("asset_cognition_records")
+}
+
+model ExternalAssetReference {
+  id                      String              @id @default(uuid()) @db.Uuid
+  asset_id                String              @db.Uuid
+  external_system         String
+  external_reference_id   String
+  external_url_placeholder String?             @db.Text
+  reference_type          ExternalReferenceType
+  sync_status             ExternalSyncStatus  @default(unknown)
+  last_checked_at         DateTime?
+  created_at              DateTime            @default(now())
+  updated_at              DateTime            @updatedAt
+
+  asset Asset @relation(fields: [asset_id], references: [id])
+
+  @@index([asset_id])
+  @@index([external_system])
+  @@index([reference_type])
+  @@map("external_asset_references")
+}
+
+model AssetLineage {
+  id                  String          @id @default(uuid()) @db.Uuid
+  source_asset_id     String          @db.Uuid
+  target_asset_id     String          @db.Uuid
+  relationship_type   AssetLineageType
+  rationale           String?         @db.Text
+  created_by_user_id  String          @db.Uuid
+  created_by_agent_rep_id String      @db.Uuid
+  created_at          DateTime        @default(now())
+
+  source_asset        Asset   @relation("SourceAsset", fields: [source_asset_id], references: [id])
+  target_asset        Asset   @relation("TargetAsset", fields: [target_asset_id], references: [id])
+  created_by_user     User    @relation(fields: [created_by_user_id], references: [id])
+  created_by_agent_rep AgentRep @relation(fields: [created_by_agent_rep_id], references: [id])
+
+  @@unique([source_asset_id, target_asset_id, relationship_type])
+  @@index([source_asset_id])
+  @@index([target_asset_id])
+  @@index([relationship_type])
+  @@map("asset_lineage")
 }
