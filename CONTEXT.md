@@ -4,40 +4,36 @@
 
 ## Current Sprint
 
-**Sprint**: 7 — Governance / Approval Workflow
+**Sprint**: 8 — Capability Registry & Resolution
 **Status**: Complete
-**Goal**: Implement the governed approval workflow on top of HumanUser, AgentRep, SAIF Decision Records, DKS, identity lineage, and RevOps department routing.
+**Goal**: Implement the STITCH capability registry and capability-resolution foundation. The system must resolve work through the canonical chain before any tool, API, MCP, or external implementation is used.
 
 ## Active Module
 
-- `modules/approvals/` — Approval types, repository, service, tests
-- `prisma/schema.prisma` — Approval model
-- `prisma/migrations/` — Approval migration
+- `modules/capability-registry/` — Capability registry types, repository, service, tests
+- `prisma/schema.prisma` — Capability registry models
+- `prisma/seed.ts` — Core capability seed data
 
 ## Sprint Acceptance Criteria
 
-- [x] Approval requests can be created for eligible targets
-- [x] Approval requests can reference SAIF Decision Records
-- [x] Authorized HumanUsers can approve, reject, request changes, escalate, or cancel
-- [x] Approval actions include HumanUser and AgentRep lineage
-- [x] Session Context Lock applies to all approval actions
-- [x] FunctionalAgent cannot approve
-- [x] GovernanceAgent cannot replace human authority
-- [x] High-risk approvals route to CCO or designated senior authority
-- [x] Department routing follows the new RevOps structure
-- [x] Approval cannot proceed when SAIF critical dimensions are unresolved
-- [x] Approval actions are audit logged
-- [x] Approval state transitions use strict state machine
-- [x] No publishing, scheduling, analytics, learning, CRM, Paperclip, ResourceSpace, or MCP integration implemented
-- [x] Existing 337 tests still pass
-- [x] New approval tests added (45 tests)
+- [x] Intent, Objective, Capability, ExecutionPattern, Resource, Implementation, and CapabilityResolution models exist
+- [x] Capability resolution follows the canonical chain
+- [x] Resolution records include HumanUser and AgentRep lineage
+- [x] Resolution can link to SAIF Decision Records
+- [x] Resolution can require approval where needed
+- [x] M5/write-enabled implementations are blocked
+- [x] MCP-required implementations are recorded but not executed
+- [x] Core seed capabilities exist
+- [x] No external systems are called
+- [x] Existing 382 tests still pass
+- [x] New registry/resolution tests are added (31 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (382 tests)
+- [x] npm run test passes (413 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 8
+- [ ] Open PR and stop for review before Sprint 9
 
 ## Next Sprint (Planned)
 
-**Sprint 8**: TBD — Awaiting review of Sprint 7 before proceeding.
+**Sprint 9**: TBD — Awaiting review of Sprint 8 before proceeding.

@@ -72,6 +72,8 @@ model User {
   role_assignments_as_human DecisionRoleAssignment[] @relation("RoleHumanUser")
   approvals_as_requester  Approval[]               @relation("ApprovalRequesterUser")
   approvals_as_approver   Approval[]               @relation("ApprovalApproverUser")
+  intents_created         Intent[]
+  resolutions             CapabilityResolution[]
 
   @@map("users")
 }
@@ -96,6 +98,8 @@ model AgentRep {
   handoffs                 DecisionExecutionHandoff[] @relation("HandoffAgentRep")
   approvals_as_requester   Approval[]                 @relation("ApprovalRequesterAgentRep")
   approvals_as_approver    Approval[]                 @relation("ApprovalApproverAgentRep")
+  intents_created          Intent[]
+  resolutions              CapabilityResolution[]
 
   @@map("agent_reps")
 }
@@ -517,6 +521,7 @@ model SaifDecisionRecord {
   execution_handoff DecisionExecutionHandoff?
   dks_links         DecisionDksLink[]
   approvals         Approval[]
+  resolutions       CapabilityResolution[]
 
   @@index([human_user_id])
   @@index([agent_rep_id])
@@ -709,4 +714,210 @@ model Approval {
   @@index([required_department])
   @@index([risk_category])
   @@map("approvals")
+}
+
+// ============================================================
+// Capability Registry & Resolution
+// ============================================================
+
+enum IntentStatus {
+  active
+  fulfilled
+  abandoned
+  superseded
+}
+
+enum ObjectiveStatus {
+  active
+  achieved
+  failed
+  abandoned
+}
+
+enum CapabilityRiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum ResolutionStatus {
+  pending
+  resolved
+  rejected
+  blocked
+  deferred
+}
+
+model Intent {
+  id                  String       @id @default(uuid()) @db.Uuid
+  name                String
+  description         String?      @db.Text
+  category            String?
+  source_type         String?
+  created_by_user_id  String       @db.Uuid
+  created_by_agent_rep_id String   @db.Uuid
+  status              IntentStatus @default(active)
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  created_by_user      User     @relation(fields: [created_by_user_id], references: [id])
+  created_by_agent_rep AgentRep @relation(fields: [created_by_agent_rep_id], references: [id])
+  objectives           Objective[]
+  resolutions          CapabilityResolution[]
+
+  @@index([status])
+  @@index([created_by_user_id])
+  @@map("intents")
+}
+
+model Objective {
+  id              String         @id @default(uuid()) @db.Uuid
+  intent_id       String         @db.Uuid
+  name            String
+  description     String?        @db.Text
+  success_criteria String?       @db.Text
+  constraints     String?        @db.Text
+  priority        Int            @default(0)
+  status          ObjectiveStatus @default(active)
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  intent      Intent                 @relation(fields: [intent_id], references: [id])
+  resolutions CapabilityResolution[]
+
+  @@index([intent_id])
+  @@index([status])
+  @@map("objectives")
+}
+
+model Capability {
+  id                   String             @id @default(uuid()) @db.Uuid
+  name                 String             @unique
+  description          String?            @db.Text
+  category             String?
+  owner_substrate      String?
+  risk_level           CapabilityRiskLevel @default(low)
+  requires_approval    Boolean            @default(false)
+  requires_saif_decision Boolean          @default(false)
+  allowed_agent_types  String[]
+  created_at           DateTime           @default(now())
+  updated_at           DateTime           @updatedAt
+
+  execution_patterns ExecutionPattern[]
+  implementations    Implementation[]
+  resolutions        CapabilityResolution[]
+
+  @@index([category])
+  @@index([risk_level])
+  @@map("capabilities")
+}
+
+model ExecutionPattern {
+  id               String   @id @default(uuid()) @db.Uuid
+  capability_id    String   @db.Uuid
+  name             String
+  description      String?  @db.Text
+  ordered_steps    Json
+  required_inputs  String[]
+  expected_outputs String[]
+  boundary_rules   Json?
+  m4_allowed       Boolean  @default(true)
+  m5_required      Boolean  @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  capability    Capability            @relation(fields: [capability_id], references: [id])
+  resolutions   CapabilityResolution[]
+
+  @@index([capability_id])
+  @@map("execution_patterns")
+}
+
+model Resource {
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String   @unique
+  resource_type      String
+  canonical_owner    String?
+  external_reference String?
+  sensitivity        String?
+  access_rules       Json?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  implementation_resources ImplementationResource[]
+
+  @@index([resource_type])
+  @@map("resources")
+}
+
+model Implementation {
+  id                 String   @id @default(uuid()) @db.Uuid
+  capability_id      String   @db.Uuid
+  name               String
+  implementation_type String
+  provider           String?
+  is_external        Boolean  @default(false)
+  requires_mcp       Boolean  @default(false)
+  m4_allowed         Boolean  @default(true)
+  m5_allowed         Boolean  @default(false)
+  status             String   @default("active")
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  capability                Capability                @relation(fields: [capability_id], references: [id])
+  implementation_resources  ImplementationResource[]
+  resolutions               CapabilityResolution[]
+
+  @@index([capability_id])
+  @@index([status])
+  @@map("implementations")
+}
+
+model ImplementationResource {
+  id                String   @id @default(uuid()) @db.Uuid
+  implementation_id String   @db.Uuid
+  resource_id       String   @db.Uuid
+  access_type       String   @default("read")
+  created_at        DateTime @default(now())
+
+  implementation Implementation @relation(fields: [implementation_id], references: [id])
+  resource       Resource       @relation(fields: [resource_id], references: [id])
+
+  @@unique([implementation_id, resource_id])
+  @@map("implementation_resources")
+}
+
+model CapabilityResolution {
+  id                    String         @id @default(uuid()) @db.Uuid
+  intent_id             String         @db.Uuid
+  objective_id          String         @db.Uuid
+  capability_id         String         @db.Uuid
+  execution_pattern_id  String         @db.Uuid
+  implementation_id     String         @db.Uuid
+  saif_decision_record_id String?      @db.Uuid
+  human_user_id         String         @db.Uuid
+  agent_rep_id          String         @db.Uuid
+  resolution_status     ResolutionStatus @default(pending)
+  rationale             String?        @db.Text
+  constraints_applied   Json?
+  rejected_alternatives Json?
+  created_at            DateTime       @default(now())
+  updated_at            DateTime       @updatedAt
+
+  intent            Intent             @relation(fields: [intent_id], references: [id])
+  objective         Objective          @relation(fields: [objective_id], references: [id])
+  capability        Capability         @relation(fields: [capability_id], references: [id])
+  execution_pattern ExecutionPattern    @relation(fields: [execution_pattern_id], references: [id])
+  implementation    Implementation     @relation(fields: [implementation_id], references: [id])
+  saif_decision     SaifDecisionRecord? @relation(fields: [saif_decision_record_id], references: [id])
+  human_user        User               @relation(fields: [human_user_id], references: [id])
+  agent_rep         AgentRep           @relation(fields: [agent_rep_id], references: [id])
+
+  @@index([intent_id])
+  @@index([objective_id])
+  @@index([capability_id])
+  @@index([resolution_status])
+  @@index([human_user_id])
+  @@map("capability_resolutions")
 }

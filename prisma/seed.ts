@@ -149,6 +149,80 @@ async function seed() {
     }
   }
 
+  // Seed core capabilities
+  console.log('Seeding core capabilities...');
+  const CORE_CAPABILITIES = [
+    {
+      name: 'GenerateContentDraft',
+      description: 'Generate platform-specific content drafts using LLM',
+      category: 'content',
+      riskLevel: 'medium',
+      requiresApproval: false,
+      requiresSaifDecision: false,
+      allowedAgentTypes: ['functional'],
+    },
+    {
+      name: 'EvaluateReachReadiness',
+      description: 'Evaluate content for reach readiness score and platform optimization',
+      category: 'analysis',
+      riskLevel: 'low',
+      requiresApproval: false,
+      requiresSaifDecision: false,
+      allowedAgentTypes: ['functional'],
+    },
+    {
+      name: 'RequestApproval',
+      description: 'Submit content for approval workflow',
+      category: 'governance',
+      riskLevel: 'medium',
+      requiresApproval: true,
+      requiresSaifDecision: false,
+      allowedAgentTypes: ['functional', 'governance'],
+    },
+    {
+      name: 'RetrieveKnowledge',
+      description: 'Retrieve knowledge from DKS or platform rules',
+      category: 'knowledge',
+      riskLevel: 'low',
+      requiresApproval: false,
+      requiresSaifDecision: false,
+      allowedAgentTypes: ['functional', 'governance'],
+    },
+    {
+      name: 'PreparePublishingPackage',
+      description: 'Prepare content package for publishing (requires SAIF decision and approval)',
+      category: 'publishing',
+      riskLevel: 'high',
+      requiresApproval: true,
+      requiresSaifDecision: true,
+      allowedAgentTypes: ['functional'],
+    },
+  ];
+
+  for (const cap of CORE_CAPABILITIES) {
+    await prisma.capability.upsert({
+      where: { name: cap.name },
+      update: {
+        description: cap.description,
+        category: cap.category,
+        risk_level: cap.riskLevel as 'low' | 'medium' | 'high' | 'critical',
+        requires_approval: cap.requiresApproval,
+        requires_saif_decision: cap.requiresSaifDecision,
+        allowed_agent_types: cap.allowedAgentTypes,
+      },
+      create: {
+        name: cap.name,
+        description: cap.description,
+        category: cap.category,
+        risk_level: cap.riskLevel as 'low' | 'medium' | 'high' | 'critical',
+        requires_approval: cap.requiresApproval,
+        requires_saif_decision: cap.requiresSaifDecision,
+        allowed_agent_types: cap.allowedAgentTypes,
+      },
+    });
+    console.log(`  Capability: ${cap.name}`);
+  }
+
   console.log('Seeding complete.');
 }
 
