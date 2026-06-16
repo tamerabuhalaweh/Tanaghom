@@ -4,41 +4,36 @@
 
 ## Current Sprint
 
-**Sprint**: 9 — MCP Mediation Boundary
+**Sprint**: 10 — SPINE Run & Artifact Lineage
 **Status**: Complete
-**Goal**: Implement the MCP Mediation Boundary foundation. The system must represent and enforce the rule that agents, capabilities, and implementations cannot directly access external systems.
+**Goal**: Implement the SPINE foundation for Run and Artifact lineage. Record planned or simulated execution runs, artifacts, causal links, and replayable audit lineage.
 
 ## Active Module
 
-- `modules/mcp-mediation/` — MCP mediation types, repository, service, tests
-- `prisma/schema.prisma` — MCP mediation models
-- `prisma/seed.ts` — Mock connector seed data
+- `modules/spine/` — SPINE types, repository, service, tests
+- `prisma/schema.prisma` — SPINE models
+- `prisma/migrations/` — SPINE migration
 
 ## Sprint Acceptance Criteria
 
-- [x] MCP connector models exist
-- [x] Capability-to-MCP binding exists
-- [x] Mediation requests can be created
-- [x] Mediation decisions can be recorded
-- [x] Direct access attempts are blocked
-- [x] M5/write-enabled operations are blocked
-- [x] Missing SAIF decision blocks connector use where required
-- [x] Missing approval blocks connector use where required
-- [x] Session Context Lock applies to mediation requests
-- [x] FunctionalAgent cannot bypass mediation
-- [x] GovernanceAgent cannot replace human authority
-- [x] Credential binding is placeholder-only and contains no real secrets
-- [x] Mock/future connector seed records exist
+- [x] SPINE Run model exists
+- [x] SPINE Artifact model exists
+- [x] Run and artifact lineage are supported
+- [x] Replay bundle query can reconstruct linked references
+- [x] SPINE references foreign canonical objects by ID but does not own them
+- [x] HumanUser and AgentRep lineage are included
+- [x] M5/write-enabled runs are blocked
+- [x] Artifact integrity metadata exists
 - [x] No external systems are called
-- [x] Existing 415 tests still pass
-- [x] New MCP mediation tests are added (43 tests)
+- [x] Existing 458 tests still pass
+- [x] New SPINE tests are added (44 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (458 tests)
+- [x] npm run test passes (502 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 10
+- [ ] Open PR and stop for review before Sprint 11
 
 ## Next Sprint (Planned)
 
-**Sprint 10**: TBD — Awaiting review of Sprint 9 before proceeding.
+**Sprint 11**: TBD — Awaiting review of Sprint 10 before proceeding.

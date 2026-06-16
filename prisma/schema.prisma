@@ -76,6 +76,8 @@ model User {
   resolutions             CapabilityResolution[]
   mcp_mediation_requests  McpMediationRequest[]
   mcp_decisions_made      McpMediationDecision[]
+  spine_runs              SpineRun[]
+  spine_artifacts_created SpineArtifact[]
 
   @@map("users")
 }
@@ -104,6 +106,8 @@ model AgentRep {
   resolutions              CapabilityResolution[]
   mcp_mediation_requests   McpMediationRequest[]
   mcp_decisions_made       McpMediationDecision[]
+  spine_runs               SpineRun[]
+  spine_artifacts_created  SpineArtifact[]
 
   @@map("agent_reps")
 }
@@ -527,6 +531,8 @@ model SaifDecisionRecord {
   approvals         Approval[]
   resolutions       CapabilityResolution[]
   mcp_requests      McpMediationRequest[]
+  spine_runs        SpineRun[]
+  spine_artifacts   SpineArtifact[]
 
   @@index([human_user_id])
   @@index([agent_rep_id])
@@ -712,6 +718,8 @@ model Approval {
   approver_agent_rep  AgentRep?           @relation("ApprovalApproverAgentRep", fields: [approver_agent_rep_id], references: [id])
   saif_decision       SaifDecisionRecord? @relation(fields: [saif_decision_record_id], references: [id])
   mcp_requests        McpMediationRequest[]
+  spine_runs          SpineRun[]
+  spine_artifacts     SpineArtifact[]
 
   @@index([target_type, target_id])
   @@index([approval_status])
@@ -922,6 +930,8 @@ model CapabilityResolution {
   human_user        User               @relation(fields: [human_user_id], references: [id])
   agent_rep         AgentRep           @relation(fields: [agent_rep_id], references: [id])
   mcp_requests      McpMediationRequest[]
+  spine_runs        SpineRun[]
+  spine_artifacts   SpineArtifact[]
 
   @@index([intent_id])
   @@index([objective_id])
@@ -1043,6 +1053,7 @@ model McpMediationRequest {
   saif_decision          SaifDecisionRecord?    @relation(fields: [saif_decision_record_id], references: [id])
   approval               Approval?              @relation(fields: [approval_id], references: [id])
   decisions              McpMediationDecision[]
+  spine_runs             SpineRun[]
 
   @@index([mcp_connector_id])
   @@index([request_status])
@@ -1064,6 +1075,7 @@ model McpMediationDecision {
   mediation_request     McpMediationRequest  @relation(fields: [mediation_request_id], references: [id])
   decided_by_user       User?                @relation(fields: [decided_by_user_id], references: [id])
   decided_by_agent_rep  AgentRep?            @relation(fields: [decided_by_agent_rep_id], references: [id])
+  spine_runs            SpineRun[]
 
   @@index([mediation_request_id])
   @@index([decision])
@@ -1103,4 +1115,163 @@ model McpCredentialBinding {
   @@index([mcp_connector_id])
   @@index([status])
   @@map("mcp_credential_bindings")
+}
+
+// ============================================================
+// SPINE Run & Artifact Lineage
+// ============================================================
+
+enum SpineRunType {
+  planned
+  simulated
+  advisory
+  execution
+}
+
+enum SpineRunStatus {
+  planned
+  ready
+  simulated
+  running
+  succeeded
+  failed
+  cancelled
+  blocked
+  audited
+}
+
+enum SpineReplayStatus {
+  replayable
+  partial
+  not_replayable
+}
+
+enum SpineArtifactType {
+  campaign_request_snapshot
+  draft_version_snapshot
+  reach_score_report
+  approval_record_snapshot
+  saif_decision_record
+  dks_reference_bundle
+  capability_resolution_bundle
+  mediation_decision_record
+  future_publishing_package
+}
+
+enum SpineArtifactStatus {
+  created
+  validated
+  archived
+  superseded
+}
+
+enum SpineArtifactLinkType {
+  derived_from
+  supports
+  supersedes
+  evidence_for
+  produced_by
+  consumed_by
+  references
+}
+
+model SpineRun {
+  id                        String           @id @default(uuid()) @db.Uuid
+  run_type                  SpineRunType     @default(planned)
+  run_status                SpineRunStatus   @default(planned)
+  human_user_id             String           @db.Uuid
+  agent_rep_id              String           @db.Uuid
+  acting_agent_type         String
+  acting_agent_id           String?
+  saif_decision_record_id   String?          @db.Uuid
+  capability_resolution_id  String?          @db.Uuid
+  approval_id               String?          @db.Uuid
+  mcp_mediation_request_id  String?          @db.Uuid
+  mcp_mediation_decision_id String?          @db.Uuid
+  parent_run_id             String?          @db.Uuid
+  started_at                DateTime?
+  completed_at              DateTime?
+  failed_at                 DateTime?
+  rationale                 String?          @db.Text
+  expected_outcome          String?          @db.Text
+  actual_outcome            String?          @db.Text
+  failure_reason            String?          @db.Text
+  replay_status             SpineReplayStatus @default(replayable)
+  created_at                DateTime         @default(now())
+  updated_at                DateTime         @updatedAt
+
+  human_user            User                  @relation(fields: [human_user_id], references: [id])
+  agent_rep             AgentRep              @relation(fields: [agent_rep_id], references: [id])
+  saif_decision         SaifDecisionRecord?   @relation(fields: [saif_decision_record_id], references: [id])
+  capability_resolution CapabilityResolution? @relation(fields: [capability_resolution_id], references: [id])
+  approval              Approval?             @relation(fields: [approval_id], references: [id])
+  mcp_mediation_request McpMediationRequest?  @relation(fields: [mcp_mediation_request_id], references: [id])
+  mcp_mediation_decision McpMediationDecision? @relation(fields: [mcp_mediation_decision_id], references: [id])
+  parent_run            SpineRun?             @relation("SpineRunHierarchy", fields: [parent_run_id], references: [id])
+  child_runs            SpineRun[]            @relation("SpineRunHierarchy")
+  artifacts             SpineArtifact[]
+
+  @@index([human_user_id])
+  @@index([agent_rep_id])
+  @@index([run_status])
+  @@index([run_type])
+  @@index([parent_run_id])
+  @@index([saif_decision_record_id])
+  @@index([capability_resolution_id])
+  @@map("spine_runs")
+}
+
+model SpineArtifact {
+  id                       String             @id @default(uuid()) @db.Uuid
+  artifact_type            SpineArtifactType
+  artifact_status          SpineArtifactStatus @default(created)
+  canonical_owner          String?
+  source_object_type       String?
+  source_object_id         String?
+  run_id                   String             @db.Uuid
+  saif_decision_record_id  String?            @db.Uuid
+  capability_resolution_id String?            @db.Uuid
+  approval_id              String?            @db.Uuid
+  content_hash             String?
+  version                  Int                @default(1)
+  metadata                 Json?
+  summary                  String?            @db.Text
+  created_by_user_id       String             @db.Uuid
+  created_by_agent_rep_id  String             @db.Uuid
+  created_at               DateTime           @default(now())
+  updated_at               DateTime           @updatedAt
+
+  run                   SpineRun           @relation(fields: [run_id], references: [id])
+  saif_decision         SaifDecisionRecord? @relation(fields: [saif_decision_record_id], references: [id])
+  capability_resolution CapabilityResolution? @relation(fields: [capability_resolution_id], references: [id])
+  approval              Approval?           @relation(fields: [approval_id], references: [id])
+  created_by_user       User                @relation(fields: [created_by_user_id], references: [id])
+  created_by_agent_rep  AgentRep            @relation(fields: [created_by_agent_rep_id], references: [id])
+  source_links          SpineArtifactLink[] @relation("SourceArtifact")
+  target_links          SpineArtifactLink[] @relation("TargetArtifact")
+
+  @@index([run_id])
+  @@index([artifact_type])
+  @@index([artifact_status])
+  @@index([source_object_type, source_object_id])
+  @@index([created_by_user_id])
+  @@map("spine_artifacts")
+}
+
+model SpineArtifactLink {
+  id                  String              @id @default(uuid()) @db.Uuid
+  source_artifact_id  String              @db.Uuid
+  target_artifact_id  String              @db.Uuid
+  relationship_type   SpineArtifactLinkType
+  rationale           String?             @db.Text
+  created_at          DateTime            @default(now())
+
+  source_artifact SpineArtifact @relation("SourceArtifact", fields: [source_artifact_id], references: [id])
+  target_artifact SpineArtifact @relation("TargetArtifact", fields: [target_artifact_id], references: [id])
+
+  @@unique([source_artifact_id, target_artifact_id, relationship_type])
+  @@index([source_artifact_id])
+  @@index([target_artifact_id])
+  @@index([relationship_type])
+  @@map("spine_artifact_links")
 }
