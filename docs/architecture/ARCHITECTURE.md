@@ -89,9 +89,9 @@ STITCH distinguishes between canonical ownership and adjacent surfaces:
 /
 ├── docs/                        # All documentation
 │   ├── product/                 # PRD, SRS, user roles, workflows
-│   ├── architecture/            # Architecture, boundaries, data model, security
+│   ├── architecture/            # Architecture, boundaries, data model, security, SAIF
 │   ├── api/                     # OpenAPI contract
-│   ├── adr/                     # Architecture decision records
+│   ├── adr/                     # Architecture decision records (SAIF format for 010+)
 │   ├── sprints/                 # Sprint files
 │   ├── quality/                 # Testing, release, AI session protocol
 │   └── prompts/                 # AI coding and PR review prompts
@@ -177,12 +177,13 @@ Every module follows the same structure:
 3. **M4/M5 runtime separation** — functional agents (M4) and governance agents (M5) operate in separate runtime contexts (ADR-007)
 4. **Asset Cognition owns canonical asset identity** — ResourceSpace is an adjacent surface, not the source of truth (ADR-008)
 5. **Paperclip and ResourceSpace are adjacent surfaces** — they provide execution capabilities but do not own canonical data (ADR-009)
-6. **MCP mediates all external access** — agents never directly access files, databases, analytics APIs, renderers, or enterprise APIs
-7. **SPINE records all execution** — every Run produces Artifacts with lineage and replay index
-8. **Observability is first-class** — Events, AuditRecords, and LearningSignals are structural, not afterthoughts
-9. **Human approval is mandatory** — until system earns production trust
-10. **Every external action is logged** — actor, timestamp, input, output, policy decision
-11. **Strict state machines** — campaign and approval states cannot be bypassed
+6. **SAIF v1.2 is the normative decision framework** — all significant AI decisions must follow SAIF's DKS declaration, mandatory evaluation dimensions, and cost-benefit analysis (ADR-010)
+7. **MCP mediates all external access** — agents never directly access files, databases, analytics APIs, renderers, or enterprise APIs
+8. **SPINE records all execution** — every Run produces Artifacts with lineage and replay index
+9. **Observability is first-class** — Events, AuditRecords, and LearningSignals are structural, not afterthoughts
+10. **Human approval is mandatory** — until system earns production trust
+11. **Every external action is logged** — actor, timestamp, input, output, policy decision
+12. **Strict state machines** — campaign and approval states cannot be bypassed
 
 ## Revision History
 
@@ -190,3 +191,4 @@ Every module follows the same structure:
 |---|---|---|
 | 2026-06-14 | Initial creation | Sprint 0A |
 | 2026-06-16 | STITCH alignment — operating substrate, adjacent surfaces, design principles | Sprint 4.5 |
+| 2026-06-16 | SAIF v1.2 adoption — normative decision framework, ADR-010 | Sprint 4.5 |
