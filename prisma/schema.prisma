@@ -1604,3 +1604,202 @@ model AssetLineage {
   @@index([relationship_type])
   @@map("asset_lineage")
 }
+
+// ============================================================
+// Operating Surface / Paperclip Relay
+// ============================================================
+
+enum SurfaceType {
+  paperclip
+  internal_web_app
+  future_chat_surface
+  future_dashboard_surface
+}
+
+enum SurfaceStatus {
+  active
+  inactive
+  planned
+}
+
+enum SurfaceDirection {
+  stitch_to_surface
+  surface_to_stitch
+  bidirectional
+}
+
+enum TaskType {
+  approval
+  review
+  assignment
+  notification
+  status_update
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+  blocked
+}
+
+enum RelayDirection {
+  inbound
+  outbound
+}
+
+enum RelayEventStatus {
+  received
+  processed
+  blocked
+  requires_review
+  failed
+}
+
+enum SyncPolicyType {
+  stitch_to_surface_read_only
+  surface_to_stitch_review_required
+  surface_to_stitch_blocked
+  surface_status_projection_only
+}
+
+enum ReferenceSyncStatus {
+  synced
+  pending
+  conflict
+  stale
+  unknown
+}
+
+model OperatingSurface {
+  id                 String       @id @default(uuid()) @db.Uuid
+  name               String       @unique
+  surface_type       SurfaceType
+  status             SurfaceStatus @default(active)
+  description        String?      @db.Text
+  is_external        Boolean      @default(true)
+  canonical_authority String      @default("stitch")
+  allowed_directions String[]
+  created_at         DateTime     @default(now())
+  updated_at         DateTime     @updatedAt
+
+  tasks              SurfaceTask[]
+  projections        SurfaceStatusProjection[]
+  relay_events       SurfaceRelayEvent[]
+  sync_policies      SurfaceSyncPolicy[]
+
+  @@index([surface_type])
+  @@index([status])
+  @@map("operating_surfaces")
+}
+
+model SurfaceTask {
+  id                       String      @id @default(uuid()) @db.Uuid
+  operating_surface_id     String      @db.Uuid
+  external_task_reference  String?
+  title                    String
+  description              String?     @db.Text
+  task_type                TaskType    @default(assignment)
+  task_status              TaskStatus  @default(pending)
+  canonical_target_type    String?
+  canonical_target_id      String?
+  assigned_user_id         String?     @db.Uuid
+  assigned_agent_rep_id    String?     @db.Uuid
+  approval_id              String?     @db.Uuid
+  saif_decision_record_id  String?     @db.Uuid
+  spine_run_id             String?     @db.Uuid
+  capability_resolution_id String?     @db.Uuid
+  created_by_user_id       String      @db.Uuid
+  created_by_agent_rep_id  String      @db.Uuid
+  created_at               DateTime    @default(now())
+  updated_at               DateTime    @updatedAt
+
+  operating_surface    OperatingSurface @relation(fields: [operating_surface_id], references: [id])
+
+  @@index([operating_surface_id])
+  @@index([task_status])
+  @@index([canonical_target_type, canonical_target_id])
+  @@index([assigned_user_id])
+  @@map("surface_tasks")
+}
+
+model SurfaceStatusProjection {
+  id                   String   @id @default(uuid()) @db.Uuid
+  operating_surface_id String   @db.Uuid
+  canonical_object_type String
+  canonical_object_id  String
+  projected_status     String
+  projected_summary    String?  @db.Text
+  source_substrate     String?
+  last_projected_at    DateTime @default(now())
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  operating_surface OperatingSurface @relation(fields: [operating_surface_id], references: [id])
+
+  @@index([operating_surface_id])
+  @@index([canonical_object_type, canonical_object_id])
+  @@map("surface_status_projections")
+}
+
+model SurfaceRelayEvent {
+  id                   String         @id @default(uuid()) @db.Uuid
+  operating_surface_id String         @db.Uuid
+  direction            RelayDirection
+  event_type           String
+  event_status         RelayEventStatus @default(received)
+  canonical_object_type String?
+  canonical_object_id  String?
+  external_reference   String?
+  payload_summary      String?        @db.Text
+  human_user_id        String?        @db.Uuid
+  agent_rep_id         String?        @db.Uuid
+  created_at           DateTime       @default(now())
+  processed_at         DateTime?
+  result               String?
+
+  operating_surface OperatingSurface @relation(fields: [operating_surface_id], references: [id])
+
+  @@index([operating_surface_id])
+  @@index([direction])
+  @@index([event_status])
+  @@index([canonical_object_type, canonical_object_id])
+  @@map("surface_relay_events")
+}
+
+model PaperclipReference {
+  id                     String              @id @default(uuid()) @db.Uuid
+  canonical_object_type  String
+  canonical_object_id    String
+  paperclip_object_type  String
+  paperclip_reference_id String
+  sync_status            ReferenceSyncStatus @default(unknown)
+  last_checked_at        DateTime?
+  created_at             DateTime            @default(now())
+  updated_at             DateTime            @updatedAt
+
+  @@index([canonical_object_type, canonical_object_id])
+  @@index([paperclip_reference_id])
+  @@map("paperclip_references")
+}
+
+model SurfaceSyncPolicy {
+  id                   String        @id @default(uuid()) @db.Uuid
+  operating_surface_id String        @db.Uuid
+  canonical_object_type String
+  direction            SurfaceDirection
+  policy_type          SyncPolicyType
+  requires_review      Boolean       @default(true)
+  requires_approval    Boolean       @default(false)
+  allowed_fields       String[]
+  blocked_fields       String[]
+  created_at           DateTime      @default(now())
+  updated_at           DateTime      @updatedAt
+
+  operating_surface OperatingSurface @relation(fields: [operating_surface_id], references: [id])
+
+  @@index([operating_surface_id])
+  @@index([policy_type])
+  @@map("surface_sync_policies")
+}

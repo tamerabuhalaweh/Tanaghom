@@ -4,38 +4,39 @@
 
 ## Current Sprint
 
-**Sprint**: 12 — Asset Cognition & ResourceSpace Boundary
+**Sprint**: 13 — Operating Surface / Paperclip Relay Foundation
 **Status**: Complete
-**Goal**: Implement the Asset Cognition foundation. STITCH owns canonical asset identity. ResourceSpace is external reference only.
+**Goal**: Implement the Operating Surface / Paperclip Relay foundation. STITCH remains the source of truth.
 
 ## Active Module
 
-- `modules/asset-cognition/` — Asset cognition types, repository, service, tests
-- `prisma/schema.prisma` — Asset cognition models
-- `prisma/migrations/` — Asset cognition migration
+- `modules/operating-surface/` — Operating surface types, repository, service, tests
+- `prisma/schema.prisma` — Operating surface models
+- `prisma/migrations/` — Operating surface migration
 
 ## Sprint Acceptance Criteria
 
-- [x] Canonical Asset model exists
-- [x] AssetCognitionRecord model exists
-- [x] ExternalAssetReference model exists
-- [x] Asset lineage is supported
-- [x] ResourceSpace is represented only as an external reference surface
-- [x] ResourceSpace cannot own canonical asset identity
-- [x] Asset Cognition references foreign canonical objects by ID only
-- [x] Asset cognition records cannot approve, publish, execute, or replace human review
-- [x] HumanUser and AgentRep lineage are included
+- [x] OperatingSurface model exists
+- [x] SurfaceTask model exists
+- [x] SurfaceStatusProjection model exists
+- [x] SurfaceRelayEvent model exists
+- [x] PaperclipReference model exists
+- [x] SurfaceSyncPolicy model exists
+- [x] Paperclip is represented only as an operating surface / external reference
+- [x] Paperclip cannot own canonical identity, approval, decision, asset, run, artifact, audit, or capability records
+- [x] Surface projections are derived visibility only
+- [x] Surface relay events cannot directly mutate canonical truth without governed review
 - [x] No secrets, tokens, API keys, credentials, or sensitive raw payloads stored
 - [x] No external systems are called
-- [x] Existing 532 tests still pass
-- [x] New asset cognition tests are added (40 tests)
+- [x] Existing 572 tests still pass
+- [x] New operating-surface tests are added (32 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (572 tests)
+- [x] npm run test passes (604 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 13
+- [ ] Open PR and stop for review before Sprint 14
 
 ## Next Sprint (Planned)
 
-**Sprint 13**: TBD — Awaiting review of Sprint 12 before proceeding.
+**Sprint 14**: TBD — Awaiting review of Sprint 13 before proceeding.
