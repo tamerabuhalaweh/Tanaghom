@@ -13,6 +13,11 @@ interface SessionContext {
   departmentId: string | null;
 }
 
+interface AgentRepStatus {
+  id: string;
+  status: 'active' | 'inactive' | 'suspended';
+}
+
 function validateSessionContextLock(
   sessionContext: SessionContext,
   targetUserId: string,
@@ -38,6 +43,12 @@ function validateAgentRepOwnership(
   }
 }
 
+function validateAgentRepIsActive(agentRep: AgentRepStatus): void {
+  if (agentRep.status !== 'active') {
+    throw new ForbiddenError(`Session Context Lock: AgentRep is ${agentRep.status}. Only active AgentReps can be used.`);
+  }
+}
+
 function validateFunctionalAgentCannotActAsHumanUser(
   agentType: 'functional' | 'governance',
   _targetUserId: string,
@@ -55,6 +66,44 @@ function validateGovernanceAgentCannotBypassHumanAuthority(
   if (agentType === 'governance' && !hasHumanApproval) {
     throw new ForbiddenError('GovernanceAgent cannot bypass HumanUser authority');
   }
+}
+
+interface IdentityLineage {
+  humanUserId: string;
+  agentRepId: string;
+  actingAgentType: 'functional' | 'governance' | 'human';
+  actingAgentId: string | null;
+  action: string;
+  targetObjectType: string;
+  targetObjectId: string;
+  timestamp: Date;
+  result: 'success' | 'failure' | 'denied' | 'blocked';
+  metadata?: Record<string, unknown>;
+}
+
+function createIdentityLineage(
+  humanUserId: string,
+  agentRepId: string,
+  actingAgentType: 'functional' | 'governance' | 'human',
+  actingAgentId: string | null,
+  action: string,
+  targetObjectType: string,
+  targetObjectId: string,
+  result: 'success' | 'failure' | 'denied' | 'blocked',
+  metadata?: Record<string, unknown>,
+): IdentityLineage {
+  return {
+    humanUserId,
+    agentRepId,
+    actingAgentType,
+    actingAgentId,
+    action,
+    targetObjectType,
+    targetObjectId,
+    timestamp: new Date(),
+    result,
+    metadata,
+  };
 }
 
 describe('Session Context Lock', () => {
@@ -123,6 +172,23 @@ describe('Session Context Lock', () => {
     });
   });
 
+  describe('AgentRep must be active', () => {
+    it('allows active AgentRep', () => {
+      const activeAgentRep: AgentRepStatus = { id: 'rep-1', status: 'active' };
+      expect(() => validateAgentRepIsActive(activeAgentRep)).not.toThrow();
+    });
+
+    it('blocks inactive AgentRep', () => {
+      const inactiveAgentRep: AgentRepStatus = { id: 'rep-1', status: 'inactive' };
+      expect(() => validateAgentRepIsActive(inactiveAgentRep)).toThrow(ForbiddenError);
+    });
+
+    it('blocks suspended AgentRep', () => {
+      const suspendedAgentRep: AgentRepStatus = { id: 'rep-1', status: 'suspended' };
+      expect(() => validateAgentRepIsActive(suspendedAgentRep)).toThrow(ForbiddenError);
+    });
+  });
+
   describe('FunctionalAgent cannot act as HumanUser', () => {
     it('blocks FunctionalAgent from acting as HumanUser', () => {
       expect(() => validateFunctionalAgentCannotActAsHumanUser('functional', 'user-a-id')).toThrow(ForbiddenError);
@@ -161,6 +227,82 @@ describe('Session Context Lock', () => {
       expect(ccoUser.agentType).toBe('governance');
       expect(ccoUser.role).toBe('cco');
     });
+  });
+});
+
+describe('Identity Lineage', () => {
+  it('creates lineage with all required fields', () => {
+    const lineage = createIdentityLineage(
+      'user-a-id',
+      'agent-rep-a-id',
+      'functional',
+      'content-strategy-agent-id',
+      'create_draft',
+      'content_item',
+      'content-item-123',
+      'success',
+      { platform: 'linkedin' },
+    );
+
+    expect(lineage.humanUserId).toBe('user-a-id');
+    expect(lineage.agentRepId).toBe('agent-rep-a-id');
+    expect(lineage.actingAgentType).toBe('functional');
+    expect(lineage.actingAgentId).toBe('content-strategy-agent-id');
+    expect(lineage.action).toBe('create_draft');
+    expect(lineage.targetObjectType).toBe('content_item');
+    expect(lineage.targetObjectId).toBe('content-item-123');
+    expect(lineage.timestamp).toBeInstanceOf(Date);
+    expect(lineage.result).toBe('success');
+    expect(lineage.metadata).toEqual({ platform: 'linkedin' });
+  });
+
+  it('creates lineage with governance agent type', () => {
+    const lineage = createIdentityLineage(
+      'cco-user-id',
+      'cco-agent-rep-id',
+      'governance',
+      'cco-governance-agent-id',
+      'approve_content',
+      'content_item',
+      'content-item-456',
+      'success',
+    );
+
+    expect(lineage.actingAgentType).toBe('governance');
+    expect(lineage.actingAgentId).toBe('cco-governance-agent-id');
+  });
+
+  it('creates lineage with human agent type', () => {
+    const lineage = createIdentityLineage(
+      'user-a-id',
+      'agent-rep-a-id',
+      'human',
+      null,
+      'manual_review',
+      'approval',
+      'approval-789',
+      'success',
+    );
+
+    expect(lineage.actingAgentType).toBe('human');
+    expect(lineage.actingAgentId).toBeNull();
+  });
+
+  it('supports all result types', () => {
+    const results = ['success', 'failure', 'denied', 'blocked'] as const;
+    for (const result of results) {
+      const lineage = createIdentityLineage(
+        'user-a-id',
+        'agent-rep-a-id',
+        'functional',
+        null,
+        'test_action',
+        'test_object',
+        'test-id',
+        result,
+      );
+      expect(lineage.result).toBe(result);
+    }
   });
 });
 

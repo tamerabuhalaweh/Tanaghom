@@ -201,6 +201,11 @@ export async function resolveSessionContext(userId: string): Promise<SessionCont
   const agentRep = await repo.getAgentRepByUserId(userId);
   if (!agentRep) throw new ForbiddenError('No AgentRep found for this user. Session context cannot be resolved.');
 
+  // Verify AgentRep is active — block inactive/suspended AgentReps
+  if (agentRep.status !== 'active') {
+    throw new ForbiddenError(`Session Context Lock: AgentRep is ${agentRep.status}. Only active AgentReps can be used.`);
+  }
+
   return {
     humanUserId: user.id,
     agentRepId: agentRep.id,
