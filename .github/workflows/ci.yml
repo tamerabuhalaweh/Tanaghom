@@ -169,7 +169,7 @@ jobs:
             node -e "require('./dist/index.js')" 2>&1 | tee /tmp/demo-check.log
           EXIT_CODE=$?
           set -e
-          if [ $EXIT_CODE -ne 0 ] && grep -q "cannot be enabled\|DEMO MODE VIOLATION\|demo mode\|Environment validation failed" /tmp/demo-check.log; then
+          if [ $EXIT_CODE -ne 0 ] && grep -qE "cannot be enabled|DEMO MODE VIOLATION|demo mode|Environment validation failed" /tmp/demo-check.log; then
             echo "PASS: Live flags correctly blocked in demo mode"
           else
             echo "FAIL: App should have exited with error for live flags in demo mode"
