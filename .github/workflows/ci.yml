@@ -163,15 +163,17 @@ jobs:
           npm ci
           npm run build
           # Test that live flags fail in demo mode - the app should exit with error
+          # Use pipefail to capture the exit code of the node command, not tee
           set +e
           DEMO_MODE=true POSTIZ_LIVE_ENABLED=true JWT_SECRET=ci-test-secret-at-least-32-characters-long \
             DATABASE_URL=postgresql://localhost:5432/test REDIS_URL=redis://localhost:6379 \
-            node -e "require('./dist/index.js')" 2>&1 | tee /tmp/demo-check.log
+            node -e "require('./dist/index.js')" > /tmp/demo-check.log 2>&1
           EXIT_CODE=$?
           set -e
+          cat /tmp/demo-check.log
           if [ $EXIT_CODE -ne 0 ] && grep -qE "cannot be enabled|DEMO MODE VIOLATION|demo mode|Environment validation failed" /tmp/demo-check.log; then
-            echo "PASS: Live flags correctly blocked in demo mode"
+            echo "PASS: Live flags correctly blocked in demo mode (exit code: $EXIT_CODE)"
           else
-            echo "FAIL: App should have exited with error for live flags in demo mode"
+            echo "FAIL: App should have exited with error for live flags in demo mode (exit code: $EXIT_CODE)"
             exit 1
           fi
