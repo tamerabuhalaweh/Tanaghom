@@ -2288,3 +2288,128 @@ model CampaignPerformanceReport {
   @@index([report_status])
   @@map("campaign_performance_reports")
 }
+
+// ============================================================
+// Learning Signal Review → DKS Update Workflow
+// ============================================================
+
+enum ReviewStatus {
+  pending
+  under_review
+  accepted
+  rejected
+  needs_more_evidence
+  superseded
+}
+
+enum ProposalType {
+  create_new_entry
+  update_existing_entry
+  mark_stale
+  increase_confidence
+  decrease_confidence
+  add_relationship
+  deprecate_entry
+}
+
+enum ProposalStatus {
+  draft
+  submitted
+  approved
+  rejected
+  deferred
+  requires_saif_review
+  applied
+}
+
+enum DksDecisionType {
+  approved
+  rejected
+  deferred
+  requires_saif_review
+}
+
+model LearningSignalReview {
+  id                  String       @id @default(uuid()) @db.Uuid
+  learning_signal_id  String       @db.Uuid
+  review_status       ReviewStatus @default(pending)
+  reviewer_user_id    String?      @db.Uuid
+  reviewer_agent_rep_id String?    @db.Uuid
+  review_decision     String?
+  review_rationale    String?      @db.Text
+  confidence_assessment String?
+  risk_assessment     String?      @db.Text
+  created_at          DateTime     @default(now())
+  reviewed_at         DateTime?
+  updated_at          DateTime     @updatedAt
+
+  @@index([learning_signal_id])
+  @@index([review_status])
+  @@index([reviewer_user_id])
+  @@map("learning_signal_reviews")
+}
+
+model DksUpdateProposal {
+  id                       String        @id @default(uuid()) @db.Uuid
+  learning_signal_id       String        @db.Uuid
+  learning_signal_review_id String?       @db.Uuid
+  target_dks_entry_id      String?       @db.Uuid
+  proposal_type            ProposalType
+  proposed_title           String?       @db.Text
+  proposed_summary         String?       @db.Text
+  proposed_tags            String[]
+  proposed_confidence      String?
+  proposed_freshness_status String?
+  proposed_source          String?
+  proposed_source_type     String?
+  proposed_version_change  String?
+  rationale                String?       @db.Text
+  proposal_status          ProposalStatus @default(draft)
+  created_by_user_id       String        @db.Uuid
+  created_by_agent_rep_id  String        @db.Uuid
+  created_at               DateTime      @default(now())
+  updated_at               DateTime      @updatedAt
+
+  decisions DksUpdateDecision[]
+
+  @@index([learning_signal_id])
+  @@index([proposal_status])
+  @@index([created_by_user_id])
+  @@map("dks_update_proposals")
+}
+
+model DksUpdateDecision {
+  id                    String         @id @default(uuid()) @db.Uuid
+  dks_update_proposal_id String        @db.Uuid
+  authority_user_id     String         @db.Uuid
+  authority_agent_rep_id String        @db.Uuid
+  decision              DksDecisionType
+  rationale             String?        @db.Text
+  risk_acceptance       String?        @db.Text
+  applied_at            DateTime?
+  created_at            DateTime       @default(now())
+  updated_at            DateTime       @updatedAt
+
+  proposal DksUpdateProposal @relation(fields: [dks_update_proposal_id], references: [id])
+
+  @@index([dks_update_proposal_id])
+  @@index([decision])
+  @@map("dks_update_decisions")
+}
+
+model KnowledgeRevision {
+  id                    String   @id @default(uuid()) @db.Uuid
+  dks_entry_id          String   @db.Uuid
+  dks_update_proposal_id String?  @db.Uuid
+  previous_version      String?
+  new_version           String
+  changed_fields        Json?
+  revision_summary      String?  @db.Text
+  applied_by_user_id    String   @db.Uuid
+  applied_by_agent_rep_id String  @db.Uuid
+  created_at            DateTime @default(now())
+
+  @@index([dks_entry_id])
+  @@index([dks_update_proposal_id])
+  @@map("knowledge_revisions")
+}

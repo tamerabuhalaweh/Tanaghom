@@ -1937,3 +1937,123 @@ ALTER TABLE "analytics_snapshots" ADD CONSTRAINT "analytics_snapshots_ingestion_
 
 -- AddForeignKey
 ALTER TABLE "campaign_performance_reports" ADD CONSTRAINT "campaign_performance_reports_reporting_period_id_fkey" FOREIGN KEY ("reporting_period_id") REFERENCES "reporting_periods"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- CreateEnum
+CREATE TYPE "ReviewStatus" AS ENUM ('pending', 'under_review', 'accepted', 'rejected', 'needs_more_evidence', 'superseded');
+
+-- CreateEnum
+CREATE TYPE "ProposalType" AS ENUM ('create_new_entry', 'update_existing_entry', 'mark_stale', 'increase_confidence', 'decrease_confidence', 'add_relationship', 'deprecate_entry');
+
+-- CreateEnum
+CREATE TYPE "ProposalStatus" AS ENUM ('draft', 'submitted', 'approved', 'rejected', 'deferred', 'requires_saif_review', 'applied');
+
+-- CreateEnum
+CREATE TYPE "DksDecisionType" AS ENUM ('approved', 'rejected', 'deferred', 'requires_saif_review');
+
+-- CreateTable
+CREATE TABLE "learning_signal_reviews" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "learning_signal_id" UUID NOT NULL,
+    "review_status" "ReviewStatus" NOT NULL DEFAULT 'pending',
+    "reviewer_user_id" UUID,
+    "reviewer_agent_rep_id" UUID,
+    "review_decision" TEXT,
+    "review_rationale" TEXT,
+    "confidence_assessment" TEXT,
+    "risk_assessment" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "reviewed_at" TIMESTAMP(3),
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "learning_signal_reviews_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "dks_update_proposals" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "learning_signal_id" UUID NOT NULL,
+    "learning_signal_review_id" UUID,
+    "target_dks_entry_id" UUID,
+    "proposal_type" "ProposalType" NOT NULL,
+    "proposed_title" TEXT,
+    "proposed_summary" TEXT,
+    "proposed_tags" TEXT[],
+    "proposed_confidence" TEXT,
+    "proposed_freshness_status" TEXT,
+    "proposed_source" TEXT,
+    "proposed_source_type" TEXT,
+    "proposed_version_change" TEXT,
+    "rationale" TEXT,
+    "proposal_status" "ProposalStatus" NOT NULL DEFAULT 'draft',
+    "created_by_user_id" UUID NOT NULL,
+    "created_by_agent_rep_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "dks_update_proposals_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "dks_update_decisions" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "dks_update_proposal_id" UUID NOT NULL,
+    "authority_user_id" UUID NOT NULL,
+    "authority_agent_rep_id" UUID NOT NULL,
+    "decision" "DksDecisionType" NOT NULL,
+    "rationale" TEXT,
+    "risk_acceptance" TEXT,
+    "applied_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "dks_update_decisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "knowledge_revisions" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "dks_entry_id" UUID NOT NULL,
+    "dks_update_proposal_id" UUID,
+    "previous_version" TEXT,
+    "new_version" TEXT NOT NULL,
+    "changed_fields" JSONB,
+    "revision_summary" TEXT,
+    "applied_by_user_id" UUID NOT NULL,
+    "applied_by_agent_rep_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "knowledge_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "learning_signal_reviews_learning_signal_id_idx" ON "learning_signal_reviews"("learning_signal_id");
+
+-- CreateIndex
+CREATE INDEX "learning_signal_reviews_review_status_idx" ON "learning_signal_reviews"("review_status");
+
+-- CreateIndex
+CREATE INDEX "learning_signal_reviews_reviewer_user_id_idx" ON "learning_signal_reviews"("reviewer_user_id");
+
+-- CreateIndex
+CREATE INDEX "dks_update_proposals_learning_signal_id_idx" ON "dks_update_proposals"("learning_signal_id");
+
+-- CreateIndex
+CREATE INDEX "dks_update_proposals_proposal_status_idx" ON "dks_update_proposals"("proposal_status");
+
+-- CreateIndex
+CREATE INDEX "dks_update_proposals_created_by_user_id_idx" ON "dks_update_proposals"("created_by_user_id");
+
+-- CreateIndex
+CREATE INDEX "dks_update_decisions_dks_update_proposal_id_idx" ON "dks_update_decisions"("dks_update_proposal_id");
+
+-- CreateIndex
+CREATE INDEX "dks_update_decisions_decision_idx" ON "dks_update_decisions"("decision");
+
+-- CreateIndex
+CREATE INDEX "knowledge_revisions_dks_entry_id_idx" ON "knowledge_revisions"("dks_entry_id");
+
+-- CreateIndex
+CREATE INDEX "knowledge_revisions_dks_update_proposal_id_idx" ON "knowledge_revisions"("dks_update_proposal_id");
+
+-- AddForeignKey
+ALTER TABLE "dks_update_decisions" ADD CONSTRAINT "dks_update_decisions_dks_update_proposal_id_fkey" FOREIGN KEY ("dks_update_proposal_id") REFERENCES "dks_update_proposals"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
