@@ -510,8 +510,13 @@ enum FreshnessStatus {
 enum HandoffStatus {
   pending
   acknowledged
+  validating
+  ready
   in_progress
+  executing
   completed
+  blocked
+  failed
   cancelled
 }
 
@@ -2412,4 +2417,177 @@ model KnowledgeRevision {
   @@index([dks_entry_id])
   @@index([dks_update_proposal_id])
   @@map("knowledge_revisions")
+}
+
+// ============================================================
+// CRM / WhatsApp Conversion Layer
+// ============================================================
+
+enum LeadStatus {
+  new_lead
+  contacted
+  qualified
+  nurturing
+  converted
+  lost
+  archived
+}
+
+enum ConsentStatus {
+  pending
+  granted
+  denied
+  withdrawn
+}
+
+enum PlanStatus {
+  draft
+  proposed
+  approved
+  rejected
+  executing
+  completed
+  cancelled
+}
+
+model LeadCaptureRecord {
+  id                           String       @id @default(uuid()) @db.Uuid
+  lead_status                  LeadStatus   @default(new_lead)
+  lead_source                  String?
+  campaign_id                  String?      @db.Uuid
+  content_item_id              String?      @db.Uuid
+  publishing_package_id        String?      @db.Uuid
+  analytics_snapshot_id        String?      @db.Uuid
+  platform                     String?
+  source_url_placeholder       String?
+  contact_reference_placeholder String?
+  lead_name_placeholder        String?
+  lead_phone_placeholder       String?
+  lead_email_placeholder       String?
+  consent_status               ConsentStatus @default(pending)
+  created_by_user_id           String       @db.Uuid
+  created_by_agent_rep_id      String       @db.Uuid
+  created_at                   DateTime     @default(now())
+  updated_at                   DateTime     @updatedAt
+
+  attributions     LeadSourceAttribution[]
+  intents          ConversionIntent[]
+  crm_handoffs     CrmHandoffRequest[]
+  whatsapp_handoffs WhatsAppHandoffRequest[]
+  sequence_plans   ConversionSequencePlan[]
+
+  @@index([lead_status])
+  @@index([campaign_id])
+  @@index([platform])
+  @@index([created_by_user_id])
+  @@map("lead_capture_records")
+}
+
+model LeadSourceAttribution {
+  id                        String   @id @default(uuid()) @db.Uuid
+  lead_capture_record_id    String   @db.Uuid
+  attribution_source        String
+  campaign_id               String?  @db.Uuid
+  content_item_id           String?  @db.Uuid
+  publishing_package_id     String?  @db.Uuid
+  postiz_publishing_job_id  String?  @db.Uuid
+  analytics_snapshot_id     String?  @db.Uuid
+  platform                  String?
+  cta_type                  String?
+  attribution_confidence    String   @default("low")
+  created_at                DateTime @default(now())
+  updated_at                DateTime @updatedAt
+
+  lead_capture_record LeadCaptureRecord @relation(fields: [lead_capture_record_id], references: [id])
+
+  @@index([lead_capture_record_id])
+  @@index([attribution_source])
+  @@map("lead_source_attributions")
+}
+
+model ConversionIntent {
+  id                     String   @id @default(uuid()) @db.Uuid
+  lead_capture_record_id String   @db.Uuid
+  intent_type            String
+  confidence             String   @default("low")
+  rationale              String?  @db.Text
+  recommended_next_step  String?  @db.Text
+  saif_decision_record_id String? @db.Uuid
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  lead_capture_record LeadCaptureRecord @relation(fields: [lead_capture_record_id], references: [id])
+
+  @@index([lead_capture_record_id])
+  @@index([intent_type])
+  @@map("conversion_intents")
+}
+
+model CrmHandoffRequest {
+  id                       String         @id @default(uuid()) @db.Uuid
+  lead_capture_record_id   String         @db.Uuid
+  crm_system               String
+  mcp_mediation_request_id String?        @db.Uuid
+  approval_id              String?        @db.Uuid
+  capability_resolution_id String?        @db.Uuid
+  requested_by_user_id     String         @db.Uuid
+  requested_by_agent_rep_id String        @db.Uuid
+  handoff_status           HandoffStatus  @default(pending)
+  payload_summary          String?        @db.Text
+  payload_hash             String?
+  blocked_reason           String?        @db.Text
+  created_at               DateTime       @default(now())
+  updated_at               DateTime       @updatedAt
+
+  lead_capture_record LeadCaptureRecord @relation(fields: [lead_capture_record_id], references: [id])
+
+  @@index([lead_capture_record_id])
+  @@index([handoff_status])
+  @@map("crm_handoff_requests")
+}
+
+model WhatsAppHandoffRequest {
+  id                       String         @id @default(uuid()) @db.Uuid
+  lead_capture_record_id   String         @db.Uuid
+  messaging_system         String
+  mcp_mediation_request_id String?        @db.Uuid
+  approval_id              String?        @db.Uuid
+  capability_resolution_id String?        @db.Uuid
+  requested_by_user_id     String         @db.Uuid
+  requested_by_agent_rep_id String        @db.Uuid
+  handoff_status           HandoffStatus  @default(pending)
+  message_template_summary String?        @db.Text
+  payload_hash             String?
+  blocked_reason           String?        @db.Text
+  created_at               DateTime       @default(now())
+  updated_at               DateTime       @updatedAt
+
+  lead_capture_record LeadCaptureRecord @relation(fields: [lead_capture_record_id], references: [id])
+
+  @@index([lead_capture_record_id])
+  @@index([handoff_status])
+  @@map("whatsapp_handoff_requests")
+}
+
+model ConversionSequencePlan {
+  id                         String     @id @default(uuid()) @db.Uuid
+  lead_capture_record_id     String     @db.Uuid
+  conversion_intent_id       String?    @db.Uuid
+  plan_status                PlanStatus @default(draft)
+  sequence_type              String
+  proposed_steps             Json?
+  recommended_owner_department String?
+  required_approval_id       String?    @db.Uuid
+  saif_decision_record_id    String?    @db.Uuid
+  created_by_user_id         String     @db.Uuid
+  created_by_agent_rep_id    String     @db.Uuid
+  created_at                 DateTime   @default(now())
+  updated_at                 DateTime   @updatedAt
+
+  lead_capture_record LeadCaptureRecord @relation(fields: [lead_capture_record_id], references: [id])
+
+  @@index([lead_capture_record_id])
+  @@index([plan_status])
+  @@index([sequence_type])
+  @@map("conversion_sequence_plans")
 }
