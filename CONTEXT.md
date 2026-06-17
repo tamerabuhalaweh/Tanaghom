@@ -4,44 +4,41 @@
 
 ## Current Sprint
 
-**Sprint**: 18 — CRM / WhatsApp Conversion Layer
+**Sprint**: 19 — Production / Rendering Workflow Foundation
 **Status**: Complete
-**Goal**: Implement controlled CRM / WhatsApp conversion foundation. Mock/provider-based, MCP-mediated, non-executing.
+**Goal**: Implement controlled production and rendering workflow foundation. Mock/provider-based, MCP-mediated, preparation-only.
 
 ## Active Module
 
-- `modules/crm-conversion/` — CRM conversion types, repository, service, tests
-- `shared/providers/` — CrmProvider, MessagingProvider interfaces and mocks
-- `prisma/schema.prisma` — Conversion models
-- `prisma/migrations/` — Conversion migration
+- `modules/production-rendering/` — Production/rendering types, repository, service, tests
+- `shared/providers/` — RenderingProvider interface and MockRenderingProvider
+- `prisma/schema.prisma` — Production/rendering models
+- `prisma/migrations/` — Production/rendering migration
 
 ## Sprint Acceptance Criteria
 
-- [x] LeadCaptureRecord model exists
-- [x] LeadSourceAttribution model exists
-- [x] ConversionIntent model exists
-- [x] CrmHandoffRequest model exists
-- [x] WhatsAppHandoffRequest model exists
-- [x] ConversionSequencePlan model exists
-- [x] MockCrmProvider exists and is deterministic
-- [x] MockMessagingProvider exists and is deterministic
-- [x] CRM/WhatsApp handoff requires MCP mediation
-- [x] Direct CRM/WhatsApp access is blocked
-- [x] M5 write-enabled handoff is blocked by default
-- [x] No real customer messages are sent
-- [x] No real CRM writes occur
-- [x] No external systems are called
-- [x] No secrets, tokens, API keys, credentials, or sensitive raw payloads stored
+- [x] ProductionRequest model exists
+- [x] CreativeBrief model exists
+- [x] ProductionAssetRequirement model exists
+- [x] RenderingPreparationPackage model exists
+- [x] RenderingTarget model exists
+- [x] ProductionReviewChecklist model exists
+- [x] MockRenderingProvider exists and is deterministic
+- [x] Missing MCP mediation blocks rendering preparation
+- [x] M5 rendering execution is blocked
+- [x] Direct rendering tool access is blocked
+- [x] No real rendering, file upload, or external tool call occurs
+- [x] Asset Cognition remains canonical owner of asset identity
 - [x] HumanUser and AgentRep lineage are included
-- [x] Existing 739 tests still pass
-- [x] New CRM/WhatsApp conversion tests are added (27 tests)
+- [x] Existing 766 tests still pass
+- [x] New production/rendering tests are added (27 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (766 tests)
+- [x] npm run test passes (793 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 19
+- [ ] Open PR and stop for review before Sprint 20
 
 ## Next Sprint (Planned)
 
-**Sprint 19**: TBD — Awaiting review of Sprint 18 before proceeding.
+**Sprint 20**: TBD — Awaiting review of Sprint 19 before proceeding.
