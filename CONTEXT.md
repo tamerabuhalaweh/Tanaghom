@@ -4,38 +4,45 @@
 
 ## Current Sprint
 
-**Sprint**: 14 — Publishing Preparation Package
+**Sprint**: 15 — Controlled Postiz Integration / M5-Gated Publishing
 **Status**: Complete
-**Goal**: Create a governed Publishing Preparation Package that proves a content item is ready for future publishing.
+**Goal**: Introduce Postiz as a controlled publishing implementation behind STITCH governance.
 
 ## Active Module
 
-- `modules/publishing-preparation/` — Publishing preparation types, repository, service, tests
-- `prisma/schema.prisma` — Publishing preparation models
-- `prisma/migrations/` — Publishing preparation migration
+- `modules/postiz-integration/` — Postiz integration types, repository, service, tests
+- `shared/providers/` — PostizProvider interface and MockPostizProvider
+- `prisma/schema.prisma` — Postiz integration models
+- `prisma/migrations/` — Postiz integration migration
 
 ## Sprint Acceptance Criteria
 
-- [x] PublishingPackage model exists
-- [x] PublishingPackageItem model exists
-- [x] PublishingTarget model exists
-- [x] PublishingReadinessCheck model exists
-- [x] PublishingManifest model exists
-- [x] Package readiness requires approval, SAIF critical dimension resolution, capability resolution
-- [x] Publishing manifest can be generated without external calls
-- [x] M5 publishing/scheduling remains blocked
-- [x] Postiz is not called
+- [x] PostizConnector placeholder exists
+- [x] PostizAccountReference placeholder exists
+- [x] PublishingExecutionRequest model exists
+- [x] PostizPublishingJob model exists
+- [x] MockPostizProvider exists and is deterministic
+- [x] Real Postiz provider is not active
+- [x] PublishingPackage readiness is validated before execution request
+- [x] Approval is required
+- [x] SAIF critical dimensions are required
+- [x] CapabilityResolution is required
+- [x] MCP mediation is required
+- [x] SPINE run reference is created or supported
+- [x] Observability event/audit is created where practical
+- [x] M5 publishing is blocked by default
+- [x] Direct Postiz access is blocked
 - [x] No external systems are called
-- [x] HumanUser and AgentRep lineage are included
-- [x] Existing 604 tests still pass
-- [x] New publishing-preparation tests are added (40 tests)
+- [x] No secrets, tokens, API keys, credentials, or sensitive raw payloads stored
+- [x] Existing 644 tests still pass
+- [x] New controlled Postiz tests are added (29 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (644 tests)
+- [x] npm run test passes (673 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 15
+- [ ] Open PR and stop for review before Sprint 16
 
 ## Next Sprint (Planned)
 
-**Sprint 15**: TBD — Awaiting review of Sprint 14 before proceeding.
+**Sprint 16**: TBD — Awaiting review of Sprint 15 before proceeding.
