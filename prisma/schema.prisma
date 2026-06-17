@@ -318,14 +318,29 @@ enum MetricWindow {
 }
 
 model AnalyticsSnapshot {
-  id              String       @id @default(uuid()) @db.Uuid
-  postiz_post_id  String
-  platform        String
-  collected_at    DateTime     @default(now())
-  metric_name     String
-  metric_value    Float
-  metric_window   MetricWindow
+  id                      String   @id @default(uuid()) @db.Uuid
+  source_id               String   @db.Uuid
+  ingestion_request_id    String?  @db.Uuid
+  campaign_id             String?  @db.Uuid
+  content_item_id         String?  @db.Uuid
+  publishing_package_id   String?  @db.Uuid
+  postiz_publishing_job_id String? @db.Uuid
+  platform                String?
+  reporting_period_id     String?  @db.Uuid
+  metrics                 Json
+  normalized_metrics      Json
+  confidence              String   @default("low")
+  source_freshness        String?
+  collected_at            DateTime @default(now())
+  created_at              DateTime @default(now())
 
+  source             AnalyticsSource           @relation(fields: [source_id], references: [id])
+  ingestion_request  AnalyticsIngestionRequest? @relation(fields: [ingestion_request_id], references: [id])
+
+  @@index([source_id])
+  @@index([campaign_id])
+  @@index([content_item_id])
+  @@index([collected_at])
   @@map("analytics_snapshots")
 }
 
@@ -2131,4 +2146,145 @@ model PostizPublishingJob {
   @@index([publishing_package_id])
   @@index([job_status])
   @@map("postiz_publishing_jobs")
+}
+
+// ============================================================
+// Analytics / Social MCP & Reporting Foundation
+// ============================================================
+
+enum AnalyticsSourceStatus {
+  active
+  inactive
+  planned
+  suspended
+}
+
+enum IngestionRequestStatus {
+  pending
+  validating
+  ingesting
+  completed
+  blocked
+  failed
+  cancelled
+}
+
+enum ReportStatus {
+  draft
+  generated
+  reviewed
+  published
+  archived
+}
+
+enum PeriodType {
+  h24
+  h48
+  d7
+  weekly
+  monthly
+  custom
+}
+
+model AnalyticsSource {
+  id               String              @id @default(uuid()) @db.Uuid
+  name             String              @unique
+  source_type      String
+  status           AnalyticsSourceStatus @default(planned)
+  mcp_connector_id String?             @db.Uuid
+  requires_mcp     Boolean             @default(true)
+  supports_read    Boolean             @default(true)
+  supports_write   Boolean             @default(false)
+  created_at       DateTime            @default(now())
+  updated_at       DateTime            @updatedAt
+
+  ingestion_requests AnalyticsIngestionRequest[]
+  snapshots          AnalyticsSnapshot[]
+
+  @@index([status])
+  @@index([source_type])
+  @@map("analytics_sources")
+}
+
+model AnalyticsIngestionRequest {
+  id                      String              @id @default(uuid()) @db.Uuid
+  source_id               String              @db.Uuid
+  campaign_id             String?             @db.Uuid
+  content_item_id         String?             @db.Uuid
+  publishing_package_id   String?             @db.Uuid
+  postiz_publishing_job_id String?            @db.Uuid
+  platform                String?
+  requested_by_user_id    String              @db.Uuid
+  requested_by_agent_rep_id String            @db.Uuid
+  mcp_mediation_request_id String?            @db.Uuid
+  status                  IngestionRequestStatus @default(pending)
+  requested_at            DateTime            @default(now())
+  completed_at            DateTime?
+  blocked_reason          String?             @db.Text
+  created_at              DateTime            @default(now())
+  updated_at              DateTime            @updatedAt
+
+  source    AnalyticsSource @relation(fields: [source_id], references: [id])
+  snapshots AnalyticsSnapshot[]
+
+  @@index([source_id])
+  @@index([status])
+  @@index([campaign_id])
+  @@map("analytics_ingestion_requests")
+}
+
+model PlatformMetricMapping {
+  id                   String   @id @default(uuid()) @db.Uuid
+  platform             String
+  source_metric_name   String
+  normalized_metric_name String
+  mapping_rule         Json?
+  confidence           String   @default("medium")
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  @@index([platform])
+  @@unique([platform, source_metric_name])
+  @@map("platform_metric_mappings")
+}
+
+model ReportingPeriod {
+  id          String     @id @default(uuid()) @db.Uuid
+  period_type PeriodType
+  start_date  DateTime
+  end_date    DateTime
+  timezone    String     @default("UTC")
+  status      String     @default("active")
+  created_at  DateTime   @default(now())
+  updated_at  DateTime   @updatedAt
+
+  reports CampaignPerformanceReport[]
+
+  @@index([period_type])
+  @@index([start_date, end_date])
+  @@map("reporting_periods")
+}
+
+model CampaignPerformanceReport {
+  id                        String     @id @default(uuid()) @db.Uuid
+  reporting_period_id       String     @db.Uuid
+  campaign_id               String     @db.Uuid
+  generated_by_user_id      String     @db.Uuid
+  generated_by_agent_rep_id String     @db.Uuid
+  report_status             ReportStatus @default(draft)
+  summary                   String?    @db.Text
+  top_findings              Json?
+  risks                     Json?
+  recommendations           Json?
+  linked_learning_signal_ids String[]
+  linked_saif_decision_record_id String? @db.Uuid
+  created_at                DateTime   @default(now())
+  updated_at                DateTime   @updatedAt
+
+  reporting_period ReportingPeriod @relation(fields: [reporting_period_id], references: [id])
+
+  @@index([reporting_period_id])
+  @@index([campaign_id])
+  @@index([report_status])
+  @@map("campaign_performance_reports")
 }

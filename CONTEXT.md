@@ -4,45 +4,41 @@
 
 ## Current Sprint
 
-**Sprint**: 15 — Controlled Postiz Integration / M5-Gated Publishing
+**Sprint**: 16 — Analytics / Social MCP & Reporting Foundation
 **Status**: Complete
-**Goal**: Introduce Postiz as a controlled publishing implementation behind STITCH governance.
+**Goal**: Implement the Analytics / Social MCP and Reporting foundation in read-only/mock mode.
 
 ## Active Module
 
-- `modules/postiz-integration/` — Postiz integration types, repository, service, tests
-- `shared/providers/` — PostizProvider interface and MockPostizProvider
-- `prisma/schema.prisma` — Postiz integration models
-- `prisma/migrations/` — Postiz integration migration
+- `modules/analytics-reporting/` — Analytics types, repository, service, tests
+- `shared/providers/` — AnalyticsProvider interface and MockAnalyticsProvider
+- `prisma/schema.prisma` — Analytics models
+- `prisma/migrations/` — Analytics migration
 
 ## Sprint Acceptance Criteria
 
-- [x] PostizConnector placeholder exists
-- [x] PostizAccountReference placeholder exists
-- [x] PublishingExecutionRequest model exists
-- [x] PostizPublishingJob model exists
-- [x] MockPostizProvider exists and is deterministic
-- [x] Real Postiz provider is not active
-- [x] PublishingPackage readiness is validated before execution request
-- [x] Approval is required
-- [x] SAIF critical dimensions are required
-- [x] CapabilityResolution is required
-- [x] MCP mediation is required
-- [x] SPINE run reference is created or supported
-- [x] Observability event/audit is created where practical
-- [x] M5 publishing is blocked by default
-- [x] Direct Postiz access is blocked
+- [x] AnalyticsSource model exists
+- [x] AnalyticsIngestionRequest model exists
+- [x] AnalyticsSnapshot model exists
+- [x] PlatformMetricMapping model exists
+- [x] ReportingPeriod model exists
+- [x] CampaignPerformanceReport model exists
+- [x] MockAnalyticsProvider exists and is deterministic
+- [x] Missing MCP mediation blocks analytics ingestion where required
+- [x] Only read-only M4/mock analytics behavior is allowed
 - [x] No external systems are called
+- [x] Analytics reports are advisory only
+- [x] LearningSignal candidates are evidence only
 - [x] No secrets, tokens, API keys, credentials, or sensitive raw payloads stored
-- [x] Existing 644 tests still pass
-- [x] New controlled Postiz tests are added (29 tests)
+- [x] Existing 673 tests still pass
+- [x] New analytics/reporting tests are added (30 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (673 tests)
+- [x] npm run test passes (703 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 16
+- [ ] Open PR and stop for review before Sprint 17
 
 ## Next Sprint (Planned)
 
-**Sprint 16**: TBD — Awaiting review of Sprint 15 before proceeding.
+**Sprint 17**: TBD — Awaiting review of Sprint 16 before proceeding.
