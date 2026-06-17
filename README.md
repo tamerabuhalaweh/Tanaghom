@@ -52,12 +52,42 @@ npx prisma db seed
 # Start development server
 npm run dev
 
+# Start frontend demo shell (separate terminal)
+cd frontend && npm run dev
+
 # Run tests
 npm test
 
 # Full CI pipeline
 npm run ci
 ```
+
+## Frontend Demo Shell
+
+The `frontend/` directory contains a demo UI for stakeholder presentations.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend runs on `http://localhost:3000` and provides:
+- STITCH Dashboard with workflow visualization
+- Campaign workspace
+- Approval queue
+- SAIF decision records
+- Capability resolution viewer
+- MCP mediation boundary page
+- Publishing package readiness
+- SPINE timeline
+- Observability / audit trail
+- Asset cognition
+- Analytics reports
+- Learning signal review
+- CRM/WhatsApp handoff preparation
+- Production/rendering preparation
+- System safety / M5 blocked status
 
 ## Available Scripts
 
