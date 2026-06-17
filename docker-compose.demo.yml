@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: demo
+      DATABASE_URL: postgresql://tanaghum:tanaghum_demo@postgres:5432/tanaghum
+    command: npx prisma migrate deploy
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: demo
+      DEMO_MODE: "true"
+      PORT: "4000"
+      DATABASE_URL: postgresql://tanaghum:tanaghum_demo@postgres:5432/tanaghum
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: http://localhost:3000
+      EXTERNAL_EXECUTION_ENABLED: "false"
+      M5_WRITE_EXECUTION_ENABLED: "false"
+      POSTIZ_LIVE_ENABLED: "false"
+      CRM_LIVE_ENABLED: "false"
+      WHATSAPP_LIVE_ENABLED: "false"
+      RENDERING_LIVE_ENABLED: "false"
+      RESOURCESPACE_LIVE_ENABLED: "false"
+      PAPERCLIP_SYNC_ENABLED: "false"
+      ANALYTICS_LIVE_ENABLED: "false"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tanaghum
+      POSTGRES_PASSWORD: tanaghum_demo
+      POSTGRES_DB: tanaghum
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tanaghum"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
