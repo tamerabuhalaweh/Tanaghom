@@ -218,12 +218,20 @@ CREATE TABLE "schedule_events" (
 -- CreateTable
 CREATE TABLE "analytics_snapshots" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "postiz_post_id" TEXT NOT NULL,
-    "platform" TEXT NOT NULL,
+    "source_id" UUID NOT NULL,
+    "ingestion_request_id" UUID,
+    "campaign_id" UUID,
+    "content_item_id" UUID,
+    "publishing_package_id" UUID,
+    "postiz_publishing_job_id" UUID,
+    "platform" TEXT,
+    "reporting_period_id" UUID,
+    "metrics" JSONB NOT NULL,
+    "normalized_metrics" JSONB NOT NULL,
+    "confidence" TEXT NOT NULL DEFAULT 'low',
+    "source_freshness" TEXT,
     "collected_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "metric_name" TEXT NOT NULL,
-    "metric_value" DOUBLE PRECISION NOT NULL,
-    "metric_window" "MetricWindow" NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "analytics_snapshots_pkey" PRIMARY KEY ("id")
 );
@@ -1908,6 +1916,18 @@ CREATE INDEX "campaign_performance_reports_report_status_idx" ON "campaign_perfo
 
 -- AddForeignKey
 ALTER TABLE "analytics_ingestion_requests" ADD CONSTRAINT "analytics_ingestion_requests_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "analytics_sources"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- CreateIndex
+CREATE INDEX "analytics_snapshots_source_id_idx" ON "analytics_snapshots"("source_id");
+
+-- CreateIndex
+CREATE INDEX "analytics_snapshots_campaign_id_idx" ON "analytics_snapshots"("campaign_id");
+
+-- CreateIndex
+CREATE INDEX "analytics_snapshots_content_item_id_idx" ON "analytics_snapshots"("content_item_id");
+
+-- CreateIndex
+CREATE INDEX "analytics_snapshots_collected_at_idx" ON "analytics_snapshots"("collected_at");
 
 -- AddForeignKey
 ALTER TABLE "analytics_snapshots" ADD CONSTRAINT "analytics_snapshots_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "analytics_sources"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
