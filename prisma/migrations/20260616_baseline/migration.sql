@@ -2243,3 +2243,195 @@ ALTER TABLE "whatsapp_handoff_requests" ADD CONSTRAINT "whatsapp_handoff_request
 
 -- AddForeignKey
 ALTER TABLE "conversion_sequence_plans" ADD CONSTRAINT "conversion_sequence_plans_lead_capture_record_id_fkey" FOREIGN KEY ("lead_capture_record_id") REFERENCES "lead_capture_records"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- CreateEnum
+CREATE TYPE "ProductionRequestStatus" AS ENUM ('draft', 'submitted', 'in_progress', 'review', 'completed', 'cancelled', 'blocked');
+
+-- CreateEnum
+CREATE TYPE "BriefStatus" AS ENUM ('draft', 'submitted', 'approved', 'rejected', 'needs_revision');
+
+-- CreateEnum
+CREATE TYPE "RequirementStatus" AS ENUM ('pending', 'available', 'missing', 'blocked');
+
+-- CreateEnum
+CREATE TYPE "PackageReadinessStatus" AS ENUM ('draft', 'validating', 'ready', 'blocked', 'cancelled');
+
+-- CreateEnum
+CREATE TYPE "ChecklistCheckStatus" AS ENUM ('pending', 'passed', 'failed', 'skipped', 'blocked');
+
+-- CreateTable
+CREATE TABLE "production_requests" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "request_status" "ProductionRequestStatus" NOT NULL DEFAULT 'draft',
+    "request_type" TEXT NOT NULL,
+    "campaign_id" UUID,
+    "content_item_id" UUID,
+    "publishing_package_id" UUID,
+    "asset_id" UUID,
+    "requested_by_user_id" UUID NOT NULL,
+    "requested_by_agent_rep_id" UUID NOT NULL,
+    "assigned_department" TEXT,
+    "priority" TEXT NOT NULL DEFAULT 'medium',
+    "due_date" TIMESTAMP(3),
+    "rationale" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "production_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "creative_briefs" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "production_request_id" UUID NOT NULL,
+    "brief_status" "BriefStatus" NOT NULL DEFAULT 'draft',
+    "title" TEXT NOT NULL,
+    "objective" TEXT,
+    "audience" TEXT,
+    "key_message" TEXT,
+    "tone" TEXT,
+    "platform" TEXT,
+    "format" TEXT,
+    "dimensions_placeholder" TEXT,
+    "brand_guidelines_reference" TEXT,
+    "asset_cognition_record_id" UUID,
+    "saif_decision_record_id" UUID,
+    "approval_id" UUID,
+    "created_by_user_id" UUID NOT NULL,
+    "created_by_agent_rep_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "creative_briefs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "production_asset_requirements" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "production_request_id" UUID NOT NULL,
+    "requirement_type" TEXT NOT NULL,
+    "required_asset_type" TEXT,
+    "description" TEXT,
+    "platform" TEXT,
+    "status" "RequirementStatus" NOT NULL DEFAULT 'pending',
+    "linked_asset_id" UUID,
+    "external_reference_id" UUID,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "production_asset_requirements_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "rendering_preparation_packages" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "production_request_id" UUID NOT NULL,
+    "creative_brief_id" UUID,
+    "package_status" "PackageReadinessStatus" NOT NULL DEFAULT 'draft',
+    "capability_resolution_id" UUID,
+    "mcp_mediation_request_id" UUID,
+    "approval_id" UUID,
+    "spine_run_id" UUID,
+    "spine_artifact_id" UUID,
+    "asset_id" UUID,
+    "readiness_score" DOUBLE PRECISION,
+    "blocked_reasons" TEXT[],
+    "package_hash" TEXT,
+    "created_by_user_id" UUID NOT NULL,
+    "created_by_agent_rep_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "rendering_preparation_packages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "rendering_targets" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "rendering_preparation_package_id" UUID NOT NULL,
+    "target_type" TEXT NOT NULL,
+    "platform" TEXT,
+    "format" TEXT,
+    "dimensions_placeholder" TEXT,
+    "duration_placeholder" TEXT,
+    "output_asset_type" TEXT,
+    "target_status" "TargetStatus" NOT NULL DEFAULT 'pending',
+    "requires_mcp" BOOLEAN NOT NULL DEFAULT true,
+    "future_connector_reference" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "rendering_targets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "production_review_checklists" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "production_request_id" UUID NOT NULL,
+    "check_type" TEXT NOT NULL,
+    "check_status" "ChecklistCheckStatus" NOT NULL DEFAULT 'pending',
+    "severity" TEXT NOT NULL DEFAULT 'info',
+    "message" TEXT,
+    "source_object_type" TEXT,
+    "source_object_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "production_review_checklists_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "creative_briefs_production_request_id_key" ON "creative_briefs"("production_request_id");
+
+-- CreateIndex
+CREATE INDEX "production_requests_request_status_idx" ON "production_requests"("request_status");
+
+-- CreateIndex
+CREATE INDEX "production_requests_request_type_idx" ON "production_requests"("request_type");
+
+-- CreateIndex
+CREATE INDEX "production_requests_campaign_id_idx" ON "production_requests"("campaign_id");
+
+-- CreateIndex
+CREATE INDEX "production_requests_requested_by_user_id_idx" ON "production_requests"("requested_by_user_id");
+
+-- CreateIndex
+CREATE INDEX "production_asset_requirements_production_request_id_idx" ON "production_asset_requirements"("production_request_id");
+
+-- CreateIndex
+CREATE INDEX "production_asset_requirements_status_idx" ON "production_asset_requirements"("status");
+
+-- CreateIndex
+CREATE INDEX "rendering_preparation_packages_production_request_id_idx" ON "rendering_preparation_packages"("production_request_id");
+
+-- CreateIndex
+CREATE INDEX "rendering_preparation_packages_package_status_idx" ON "rendering_preparation_packages"("package_status");
+
+-- CreateIndex
+CREATE INDEX "rendering_targets_rendering_preparation_package_id_idx" ON "rendering_targets"("rendering_preparation_package_id");
+
+-- CreateIndex
+CREATE INDEX "rendering_targets_target_type_idx" ON "rendering_targets"("target_type");
+
+-- CreateIndex
+CREATE INDEX "production_review_checklists_production_request_id_idx" ON "production_review_checklists"("production_request_id");
+
+-- CreateIndex
+CREATE INDEX "production_review_checklists_check_type_idx" ON "production_review_checklists"("check_type");
+
+-- CreateIndex
+CREATE INDEX "production_review_checklists_check_status_idx" ON "production_review_checklists"("check_status");
+
+-- AddForeignKey
+ALTER TABLE "creative_briefs" ADD CONSTRAINT "creative_briefs_production_request_id_fkey" FOREIGN KEY ("production_request_id") REFERENCES "production_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "production_asset_requirements" ADD CONSTRAINT "production_asset_requirements_production_request_id_fkey" FOREIGN KEY ("production_request_id") REFERENCES "production_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rendering_preparation_packages" ADD CONSTRAINT "rendering_preparation_packages_production_request_id_fkey" FOREIGN KEY ("production_request_id") REFERENCES "production_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rendering_targets" ADD CONSTRAINT "rendering_targets_rendering_preparation_package_id_fkey" FOREIGN KEY ("rendering_preparation_package_id") REFERENCES "rendering_preparation_packages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "production_review_checklists" ADD CONSTRAINT "production_review_checklists_production_request_id_fkey" FOREIGN KEY ("production_request_id") REFERENCES "production_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

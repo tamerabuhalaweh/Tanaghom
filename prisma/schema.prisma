@@ -2591,3 +2591,191 @@ model ConversionSequencePlan {
   @@index([sequence_type])
   @@map("conversion_sequence_plans")
 }
+
+// ============================================================
+// Production / Rendering Workflow
+// ============================================================
+
+enum ProductionRequestStatus {
+  draft
+  submitted
+  in_progress
+  review
+  completed
+  cancelled
+  blocked
+}
+
+enum BriefStatus {
+  draft
+  submitted
+  approved
+  rejected
+  needs_revision
+}
+
+enum RequirementStatus {
+  pending
+  available
+  missing
+  blocked
+}
+
+enum PackageReadinessStatus {
+  draft
+  validating
+  ready
+  blocked
+  cancelled
+}
+
+enum ChecklistCheckStatus {
+  pending
+  passed
+  failed
+  skipped
+  blocked
+}
+
+model ProductionRequest {
+  id                      String               @id @default(uuid()) @db.Uuid
+  request_status          ProductionRequestStatus @default(draft)
+  request_type            String
+  campaign_id             String?              @db.Uuid
+  content_item_id         String?              @db.Uuid
+  publishing_package_id   String?              @db.Uuid
+  asset_id                String?              @db.Uuid
+  requested_by_user_id    String               @db.Uuid
+  requested_by_agent_rep_id String             @db.Uuid
+  assigned_department     String?
+  priority                String               @default("medium")
+  due_date                DateTime?
+  rationale               String?              @db.Text
+  created_at              DateTime             @default(now())
+  updated_at              DateTime             @updatedAt
+
+  creative_brief          CreativeBrief?
+  asset_requirements      ProductionAssetRequirement[]
+  rendering_packages      RenderingPreparationPackage[]
+  review_checklists       ProductionReviewChecklist[]
+
+  @@index([request_status])
+  @@index([request_type])
+  @@index([campaign_id])
+  @@index([requested_by_user_id])
+  @@map("production_requests")
+}
+
+model CreativeBrief {
+  id                        String      @id @default(uuid()) @db.Uuid
+  production_request_id     String      @unique @db.Uuid
+  brief_status              BriefStatus @default(draft)
+  title                     String
+  objective                 String?     @db.Text
+  audience                  String?
+  key_message               String?     @db.Text
+  tone                      String?
+  platform                  String?
+  format                    String?
+  dimensions_placeholder    String?
+  brand_guidelines_reference String?
+  asset_cognition_record_id String?     @db.Uuid
+  saif_decision_record_id   String?     @db.Uuid
+  approval_id               String?     @db.Uuid
+  created_by_user_id        String      @db.Uuid
+  created_by_agent_rep_id   String      @db.Uuid
+  created_at                DateTime    @default(now())
+  updated_at                DateTime    @updatedAt
+
+  production_request ProductionRequest @relation(fields: [production_request_id], references: [id])
+
+  @@map("creative_briefs")
+}
+
+model ProductionAssetRequirement {
+  id                    String           @id @default(uuid()) @db.Uuid
+  production_request_id String           @db.Uuid
+  requirement_type      String
+  required_asset_type   String?
+  description           String?          @db.Text
+  platform              String?
+  status                RequirementStatus @default(pending)
+  linked_asset_id       String?          @db.Uuid
+  external_reference_id String?          @db.Uuid
+  created_at            DateTime         @default(now())
+  updated_at            DateTime         @updatedAt
+
+  production_request ProductionRequest @relation(fields: [production_request_id], references: [id])
+
+  @@index([production_request_id])
+  @@index([status])
+  @@map("production_asset_requirements")
+}
+
+model RenderingPreparationPackage {
+  id                        String               @id @default(uuid()) @db.Uuid
+  production_request_id     String               @db.Uuid
+  creative_brief_id         String?              @db.Uuid
+  package_status            PackageReadinessStatus @default(draft)
+  capability_resolution_id  String?              @db.Uuid
+  mcp_mediation_request_id  String?              @db.Uuid
+  approval_id               String?              @db.Uuid
+  spine_run_id              String?              @db.Uuid
+  spine_artifact_id         String?              @db.Uuid
+  asset_id                  String?              @db.Uuid
+  readiness_score           Float?
+  blocked_reasons           String[]
+  package_hash              String?
+  created_by_user_id        String               @db.Uuid
+  created_by_agent_rep_id   String               @db.Uuid
+  created_at                DateTime             @default(now())
+  updated_at                DateTime             @updatedAt
+
+  production_request ProductionRequest @relation(fields: [production_request_id], references: [id])
+  rendering_targets  RenderingTarget[]
+
+  @@index([production_request_id])
+  @@index([package_status])
+  @@map("rendering_preparation_packages")
+}
+
+model RenderingTarget {
+  id                              String       @id @default(uuid()) @db.Uuid
+  rendering_preparation_package_id String      @db.Uuid
+  target_type                     String
+  platform                        String?
+  format                          String?
+  dimensions_placeholder          String?
+  duration_placeholder            String?
+  output_asset_type               String?
+  target_status                   TargetStatus @default(pending)
+  requires_mcp                    Boolean      @default(true)
+  future_connector_reference      String?
+  created_at                      DateTime     @default(now())
+  updated_at                      DateTime     @updatedAt
+
+  rendering_package RenderingPreparationPackage @relation(fields: [rendering_preparation_package_id], references: [id])
+
+  @@index([rendering_preparation_package_id])
+  @@index([target_type])
+  @@map("rendering_targets")
+}
+
+model ProductionReviewChecklist {
+  id                    String              @id @default(uuid()) @db.Uuid
+  production_request_id String              @db.Uuid
+  check_type            String
+  check_status          ChecklistCheckStatus @default(pending)
+  severity              String              @default("info")
+  message               String?             @db.Text
+  source_object_type    String?
+  source_object_id      String?
+  created_at            DateTime            @default(now())
+
+  production_request ProductionRequest @relation(fields: [production_request_id], references: [id])
+
+  @@index([production_request_id])
+  @@index([check_type])
+  @@index([check_status])
+  @@map("production_review_checklists")
+}
