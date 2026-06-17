@@ -163,23 +163,15 @@ jobs:
           npm ci
           npm run build
           # Test that live flags fail in demo mode - the app should exit with error
-          node -e "
-            process.env.JWT_SECRET = 'ci-test-secret-at-least-32-characters-long';
-            process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
-            process.env.REDIS_URL = 'redis://localhost:6379';
-            process.env.DEMO_MODE = 'true';
-            process.env.POSTIZ_LIVE_ENABLED = 'true';
-            try {
-              require('./dist/index.js');
-              console.log('FAIL: App should have exited with error for live flags in demo mode');
-              process.exit(1);
-            } catch (e) {
-              if (e.message && (e.message.includes('DEMO MODE VIOLATION') || e.message.includes('demo mode') || e.message.includes('cannot be enabled'))) {
-                console.log('PASS: Live flags correctly blocked in demo mode');
-                process.exit(0);
-              }
-              // App may exit with validation error - that's also acceptable
-              console.log('PASS: App exited with error for live flags in demo mode');
-              process.exit(0);
-            }
-          "
+          set +e
+          DEMO_MODE=true POSTIZ_LIVE_ENABLED=true JWT_SECRET=ci-test-secret-at-least-32-characters-long \
+            DATABASE_URL=postgresql://localhost:5432/test REDIS_URL=redis://localhost:6379 \
+            node -e "require('./dist/index.js')" 2>&1 | tee /tmp/demo-check.log
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 0 ] && grep -q "cannot be enabled\|DEMO MODE VIOLATION\|demo mode\|Environment validation failed" /tmp/demo-check.log; then
+            echo "PASS: Live flags correctly blocked in demo mode"
+          else
+            echo "FAIL: App should have exited with error for live flags in demo mode"
+            exit 1
+          fi

@@ -21,10 +21,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm ci --omit=dev && npm install prisma @prisma/client
+RUN npm ci --omit=dev && npm install --no-save prisma
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY prisma ./prisma/
 
 RUN addgroup -g 1001 -S appgroup && \
