@@ -4,39 +4,38 @@
 
 ## Current Sprint
 
-**Sprint**: 13 — Operating Surface / Paperclip Relay Foundation
+**Sprint**: 14 — Publishing Preparation Package
 **Status**: Complete
-**Goal**: Implement the Operating Surface / Paperclip Relay foundation. STITCH remains the source of truth.
+**Goal**: Create a governed Publishing Preparation Package that proves a content item is ready for future publishing.
 
 ## Active Module
 
-- `modules/operating-surface/` — Operating surface types, repository, service, tests
-- `prisma/schema.prisma` — Operating surface models
-- `prisma/migrations/` — Operating surface migration
+- `modules/publishing-preparation/` — Publishing preparation types, repository, service, tests
+- `prisma/schema.prisma` — Publishing preparation models
+- `prisma/migrations/` — Publishing preparation migration
 
 ## Sprint Acceptance Criteria
 
-- [x] OperatingSurface model exists
-- [x] SurfaceTask model exists
-- [x] SurfaceStatusProjection model exists
-- [x] SurfaceRelayEvent model exists
-- [x] PaperclipReference model exists
-- [x] SurfaceSyncPolicy model exists
-- [x] Paperclip is represented only as an operating surface / external reference
-- [x] Paperclip cannot own canonical identity, approval, decision, asset, run, artifact, audit, or capability records
-- [x] Surface projections are derived visibility only
-- [x] Surface relay events cannot directly mutate canonical truth without governed review
-- [x] No secrets, tokens, API keys, credentials, or sensitive raw payloads stored
+- [x] PublishingPackage model exists
+- [x] PublishingPackageItem model exists
+- [x] PublishingTarget model exists
+- [x] PublishingReadinessCheck model exists
+- [x] PublishingManifest model exists
+- [x] Package readiness requires approval, SAIF critical dimension resolution, capability resolution
+- [x] Publishing manifest can be generated without external calls
+- [x] M5 publishing/scheduling remains blocked
+- [x] Postiz is not called
 - [x] No external systems are called
-- [x] Existing 572 tests still pass
-- [x] New operating-surface tests are added (32 tests)
+- [x] HumanUser and AgentRep lineage are included
+- [x] Existing 604 tests still pass
+- [x] New publishing-preparation tests are added (40 tests)
 - [x] npm run lint passes
 - [x] npm run typecheck passes
-- [x] npm run test passes (604 tests)
+- [x] npm run test passes (644 tests)
 - [x] npm run build passes
 - [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review before Sprint 14
+- [ ] Open PR and stop for review before Sprint 15
 
 ## Next Sprint (Planned)
 
-**Sprint 14**: TBD — Awaiting review of Sprint 13 before proceeding.
+**Sprint 15**: TBD — Awaiting review of Sprint 14 before proceeding.
