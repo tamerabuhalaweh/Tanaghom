@@ -2057,3 +2057,189 @@ CREATE INDEX "knowledge_revisions_dks_update_proposal_id_idx" ON "knowledge_revi
 
 -- AddForeignKey
 ALTER TABLE "dks_update_decisions" ADD CONSTRAINT "dks_update_decisions_dks_update_proposal_id_fkey" FOREIGN KEY ("dks_update_proposal_id") REFERENCES "dks_update_proposals"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- CreateEnum
+CREATE TYPE "LeadStatus" AS ENUM ('new_lead', 'contacted', 'qualified', 'nurturing', 'converted', 'lost', 'archived');
+
+-- CreateEnum
+CREATE TYPE "ConsentStatus" AS ENUM ('pending', 'granted', 'denied', 'withdrawn');
+
+-- CreateEnum
+CREATE TYPE "PlanStatus" AS ENUM ('draft', 'proposed', 'approved', 'rejected', 'executing', 'completed', 'cancelled');
+
+-- CreateTable
+CREATE TABLE "lead_capture_records" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "lead_status" "LeadStatus" NOT NULL DEFAULT 'new_lead',
+    "lead_source" TEXT,
+    "campaign_id" UUID,
+    "content_item_id" UUID,
+    "publishing_package_id" UUID,
+    "analytics_snapshot_id" UUID,
+    "platform" TEXT,
+    "source_url_placeholder" TEXT,
+    "contact_reference_placeholder" TEXT,
+    "lead_name_placeholder" TEXT,
+    "lead_phone_placeholder" TEXT,
+    "lead_email_placeholder" TEXT,
+    "consent_status" "ConsentStatus" NOT NULL DEFAULT 'pending',
+    "created_by_user_id" UUID NOT NULL,
+    "created_by_agent_rep_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "lead_capture_records_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "lead_source_attributions" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "lead_capture_record_id" UUID NOT NULL,
+    "attribution_source" TEXT NOT NULL,
+    "campaign_id" UUID,
+    "content_item_id" UUID,
+    "publishing_package_id" UUID,
+    "postiz_publishing_job_id" UUID,
+    "analytics_snapshot_id" UUID,
+    "platform" TEXT,
+    "cta_type" TEXT,
+    "attribution_confidence" TEXT NOT NULL DEFAULT 'low',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "lead_source_attributions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversion_intents" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "lead_capture_record_id" UUID NOT NULL,
+    "intent_type" TEXT NOT NULL,
+    "confidence" TEXT NOT NULL DEFAULT 'low',
+    "rationale" TEXT,
+    "recommended_next_step" TEXT,
+    "saif_decision_record_id" UUID,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "conversion_intents_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "crm_handoff_requests" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "lead_capture_record_id" UUID NOT NULL,
+    "crm_system" TEXT NOT NULL,
+    "mcp_mediation_request_id" UUID,
+    "approval_id" UUID,
+    "capability_resolution_id" UUID,
+    "requested_by_user_id" UUID NOT NULL,
+    "requested_by_agent_rep_id" UUID NOT NULL,
+    "handoff_status" "HandoffStatus" NOT NULL DEFAULT 'pending',
+    "payload_summary" TEXT,
+    "payload_hash" TEXT,
+    "blocked_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "crm_handoff_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "whatsapp_handoff_requests" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "lead_capture_record_id" UUID NOT NULL,
+    "messaging_system" TEXT NOT NULL,
+    "mcp_mediation_request_id" UUID,
+    "approval_id" UUID,
+    "capability_resolution_id" UUID,
+    "requested_by_user_id" UUID NOT NULL,
+    "requested_by_agent_rep_id" UUID NOT NULL,
+    "handoff_status" "HandoffStatus" NOT NULL DEFAULT 'pending',
+    "message_template_summary" TEXT,
+    "payload_hash" TEXT,
+    "blocked_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "whatsapp_handoff_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversion_sequence_plans" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "lead_capture_record_id" UUID NOT NULL,
+    "conversion_intent_id" UUID,
+    "plan_status" "PlanStatus" NOT NULL DEFAULT 'draft',
+    "sequence_type" TEXT NOT NULL,
+    "proposed_steps" JSONB,
+    "recommended_owner_department" TEXT,
+    "required_approval_id" UUID,
+    "saif_decision_record_id" UUID,
+    "created_by_user_id" UUID NOT NULL,
+    "created_by_agent_rep_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "conversion_sequence_plans_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "lead_capture_records_lead_status_idx" ON "lead_capture_records"("lead_status");
+
+-- CreateIndex
+CREATE INDEX "lead_capture_records_campaign_id_idx" ON "lead_capture_records"("campaign_id");
+
+-- CreateIndex
+CREATE INDEX "lead_capture_records_platform_idx" ON "lead_capture_records"("platform");
+
+-- CreateIndex
+CREATE INDEX "lead_capture_records_created_by_user_id_idx" ON "lead_capture_records"("created_by_user_id");
+
+-- CreateIndex
+CREATE INDEX "lead_source_attributions_lead_capture_record_id_idx" ON "lead_source_attributions"("lead_capture_record_id");
+
+-- CreateIndex
+CREATE INDEX "lead_source_attributions_attribution_source_idx" ON "lead_source_attributions"("attribution_source");
+
+-- CreateIndex
+CREATE INDEX "conversion_intents_lead_capture_record_id_idx" ON "conversion_intents"("lead_capture_record_id");
+
+-- CreateIndex
+CREATE INDEX "conversion_intents_intent_type_idx" ON "conversion_intents"("intent_type");
+
+-- CreateIndex
+CREATE INDEX "crm_handoff_requests_lead_capture_record_id_idx" ON "crm_handoff_requests"("lead_capture_record_id");
+
+-- CreateIndex
+CREATE INDEX "crm_handoff_requests_handoff_status_idx" ON "crm_handoff_requests"("handoff_status");
+
+-- CreateIndex
+CREATE INDEX "whatsapp_handoff_requests_lead_capture_record_id_idx" ON "whatsapp_handoff_requests"("lead_capture_record_id");
+
+-- CreateIndex
+CREATE INDEX "whatsapp_handoff_requests_handoff_status_idx" ON "whatsapp_handoff_requests"("handoff_status");
+
+-- CreateIndex
+CREATE INDEX "conversion_sequence_plans_lead_capture_record_id_idx" ON "conversion_sequence_plans"("lead_capture_record_id");
+
+-- CreateIndex
+CREATE INDEX "conversion_sequence_plans_plan_status_idx" ON "conversion_sequence_plans"("plan_status");
+
+-- CreateIndex
+CREATE INDEX "conversion_sequence_plans_sequence_type_idx" ON "conversion_sequence_plans"("sequence_type");
+
+-- AddForeignKey
+ALTER TABLE "lead_source_attributions" ADD CONSTRAINT "lead_source_attributions_lead_capture_record_id_fkey" FOREIGN KEY ("lead_capture_record_id") REFERENCES "lead_capture_records"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversion_intents" ADD CONSTRAINT "conversion_intents_lead_capture_record_id_fkey" FOREIGN KEY ("lead_capture_record_id") REFERENCES "lead_capture_records"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "crm_handoff_requests" ADD CONSTRAINT "crm_handoff_requests_lead_capture_record_id_fkey" FOREIGN KEY ("lead_capture_record_id") REFERENCES "lead_capture_records"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "whatsapp_handoff_requests" ADD CONSTRAINT "whatsapp_handoff_requests_lead_capture_record_id_fkey" FOREIGN KEY ("lead_capture_record_id") REFERENCES "lead_capture_records"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversion_sequence_plans" ADD CONSTRAINT "conversion_sequence_plans_lead_capture_record_id_fkey" FOREIGN KEY ("lead_capture_record_id") REFERENCES "lead_capture_records"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
