@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-COPY tsconfig.json ./
+COPY tsconfig.json tsup.config.ts ./
 COPY prisma ./prisma/
 COPY src ./src/
 COPY modules ./modules/
@@ -33,4 +33,4 @@ USER appuser
 
 EXPOSE 4000
 
-CMD ["node", "dist/src/index.js"]
+CMD ["node", "dist/index.js"]
