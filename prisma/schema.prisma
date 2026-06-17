@@ -1985,3 +1985,150 @@ model PublishingManifest {
 
   @@map("publishing_manifests")
 }
+
+// ============================================================
+// Controlled Postiz Integration
+// ============================================================
+
+enum PostizConnectorStatus {
+  active
+  inactive
+  planned
+  suspended
+}
+
+enum AccountStatus {
+  active
+  inactive
+  disconnected
+  placeholder
+}
+
+enum ExecutionRequestStatus {
+  pending
+  validating
+  ready
+  executing
+  completed
+  blocked
+  failed
+  cancelled
+}
+
+enum ExecutionMode {
+  mock
+  simulated
+  live
+}
+
+enum RequestedAction {
+  prepare_draft
+  prepare_schedule
+  publish
+}
+
+enum PostizJobStatus {
+  pending
+  preparing
+  prepared
+  scheduled
+  published
+  failed
+  cancelled
+  blocked
+}
+
+model PostizConnector {
+  id                     String              @id @default(uuid()) @db.Uuid
+  connector_name         String              @unique
+  connector_status       PostizConnectorStatus @default(planned)
+  mcp_connector_id       String?             @db.Uuid
+  implementation_id      String?             @db.Uuid
+  target_system          String              @default("Postiz")
+  base_url_placeholder   String?
+  credential_binding_id  String?
+  supports_draft         Boolean             @default(true)
+  supports_schedule      Boolean             @default(true)
+  supports_publish       Boolean             @default(false)
+  m4_allowed             Boolean             @default(true)
+  m5_allowed             Boolean             @default(false)
+  created_at             DateTime            @default(now())
+  updated_at             DateTime            @updatedAt
+
+  account_references  PostizAccountReference[]
+  execution_requests  PublishingExecutionRequest[]
+
+  @@index([connector_status])
+  @@map("postiz_connectors")
+}
+
+model PostizAccountReference {
+  id                       String         @id @default(uuid()) @db.Uuid
+  postiz_connector_id      String         @db.Uuid
+  platform                 String
+  account_reference_placeholder String?
+  account_display_name     String?
+  account_status           AccountStatus  @default(placeholder)
+  created_at               DateTime       @default(now())
+  updated_at               DateTime       @updatedAt
+
+  postiz_connector PostizConnector @relation(fields: [postiz_connector_id], references: [id])
+  publishing_jobs  PostizPublishingJob[]
+
+  @@index([postiz_connector_id])
+  @@index([platform])
+  @@map("postiz_account_references")
+}
+
+model PublishingExecutionRequest {
+  id                        String              @id @default(uuid()) @db.Uuid
+  publishing_package_id     String              @db.Uuid
+  publishing_manifest_id    String?             @db.Uuid
+  postiz_connector_id       String              @db.Uuid
+  capability_resolution_id  String?             @db.Uuid
+  mcp_mediation_request_id  String?             @db.Uuid
+  mcp_mediation_decision_id String?            @db.Uuid
+  spine_run_id              String?             @db.Uuid
+  approval_id               String?             @db.Uuid
+  saif_decision_record_id   String?             @db.Uuid
+  requested_by_user_id      String              @db.Uuid
+  requested_by_agent_rep_id String              @db.Uuid
+  request_status            ExecutionRequestStatus @default(pending)
+  execution_mode            ExecutionMode       @default(mock)
+  requested_action          RequestedAction     @default(prepare_draft)
+  blocked_reason            String?             @db.Text
+  created_at                DateTime            @default(now())
+  updated_at                DateTime            @updatedAt
+
+  postiz_connector    PostizConnector      @relation(fields: [postiz_connector_id], references: [id])
+  publishing_jobs     PostizPublishingJob[]
+
+  @@index([publishing_package_id])
+  @@index([request_status])
+  @@index([requested_by_user_id])
+  @@map("publishing_execution_requests")
+}
+
+model PostizPublishingJob {
+  id                               String          @id @default(uuid()) @db.Uuid
+  publishing_execution_request_id  String          @db.Uuid
+  publishing_package_id            String          @db.Uuid
+  platform                         String
+  account_reference_id             String?         @db.Uuid
+  job_status                       PostizJobStatus @default(pending)
+  postiz_external_reference_placeholder String?     @db.Text
+  scheduled_at                     DateTime?
+  timezone                         String?
+  payload_hash                     String?
+  payload_summary                  String?         @db.Text
+  created_at                       DateTime        @default(now())
+  updated_at                       DateTime        @updatedAt
+
+  execution_request PublishingExecutionRequest @relation(fields: [publishing_execution_request_id], references: [id])
+  account_reference PostizAccountReference?    @relation(fields: [account_reference_id], references: [id])
+
+  @@index([publishing_execution_request_id])
+  @@index([publishing_package_id])
+  @@index([job_status])
+  @@map("postiz_publishing_jobs")
+}
