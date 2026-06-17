@@ -13,6 +13,10 @@ export default defineConfig({
       exclude: ['node_modules', 'dist', 'frontend', 'e2e', '**/*.test.ts', '**/*.spec.ts'],
     },
     setupFiles: [],
+    env: {
+      JWT_SECRET: 'test-jwt-secret-for-testing-only-at-least-32-chars',
+      NODE_ENV: 'test',
+    },
   },
   resolve: {
     alias: {

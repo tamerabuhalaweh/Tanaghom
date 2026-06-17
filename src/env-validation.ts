@@ -48,11 +48,16 @@ export function validateEnvironment(): EnvValidationResult {
     }
   }
 
-  // Validate execution kill switches default to false
+  // Validate execution kill switches — hard failures in demo mode
+  const isDemo = process.env.DEMO_MODE === 'true' || !process.env.DEMO_MODE;
   for (const switchName of EXECUTION_KILL_SWITCHES) {
     const value = process.env[switchName];
     if (value && value !== 'false' && value !== '0') {
-      warnings.push(`${switchName} is enabled (${value}). Live execution should be disabled in demo mode.`);
+      if (isDemo) {
+        errors.push(`DEMO MODE VIOLATION: ${switchName} cannot be enabled in demo mode`);
+      } else {
+        warnings.push(`${switchName} is enabled (${value}). Live execution should be disabled in demo mode.`);
+      }
     }
   }
 

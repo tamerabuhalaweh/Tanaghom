@@ -4,8 +4,9 @@ import helmet from 'helmet';
 import { logger } from '@shared/logging';
 import { connectDatabase, disconnectDatabase } from '@shared/database';
 import { closeQueue } from '@shared/queue';
-import { validateEnvironment, isDemoMode } from './env-validation';
+import { validateEnvironment, isDemoMode, assertDemoSafe } from './env-validation';
 import { healthCheck } from './routes/health';
+import { AppError } from '../shared/errors';
 import { authRouter } from '../modules/auth/controller';
 import { usersDepartmentsRouter } from '../modules/users-departments/controller';
 import { campaignsRouter } from '../modules/campaigns/controller';
@@ -21,6 +22,9 @@ if (!envValidation.valid) {
 if (envValidation.warnings.length > 0) {
   logger.warn({ warnings: envValidation.warnings }, 'Environment warnings');
 }
+
+// Enforce demo safety
+assertDemoSafe();
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -76,12 +80,22 @@ app.use('/campaigns', campaignsRouter);
 app.use('/ai-generation', aiGenerationRouter);
 app.use('/algo', algoRouter);
 
-// Error handler (must be last) — no stack traces in production/demo
+// Error handler (must be last) — preserves AppError status codes, hides stack traces
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error({ err, path: req.path }, 'Unhandled error');
+
+  // Preserve AppError status codes
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({
+      error: err.message,
+      code: err.code,
+    });
+    return;
+  }
+
+  // Generic errors — no stack traces in production/demo
   res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 });
 
