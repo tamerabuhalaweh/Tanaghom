@@ -65,7 +65,7 @@
 
 ## Demo Instructions
 
-See [Demo Deployment Guide](docs/deployment/DEMO_DEPLOYMENT_GUIDE.md) and [Stakeholder Walkthrough](docs/demo/STAKEHOLDER_WALKTHROUGH.md).
+See [Demo Deployment Guide](DEMO_DEPLOYMENT_GUIDE.md) and [Stakeholder Walkthrough](../demo/STAKEHOLDER_WALKTHROUGH.md).
 
 ## Next Phase
 

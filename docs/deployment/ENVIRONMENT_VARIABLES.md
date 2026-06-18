@@ -22,7 +22,7 @@
 
 ## Execution Kill Switches
 
-All default to `false`. Set to `true` only with explicit approval.
+All default to `false`. **Must remain `false` for this release.** Demo mode will fail startup if any live flag is enabled.
 
 | Variable | Description |
 |---|---|

@@ -19,7 +19,7 @@ This guide explains how to deploy the Tanaghum platform for a controlled stakeho
 ```bash
 # Clone the repository
 git clone https://github.com/tamerabuhalaweh/Tanaghom.git
-cd Tanaghum
+cd Tanaghom
 
 # Set a strong JWT_SECRET (required)
 export JWT_SECRET="your-strong-secret-at-least-32-characters-long"
