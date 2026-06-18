@@ -2,4 +2,7 @@ title = "Gitleaks Config"
 
 [allowlist]
   description = "Global allowlist"
-  paths = [''.github/workflows/.*'']
+  paths = [
+    "\.github/workflows/.*\\.yml$",
+    "\.github/workflows/.*\\.yaml$"
+  ]
