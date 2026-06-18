@@ -111,7 +111,7 @@ jobs:
         run: docker build -t tanaghum-frontend ./frontend
 
       - name: Validate Compose Config
-        run: docker compose -f docker-compose.demo.yml config
+        run: JWT_SECRET=ci-test-secret-at-least-32-characters-long docker compose -f docker-compose.demo.yml config
 
       - name: Container Startup Test
         run: |
