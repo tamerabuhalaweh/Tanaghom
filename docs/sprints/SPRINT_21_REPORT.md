@@ -21,20 +21,20 @@ Create a React-based frontend demo shell for stakeholder presentation. No real d
 ## Pages
 
 1. Dashboard
-2. Campaigns
-3. Campaign Detail
-4. AI Drafts
-5. Approvals
-6. Analytics
-7. Learning Signals
-8. CRM Leads
-9. Production Requests
-10. Assets
-11. SPINE Timeline
-12. SAIF Decisions
-13. Safety Status (11 gates)
-14. AgentReps
-15. Settings
+2. CampaignWorkspace
+3. ApprovalQueue
+4. Analytics
+5. LearningSignals
+6. CrmConversion
+7. ProductionRendering
+8. AssetCognition
+9. SpineTimeline
+10. SaifDecisions
+11. SafetyStatus
+12. CapabilityResolution
+13. McpMediation
+14. Observability
+15. PublishingPrep
 
 ## Technical Notes
 

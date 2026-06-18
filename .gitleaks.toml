@@ -1,5 +1,5 @@
 title = "Gitleaks Config"
 
 [allowlist]
-  description = "Global allowlist"
-  paths = ['.github/workflows']
+  description = "Allowlist CI placeholder secrets"
+  regexes = [''ci-test-secret-at-least-32-characters-long'']
