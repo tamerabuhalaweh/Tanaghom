@@ -1,0 +1,5 @@
+title = "Gitleaks Config"
+
+[allowlist]
+  description = "Allowlist CI placeholder secrets"
+  regexes = ["ci-test-secret-at-least-32-characters-long"]

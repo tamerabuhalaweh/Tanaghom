@@ -111,7 +111,7 @@ jobs:
         run: docker build -t tanaghum-frontend ./frontend
 
       - name: Validate Compose Config
-        run: docker compose -f docker-compose.demo.yml config
+        run: JWT_SECRET=ci-test-secret-at-least-32-characters-long docker compose -f docker-compose.demo.yml config
 
       - name: Container Startup Test
         run: |
@@ -140,22 +140,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Secret Scan
-        run: |
-          # Check for common secret patterns in source code (excluding tests and mock data)
-          FOUND=0
-          for pattern in 'sk-[a-zA-Z0-9]{20,}' 'ghp_[a-zA-Z0-9]{36}' 'xox[bprs]-[a-zA-Z0-9-]+' 'AKIA[0-9A-Z]{16}'; do
-            if grep -rE "$pattern" --include="*.ts" --include="*.js" --exclude-dir="node_modules" --exclude-dir="tests" --exclude-dir="dist" .; then
-              echo "WARNING: Potential secret pattern found: $pattern"
-              FOUND=1
-            fi
-          done
-          if [ $FOUND -eq 1 ]; then
-            echo "Potential secrets found. Review before merging."
-            exit 1
-          fi
-          echo "PASS: No secrets detected"
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Demo Safety Check
         run: |

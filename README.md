@@ -14,7 +14,7 @@ Agent-assisted social media operations platform built on the **STITCH operating 
 | Production live execution | ❌ Not enabled |
 | Demo safe | ✅ Yes |
 | CI | ✅ 4/4 jobs green |
-| Tests | ✅ 856 passing |
+| Tests | ✅ 855 passing |
 
 **This platform is ready for controlled demo/pilot only.**
 
