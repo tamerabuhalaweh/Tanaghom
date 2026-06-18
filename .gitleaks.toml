@@ -1,0 +1,5 @@
+title = "Gitleaks Config"
+
+[allowlist]
+  description = "Global allowlist"
+  paths = [''.github/workflows/.*'']
