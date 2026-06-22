@@ -36,6 +36,10 @@ A STITCH-based, SAIF-governed, multi-agent enterprise operating platform coverin
 | [AI Engineering Protocol](docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md) | No AI memory, strict source-of-truth |
 | [Sprint Template](docs/enterprise/governance/SPRINT_TEMPLATE.md) | Standardized sprint structure |
 | [Enterprise Roadmap](docs/enterprise/ENTERPRISE_ROADMAP.md) | Sprints 25-40+ planning |
+| [Canonical Taxonomy](docs/enterprise/taxonomy/CANONICAL_TAXONOMY.md) | Approved terms and mappings |
+| [Legacy Taxonomy Mapping](docs/enterprise/taxonomy/LEGACY_TAXONOMY_MAPPING.md) | Old terms → new model |
+| [ADR-011: Canonical Taxonomy](docs/adr/011-canonical-taxonomy-and-capability-topology.md) | Taxonomy and topology decisions |
+| [Capability Registry Extension Plan](docs/enterprise/architecture/CAPABILITY_REGISTRY_EXTENSION_PLAN.md) | How to register new capabilities |
 
 ## Quick Start
 

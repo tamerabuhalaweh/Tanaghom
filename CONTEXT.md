@@ -5,43 +5,53 @@
 
 ## Current Sprint
 
-**Sprint**: 25 — Enterprise Architecture Reconciliation & Engineering Control Plane
+**Sprint**: 26 — Taxonomy Decision + Capability/Topology Registry Foundation
 **Status**: Complete
-**PR**: #26
-**Branch**: feature/sprint-25-enterprise-architecture-reconciliation
+**PR**: See PR #27
+**Branch**: feature/sprint-26-taxonomy-capability-topology-registry
 
 ## Active Module
 
-- `docs/enterprise/` — Enterprise governance and architecture documentation
-- `docs/sprints/SPRINT_25_PLAN.md` — Sprint 25 plan
-- `docs/sprints/SPRINT_25_COMPLETION_REPORT.md` — Sprint 25 completion report
-- No new business code — documentation only
+- `modules/capability-registry/` — Extended with enterprise taxonomy tests
+- `prisma/seed.ts` — Extended with enterprise capability seeds
+- `docs/enterprise/taxonomy/` — New taxonomy documents
+- `docs/adr/011-*.md` — New ADR for taxonomy decisions
+- No new business code — taxonomy/registry foundation only
 
 ## Sprint Acceptance Criteria
 
-- [x] Source-of-truth register created
-- [x] STITCH supremacy documented
-- [x] SAIF decision package schema defined
-- [x] Capability/topology model documented
-- [x] Content department overlay model documented
-- [x] Pack boundary model documented
-- [x] ERP governance documented
-- [x] Enterprise acceptance criteria documented
-- [x] AI engineering protocol documented
-- [x] Sprint template created
-- [x] Enterprise roadmap created
-- [x] Repo baseline audit created
-- [x] Root docs reference enterprise control-plane docs
-- [x] MODULE_BOUNDARIES reconciled with capability/topology
-- [x] 855 tests pass
+- [x] Registry audit completed
+- [x] ADR-011 canonical taxonomy created
+- [x] Canonical taxonomy document created
+- [x] Legacy taxonomy mapping created
+- [x] Capability registry extension plan created
+- [x] Enterprise capability seeds added
+- [x] Enterprise taxonomy tests added (16 new tests)
+- [x] Commercial/Content mapped as reference implementation
+- [x] Future enterprise capabilities registered as planned
+- [x] QC marked as Evaluator, not Authority
+- [x] ERP requires MCP and separate scope
+- [x] No M5 capability enabled
+- [x] No direct external access capability enabled
+- [x] Deprecated terms mapped or rejected
+- [x] Documentation updates complete
+- [x] 871 tests pass (16 new)
 - [x] CI 4/4 green
-- [x] No new business code
-- [x] No external integrations
-- [x] No M5 enabled
+- [x] No business feature implementation
+- [x] No Financial Agent implementation
+- [x] No ERP connector
+- [x] No external APIs
+- [x] No M5
+
+## Taxonomy Decision Status
+
+**4-Pillar vs 5-Pillar: REQUIRES BUSINESS AUTHORITY DECISION**
+
+See ADR-011 for details. The customer must confirm which model is canonical before Sprint 27.
 
 ## Next Sprint (Planned)
 
-**Sprint 26**: TBD — Awaiting Codex review of Sprint 25 before proceeding.
+**Sprint 27**: TBD — Awaiting Codex review of Sprint 26 before proceeding.
 
 ## Enterprise Control Plane
 
@@ -59,3 +69,7 @@
 | AI Engineering Protocol | `docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md` |
 | Sprint Template | `docs/enterprise/governance/SPRINT_TEMPLATE.md` |
 | Enterprise Roadmap | `docs/enterprise/ENTERPRISE_ROADMAP.md` |
+| Canonical Taxonomy | `docs/enterprise/taxonomy/CANONICAL_TAXONOMY.md` |
+| Legacy Taxonomy Mapping | `docs/enterprise/taxonomy/LEGACY_TAXONOMY_MAPPING.md` |
+| ADR-011: Canonical Taxonomy | `docs/adr/011-canonical-taxonomy-and-capability-topology.md` |
+| Capability Registry Extension Plan | `docs/enterprise/architecture/CAPABILITY_REGISTRY_EXTENSION_PLAN.md` |

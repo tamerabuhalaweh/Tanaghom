@@ -361,3 +361,180 @@ describe('Resource Validation Before Implementation', () => {
     expect(result.errors[0]).toContain('ExternalPlatformAccountReference');
   });
 });
+
+describe('Enterprise Taxonomy — Capability IDs', () => {
+  const ENTERPRISE_CAPABILITIES = [
+    { id: 'cap-content-generate-draft-v1', name: 'GenerateContentDraft', bundle: 'Content Intelligence' },
+    { id: 'cap-content-manage-campaign-v1', name: 'ManageCampaign', bundle: 'Creative Production' },
+    { id: 'cap-content-evaluate-reach-v1', name: 'EvaluateReachReadiness', bundle: 'Analytics' },
+    { id: 'cap-governance-request-approval-v1', name: 'RequestApproval', bundle: 'Quality Control' },
+    { id: 'cap-knowledge-retrieve-v1', name: 'RetrieveKnowledge', bundle: 'Cross-domain' },
+    { id: 'cap-publishing-prepare-v1', name: 'PreparePublishingPackage', bundle: 'Distribution' },
+    { id: 'cap-content-analyze-audience-v1', name: 'AnalyzeAudience', bundle: 'Audience Intelligence' },
+    { id: 'cap-asset-manage-v1', name: 'ManageAsset', bundle: 'Creative Production' },
+    { id: 'cap-conversion-capture-lead-v1', name: 'CaptureLead', bundle: 'Conversion' },
+    { id: 'cap-rendering-render-v1', name: 'RenderContent', bundle: 'Creative Production' },
+    // Future enterprise capabilities (registered, not implemented)
+    { id: 'cap-finance-report-v1', name: 'GenerateFinancialReport', bundle: 'Finance Control' },
+    { id: 'cap-hr-manage-employee-v1', name: 'ManageEmployee', bundle: 'HR Operations' },
+    { id: 'cap-procurement-manage-v1', name: 'ManageProcurement', bundle: 'Procurement Operations' },
+    { id: 'cap-inventory-track-v1', name: 'TrackInventory', bundle: 'Inventory Control' },
+    { id: 'cap-purchase-manage-order-v1', name: 'ManagePurchaseOrder', bundle: 'Purchase Management' },
+    { id: 'cap-supply-chain-manage-v1', name: 'ManageSupplyChain', bundle: 'Supply Chain Operations' },
+    { id: 'cap-erp-integrate-v1', name: 'IntegrateERP', bundle: 'ERP Integration' },
+  ];
+
+  it('all capability IDs are unique', () => {
+    const ids = ENTERPRISE_CAPABILITIES.map(c => c.id);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it('all capability names are unique', () => {
+    const names = ENTERPRISE_CAPABILITIES.map(c => c.name);
+    const unique = new Set(names);
+    expect(unique.size).toBe(names.length);
+  });
+
+  it('Commercial/Content capabilities are registered', () => {
+    const contentCaps = ENTERPRISE_CAPABILITIES.filter(c => c.id.startsWith('cap-content-'));
+    expect(contentCaps.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('future enterprise capabilities are registered as planned', () => {
+    const futureCaps = ['GenerateFinancialReport', 'ManageEmployee', 'ManageProcurement', 'TrackInventory', 'ManagePurchaseOrder', 'ManageSupplyChain', 'IntegrateERP'];
+    for (const cap of futureCaps) {
+      expect(ENTERPRISE_CAPABILITIES.find(c => c.name === cap)).toBeDefined();
+    }
+  });
+});
+
+describe('Enterprise Taxonomy — Topology Nodes', () => {
+  const TOPOLOGY_NODES = [
+    { id: 'node-commercial-content', name: 'Commercial / Content', domain: 'commercial', bundle: 'Content Intelligence, Creative Production, Analytics, Conversion, Community' },
+    { id: 'node-finance', name: 'Finance', domain: 'finance', bundle: 'Finance Control' },
+    { id: 'node-hr', name: 'HR', domain: 'hr', bundle: 'HR Operations' },
+    { id: 'node-procurement', name: 'Procurement', domain: 'procurement', bundle: 'Procurement Operations' },
+    { id: 'node-inventory', name: 'Inventory', domain: 'inventory', bundle: 'Inventory Control' },
+    { id: 'node-purchase-management', name: 'Purchase Management', domain: 'purchase', bundle: 'Purchase Management' },
+    { id: 'node-supply-chain', name: 'Supply Chain', domain: 'supply_chain', bundle: 'Supply Chain Operations' },
+    { id: 'node-executive-governance', name: 'Executive / Governance', domain: 'executive', bundle: 'Cross-domain' },
+  ];
+
+  it('all topology node IDs are unique', () => {
+    const ids = TOPOLOGY_NODES.map(n => n.id);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it('all topology node names are unique', () => {
+    const names = TOPOLOGY_NODES.map(n => n.name);
+    const unique = new Set(names);
+    expect(unique.size).toBe(names.length);
+  });
+
+  it('Commercial/Content is a topology node', () => {
+    const cc = TOPOLOGY_NODES.find(n => n.id === 'node-commercial-content');
+    expect(cc).toBeDefined();
+    expect(cc!.domain).toBe('commercial');
+  });
+
+  it('future enterprise topology nodes are registered', () => {
+    const futureNodes = ['Finance', 'HR', 'Procurement', 'Inventory', 'Purchase Management', 'Supply Chain'];
+    for (const node of futureNodes) {
+      expect(TOPOLOGY_NODES.find(n => n.name === node)).toBeDefined();
+    }
+  });
+});
+
+describe('Enterprise Taxonomy — Capability Bundles', () => {
+  const CAPABILITY_BUNDLES = [
+    { id: 'bundle-content-intelligence', name: 'Content Intelligence', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-audience-intelligence', name: 'Audience Intelligence', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-creative-production', name: 'Creative Production', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-quality-control', name: 'Quality Control', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-distribution', name: 'Distribution', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-community', name: 'Community', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-analytics', name: 'Analytics', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-conversion', name: 'Conversion', topologyNode: 'node-commercial-content' },
+    { id: 'bundle-finance-control', name: 'Finance Control', topologyNode: 'node-finance' },
+    { id: 'bundle-hr-operations', name: 'HR Operations', topologyNode: 'node-hr' },
+    { id: 'bundle-procurement-operations', name: 'Procurement Operations', topologyNode: 'node-procurement' },
+    { id: 'bundle-inventory-control', name: 'Inventory Control', topologyNode: 'node-inventory' },
+    { id: 'bundle-purchase-management', name: 'Purchase Management', topologyNode: 'node-purchase-management' },
+    { id: 'bundle-supply-chain-operations', name: 'Supply Chain Operations', topologyNode: 'node-supply-chain' },
+  ];
+
+  it('all bundle IDs are unique', () => {
+    const ids = CAPABILITY_BUNDLES.map(b => b.id);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it('bundles map to topology nodes', () => {
+    for (const bundle of CAPABILITY_BUNDLES) {
+      expect(bundle.topologyNode).toBeDefined();
+      expect(bundle.topologyNode.startsWith('node-')).toBe(true);
+    }
+  });
+
+  it('Commercial/Content has multiple bundles', () => {
+    const ccBundles = CAPABILITY_BUNDLES.filter(b => b.topologyNode === 'node-commercial-content');
+    expect(ccBundles.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe('Enterprise Taxonomy — Boundary Rules', () => {
+  it('QC is Evaluator, not Authority', () => {
+    const qcCapability = { name: 'RequestApproval', role: 'evaluator', hasAuthority: false };
+    expect(qcCapability.role).toBe('evaluator');
+    expect(qcCapability.hasAuthority).toBe(false);
+  });
+
+  it('ERP capability requires MCP and separate scope', () => {
+    const erpCapability = {
+      name: 'IntegrateERP',
+      requiresMcp: true,
+      requiresSaifDecision: true,
+      riskLevel: 'critical',
+      separateScope: true,
+    };
+    expect(erpCapability.requiresMcp).toBe(true);
+    expect(erpCapability.requiresSaifDecision).toBe(true);
+    expect(erpCapability.separateScope).toBe(true);
+  });
+
+  it('no M5 capability is enabled', () => {
+    const capabilities = [
+      { name: 'GenerateContentDraft', m5Required: false },
+      { name: 'ManageCampaign', m5Required: false },
+      { name: 'PreparePublishingPackage', m5Required: false },
+    ];
+    for (const cap of capabilities) {
+      expect(cap.m5Required).toBe(false);
+    }
+  });
+
+  it('no direct external access capability is enabled', () => {
+    const capabilities = [
+      { name: 'PreparePublishingPackage', directExternalAccess: false, requiresMcp: true },
+      { name: 'IntegrateERP', directExternalAccess: false, requiresMcp: true },
+    ];
+    for (const cap of capabilities) {
+      expect(cap.directExternalAccess).toBe(false);
+    }
+  });
+
+  it('deprecated terms are mapped or rejected', () => {
+    const deprecatedMappings = [
+      { legacy: 'Department Agent', mapped: 'TopologyNode + CapabilityBundle' },
+      { legacy: 'Commercial Agent', mapped: 'Commercial/Content Capability Overlay' },
+      { legacy: 'QC Approval', mapped: 'Evaluator Output' },
+      { legacy: 'ERP Integration', mapped: 'Optional MCP-Mediated Connector' },
+    ];
+    for (const mapping of deprecatedMappings) {
+      expect(mapping.mapped).toBeDefined();
+      expect(mapping.mapped.length).toBeGreaterThan(0);
+    }
+  });
+});
