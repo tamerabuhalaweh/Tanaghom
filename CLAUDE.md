@@ -2,7 +2,9 @@
 
 ## Project
 
-Tanaghum AI Commercial Automation Platform. Agent-assisted social media operations for SmartLabs.
+Tanaghom AI Enterprise Platform. A STITCH-based, SAIF-governed, multi-agent enterprise operating platform covering Commercial/Social/Content, Finance, HR, Procurement, Inventory, Purchase Management, Supply Chain, and optional ERP integrations.
+
+**AI memory is not authoritative.** Every sprint must start from repo docs, Sprint Template, Source-of-Truth Register, and Enterprise Acceptance Criteria.
 
 ## Core Rules
 
@@ -16,6 +18,19 @@ Tanaghum AI Commercial Automation Platform. Agent-assisted social media operatio
 8. Write or update tests for every change. Unit + integration + permission tests where applicable.
 9. Use provider interfaces (`LLMProvider`, `PostizProvider`, `MessagingProvider`, `CRMProvider`, `AnalyticsProvider`). Never couple directly to external services.
 10. Campaign and approval statuses are a strict state machine. No module may bypass state transitions.
+11. Read the Enterprise Control Plane docs before starting any sprint:
+    - `docs/enterprise/governance/SOURCE_OF_TRUTH_REGISTER.md`
+    - `docs/enterprise/governance/REPO_BASELINE_AUDIT.md`
+    - `docs/enterprise/architecture/STITCH_SUPREMACY.md`
+    - `docs/enterprise/architecture/CAPABILITY_AND_TOPOLOGY_MODEL.md`
+    - `docs/enterprise/saif/SAIF_DECISION_PACKAGE_SCHEMA.md`
+    - `docs/enterprise/packs/PACK_BOUNDARY_MODEL.md`
+    - `docs/enterprise/architecture/CONTENT_DEPARTMENT_OVERLAY_MODEL.md`
+    - `docs/enterprise/erp/ERP_CONNECTOR_GOVERNANCE.md`
+    - `docs/enterprise/governance/ENTERPRISE_ACCEPTANCE_CRITERIA.md`
+    - `docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md`
+    - `docs/enterprise/governance/SPRINT_TEMPLATE.md`
+    - `docs/enterprise/ENTERPRISE_ROADMAP.md`
 
 ## Sprint Deliverable Checklist
 
