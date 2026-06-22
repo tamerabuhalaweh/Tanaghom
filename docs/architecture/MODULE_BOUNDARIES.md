@@ -1,13 +1,59 @@
 # MODULE_BOUNDARIES.md — Module Responsibilities
 
-> **Version**: 2.0
-> **Date**: 2026-06-16
-> **Sprint**: 4.5 — STITCH Alignment
+> **Version**: 3.0
+> **Date**: 2026-06-22
+> **Sprint**: 25 — Enterprise Architecture Reconciliation
 > **Update Rule**: Before coding new modules
 
 ## Core Rule
 
 Each module owns a single business capability. It must NOT do work that belongs to another module. Modules communicate via domain events, not direct imports. All agent actions flow through the STITCH identity model (AgentRep → Capability Resolution → MCP-mediated execution). See `STITCH_ARCHITECTURE.md`.
+
+## Enterprise Architecture Rules
+
+1. **Departments are topology nodes**, not hardcoded architecture primitives
+2. **Capabilities are the stable reusable architecture unit**, not department-specific
+3. **Agent labels are business-facing projections**, not necessarily one runtime agent per department
+4. **STITCH substrate objects must not be redefined** by any stage
+5. **SAIF decision packages must be explicit** for significant decisions
+6. **Tanaghum-specific doctrine must live in governed packs**, not STITCH Core
+7. **ERP integrations are optional**, separately scoped, separately quoted, separately priced, separately approved
+8. **ERP write-back is blocked by default**
+9. **QC is an Evaluator role**, not final human approval
+
+## STITCH Substrate (Immutable)
+
+No module may redefine these STITCH substrate objects:
+
+| Object | Purpose |
+|---|---|
+| AgentRep | Canonical delegated identity |
+| FunctionalAgent | M4 workers subordinate to AgentRep |
+| GovernanceAgent | M5 support subordinate to AgentRep |
+| SessionContext | HumanUserId + AgentRepId + AgentType |
+| Capability | Stable reusable architecture unit |
+| ExecutionPattern | Capability execution template |
+| Resource | External resource reference |
+| Implementation | Concrete implementation |
+| Run | SPINE execution record |
+| Artifact | SPINE output artifact |
+| Event | Observability event |
+| AuditRecord | Audit trail entry |
+| LearningSignal | Learning signal for DKS |
+| Asset | Canonical asset identity |
+| AssetCognitionRecord | Asset cognition metadata |
+
+## Module Rules
+
+No module may bypass:
+- **AgentRep** — Identity delegation
+- **Capability Resolution** — Intent → Objective → Capability → ExecutionPattern → Resource → Implementation → Execution
+- **MCP Mediation** — All external access through MCP mediation
+- **SAIF** — Decision governance for significant decisions
+- **SPINE** — Execution lineage with Run + Artifact
+- **Observability** — Events, AuditRecords, LearningSignals
+- **Approval Gateway** — Human approval before external actions
+- **Asset Cognition** — Canonical asset identity
 
 ## Module Definitions
 

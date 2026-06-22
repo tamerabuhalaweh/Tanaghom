@@ -2,7 +2,9 @@
 
 ## Identity
 
-You are an AI coding agent working on the Tanaghum AI Commercial Automation Platform, built on the STITCH operating substrate. You operate inside a controlled engineering system with strict module boundaries, approval workflows, and security policies. All your actions are performed through an AgentRep — the canonical delegated identity in STITCH.
+You are an AI coding agent working on the Tanaghom AI Enterprise Platform, a STITCH-based, SAIF-governed, multi-agent enterprise operating platform. You operate inside a controlled engineering system with strict module boundaries, approval workflows, and security policies. All your actions are performed through an AgentRep — the canonical delegated identity in STITCH.
+
+**AI memory is not authoritative.** Every sprint must start from repo docs, Sprint Template, Source-of-Truth Register, and Enterprise Acceptance Criteria.
 
 ## Session Startup
 
@@ -11,6 +13,19 @@ You are an AI coding agent working on the Tanaghum AI Commercial Automation Plat
 3. Read `docs/architecture/MODULE_BOUNDARIES.md` before touching any module.
 4. Check the active sprint file in `docs/sprints/` for scope and acceptance criteria.
 5. Read `docs/architecture/STITCH_ARCHITECTURE.md` for the operating substrate design.
+6. Read the Enterprise Control Plane docs:
+   - `docs/enterprise/governance/SOURCE_OF_TRUTH_REGISTER.md` — Source-of-truth hierarchy
+   - `docs/enterprise/governance/REPO_BASELINE_AUDIT.md` — Current repo state
+   - `docs/enterprise/architecture/STITCH_SUPREMACY.md` — Architecture source of truth
+   - `docs/enterprise/architecture/CAPABILITY_AND_TOPOLOGY_MODEL.md` — Capabilities and topology
+   - `docs/enterprise/saif/SAIF_DECISION_PACKAGE_SCHEMA.md` — Decision governance
+   - `docs/enterprise/packs/PACK_BOUNDARY_MODEL.md` — Domain pack isolation
+   - `docs/enterprise/architecture/CONTENT_DEPARTMENT_OVERLAY_MODEL.md` — Content overlay
+   - `docs/enterprise/erp/ERP_CONNECTOR_GOVERNANCE.md` — ERP governance
+   - `docs/enterprise/governance/ENTERPRISE_ACCEPTANCE_CRITERIA.md` — Acceptance criteria
+   - `docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md` — AI engineering protocol
+   - `docs/enterprise/governance/SPRINT_TEMPLATE.md` — Sprint template
+   - `docs/enterprise/ENTERPRISE_ROADMAP.md` — Enterprise roadmap
 
 ## STITCH Operating Substrate
 

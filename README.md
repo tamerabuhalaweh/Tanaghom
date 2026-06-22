@@ -1,6 +1,6 @@
-# Tanaghum AI Commercial Automation Platform
+# Tanaghom AI Enterprise Platform
 
-Agent-assisted social media operations platform built on the **STITCH operating substrate**.
+A STITCH-based, SAIF-governed, multi-agent enterprise operating platform covering Commercial/Social/Content, Finance, HR, Procurement, Inventory, Purchase Management, Supply Chain, and optional ERP integrations.
 
 ## Current Status
 
@@ -17,6 +17,25 @@ Agent-assisted social media operations platform built on the **STITCH operating 
 | Tests | ✅ 855 passing |
 
 **This platform is ready for controlled demo/pilot only.**
+
+## Enterprise Control Plane
+
+**AI memory is not authoritative.** Every sprint must start from repo docs, Sprint Template, Source-of-Truth Register, and Enterprise Acceptance Criteria.
+
+| Document | Purpose |
+|---|---|
+| [Source-of-Truth Register](docs/enterprise/governance/SOURCE_OF_TRUTH_REGISTER.md) | SRD, STITCH, SAIF, Repo hierarchy |
+| [Repo Baseline Audit](docs/enterprise/governance/REPO_BASELINE_AUDIT.md) | Current repo state audit |
+| [STITCH Supremacy](docs/enterprise/architecture/STITCH_SUPREMACY.md) | Architecture source of truth |
+| [Capability & Topology Model](docs/enterprise/architecture/CAPABILITY_AND_TOPOLOGY_MODEL.md) | Capabilities as stable units, departments as topology nodes |
+| [Content Department Overlay](docs/enterprise/architecture/CONTENT_DEPARTMENT_OVERLAY_MODEL.md) | Commercial/Content domain overlay |
+| [SAIF Decision Package Schema](docs/enterprise/saif/SAIF_DECISION_PACKAGE_SCHEMA.md) | Decision governance schema |
+| [Pack Boundary Model](docs/enterprise/packs/PACK_BOUNDARY_MODEL.md) | Domain pack isolation rules |
+| [ERP Connector Governance](docs/enterprise/erp/ERP_CONNECTOR_GOVERNANCE.md) | Optional ERP integration rules |
+| [Enterprise Acceptance Criteria](docs/enterprise/governance/ENTERPRISE_ACCEPTANCE_CRITERIA.md) | Cross-domain acceptance rules |
+| [AI Engineering Protocol](docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md) | No AI memory, strict source-of-truth |
+| [Sprint Template](docs/enterprise/governance/SPRINT_TEMPLATE.md) | Standardized sprint structure |
+| [Enterprise Roadmap](docs/enterprise/ENTERPRISE_ROADMAP.md) | Sprints 25-40+ planning |
 
 ## Quick Start
 

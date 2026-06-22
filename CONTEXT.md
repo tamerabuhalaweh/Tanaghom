@@ -1,43 +1,61 @@
 # CONTEXT.md — Active Sprint Briefing
 
 > **Update this file at the start and end of every sprint.**
+> **AI memory is not authoritative.** Every sprint must start from repo docs, Sprint Template, Source-of-Truth Register, and Enterprise Acceptance Criteria.
 
 ## Current Sprint
 
-**Sprint**: 20 — End-to-End QA, Security Hardening & Production Readiness
+**Sprint**: 25 — Enterprise Architecture Reconciliation & Engineering Control Plane
 **Status**: Complete
-**Goal**: Stabilize platform for controlled pilot/demo readiness. No new business modules.
+**PR**: #26
+**Branch**: feature/sprint-25-enterprise-architecture-reconciliation
 
 ## Active Module
 
-- `tests/e2e/` — E2E boundary tests
-- `docs/quality/` — Release checklist, pilot guide, testing strategy
-- `README.md` — Updated with current status
-- Existing modules — small fixes only
+- `docs/enterprise/` — Enterprise governance and architecture documentation
+- `docs/sprints/SPRINT_25_PLAN.md` — Sprint 25 plan
+- `docs/sprints/SPRINT_25_COMPLETION_REPORT.md` — Sprint 25 completion report
+- No new business code — documentation only
 
 ## Sprint Acceptance Criteria
 
-- [x] E2E safe flow tests exist for publishing preparation
-- [x] E2E safe flow tests exist for analytics → learning → DKS review
-- [x] E2E safe flow tests exist for asset → production/rendering preparation
-- [x] E2E safe flow tests exist for conversion handoff preparation
-- [x] Boundary tests prove M5 execution remains blocked
-- [x] Boundary tests prove external systems are not called
-- [x] Boundary tests prove canonical ownership rules are preserved
-- [x] Security checks/docs confirm no secrets, tokens, API keys, credentials, real customer PII
-- [x] Release checklist is updated
-- [x] Pilot/demo guide exists
-- [x] Technical debt register exists
-- [x] README clearly explains current status and limitations
-- [x] Existing 793 tests still pass
-- [x] New E2E/security/boundary tests are added (27 tests)
-- [x] npm run lint passes
-- [x] npm run typecheck passes
-- [x] npm run test passes (820 tests)
-- [x] npm run build passes
-- [ ] GitHub Actions CI is green
-- [ ] Open PR and stop for review
+- [x] Source-of-truth register created
+- [x] STITCH supremacy documented
+- [x] SAIF decision package schema defined
+- [x] Capability/topology model documented
+- [x] Content department overlay model documented
+- [x] Pack boundary model documented
+- [x] ERP governance documented
+- [x] Enterprise acceptance criteria documented
+- [x] AI engineering protocol documented
+- [x] Sprint template created
+- [x] Enterprise roadmap created
+- [x] Repo baseline audit created
+- [x] Root docs reference enterprise control-plane docs
+- [x] MODULE_BOUNDARIES reconciled with capability/topology
+- [x] 855 tests pass
+- [x] CI 4/4 green
+- [x] No new business code
+- [x] No external integrations
+- [x] No M5 enabled
 
 ## Next Sprint (Planned)
 
-**Sprint 21**: TBD — Awaiting review of Sprint 20 before proceeding.
+**Sprint 26**: TBD — Awaiting Codex review of Sprint 25 before proceeding.
+
+## Enterprise Control Plane
+
+| Document | Location |
+|---|---|
+| Source-of-Truth Register | `docs/enterprise/governance/SOURCE_OF_TRUTH_REGISTER.md` |
+| Repo Baseline Audit | `docs/enterprise/governance/REPO_BASELINE_AUDIT.md` |
+| STITCH Supremacy | `docs/enterprise/architecture/STITCH_SUPREMACY.md` |
+| Capability & Topology Model | `docs/enterprise/architecture/CAPABILITY_AND_TOPOLOGY_MODEL.md` |
+| Content Department Overlay | `docs/enterprise/architecture/CONTENT_DEPARTMENT_OVERLAY_MODEL.md` |
+| SAIF Decision Package Schema | `docs/enterprise/saif/SAIF_DECISION_PACKAGE_SCHEMA.md` |
+| Pack Boundary Model | `docs/enterprise/packs/PACK_BOUNDARY_MODEL.md` |
+| ERP Connector Governance | `docs/enterprise/erp/ERP_CONNECTOR_GOVERNANCE.md` |
+| Enterprise Acceptance Criteria | `docs/enterprise/governance/ENTERPRISE_ACCEPTANCE_CRITERIA.md` |
+| AI Engineering Protocol | `docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md` |
+| Sprint Template | `docs/enterprise/governance/SPRINT_TEMPLATE.md` |
+| Enterprise Roadmap | `docs/enterprise/ENTERPRISE_ROADMAP.md` |

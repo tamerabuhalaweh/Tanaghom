@@ -1,8 +1,9 @@
 # Sprint 25 — Enterprise Architecture Reconciliation & Engineering Control Plane
 
 > **Date**: 2026-06-22
-> **Status**: 🔄 In Progress
+> **Status**: ✅ Complete
 > **Branch**: feature/sprint-25-enterprise-architecture-reconciliation
+> **PR**: #26
 
 ## Goal
 
@@ -36,33 +37,34 @@ Safely bridge from the completed controlled pilot foundation into the much large
 
 | Item | Description | Status |
 |---|---|---|
-| Repo baseline audit | Document current state through Sprint 24 | 🔄 |
-| Source-of-truth register | SRD, STITCH, SAIF, Repo hierarchy | 🔄 |
-| Architecture supremacy document | STITCH as architecture source of truth | 🔄 |
-| Capability/topology model | Departments as topology nodes, capabilities as stable units | 🔄 |
-| SAIF decision package schema | Decision governance for enterprise scale | 🔄 |
-| Pack boundary model | Governed packs for Tanaghum-specific doctrine | 🔄 |
-| Content overlay model | Commercial/Content overlay for enterprise domains | 🔄 |
-| ERP connector governance | Optional, separately scoped, blocked write-back | 🔄 |
-| Enterprise acceptance criteria | Cross-domain acceptance rules | 🔄 |
-| AI engineering protocol | No AI memory, strict source-of-truth | 🔄 |
-| Enterprise sprint roadmap | Sprints 26-40+ planning | 🔄 |
-| Sprint template | Standardized sprint structure | 🔄 |
+| Repo baseline audit | Document current state through Sprint 24 | ✅ |
+| Source-of-truth register | SRD, STITCH, SAIF, Repo hierarchy | ✅ |
+| Architecture supremacy document | STITCH as architecture source of truth | ✅ |
+| Capability/topology model | Departments as topology nodes, capabilities as stable units | ✅ |
+| SAIF decision package schema | Decision governance for enterprise scale | ✅ |
+| Pack boundary model | Governed packs for Tanaghum-specific doctrine | ✅ |
+| Content overlay model | Commercial/Content overlay for enterprise domains | ✅ |
+| ERP connector governance | Optional, separately scoped, blocked write-back | ✅ |
+| Enterprise acceptance criteria | Cross-domain acceptance rules | ✅ |
+| AI engineering protocol | No AI memory, strict source-of-truth | ✅ |
+| Enterprise sprint roadmap | Sprints 26-40+ planning | ✅ |
+| Sprint template | Standardized sprint structure | ✅ |
+| Root docs wiring | Wire enterprise docs into repo root instructions | ✅ |
 
 ## Success Criteria
 
-1. All source-of-truth documents identified and referenced
-2. STITCH supremacy documented
-3. SAIF decision package schema defined
-4. Capability/topology model documented
-5. Pack boundary model documented
-6. ERP governance documented
-7. AI engineering protocol documented
-8. Enterprise sprint roadmap created
-9. Sprint template created
-10. No new business code written
-11. 855 tests still pass
-12. CI 4/4 green
+1. All source-of-truth documents identified and referenced ✅
+2. STITCH supremacy documented ✅
+3. SAIF decision package schema defined ✅
+4. Capability/topology model documented ✅
+5. Pack boundary model documented ✅
+6. ERP governance documented ✅
+7. AI engineering protocol documented ✅
+8. Enterprise sprint roadmap created ✅
+9. Sprint template created ✅
+10. No new business code written ✅
+11. 855 tests still pass ✅
+12. CI 4/4 green ✅
 
 ## Architecture Corrections (from Customer)
 

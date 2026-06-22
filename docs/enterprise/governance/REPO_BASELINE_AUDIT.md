@@ -1,10 +1,10 @@
 # Repo Baseline Audit
 
-> **Version**: 1.0
+> **Version**: 2.0
 > **Date**: 2026-06-22
 > **Sprint**: 25
 
-## Current State
+## Baseline State (Before Sprint 25)
 
 | Metric | Value |
 |---|---|
@@ -17,9 +17,9 @@
 | SAIF decision packages | 1 |
 | ADRs | 10 |
 
-## Architecture Components
+### Architecture Components (Before Sprint 25)
 
-### STITCH Substrate (Implemented)
+#### STITCH Substrate (Implemented)
 
 | Component | Status | Location |
 |---|---|---|
@@ -39,7 +39,7 @@
 | Asset | ✅ Implemented | `modules/asset-cognition/` |
 | AssetCognitionRecord | ✅ Implemented | `modules/asset-cognition/` |
 
-### Business Modules (Implemented)
+#### Business Modules (Implemented)
 
 | Module | Status | Tests |
 |---|---|---|
@@ -56,7 +56,7 @@
 | crm-conversion | ✅ Implemented | 27 |
 | production-rendering | ✅ Implemented | 27 |
 
-### Infrastructure
+#### Infrastructure
 
 | Component | Status | Location |
 |---|---|---|
@@ -68,7 +68,7 @@
 | Environment validation | ✅ Implemented | `src/env-validation.ts` |
 | Kill switches | ✅ Implemented | `src/env-validation.ts` |
 
-### Documentation
+#### Documentation
 
 | Document | Status | Location |
 |---|---|---|
@@ -80,22 +80,65 @@
 | Pilot scope | ✅ Current | `docs/pilot/` |
 | Technical debt | ✅ Current | `docs/quality/` |
 | Evidence artifacts | ✅ Current | `docs/evidence/` |
-| Enterprise docs | 🔄 In Progress | `docs/enterprise/` |
 
-## Gaps
+## Sprint 25 Additions
 
-| Gap | Description | Priority |
+### New Documents
+
+| Document | Location | Purpose |
 |---|---|---|
-| Enterprise governance | Enterprise documentation structure | 🔄 In Progress |
-| Domain packs | Domain-specific documentation | ⏳ Planned |
-| ERP governance | ERP connector documentation | 🔄 In Progress |
-| SAIF decision packages | Enterprise SAIF packages | 🔄 In Progress |
-| Capability topology | Enterprise capability model | 🔄 In Progress |
+| Source-of-Truth Register | `docs/enterprise/governance/SOURCE_OF_TRUTH_REGISTER.md` | SRD, STITCH, SAIF, Repo hierarchy |
+| STITCH Supremacy | `docs/enterprise/architecture/STITCH_SUPREMACY.md` | Architecture source of truth |
+| SAIF Decision Package Schema | `docs/enterprise/saif/SAIF_DECISION_PACKAGE_SCHEMA.md` | Decision governance schema |
+| Capability & Topology Model | `docs/enterprise/architecture/CAPABILITY_AND_TOPOLOGY_MODEL.md` | Capabilities as stable units |
+| Content Department Overlay | `docs/enterprise/architecture/CONTENT_DEPARTMENT_OVERLAY_MODEL.md` | Commercial/Content overlay |
+| Pack Boundary Model | `docs/enterprise/packs/PACK_BOUNDARY_MODEL.md` | Domain pack isolation |
+| ERP Connector Governance | `docs/enterprise/erp/ERP_CONNECTOR_GOVERNANCE.md` | ERP integration rules |
+| Enterprise Acceptance Criteria | `docs/enterprise/governance/ENTERPRISE_ACCEPTANCE_CRITERIA.md` | Cross-domain acceptance |
+| AI Engineering Protocol | `docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md` | No AI memory protocol |
+| Sprint Template | `docs/enterprise/governance/SPRINT_TEMPLATE.md` | Standardized sprint structure |
+| Enterprise Roadmap | `docs/enterprise/ENTERPRISE_ROADMAP.md` | Sprints 25-40+ planning |
+| Repo Baseline Audit | `docs/enterprise/governance/REPO_BASELINE_AUDIT.md` | This document |
+| Sprint 25 Plan | `docs/sprints/SPRINT_25_PLAN.md` | Sprint 25 plan |
+| Sprint 25 Completion Report | `docs/sprints/SPRINT_25_COMPLETION_REPORT.md` | Sprint 25 completion |
 
-## Recommendations
+### Updated Documents
 
-1. **Complete Sprint 25** — Enterprise Architecture Reconciliation
-2. **Create domain packs** — Documentation for each enterprise domain
-3. **Create SAIF packages** — Decision packages for enterprise decisions
-4. **Create ERP governance** — ERP connector documentation
-5. **Update roadmap** — Enterprise sprint roadmap
+| Document | Location | Changes |
+|---|---|---|
+| README | `README.md` | Added enterprise control-plane docs reference |
+| AGENTS | `AGENTS.md` | Added enterprise control-plane docs reference, AI memory rule |
+| CONTEXT | `CONTEXT.md` | Updated to Sprint 25, added enterprise control-plane docs |
+| CLAUDE | `CLAUDE.md` | Added enterprise control-plane docs reference, AI memory rule |
+| MODULE_BOUNDARIES | `docs/architecture/MODULE_BOUNDARIES.md` | Reconciled with capability/topology, pack boundaries |
+
+## Remaining Gaps After Sprint 25
+
+| Gap | Description | Priority | Sprint |
+|---|---|---|---|
+| SRD v1.2 reference | Customer-provided SRD should be referenced in repo | Medium | 26 |
+| Addendum Pack A–G reference | Customer-provided addendums should be referenced | Medium | 26 |
+| STITCH Reconciliation reference | Customer-provided reconciliation should be referenced | Medium | 26 |
+| Domain pack documentation | Documentation for each enterprise domain | High | 26-30 |
+| Domain pack implementation | Implementation for each enterprise domain | High | 31-36 |
+| ERP connector framework | ERP connector implementation | Medium | 37-40 |
+| Production environment | Production deployment configuration | High | TBD |
+| Real integrations | Real external integrations through MCP | High | TBD |
+| M5 authorization | M5 authorization governance process | High | TBD |
+
+## Summary
+
+Sprint 25 successfully established the enterprise architecture reconciliation and engineering control plane. The repo now has:
+
+1. **Source-of-truth hierarchy** — SRD, STITCH, SAIF, Repo
+2. **Architecture supremacy** — STITCH as architecture source of truth
+3. **Capability/topology model** — Capabilities as stable units, departments as topology nodes
+4. **SAIF decision governance** — Decision packages for significant decisions
+5. **Pack boundary model** — Domain pack isolation rules
+6. **ERP governance** — Optional, separately scoped, blocked write-back
+7. **AI engineering protocol** — No AI memory, strict source-of-truth
+8. **Sprint template** — Standardized sprint structure
+9. **Enterprise roadmap** — Sprints 25-40+ planning
+10. **Root docs wiring** — All root docs reference enterprise control-plane docs
+
+No new business code was added. No external integrations were enabled. No M5 was activated. All tests pass. CI is green.
