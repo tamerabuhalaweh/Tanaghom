@@ -52,8 +52,8 @@ export default function AIProviderSettings() {
         <div className="grid grid-cols-3 gap-6">
           {[
             { name: 'Mock LLM', type: 'mock', description: 'Default provider. No external API calls.', status: 'always available' },
-            { name: 'OpenAI', type: 'openai', description: 'GPT-4o via OpenAI API.', status: 'requires OPENAI_API_KEY' },
-            { name: 'Claude', type: 'claude', description: 'Claude Sonnet via Anthropic API.', status: 'requires CLAUDE_API_KEY' },
+            { name: 'OpenAI', type: 'openai', description: 'OpenAI-compatible provider slot. Prepared; live calls disabled for demo.', status: 'requires OPENAI_API_KEY' },
+            { name: 'Claude', type: 'claude', description: 'Claude provider slot. Prepared; live calls disabled for demo.', status: 'requires CLAUDE_API_KEY' },
           ].map(p => {
             const providerStatus = providers.find(pr => pr.type === p.type);
             const isConfigured = providerStatus?.configured || p.type === 'mock';
