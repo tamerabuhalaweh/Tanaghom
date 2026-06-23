@@ -1,8 +1,23 @@
 # Canonical Taxonomy
 
-> **Version**: 1.0
+> **Version**: 1.1
 > **Date**: 2026-06-22
 > **Sprint**: 26
+> **Status**: Accepted — 5-Pillar Model
+
+## Canonical Model
+
+The customer has confirmed the **5-pillar model** as the canonical taxonomy:
+
+| Pillar | Description |
+|---|---|
+| Agent | Delegated identity (AgentRep, FunctionalAgent, GovernanceAgent) |
+| Capability | Stable reusable architecture unit |
+| Topology | Organizational grouping (departments as topology nodes) |
+| Pack | Self-contained domain-specific doctrine |
+| Decision | SAIF-governed decision record (DecisionPackage) |
+
+**Note**: Exact pillar names/definitions are pending customer confirmation. The canonical structure is 5 pillars.
 
 ## Approved Terms
 

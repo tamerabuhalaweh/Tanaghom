@@ -1,11 +1,23 @@
 # Legacy Taxonomy Mapping
 
-> **Version**: 1.0
+> **Version**: 1.1
 > **Date**: 2026-06-22
+> **Status**: 5-Pillar Model Confirmed
 
 ## Purpose
 
 Map older terms and concepts to the new enterprise taxonomy model.
+
+## Canonical Model (5-Pillar)
+
+The customer has confirmed the 5-pillar model:
+1. Agent
+2. Capability
+3. Topology
+4. Pack
+5. Decision
+
+**Note**: Exact pillar names/definitions are pending customer confirmation. The canonical structure is 5 pillars.
 
 ## Term Mappings
 

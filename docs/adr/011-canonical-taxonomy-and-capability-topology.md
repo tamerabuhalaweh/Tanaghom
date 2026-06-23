@@ -1,7 +1,7 @@
 # ADR-011: Canonical Taxonomy and Capability Topology
 
 > **Date**: 2026-06-22
-> **Status**: Proposed / Requires Business Authority Decision
+> **Status**: Accepted
 > **Sprint**: 26
 
 ## Context
@@ -57,16 +57,18 @@ The Tanaghom AI Enterprise Platform has evolved from a Commercial/Social/Content
 - Packs reference STITCH objects, never redefine them
 - Packs are isolated and self-contained
 
-### 5. 4-Pillar vs 5-Pillar Taxonomy
+### 5. Canonical Taxonomy Model
 
-**Status: REQUIRES BUSINESS AUTHORITY DECISION**
+**Status: ACCEPTED — 5-Pillar Model**
 
-The customer documents reference both 4-pillar and 5-pillar taxonomy models. No authoritative source has been provided to resolve this ambiguity. The following decision is deferred:
+The customer has confirmed the 5-pillar model as the canonical taxonomy.
 
-- **4-Pillar Model**: Agent, Capability, Topology, Pack
 - **5-Pillar Model**: Agent, Capability, Topology, Pack, Decision
+- **4-Pillar Model**: Legacy/public/previous model (Agent, Capability, Topology, Pack)
 
-**Action Required**: Business authority must confirm which model is canonical before Sprint 27.
+The 5-pillar model adds Decision (SAIF DecisionPackage) as a first-class pillar, reflecting the enterprise requirement that all significant decisions must be governed by SAIF.
+
+**Note**: Exact pillar names/definitions are pending customer confirmation. The canonical structure is 5 pillars.
 
 ### 6. Commercial/Content as Reference Implementation
 
@@ -111,6 +113,7 @@ ERP integrations are optional, separately scoped, separately quoted, separately 
 3. **Packs isolate doctrine** — Domain-specific rules don't contaminate STITCH Core
 4. **Topology is flexible** — Reorganize departments without changing capabilities
 5. **ERP remains optional** — No dependency on ERP for core platform
+6. **5-pillar model is canonical** — Decision (SAIF DecisionPackage) is a first-class pillar
 
 ## Related ADRs
 
@@ -118,10 +121,3 @@ ERP integrations are optional, separately scoped, separately quoted, separately 
 - ADR-006: Capability Resolution Before Tool Implementation
 - ADR-007: M4/M5 Runtime Separation
 - ADR-010: Adopt SAIF v1.2 as Normative Decision Framework
-
-## Action Required
-
-**Business authority must decide:**
-1. 4-pillar vs 5-pillar taxonomy model
-2. Confirmation that Commercial/Content reference implementation is correct
-3. Confirmation that future enterprise domains are correctly grouped

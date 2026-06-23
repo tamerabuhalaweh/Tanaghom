@@ -43,18 +43,16 @@
 
 ## Taxonomy Decision Status
 
-**4-Pillar vs 5-Pillar: REQUIRES BUSINESS AUTHORITY DECISION**
+**5-Pillar Model: ACCEPTED**
 
-The customer documents reference both 4-pillar and 5-pillar taxonomy models. No authoritative source has been provided to resolve this ambiguity. ADR-011 is marked as "Proposed / Requires Business Authority Decision" and lists the missing decision.
+The customer has confirmed the 5-pillar model as the canonical taxonomy:
+1. Agent
+2. Capability
+3. Topology
+4. Pack
+5. Decision
 
-## Tests Added
-
-| Suite | Tests | Validates |
-|---|---|---|
-| Enterprise Taxonomy — Capability IDs | 4 | Capability ID uniqueness, Commercial/Content registration, future enterprise registration |
-| Enterprise Taxonomy — Topology Nodes | 4 | Topology node uniqueness, Commercial/Content node, future enterprise nodes |
-| Enterprise Taxonomy — Capability Bundles | 3 | Bundle ID uniqueness, bundle-to-node mapping, Commercial/Content bundles |
-| Enterprise Taxonomy — Boundary Rules | 5 | QC as Evaluator, ERP requires MCP, no M5, no direct external access, deprecated term mapping |
+ADR-011 status updated to "Accepted". Exact pillar names/definitions pending customer confirmation.
 
 ## What Was Intentionally Not Implemented
 
