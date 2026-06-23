@@ -176,6 +176,54 @@ async function seed() {
     console.log(`  Capability: ${cap.name} [${cap.implemented ? 'implemented' : 'planned'}]`);
   }
 
+  // Seed demo campaigns
+  console.log('Seeding demo campaigns...');
+  const demandUser = await prisma.user.findUnique({ where: { email: 'demand.specialist@tanaghum.com' } });
+
+  if (demandUser) {
+    const demoCampaigns = [
+      {
+        raw_message: 'Summer Wellness Launch',
+        objective: 'Promote wellness course to health-conscious professionals on LinkedIn and Instagram',
+        status: 'draft' as const,
+        risk_category: 'medium' as const,
+        target_platforms: ['linkedin', 'instagram'],
+        audience: 'Health-conscious professionals aged 25-45',
+        channel: 'social_media',
+        content_type: 'campaign' as const,
+        requester_id: demandUser.id,
+      },
+      {
+        raw_message: 'Product Feature Announcement',
+        objective: 'Announce new product features to existing customers',
+        status: 'approved' as const,
+        risk_category: 'low' as const,
+        target_platforms: ['linkedin', 'twitter'],
+        audience: 'Existing customers and partners',
+        channel: 'social_media',
+        content_type: 'campaign' as const,
+        requester_id: demandUser.id,
+      },
+    ];
+
+    for (const campaign of demoCampaigns) {
+      const existing = await prisma.contentRequest.findFirst({
+        where: { raw_message: campaign.raw_message, requester_id: demandUser.id },
+      });
+      if (existing) {
+        await prisma.contentRequest.update({
+          where: { id: existing.id },
+          data: campaign,
+        });
+      } else {
+        await prisma.contentRequest.create({
+          data: campaign,
+        });
+      }
+      console.log(`  Campaign: ${campaign.raw_message}`);
+    }
+  }
+
   // Seed mock MCP connectors (future/planned only)
   console.log('Seeding mock MCP connectors...');
   const MOCK_CONNECTORS = [
