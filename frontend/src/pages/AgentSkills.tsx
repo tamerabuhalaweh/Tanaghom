@@ -9,7 +9,7 @@ export default function AgentSkills() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Agent Skills</h1>
+          <h1 className="text-2xl font-bold text-white">Agent Skills</h1>
           <p className="text-gray-500 text-sm mt-1">Governed capabilities — not random tools</p>
         </div>
         <DemoLabel>STITCH Native / MCP Imported / Planned</DemoLabel>
@@ -66,14 +66,14 @@ export default function AgentSkills() {
       <Card title="Skill Governance Rules">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="space-y-2">
-            <div className="font-medium text-gray-700">Allowed</div>
+            <div className="font-medium text-gray-200">Allowed</div>
             <div className="text-gray-600">• Skills accessed through STITCH capability resolution</div>
             <div className="text-gray-600">• SAIF approval for high-risk skills</div>
             <div className="text-gray-600">• Full audit trail for all skill executions</div>
             <div className="text-gray-600">• MCP mediation for external skills</div>
           </div>
           <div className="space-y-2">
-            <div className="font-medium text-gray-700">Blocked</div>
+            <div className="font-medium text-gray-200">Blocked</div>
             <div className="text-gray-600">• Direct MCP tool calls by agents</div>
             <div className="text-gray-600">• Direct MCP tool calls by OpenClaw</div>
             <div className="text-gray-600">• External system access without approval</div>

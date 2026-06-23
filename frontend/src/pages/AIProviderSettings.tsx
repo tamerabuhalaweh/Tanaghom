@@ -32,7 +32,7 @@ export default function AIProviderSettings() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">AI Provider Settings</h1>
+        <h1 className="text-2xl font-bold text-white">AI Provider Settings</h1>
         <DemoLabel>Admin Only</DemoLabel>
       </div>
 
@@ -69,7 +69,7 @@ export default function AIProviderSettings() {
                     {!isActive && !isConfigured && <StatusBadge label="Not Configured" variant="default" />}
                   </div>
 
-                  <p className="text-sm text-gray-600">{p.description}</p>
+                  <p className="text-sm text-gray-400">{p.description}</p>
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
@@ -78,7 +78,7 @@ export default function AIProviderSettings() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">API Key:</span>
-                      <span className={isConfigured ? 'text-green-600' : 'text-red-600'}>
+                      <span className={isConfigured ? 'text-emerald-400' : 'text-rose-400'}>
                         {p.type === 'mock' ? 'Not required' : (providerStatus?.apiKeyStatus === 'configured' ? 'Configured' : 'Missing')}
                       </span>
                     </div>
@@ -89,7 +89,7 @@ export default function AIProviderSettings() {
                   </div>
 
                   {isActive && (
-                    <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs text-blue-800 text-center font-medium">
+                    <div className="rounded-lg border border-blue-800 bg-blue-950/60 p-2 text-center text-xs font-medium text-blue-300">
                       Currently Active
                     </div>
                   )}
