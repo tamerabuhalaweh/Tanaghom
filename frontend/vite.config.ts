@@ -16,6 +16,7 @@ export default defineConfig({
       '/analytics': 'http://localhost:4000',
       '/spine': 'http://localhost:4000',
       '/observability': 'http://localhost:4000',
+      '/ai-provider': 'http://localhost:4000',
       '/users': 'http://localhost:4000',
       '/departments': 'http://localhost:4000',
       '/health': 'http://localhost:4000',
