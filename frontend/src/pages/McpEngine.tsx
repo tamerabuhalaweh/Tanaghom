@@ -23,7 +23,7 @@ export default function McpEngine() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">MCP Engine</h1>
+          <h1 className="text-2xl font-bold text-white">MCP Engine</h1>
           <p className="text-gray-500 text-sm mt-1">Model Context Protocol — Integration & Skill Engine</p>
         </div>
         <DemoLabel>Mock/Sandbox Only — No Live Execution</DemoLabel>
@@ -37,7 +37,7 @@ export default function McpEngine() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Connector List */}
         <div className="lg:col-span-2 space-y-3">
-          <h2 className="font-semibold text-gray-700">MCP Connectors ({MCP_CONNECTORS.length})</h2>
+          <h2 className="font-semibold text-gray-300">MCP Connectors ({MCP_CONNECTORS.length})</h2>
           {MCP_CONNECTORS.map(connector => (
             <Card key={connector.id} className={`cursor-pointer transition-all ${selected === connector.id ? 'ring-2 ring-blue-500' : ''}`}>
               <div onClick={() => setSelected(connector.id === selected ? null : connector.id)}>
@@ -65,13 +65,13 @@ export default function McpEngine() {
                     <div>
                       <div className="text-gray-500 mb-1">Tools/Skills</div>
                       <div className="flex flex-wrap gap-1">
-                        {selectedConnector.tools.map(t => <span key={t} className="px-2 py-0.5 bg-gray-100 rounded text-xs">{t}</span>)}
+                        {selectedConnector.tools.map(t => <span key={t} className="rounded border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-gray-300">{t}</span>)}
                       </div>
                     </div>
                     <div>
                       <div className="text-gray-500 mb-1">Allowed Roles</div>
                       <div className="flex flex-wrap gap-1">
-                        {selectedConnector.allowedRoles.map(r => <span key={r} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{r}</span>)}
+                        {selectedConnector.allowedRoles.map(r => <span key={r} className="rounded border border-blue-800 bg-blue-950/60 px-2 py-0.5 text-xs text-blue-300">{r}</span>)}
                       </div>
                     </div>
                   </div>
@@ -107,7 +107,7 @@ export default function McpEngine() {
                     <button
                       onClick={() => handleTestConnection(selectedConnector.id)}
                       disabled={testing === selectedConnector.id}
-                      className="px-3 py-1.5 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50"
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                     >
                       {testing === selectedConnector.id ? 'Testing...' : 'Test Mock Connection'}
                     </button>
@@ -142,7 +142,7 @@ export default function McpEngine() {
           </Card>
 
           <Card title="Safety Rules">
-            <div className="space-y-2 text-xs text-gray-600">
+            <div className="space-y-2 text-xs text-gray-400">
               <div>• Source of truth: STITCH, never MCP</div>
               <div>• No real external API calls</div>
               <div>• No real MCP tool execution</div>
@@ -153,7 +153,7 @@ export default function McpEngine() {
           </Card>
 
           <Card title="Future Path">
-            <div className="font-mono text-xs bg-gray-50 rounded p-3">
+            <div className="rounded-lg bg-gray-800/50 p-3 font-mono text-xs text-gray-300">
               STITCH → SAIF → MCP Connector Layer → External APIs
             </div>
           </Card>
