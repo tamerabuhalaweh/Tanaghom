@@ -18,6 +18,8 @@ import { analyticsRouter } from '../modules/analytics-reporting/controller';
 import { spineRouter } from '../modules/spine/controller';
 import { observabilityRouter } from '../modules/observability/controller';
 import { aiProviderRouter } from '../modules/ai-provider/controller';
+import { demoRouter } from '../modules/demo/controller';
+import { publishingPackageRouter } from '../modules/publishing-package/controller';
 
 // Validate environment before startup
 const envValidation = validateEnvironment();
@@ -91,6 +93,8 @@ app.use('/analytics', analyticsRouter);
 app.use('/spine', spineRouter);
 app.use('/observability', observabilityRouter);
 app.use('/ai-provider', aiProviderRouter);
+app.use('/demo', demoRouter);
+app.use('/publishing-package', publishingPackageRouter);
 
 // Error handler (must be last) — preserves AppError status codes, hides stack traces
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {

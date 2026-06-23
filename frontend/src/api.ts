@@ -146,3 +146,21 @@ export const aiProviderApi = {
   active: (token: string) =>
     apiFetch<unknown>('/ai-provider/active', { token }),
 };
+
+// Demo
+export const demoApi = {
+  status: (token: string) =>
+    apiFetch<unknown>('/demo/status', { token }),
+  auditTrail: (token: string) =>
+    apiFetch<unknown[]>('/demo/audit-trail', { token }),
+  leads: (token: string) =>
+    apiFetch<unknown[]>('/demo/leads', { token }),
+};
+
+// Publishing Package
+export const publishingPackageApi = {
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/publishing-package/create', { method: 'POST', body: data, token }),
+  list: (token: string) =>
+    apiFetch<unknown[]>('/publishing-package/list', { token }),
+};
