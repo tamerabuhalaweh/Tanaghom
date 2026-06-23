@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { analyticsApi } from '../api';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 export default function Analytics() {
   const { token } = useAuth();

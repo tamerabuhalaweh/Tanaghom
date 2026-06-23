@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { campaignsApi, approvalsApi, algoApi, aiGenerationApi } from '../api';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 export default function CampaignWorkspace() {
   const { token } = useAuth();

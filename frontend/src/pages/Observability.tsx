@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { observabilityApi } from '../api';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 export default function Observability() {
   const { token } = useAuth();

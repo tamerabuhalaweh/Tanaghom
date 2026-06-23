@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { approvalsApi } from '../api';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 export default function ApprovalQueue() {
   const { token } = useAuth();
@@ -8,15 +8,10 @@ export default function ApprovalQueue() {
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
 
-  const loadApprovals = async () => {
+  useEffect(() => {
     if (!token) return;
-    try {
-      const data = await approvalsApi.list(token);
-      setApprovals(data);
-    } catch (err) { console.error(err); }
-  };
-
-  useEffect(() => { loadApprovals(); }, [token]);
+    approvalsApi.list(token).then(setApprovals).catch(console.error);
+  }, [token]);
 
   const handleAction = async (id: string, action: 'approve' | 'reject' | 'request-changes') => {
     setLoading(`${action}-${id}`);
@@ -31,7 +26,7 @@ export default function ApprovalQueue() {
         await approvalsApi.requestChanges(id, { comment: 'Please revise' }, token!);
         setMessage(`Approval ${id} — changes requested`);
       }
-      await loadApprovals();
+      await approvalsApi.list(token!).then(setApprovals).catch(console.error);
     } catch (err) {
       setMessage(`Error: ${err instanceof Error ? err.message : 'Action failed'}`);
     }
