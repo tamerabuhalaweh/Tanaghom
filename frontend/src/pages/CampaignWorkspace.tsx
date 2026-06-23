@@ -6,7 +6,8 @@ export default function CampaignWorkspace() {
   const { token } = useAuth();
   const [campaigns, setCampaigns] = useState<Record<string, unknown>[]>([]);
   const [selected, setSelected] = useState<Record<string, unknown> | null>(null);
-  const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, unknown>[]>([]);
+  const [selectedDraft, setSelectedDraft] = useState<Record<string, unknown> | null>(null);
   const [score, setScore] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
@@ -20,7 +21,8 @@ export default function CampaignWorkspace() {
     try {
       const c = await campaignsApi.get(id, token!);
       setSelected(c as Record<string, unknown>);
-      setDraft(null);
+      setDrafts([]);
+      setSelectedDraft(null);
       setScore(null);
       setMessage('');
     } catch (err) { console.error(err); }
@@ -36,7 +38,9 @@ export default function CampaignWorkspace() {
         campaignRequestId: selected.id,
         platforms: ['linkedin'],
       }, token!);
-      setDraft(result as Record<string, unknown>);
+      const draftResults = Array.isArray(result) ? result as Record<string, unknown>[] : [result as Record<string, unknown>];
+      setDrafts(draftResults);
+      setSelectedDraft(draftResults[0] || null);
       setMessage('Draft generated — Mock LLM Provider');
     } catch (err) {
       setMessage(`Error: ${err instanceof Error ? err.message : 'Generation failed'}`);
@@ -45,13 +49,13 @@ export default function CampaignWorkspace() {
   };
 
   const evaluateReach = async () => {
-    if (!draft || !selected) return;
+    if (!selectedDraft || !selected) return;
     setLoading('score');
     try {
       const result = await algoApi.score({
-        contentItemId: draft.contentItemId || selected.id,
-        platform: 'linkedin',
-        draftText: draft.draftText || 'Demo content for wellness campaign',
+        contentItemId: selectedDraft.contentItemId as string,
+        platform: (selectedDraft.platform as string) || 'linkedin',
+        draftText: (selectedDraft.draftText as string) || 'Demo content',
       }, token!);
       setScore(result as Record<string, unknown>);
       setMessage('Reach score calculated — deterministic scoring');
@@ -129,7 +133,7 @@ export default function CampaignWorkspace() {
                 </button>
                 <button
                   onClick={evaluateReach}
-                  disabled={!draft || loading === 'score'}
+                  disabled={!selectedDraft || loading === 'score'}
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-sm"
                 >
                   {loading === 'score' ? 'Scoring...' : 'Evaluate Reach'}
@@ -143,13 +147,13 @@ export default function CampaignWorkspace() {
                 </button>
               </div>
 
-              {draft && (
+              {drafts.length > 0 && (
                 <div className="bg-white border rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <h4 className="font-semibold">AI Draft</h4>
+                    <h4 className="font-semibold">AI Draft ({drafts[0]?.platform as string || 'linkedin'})</h4>
                     <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">Mock LLM Provider</span>
                   </div>
-                  <pre className="text-sm whitespace-pre-wrap bg-gray-50 p-3 rounded">{JSON.stringify(draft, null, 2)}</pre>
+                  <pre className="text-sm whitespace-pre-wrap bg-gray-50 p-3 rounded">{JSON.stringify(drafts[0], null, 2)}</pre>
                 </div>
               )}
 
