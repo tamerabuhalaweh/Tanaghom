@@ -26,6 +26,10 @@ You are an AI coding agent working on the Tanaghom AI Enterprise Platform, a STI
    - `docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md` — AI engineering protocol
    - `docs/enterprise/governance/SPRINT_TEMPLATE.md` — Sprint template
    - `docs/enterprise/ENTERPRISE_ROADMAP.md` — Enterprise roadmap
+   - `docs/enterprise/taxonomy/CANONICAL_TAXONOMY.md` — Canonical taxonomy (STITCH architecture + business pillars)
+   - `docs/enterprise/taxonomy/LEGACY_TAXONOMY_MAPPING.md` — Legacy term mappings
+   - `docs/adr/011-canonical-taxonomy-and-capability-topology.md` — Taxonomy ADR
+   - `docs/enterprise/architecture/CAPABILITY_REGISTRY_EXTENSION_PLAN.md` — How to register new capabilities
 
 ## STITCH Operating Substrate
 

@@ -31,6 +31,10 @@ Tanaghom AI Enterprise Platform. A STITCH-based, SAIF-governed, multi-agent ente
     - `docs/enterprise/governance/AI_ENGINEERING_PROTOCOL.md`
     - `docs/enterprise/governance/SPRINT_TEMPLATE.md`
     - `docs/enterprise/ENTERPRISE_ROADMAP.md`
+    - `docs/enterprise/taxonomy/CANONICAL_TAXONOMY.md`
+    - `docs/enterprise/taxonomy/LEGACY_TAXONOMY_MAPPING.md`
+    - `docs/adr/011-canonical-taxonomy-and-capability-topology.md`
+    - `docs/enterprise/architecture/CAPABILITY_REGISTRY_EXTENSION_PLAN.md`
 
 ## Sprint Deliverable Checklist
 

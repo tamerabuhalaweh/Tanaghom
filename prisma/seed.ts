@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../shared/auth';
+import { ENTERPRISE_CAPABILITIES } from '../modules/capability-registry/registry-data';
 
 const prisma = new PrismaClient();
 
@@ -149,57 +150,9 @@ async function seed() {
     }
   }
 
-  // Seed core capabilities
-  console.log('Seeding core capabilities...');
-  const CORE_CAPABILITIES = [
-    {
-      name: 'GenerateContentDraft',
-      description: 'Generate platform-specific content drafts using LLM',
-      category: 'content',
-      riskLevel: 'medium',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'EvaluateReachReadiness',
-      description: 'Evaluate content for reach readiness score and platform optimization',
-      category: 'analysis',
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'RequestApproval',
-      description: 'Submit content for approval workflow',
-      category: 'governance',
-      riskLevel: 'medium',
-      requiresApproval: true,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional', 'governance'],
-    },
-    {
-      name: 'RetrieveKnowledge',
-      description: 'Retrieve knowledge from DKS or platform rules',
-      category: 'knowledge',
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional', 'governance'],
-    },
-    {
-      name: 'PreparePublishingPackage',
-      description: 'Prepare content package for publishing (requires SAIF decision and approval)',
-      category: 'publishing',
-      riskLevel: 'high',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-  ];
-
-  for (const cap of CORE_CAPABILITIES) {
+  // Seed capabilities from shared registry data
+  console.log('Seeding capabilities from registry...');
+  for (const cap of ENTERPRISE_CAPABILITIES) {
     await prisma.capability.upsert({
       where: { name: cap.name },
       update: {
@@ -220,7 +173,7 @@ async function seed() {
         allowed_agent_types: cap.allowedAgentTypes,
       },
     });
-    console.log(`  Capability: ${cap.name}`);
+    console.log(`  Capability: ${cap.name} [${cap.implemented ? 'implemented' : 'planned'}]`);
   }
 
   // Seed mock MCP connectors (future/planned only)

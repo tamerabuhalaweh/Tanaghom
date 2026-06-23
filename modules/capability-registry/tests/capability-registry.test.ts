@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ForbiddenError } from '@shared/errors';
+import { ENTERPRISE_CAPABILITIES, TOPOLOGY_NODES, CAPABILITY_BUNDLES, DEPRECATED_MAPPINGS } from '../registry-data';
 
 // Capability Registry & Resolution tests — validates canonical chain, M5 blocking, MCP boundary, permissions
 
@@ -359,5 +360,121 @@ describe('Resource Validation Before Implementation', () => {
     const result = validateResourcesBeforeImplementation(impl);
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toContain('ExternalPlatformAccountReference');
+  });
+});
+
+describe('Enterprise Taxonomy — Capability IDs', () => {
+  it('all capability IDs are unique', () => {
+    const ids = ENTERPRISE_CAPABILITIES.map(c => c.id);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it('all capability names are unique', () => {
+    const names = ENTERPRISE_CAPABILITIES.map(c => c.name);
+    const unique = new Set(names);
+    expect(unique.size).toBe(names.length);
+  });
+
+  it('Commercial/Content capabilities are registered', () => {
+    const contentCaps = ENTERPRISE_CAPABILITIES.filter(c => c.domain === 'commercial' && c.implemented);
+    expect(contentCaps.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('future enterprise capabilities are registered as planned', () => {
+    const futureCaps = ENTERPRISE_CAPABILITIES.filter(c => !c.implemented);
+    expect(futureCaps.length).toBeGreaterThanOrEqual(7);
+    const futureNames = futureCaps.map(c => c.name);
+    expect(futureNames).toContain('GenerateFinancialReport');
+    expect(futureNames).toContain('ManageEmployee');
+    expect(futureNames).toContain('ManageProcurement');
+    expect(futureNames).toContain('TrackInventory');
+    expect(futureNames).toContain('ManagePurchaseOrder');
+    expect(futureNames).toContain('ManageSupplyChain');
+    expect(futureNames).toContain('IntegrateERP');
+  });
+});
+
+describe('Enterprise Taxonomy — Topology Nodes', () => {
+  it('all topology node IDs are unique', () => {
+    const ids = TOPOLOGY_NODES.map(n => n.id);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it('all topology node names are unique', () => {
+    const names = TOPOLOGY_NODES.map(n => n.name);
+    const unique = new Set(names);
+    expect(unique.size).toBe(names.length);
+  });
+
+  it('Commercial/Content is a topology node', () => {
+    const cc = TOPOLOGY_NODES.find(n => n.id === 'node-commercial-content');
+    expect(cc).toBeDefined();
+    expect(cc!.domain).toBe('commercial');
+  });
+
+  it('future enterprise topology nodes are registered', () => {
+    const futureNodes = ['Finance', 'HR', 'Procurement', 'Inventory', 'Purchase Management', 'Supply Chain'];
+    for (const node of futureNodes) {
+      expect(TOPOLOGY_NODES.find(n => n.name === node)).toBeDefined();
+    }
+  });
+});
+
+describe('Enterprise Taxonomy — Capability Bundles', () => {
+  it('all bundle IDs are unique', () => {
+    const ids = CAPABILITY_BUNDLES.map(b => b.id);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it('bundles map to topology nodes', () => {
+    for (const bundle of CAPABILITY_BUNDLES) {
+      expect(bundle.topologyNode).toBeDefined();
+      expect(bundle.topologyNode.startsWith('node-')).toBe(true);
+    }
+  });
+
+  it('Commercial/Content has multiple bundles', () => {
+    const ccBundles = CAPABILITY_BUNDLES.filter(b => b.topologyNode === 'node-commercial-content');
+    expect(ccBundles.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe('Enterprise Taxonomy — Boundary Rules', () => {
+  it('QC is Evaluator, not Authority', () => {
+    const qcCapability = ENTERPRISE_CAPABILITIES.find(c => c.name === 'RequestApproval');
+    expect(qcCapability).toBeDefined();
+    expect(qcCapability!.requiresApproval).toBe(true);
+    expect(qcCapability!.requiresSaifDecision).toBe(false);
+  });
+
+  it('ERP capability requires MCP and separate scope', () => {
+    const erpCapability = ENTERPRISE_CAPABILITIES.find(c => c.name === 'IntegrateERP');
+    expect(erpCapability).toBeDefined();
+    expect(erpCapability!.requiresMcp).toBe(true);
+    expect(erpCapability!.requiresSaifDecision).toBe(true);
+    expect(erpCapability!.riskLevel).toBe('critical');
+    expect(erpCapability!.separateScope).toBe(true);
+  });
+
+  it('no M5 capability is enabled', () => {
+    for (const cap of ENTERPRISE_CAPABILITIES) {
+      expect(cap.m5Required).toBe(false);
+    }
+  });
+
+  it('no direct external access capability is enabled', () => {
+    for (const cap of ENTERPRISE_CAPABILITIES) {
+      expect(cap.directExternalAccess).toBe(false);
+    }
+  });
+
+  it('deprecated terms are mapped or rejected', () => {
+    for (const mapping of DEPRECATED_MAPPINGS) {
+      expect(mapping.mapped).toBeDefined();
+      expect(mapping.mapped.length).toBeGreaterThan(0);
+    }
   });
 });
