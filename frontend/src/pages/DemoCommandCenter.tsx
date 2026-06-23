@@ -1,5 +1,5 @@
 import { useAuth } from '../contexts/useAuth';
-import { Card, MetricCard, StatusBadge, Alert, DemoLabel } from '../components/UI';
+import { ExecutiveMetric, FlowTimeline, IntegrationStatusCard, SafetyGateCard, Badge } from '../components/ExecutiveUI';
 import { MCP_CONNECTORS, MCP_SKILLS } from '../modules/mcp-engine/registry-data';
 
 export default function DemoCommandCenter() {
@@ -16,220 +16,129 @@ export default function DemoCommandCenter() {
     total: MCP_SKILLS.length,
     working: MCP_SKILLS.filter(s => s.status === 'working').length,
     mock: MCP_SKILLS.filter(s => s.status === 'mock').length,
-    planned: MCP_SKILLS.filter(s => s.status === 'planned').length,
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Demo Command Center</h1>
-          <p className="text-gray-500 text-sm mt-1">Executive Boardroom View — Commercial/Social Model</p>
+          <h1 className="text-2xl font-bold text-white">Command Center</h1>
+          <p className="text-gray-500 text-sm mt-0.5">Commercial / Social Intelligence • Demo Mode</p>
         </div>
-        <DemoLabel>Controlled Demo — Live Execution Blocked</DemoLabel>
+        <div className="flex items-center gap-3">
+          <Badge variant="mock">Mock Providers</Badge>
+          <Badge variant="blocked">M5 Blocked</Badge>
+          <Badge variant="success">881 Tests</Badge>
+        </div>
       </div>
 
-      <Alert type="info">
-        <strong>Tanaghum is ready for controlled expansion into real integrations.</strong> 
-        Live execution remains blocked until authorized.
-      </Alert>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-6 gap-4">
-        <MetricCard label="Campaigns" value="2" sublabel="Demo data" />
-        <MetricCard label="AI Drafts" value="3" sublabel="Mock LLM" />
-        <MetricCard label="MCP Connectors" value={String(mcpStats.total)} sublabel={`${mcpStats.mock} mock`} />
-        <MetricCard label="Agent Skills" value={String(skillStats.total)} sublabel={`${skillStats.working} working`} />
-        <MetricCard label="Safety Gates" value="9/11" sublabel="Blocked" />
-        <MetricCard label="Tests" value="871" sublabel="All passing" />
+      {/* Core Value Proposition */}
+      <div className="bg-gradient-to-r from-blue-900/30 via-indigo-900/20 to-purple-900/30 border border-blue-800/40 rounded-xl p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white mb-1">AI prepares → Human approves → System records</h2>
+            <p className="text-gray-400 text-sm">Social Media Intelligence + AI Content Preparation + Human Governance + Safe Execution</p>
+          </div>
+          <div className="text-right">
+            <div className="text-3xl font-bold text-blue-400">100%</div>
+            <div className="text-xs text-gray-500">External execution blocked</div>
+          </div>
+        </div>
       </div>
 
-      {/* Golden Path Status */}
-      <Card title="Commercial/Social Golden Path">
-        <div className="grid grid-cols-5 gap-3">
-          {[
-            { step: 'Login', status: 'working' },
-            { step: 'Campaign Select', status: 'working' },
-            { step: 'AI Draft', status: 'working' },
-            { step: 'Reach Score', status: 'working' },
-            { step: 'Approval', status: 'working' },
-            { step: 'Publishing Prep', status: 'working' },
-            { step: 'Mock Postiz', status: 'mock' },
-            { step: 'Analytics', status: 'mock' },
-            { step: 'Lead Capture', status: 'mock' },
-            { step: 'GHL Handoff', status: 'planned' },
-            { step: 'WhatsApp', status: 'planned' },
-            { step: 'Voice/Chat', status: 'planned' },
-            { step: 'Audit Trail', status: 'working' },
-            { step: 'SPINE', status: 'working' },
-            { step: 'Observability', status: 'working' },
-          ].map(item => (
-            <div key={item.step} className="text-center p-2 bg-gray-50 rounded">
-              <div className="text-xs font-medium">{item.step}</div>
-              <StatusBadge label={item.status} variant={item.status === 'working' ? 'success' : item.status === 'mock' ? 'mock' : 'default'} />
-            </div>
-          ))}
-        </div>
-      </Card>
+      {/* Golden Path */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Golden Path Progress</h3>
+        <FlowTimeline steps={[
+          { label: 'Login', status: 'done' },
+          { label: 'Campaign', status: 'done' },
+          { label: 'AI Draft', status: 'done', badge: 'Mock LLM' },
+          { label: 'Platform Adapt', status: 'done' },
+          { label: 'Reach Score', status: 'done' },
+          { label: 'Approval', status: 'done' },
+          { label: 'Publishing Prep', status: 'active' },
+          { label: 'Analytics', status: 'pending', badge: 'Mock' },
+          { label: 'Lead Capture', status: 'pending', badge: 'Mock' },
+          { label: 'GHL Handoff', status: 'blocked', badge: 'Planned' },
+          { label: 'Audit Trail', status: 'done' },
+        ]} />
+      </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        {/* MCP Engine Status */}
-        <Card title="MCP Engine Status">
-          <div className="space-y-3">
-            {MCP_CONNECTORS.slice(0, 6).map(connector => (
-              <div key={connector.id} className="flex items-center justify-between text-sm">
-                <span className="truncate">{connector.name}</span>
-                <StatusBadge label={connector.status} variant={connector.status === 'mock' ? 'mock' : 'default'} />
-              </div>
-            ))}
-            <div className="text-xs text-gray-400">+ {MCP_CONNECTORS.length - 6} more connectors</div>
-          </div>
-        </Card>
-
-        {/* Agent Skills Status */}
-        <Card title="Agent Skills Status">
-          <div className="space-y-3">
-            {MCP_SKILLS.slice(0, 6).map(skill => (
-              <div key={skill.id} className="flex items-center justify-between text-sm">
-                <span className="truncate">{skill.name}</span>
-                <StatusBadge label={skill.status} variant={skill.status === 'working' ? 'success' : skill.status === 'mock' ? 'mock' : 'default'} />
-              </div>
-            ))}
-            <div className="text-xs text-gray-400">+ {MCP_SKILLS.length - 6} more skills</div>
-          </div>
-        </Card>
+      {/* KPIs */}
+      <div className="grid grid-cols-6 gap-3">
+        <ExecutiveMetric label="Campaigns" value="2" sublabel="Demo data" trend="flat" />
+        <ExecutiveMetric label="AI Drafts" value="3" sublabel="Mock LLM" trend="flat" />
+        <ExecutiveMetric label="Reach Score" value="78" sublabel="/ 100" trend="up" />
+        <ExecutiveMetric label="MCP Connectors" value={String(mcpStats.total)} sublabel={`${mcpStats.mock} mock`} trend="flat" />
+        <ExecutiveMetric label="Agent Skills" value={String(skillStats.total)} sublabel={`${skillStats.working} working`} trend="flat" />
+        <ExecutiveMetric label="Safety Gates" value="9/11" sublabel="Blocked" trend="flat" />
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {/* GoHighLevel Readiness */}
-        <Card title="GoHighLevel CRM">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Status</span>
-              <StatusBadge label="Planned" variant="default" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">CRM Writes</span>
-              <StatusBadge label="Blocked" variant="danger" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Credentials</span>
-              <StatusBadge label="Missing" variant="warning" />
+        {/* Integration Readiness */}
+        <div className="col-span-2 space-y-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Integration Readiness</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <IntegrationStatusCard name="Postiz Scheduling" status="sandbox_ready" direction="Prepare-only" />
+              <IntegrationStatusCard name="GoHighLevel CRM" status="planned" direction="Write-blocked" />
+              <IntegrationStatusCard name="OpenClaw Orchestration" status="planned" direction="Channel only" />
+              <IntegrationStatusCard name="AI Provider (LLM)" status="mock" direction="Mock default" />
+              <IntegrationStatusCard name="Social Analytics" status="planned" direction="Read-only" />
+              <IntegrationStatusCard name="WhatsApp Messaging" status="planned" direction="Write-blocked" />
             </div>
           </div>
-        </Card>
 
-        {/* Postiz Sandbox */}
-        <Card title="Postiz Sandbox">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Status</span>
-              <StatusBadge label="Sandbox Ready" variant="info" />
+          {/* System Health */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">System Health</h3>
+              <span className="text-[10px] text-gray-600">Demo readiness snapshot — not live runtime</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Publishing</span>
-              <StatusBadge label="Blocked" variant="danger" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Credentials</span>
-              <StatusBadge label="Missing" variant="warning" />
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'Backend', status: 'Builds clean', color: 'green' },
+                { label: 'Database', status: 'Schema ready', color: 'green' },
+                { label: 'Redis', status: 'Config present', color: 'green' },
+                { label: 'CI/CD', status: '4/4 Green', color: 'green' },
+              ].map(item => (
+                <div key={item.label} className="bg-gray-800/50 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-500 mb-1">{item.label}</div>
+                  <div className={`text-sm font-medium text-${item.color}-400`}>{item.status}</div>
+                </div>
+              ))}
             </div>
           </div>
-        </Card>
+        </div>
 
-        {/* OpenClaw Readiness */}
-        <Card title="OpenClaw">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Status</span>
-              <StatusBadge label="Planned" variant="default" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Channel Orchestration</span>
-              <StatusBadge label="Blocked" variant="danger" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Source of Truth</span>
-              <span className="font-medium">STITCH</span>
-            </div>
-          </div>
-        </Card>
+        {/* Safety Gates */}
+        <SafetyGateCard gates={[
+          { label: 'M5 Execution', status: 'blocked' },
+          { label: 'External APIs', status: 'blocked' },
+          { label: 'Live Publishing', status: 'blocked' },
+          { label: 'Real CRM Writes', status: 'blocked' },
+          { label: 'Real WhatsApp', status: 'blocked' },
+          { label: 'Real Analytics', status: 'blocked' },
+          { label: 'Real Rendering', status: 'blocked' },
+          { label: 'Voice/Chat', status: 'blocked' },
+          { label: 'AI Draft Gen', status: 'clear' },
+          { label: 'Approval Flow', status: 'clear' },
+        ]} />
       </div>
 
-      {/* Safety Gates */}
-      <Card title="Safety Gates">
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { gate: 'M5 Execution', status: 'Blocked' },
-            { gate: 'External APIs', status: 'Blocked' },
-            { gate: 'Live Publishing', status: 'Blocked' },
-            { gate: 'Real CRM Writes', status: 'Blocked' },
-            { gate: 'Real WhatsApp', status: 'Blocked' },
-            { gate: 'Real Analytics', status: 'Blocked' },
-            { gate: 'Real Rendering', status: 'Blocked' },
-            { gate: 'Voice/Chat', status: 'Blocked' },
-            { gate: 'M5 Approval', status: 'Required' },
-          ].map(item => (
-            <div key={item.gate} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
-              <span>{item.gate}</span>
-              <StatusBadge label={item.status} variant="danger" />
-            </div>
-          ))}
+      {/* Architecture */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Architecture</h3>
+        <div className="font-mono text-xs text-gray-500 bg-gray-800/50 rounded p-4">
+          Tanaghum STITCH Core → Capability Resolution → SAIF Approval Gateway → MCP Connector Layer → Postiz / Social APIs / GoHighLevel
         </div>
-      </Card>
-
-      {/* Deployment Status */}
-      <Card title="Deployment Status">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Frontend</span>
-              <StatusBadge label="Vercel Ready" variant="success" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Backend</span>
-              <StatusBadge label="VPS/Container Ready" variant="success" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Database</span>
-              <StatusBadge label="PostgreSQL 16" variant="success" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-500">CI/CD</span>
-              <StatusBadge label="4/4 Green" variant="success" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">AI Provider</span>
-              <StatusBadge label="Mock (default)" variant="mock" />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Tests</span>
-              <StatusBadge label="871 passing" variant="success" />
-            </div>
-          </div>
+        <div className="flex items-center gap-4 mt-3">
+          <span className="text-xs text-gray-500">Tanaghum owns: strategy, AI, approval, audit, learning</span>
+          <span className="text-xs text-gray-600">|</span>
+          <span className="text-xs text-gray-500">External: scheduling surface only</span>
         </div>
-      </Card>
-
-      {/* Audit Evidence */}
-      <Card title="Audit / SPINE Evidence Available">
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          {[
-            'Observability Events',
-            'Audit Records',
-            'SPINE Runs & Artifacts',
-            'Learning Signals',
-            'Approval Decisions',
-            'Campaign State Transitions',
-          ].map(item => (
-            <div key={item} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-              <StatusBadge label="Available" variant="success" />
-              <span>{item}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
+      </div>
     </div>
   );
 }

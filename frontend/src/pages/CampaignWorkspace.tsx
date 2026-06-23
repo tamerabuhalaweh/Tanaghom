@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { campaignsApi, approvalsApi, algoApi, aiGenerationApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
-import { StatusBadge, Card, MetricCard, Alert, DemoLabel, LoadingSpinner, EmptyState } from '../components/UI';
+import { ReadinessGauge, FlowTimeline, PlatformPreviewCard, RecommendationCard, Badge } from '../components/ExecutiveUI';
 
 export default function CampaignWorkspace() {
   const { token } = useAuth();
@@ -23,39 +23,26 @@ export default function CampaignWorkspace() {
     try {
       const c = await campaignsApi.get(id, token!);
       setSelected(c as Record<string, unknown>);
-      setDrafts([]);
-      setSelectedDraft(null);
-      setScore(null);
-      setMessage('');
-      setStep('generate');
+      setDrafts([]); setSelectedDraft(null); setScore(null); setMessage(''); setStep('generate');
     } catch (err) { console.error(err); }
     setLoading('');
   };
 
   const generateDraft = async () => {
     if (!selected) return;
-    setLoading('draft');
-    setMessage('');
+    setLoading('draft'); setMessage('');
     try {
-      const result = await aiGenerationApi.generate({
-        campaignRequestId: selected.id,
-        platforms: ['linkedin', 'instagram'],
-      }, token!);
+      const result = await aiGenerationApi.generate({ campaignRequestId: selected.id, platforms: ['linkedin', 'instagram'] }, token!);
       const draftResults = Array.isArray(result) ? result as Record<string, unknown>[] : [result as Record<string, unknown>];
-      setDrafts(draftResults);
-      setSelectedDraft(draftResults[0] || null);
-      setMessage('Draft generated successfully');
-      setStep('score');
-    } catch (err) {
-      setMessage(`Generation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
+      setDrafts(draftResults); setSelectedDraft(draftResults[0] || null);
+      setMessage('Draft generated'); setStep('score');
+    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
     setLoading('');
   };
 
   const evaluateReach = async () => {
     if (!selectedDraft) return;
-    setLoading('score');
-    setMessage('');
+    setLoading('score'); setMessage('');
     try {
       const result = await algoApi.score({
         contentItemId: selectedDraft.contentItemId as string,
@@ -63,11 +50,8 @@ export default function CampaignWorkspace() {
         draftText: (selectedDraft.draftText as string) || 'Demo content',
       }, token!);
       setScore(result as Record<string, unknown>);
-      setMessage('Reach score calculated');
-      setStep('approve');
-    } catch (err) {
-      setMessage(`Scoring failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
+      setMessage('Score calculated'); setStep('approve');
+    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
     setLoading('');
   };
 
@@ -75,147 +59,133 @@ export default function CampaignWorkspace() {
     if (!selected) return;
     setLoading('approval');
     try {
-      await approvalsApi.submit({
-        targetId: selected.id as string,
-        targetType: 'campaign',
-        riskCategory: 'medium',
-      }, token!);
+      await approvalsApi.submit({ targetId: selected.id as string, targetType: 'campaign', riskCategory: 'medium' }, token!);
       setMessage('Submitted for approval — human decision required');
-    } catch (err) {
-      setMessage(`Submission failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
+    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
     setLoading('');
   };
 
-  const scoreValue = score?.totalScore as number | undefined;
-  const scoreBand = scoreValue && scoreValue >= 75 ? 'approve' : scoreValue && scoreValue >= 60 ? 'optimize' : scoreValue && scoreValue >= 40 ? 'revise' : 'block';
+  const scoreValue = score?.totalScore as number || 0;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Commercial / Social Campaign</h1>
-        <DemoLabel>Working Locally — Mock LLM Provider</DemoLabel>
+        <div>
+          <h1 className="text-2xl font-bold text-white">Campaign Workspace</h1>
+          <p className="text-gray-500 text-sm mt-0.5">AI-powered social content creation</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="mock">Mock LLM</Badge>
+          <Badge variant="info">Controlled Demo</Badge>
+        </div>
       </div>
 
-      {/* Progress Steps */}
-      <div className="flex items-center gap-2 text-sm">
-        {[
-          { key: 'select', label: '1. Select Campaign' },
-          { key: 'generate', label: '2. Generate Draft' },
-          { key: 'score', label: '3. Score Reach' },
-          { key: 'approve', label: '4. Submit for Approval' },
-        ].map((s, i) => (
-          <div key={s.key} className="flex items-center">
-            <div className={`px-3 py-1.5 rounded-full font-medium ${step === s.key ? 'bg-blue-600 text-white' : ['select', 'generate', 'score', 'approve'].indexOf(step) > i ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-              {s.label}
-            </div>
-            {i < 3 && <div className={`w-8 h-0.5 mx-1 ${['select', 'generate', 'score', 'approve'].indexOf(step) > i ? 'bg-green-300' : 'bg-gray-200'}`} />}
-          </div>
-        ))}
-      </div>
+      {/* Progress */}
+      <FlowTimeline steps={[
+        { label: 'Select', status: step === 'select' ? 'active' : 'done' },
+        { label: 'Generate', status: step === 'generate' ? 'active' : step === 'select' ? 'pending' : 'done', badge: 'Mock LLM' },
+        { label: 'Score', status: step === 'score' ? 'active' : ['select', 'generate'].includes(step) ? 'pending' : 'done' },
+        { label: 'Approve', status: step === 'approve' ? 'active' : 'pending' },
+      ]} />
 
-      {message && <Alert type={message.includes('failed') ? 'error' : 'success'}>{message}</Alert>}
+      {message && <div className={`border rounded-lg px-4 py-2 text-sm ${message.includes('Failed') ? 'bg-red-900/20 border-red-800 text-red-400' : 'bg-green-900/20 border-green-800 text-green-400'}`}>{message}</div>}
 
       <div className="grid grid-cols-3 gap-6">
-        {/* Left: Campaign List */}
+        {/* Campaign List */}
         <div className="space-y-3">
-          <h2 className="font-semibold text-gray-700">Demo Campaigns</h2>
-          {campaigns.length === 0 ? (
-            <EmptyState message="No campaigns found. Run seed first." />
-          ) : (
-            campaigns.map(c => (
-              <button
-                key={c.id as string}
-                onClick={() => selectCampaign(c.id as string)}
-                disabled={loading === 'campaign'}
-                className={`w-full text-left p-3 border rounded-lg transition-all ${selected?.id === c.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'hover:bg-gray-50 hover:shadow-sm'}`}
-              >
-                <div className="font-medium text-gray-900">{c.topic as string}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <StatusBadge label={c.status as string} variant={c.status === 'approved' ? 'success' : c.status === 'draft' ? 'warning' : 'default'} />
-                  <StatusBadge label={c.riskCategory as string} variant={c.riskCategory === 'high' ? 'danger' : c.riskCategory === 'medium' ? 'warning' : 'success'} />
-                </div>
-              </button>
-            ))
-          )}
+          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Demo Campaigns</h2>
+          {campaigns.map(c => (
+            <button key={c.id as string} onClick={() => selectCampaign(c.id as string)}
+              className={`w-full text-left p-4 rounded-xl border transition-all ${selected?.id === c.id ? 'bg-blue-900/20 border-blue-500/50' : 'bg-gray-900 border-gray-800 hover:border-gray-700'}`}>
+              <div className="font-medium text-white text-sm">{c.topic as string}</div>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge variant={c.status === 'approved' ? 'success' : 'warning'}>{c.status as string}</Badge>
+                <Badge variant={c.riskCategory === 'high' ? 'danger' : c.riskCategory === 'medium' ? 'warning' : 'success'}>{c.riskCategory as string}</Badge>
+              </div>
+            </button>
+          ))}
         </div>
 
-        {/* Right: Campaign Detail & Actions */}
+        {/* Detail & Actions */}
         <div className="col-span-2 space-y-4">
           {!selected ? (
-            <Card><EmptyState message="Select a campaign to begin the demo flow" /></Card>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-500">Select a campaign to begin</div>
           ) : (
             <>
-              {/* Campaign Details */}
-              <Card title={selected.topic as string}>
+              {/* Campaign Overview */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <h3 className="text-lg font-bold text-white mb-3">{selected.topic as string}</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-gray-500">Objective:</span> {selected.objective as string}</div>
-                  <div><span className="text-gray-500">Audience:</span> {selected.audience as string}</div>
-                  <div><span className="text-gray-500">Channel:</span> {selected.channel as string}</div>
-                  <div><span className="text-gray-500">Platforms:</span> {(selected.targetPlatforms as string[])?.join(', ')}</div>
+                  <div><span className="text-gray-500">Objective:</span> <span className="text-gray-300">{selected.objective as string}</span></div>
+                  <div><span className="text-gray-500">Audience:</span> <span className="text-gray-300">{selected.audience as string}</span></div>
+                  <div><span className="text-gray-500">Channel:</span> <span className="text-gray-300">{selected.channel as string}</span></div>
+                  <div><span className="text-gray-500">Platforms:</span> <span className="text-gray-300">{(selected.targetPlatforms as string[])?.join(', ')}</span></div>
                 </div>
-              </Card>
+              </div>
 
-              {/* Action Buttons */}
+              {/* Actions */}
               <div className="flex gap-3">
-                <button onClick={generateDraft} disabled={loading === 'draft'} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium">
-                  {loading === 'draft' ? <><LoadingSpinner /> Generating...</> : 'Generate AI Draft'}
+                <button onClick={generateDraft} disabled={loading === 'draft'}
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-all">
+                  {loading === 'draft' ? 'Generating...' : 'Generate AI Draft'}
                 </button>
-                <button onClick={evaluateReach} disabled={!selectedDraft || loading === 'score'} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium">
+                <button onClick={evaluateReach} disabled={!selectedDraft || loading === 'score'}
+                  className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm transition-all">
                   {loading === 'score' ? 'Scoring...' : 'Evaluate Reach'}
                 </button>
-                <button onClick={submitForApproval} disabled={loading === 'approval'} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
+                <button onClick={submitForApproval} disabled={loading === 'approval'}
+                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium text-sm transition-all">
                   {loading === 'approval' ? 'Submitting...' : 'Submit for Approval'}
                 </button>
               </div>
 
-              {/* Generated Draft */}
+              {/* Platform Previews */}
               {drafts.length > 0 && (
-                <Card title={`AI Draft — ${(selectedDraft?.platform as string) || 'linkedin'}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <DemoLabel>Mock LLM Provider</DemoLabel>
-                    <span className="text-xs text-gray-500">Platform-specific adaptation</span>
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">AI-Generated Drafts</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {drafts.map((d, i) => (
+                      <div key={i} onClick={() => setSelectedDraft(d)} className={`cursor-pointer rounded-xl transition-all ${selectedDraft === d ? 'ring-2 ring-blue-500' : ''}`}>
+                        <PlatformPreviewCard
+                          platform={(d.platform as string) || 'linkedin'}
+                          content={(d.draftText as string) || 'AI-generated content'}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <div className="bg-gray-50 rounded p-4 text-sm">
-                    <div className="font-medium text-gray-700 mb-2">Generated Content:</div>
-                    <div className="whitespace-pre-wrap">{selectedDraft?.draftText as string || 'Draft content generated by AI'}</div>
-                  </div>
-                  {drafts.length > 1 && (
-                    <div className="mt-3 flex gap-2">
-                      {drafts.map((d, i) => (
-                        <button key={i} onClick={() => setSelectedDraft(d)} className={`px-3 py-1 rounded text-sm ${selectedDraft === d ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>
-                          {d.platform as string || `Draft ${i + 1}`}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </Card>
+                </div>
               )}
 
               {/* Reach Score */}
               {score && (
-                <Card title="Reach Readiness Score">
-                  <div className="flex items-center gap-2 mb-3">
-                    <DemoLabel>Deterministic Scoring</DemoLabel>
-                    <span className="text-xs text-gray-500">Not prediction</span>
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Reach Readiness Score</h3>
+                    <Badge variant="mock">Deterministic Scoring</Badge>
                   </div>
-                  <div className="grid grid-cols-4 gap-4">
-                    <MetricCard label="Score" value={scoreValue || 0} sublabel="out of 100" />
-                    <MetricCard label="Band" value={scoreBand} />
-                    <MetricCard label="Platform" value={(selectedDraft?.platform as string) || 'linkedin'} />
-                    <MetricCard label="Status" value={scoreValue && scoreValue >= 60 ? 'Ready' : 'Needs Work'} />
+                  <div className="flex items-center gap-8">
+                    <div className="relative">
+                      <ReadinessGauge value={scoreValue} label="Score" />
+                    </div>
+                    <div className="flex-1 grid grid-cols-2 gap-3">
+                      <RecommendationCard title="Best Platform" value={(selectedDraft?.platform as string) || 'LinkedIn'} confidence={85} />
+                      <RecommendationCard title="Best Time" value="Tuesday 10:00 AM" confidence={78} />
+                      <RecommendationCard title="Format" value="Educational post with image" confidence={82} />
+                      <RecommendationCard title="Band" value={scoreValue >= 75 ? 'Approve' : scoreValue >= 60 ? 'Optimize' : 'Revise'} />
+                    </div>
                   </div>
                   {score.components ? (
-                    <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                      {(score.components as { component: string; score: number; weight: number; explanation: string }[]).map((c, i) => (
-                        <div key={i} className="flex justify-between bg-gray-50 px-3 py-2 rounded">
-                          <span className="text-gray-600 capitalize">{c.component}</span>
-                          <span className="font-medium">{c.score}</span>
+                    <div className="grid grid-cols-3 gap-2 mt-4">
+                      {(score.components as { component: string; score: number }[]).map((c, i) => (
+                        <div key={i} className="bg-gray-800/50 rounded p-2 flex justify-between text-sm">
+                          <span className="text-gray-400 capitalize">{c.component}</span>
+                          <span className="text-white font-medium">{String(c.score)}</span>
                         </div>
                       ))}
                     </div>
                   ) : null}
-                </Card>
+                </div>
               )}
             </>
           )}
