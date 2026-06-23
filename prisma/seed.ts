@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../shared/auth';
+import { ENTERPRISE_CAPABILITIES } from '../modules/capability-registry/registry-data';
 
 const prisma = new PrismaClient();
 
@@ -149,167 +150,9 @@ async function seed() {
     }
   }
 
-  // Seed core capabilities
-  console.log('Seeding core capabilities...');
-  const CORE_CAPABILITIES = [
-    {
-      name: 'GenerateContentDraft',
-      description: 'Generate platform-specific content drafts using LLM',
-      category: 'content',
-      riskLevel: 'medium',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'EvaluateReachReadiness',
-      description: 'Evaluate content for reach readiness score and platform optimization',
-      category: 'analysis',
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'RequestApproval',
-      description: 'Submit content for approval workflow',
-      category: 'governance',
-      riskLevel: 'medium',
-      requiresApproval: true,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional', 'governance'],
-    },
-    {
-      name: 'RetrieveKnowledge',
-      description: 'Retrieve knowledge from DKS or platform rules',
-      category: 'knowledge',
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional', 'governance'],
-    },
-    {
-      name: 'PreparePublishingPackage',
-      description: 'Prepare content package for publishing (requires SAIF decision and approval)',
-      category: 'publishing',
-      riskLevel: 'high',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-    // Commercial/Content capability bundle (reference implementation)
-    {
-      name: 'ManageCampaign',
-      description: 'Create, manage, and track marketing campaigns',
-      category: 'content',
-      riskLevel: 'medium',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'AnalyzeAudience',
-      description: 'Analyze audience intelligence and market trends',
-      category: 'analysis',
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'ManageAsset',
-      description: 'Manage digital assets and creative resources',
-      category: 'asset',
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'CaptureLead',
-      description: 'Capture and route leads through CRM integration',
-      category: 'conversion',
-      riskLevel: 'medium',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'RenderContent',
-      description: 'Render visual content and creative assets',
-      category: 'rendering',
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    // Future enterprise capability bundles (registered, not implemented)
-    {
-      name: 'GenerateFinancialReport',
-      description: 'Generate financial reports and analysis [FUTURE - not implemented]',
-      category: 'finance',
-      riskLevel: 'high',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'ManageEmployee',
-      description: 'Manage employee records and HR operations [FUTURE - not implemented]',
-      category: 'hr',
-      riskLevel: 'high',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'ManageProcurement',
-      description: 'Manage procurement and vendor operations [FUTURE - not implemented]',
-      category: 'procurement',
-      riskLevel: 'high',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'TrackInventory',
-      description: 'Track inventory and stock levels [FUTURE - not implemented]',
-      category: 'inventory',
-      riskLevel: 'medium',
-      requiresApproval: false,
-      requiresSaifDecision: false,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'ManagePurchaseOrder',
-      description: 'Manage purchase orders and receiving [FUTURE - not implemented]',
-      category: 'purchase',
-      riskLevel: 'high',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'ManageSupplyChain',
-      description: 'Manage supply chain and logistics [FUTURE - not implemented]',
-      category: 'supply_chain',
-      riskLevel: 'high',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-    {
-      name: 'IntegrateERP',
-      description: 'Integrate with ERP systems via MCP mediation [FUTURE - not implemented, requires separate scope]',
-      category: 'erp',
-      riskLevel: 'critical',
-      requiresApproval: true,
-      requiresSaifDecision: true,
-      allowedAgentTypes: ['functional'],
-    },
-  ];
-
-  for (const cap of CORE_CAPABILITIES) {
+  // Seed capabilities from shared registry data
+  console.log('Seeding capabilities from registry...');
+  for (const cap of ENTERPRISE_CAPABILITIES) {
     await prisma.capability.upsert({
       where: { name: cap.name },
       update: {
@@ -330,7 +173,7 @@ async function seed() {
         allowed_agent_types: cap.allowedAgentTypes,
       },
     });
-    console.log(`  Capability: ${cap.name}`);
+    console.log(`  Capability: ${cap.name} [${cap.implemented ? 'implemented' : 'planned'}]`);
   }
 
   // Seed mock MCP connectors (future/planned only)

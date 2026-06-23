@@ -444,41 +444,29 @@ describe('Enterprise Taxonomy — Capability Bundles', () => {
 
 describe('Enterprise Taxonomy — Boundary Rules', () => {
   it('QC is Evaluator, not Authority', () => {
-    const qcCapability = { name: 'RequestApproval', role: 'evaluator', hasAuthority: false };
-    expect(qcCapability.role).toBe('evaluator');
-    expect(qcCapability.hasAuthority).toBe(false);
+    const qcCapability = ENTERPRISE_CAPABILITIES.find(c => c.name === 'RequestApproval');
+    expect(qcCapability).toBeDefined();
+    expect(qcCapability!.requiresApproval).toBe(true);
+    expect(qcCapability!.requiresSaifDecision).toBe(false);
   });
 
   it('ERP capability requires MCP and separate scope', () => {
-    const erpCapability = {
-      name: 'IntegrateERP',
-      requiresMcp: true,
-      requiresSaifDecision: true,
-      riskLevel: 'critical',
-      separateScope: true,
-    };
-    expect(erpCapability.requiresMcp).toBe(true);
-    expect(erpCapability.requiresSaifDecision).toBe(true);
-    expect(erpCapability.separateScope).toBe(true);
+    const erpCapability = ENTERPRISE_CAPABILITIES.find(c => c.name === 'IntegrateERP');
+    expect(erpCapability).toBeDefined();
+    expect(erpCapability!.requiresMcp).toBe(true);
+    expect(erpCapability!.requiresSaifDecision).toBe(true);
+    expect(erpCapability!.riskLevel).toBe('critical');
+    expect(erpCapability!.separateScope).toBe(true);
   });
 
   it('no M5 capability is enabled', () => {
-    const capabilities = [
-      { name: 'GenerateContentDraft', m5Required: false },
-      { name: 'ManageCampaign', m5Required: false },
-      { name: 'PreparePublishingPackage', m5Required: false },
-    ];
-    for (const cap of capabilities) {
+    for (const cap of ENTERPRISE_CAPABILITIES) {
       expect(cap.m5Required).toBe(false);
     }
   });
 
   it('no direct external access capability is enabled', () => {
-    const capabilities = [
-      { name: 'PreparePublishingPackage', directExternalAccess: false, requiresMcp: true },
-      { name: 'IntegrateERP', directExternalAccess: false, requiresMcp: true },
-    ];
-    for (const cap of capabilities) {
+    for (const cap of ENTERPRISE_CAPABILITIES) {
       expect(cap.directExternalAccess).toBe(false);
     }
   });

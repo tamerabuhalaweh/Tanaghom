@@ -14,7 +14,7 @@ A STITCH-based, SAIF-governed, multi-agent enterprise operating platform coverin
 | Production live execution | ❌ Not enabled |
 | Demo safe | ✅ Yes |
 | CI | ✅ 4/4 jobs green |
-| Tests | ✅ 855 passing |
+| Tests | ✅ 871 passing |
 
 **This platform is ready for controlled demo/pilot only.**
 
