@@ -95,6 +95,14 @@ async function getIntegrationStatus(): Promise<Record<string, unknown>> {
   };
 }
 
+async function optionalFindMany<T>(query: Promise<T[]>): Promise<T[]> {
+  try {
+    return await query;
+  } catch {
+    return [];
+  }
+}
+
 demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
@@ -111,30 +119,30 @@ demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction
       take: 10,
     });
 
-    const auditRecords = await prisma.auditRecord.findMany({
+    const auditRecords = await optionalFindMany(prisma.auditRecord.findMany({
       orderBy: { created_at: 'desc' },
       take: 10,
-    });
+    }));
 
-    const observabilityEvents = await prisma.observabilityEvent.findMany({
+    const observabilityEvents = await optionalFindMany(prisma.observabilityEvent.findMany({
       orderBy: { created_at: 'desc' },
       take: 10,
-    });
+    }));
 
-    const leadCaptures = await prisma.leadCaptureRecord.findMany({
+    const leadCaptures = await optionalFindMany(prisma.leadCaptureRecord.findMany({
       orderBy: { created_at: 'desc' },
       take: 5,
-    });
+    }));
 
-    const productionRequests = await prisma.productionRequest.findMany({
+    const productionRequests = await optionalFindMany(prisma.productionRequest.findMany({
       orderBy: { created_at: 'desc' },
       take: 5,
-    });
+    }));
 
-    const publishingPackages = await prisma.publishingPackage.findMany({
+    const publishingPackages = await optionalFindMany(prisma.publishingPackage.findMany({
       orderBy: { created_at: 'desc' },
       take: 5,
-    });
+    }));
 
     const integrations = await getIntegrationStatus();
 
@@ -216,10 +224,10 @@ demoRouter.get('/integrations', async (req: Request, res: Response, next: NextFu
 demoRouter.get('/audit-trail', async (req: Request, res: Response, next: NextFunction) => {
   try {
     getPayload(req);
-    const records = await prisma.auditRecord.findMany({
+    const records = await optionalFindMany(prisma.auditRecord.findMany({
       orderBy: { created_at: 'desc' },
       take: 20,
-    });
+    }));
     res.json(records.map((r: Record<string, unknown>) => ({
       id: r.id,
       actor: r.human_user_id || r.agent_rep_id || 'system',
@@ -237,10 +245,10 @@ demoRouter.get('/audit-trail', async (req: Request, res: Response, next: NextFun
 demoRouter.get('/leads', async (req: Request, res: Response, next: NextFunction) => {
   try {
     getPayload(req);
-    const leads = await prisma.leadCaptureRecord.findMany({
+    const leads = await optionalFindMany(prisma.leadCaptureRecord.findMany({
       orderBy: { created_at: 'desc' },
       take: 10,
-    });
+    }));
     res.json(leads.map((l: Record<string, unknown>) => ({
       id: l.id,
       source: l.source_platform,
