@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/useAuth';
 export default function Login() {
   const { login, loading, error } = useAuth();
   const [email, setEmail] = useState('demand.specialist@tanaghum.com');
-  const [password, setPassword] = useState('demo123');
+  const [password, setPassword] = useState('password123');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +22,7 @@ export default function Login() {
           <div className="mt-1">demand.specialist@tanaghum.com — Content Specialist</div>
           <div>brand.head@tanaghum.com — Department Head (Approver)</div>
           <div>admin@tanaghum.com — Admin</div>
-          <div className="mt-1 text-yellow-600">Password: demo123</div>
+          <div className="mt-1 text-yellow-600">Password: password123</div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -182,41 +182,36 @@ async function seed() {
   const brandUser = await prisma.user.findUnique({ where: { email: 'brand.head@tanaghum.com' } });
 
   if (demandUser) {
-    const demandRep = await prisma.agentRep.findUnique({ where: { user_id: demandUser.id } });
-    if (demandRep) {
-      const demoCampaigns = [
-        {
-          name: 'Summer Wellness Launch',
-          description: 'Promote wellness course to health-conscious professionals on LinkedIn and Instagram',
-          status: 'draft' as const,
-          risk_level: 'medium' as const,
-          target_platforms: ['linkedin', 'instagram'],
-          target_audience: 'Health-conscious professionals aged 25-45',
-          objectives: 'Increase course sign-ups by 20% through social media engagement',
-          created_by_user_id: demandUser.id,
-          created_by_agent_rep_id: demandRep.id,
-        },
-        {
-          name: 'Product Feature Announcement',
-          description: 'Announce new product features to existing customers',
-          status: 'approved' as const,
-          risk_level: 'low' as const,
-          target_platforms: ['linkedin', 'twitter'],
-          target_audience: 'Existing customers and partners',
-          objectives: 'Increase product awareness and feature adoption',
-          created_by_user_id: demandUser.id,
-          created_by_agent_rep_id: demandRep.id,
-        },
-      ];
+    const demoCampaigns = [
+      {
+        raw_message: 'Summer Wellness Launch',
+        objective: 'Promote wellness course to health-conscious professionals on LinkedIn and Instagram',
+        status: 'draft' as const,
+        risk_category: 'medium' as const,
+        target_platforms: ['linkedin', 'instagram'],
+        audience: 'Health-conscious professionals aged 25-45',
+        channel: 'social_media',
+        content_type: 'campaign' as const,
+        requester_id: demandUser.id,
+      },
+      {
+        raw_message: 'Product Feature Announcement',
+        objective: 'Announce new product features to existing customers',
+        status: 'approved' as const,
+        risk_category: 'low' as const,
+        target_platforms: ['linkedin', 'twitter'],
+        audience: 'Existing customers and partners',
+        channel: 'social_media',
+        content_type: 'campaign' as const,
+        requester_id: demandUser.id,
+      },
+    ];
 
-      for (const campaign of demoCampaigns) {
-        await prisma.campaign.upsert({
-          where: { name: campaign.name },
-          update: campaign,
-          create: campaign,
-        });
-        console.log(`  Campaign: ${campaign.name}`);
-      }
+    for (const campaign of demoCampaigns) {
+      await prisma.contentRequest.create({
+        data: campaign,
+      });
+      console.log(`  Campaign: ${campaign.raw_message}`);
     }
   }
 

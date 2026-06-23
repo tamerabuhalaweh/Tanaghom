@@ -33,9 +33,8 @@ export default function CampaignWorkspace() {
     setMessage('Generating AI draft using mock LLM provider...');
     try {
       const result = await aiGenerationApi.generate({
-        campaignId: (selected as { id: string }).id,
-        platform: 'linkedin',
-        contentType: 'post',
+        campaignRequestId: selected.id,
+        platforms: ['linkedin'],
       }, token!);
       setDraft(result as Record<string, unknown>);
       setMessage('Draft generated — Mock LLM Provider');
@@ -91,14 +90,14 @@ export default function CampaignWorkspace() {
         <div>
           <h2 className="font-semibold mb-3">Campaigns</h2>
           <div className="space-y-2">
-            {(campaigns as { id: string; name: string; status: string }[]).map(c => (
+            {(campaigns as { id: string; topic: string; status: string; riskCategory: string }[]).map(c => (
               <button
                 key={c.id}
                 onClick={() => selectCampaign(c.id)}
-                className={`w-full text-left p-3 border rounded-lg hover:bg-gray-50 ${(selected as { id?: string })?.id === c.id ? 'border-blue-500 bg-blue-50' : ''}`}
+                className={`w-full text-left p-3 border rounded-lg hover:bg-gray-50 ${selected?.id === c.id ? 'border-blue-500 bg-blue-50' : ''}`}
               >
-                <div className="font-medium">{c.name}</div>
-                <div className="text-xs text-gray-500">Status: {c.status}</div>
+                <div className="font-medium">{c.topic}</div>
+                <div className="text-xs text-gray-500">Status: {c.status} • Risk: {c.riskCategory}</div>
               </button>
             ))}
             {campaigns.length === 0 && <div className="text-gray-400 text-sm">No campaigns found. Seed data may need to be loaded.</div>}
@@ -109,11 +108,13 @@ export default function CampaignWorkspace() {
           {selected ? (
             <div className="space-y-4">
               <div className="bg-white border rounded-lg p-4">
-                <h3 className="font-semibold">{(selected as { name: string }).name}</h3>
-                <div className="text-sm text-gray-600 mt-1">{(selected as { description?: string }).description}</div>
+                <h3 className="font-semibold">{selected.topic as string}</h3>
+                <div className="text-sm text-gray-600 mt-1">{selected.objective as string}</div>
                 <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
-                  <div><span className="text-gray-500">Status:</span> {(selected as { status: string }).status}</div>
-                  <div><span className="text-gray-500">Risk:</span> {(selected as { risk_level?: string }).risk_level || 'medium'}</div>
+                  <div><span className="text-gray-500">Status:</span> {selected.status as string}</div>
+                  <div><span className="text-gray-500">Risk:</span> {selected.riskCategory as string}</div>
+                  <div><span className="text-gray-500">Channel:</span> {selected.channel as string}</div>
+                  <div><span className="text-gray-500">Audience:</span> {selected.audience as string}</div>
                 </div>
               </div>
 
