@@ -176,6 +176,50 @@ async function seed() {
     console.log(`  Capability: ${cap.name} [${cap.implemented ? 'implemented' : 'planned'}]`);
   }
 
+  // Seed demo campaigns
+  console.log('Seeding demo campaigns...');
+  const demandUser = await prisma.user.findUnique({ where: { email: 'demand.specialist@tanaghum.com' } });
+  const brandUser = await prisma.user.findUnique({ where: { email: 'brand.head@tanaghum.com' } });
+
+  if (demandUser) {
+    const demandRep = await prisma.agentRep.findUnique({ where: { user_id: demandUser.id } });
+    if (demandRep) {
+      const demoCampaigns = [
+        {
+          name: 'Summer Wellness Launch',
+          description: 'Promote wellness course to health-conscious professionals on LinkedIn and Instagram',
+          status: 'draft' as const,
+          risk_level: 'medium' as const,
+          target_platforms: ['linkedin', 'instagram'],
+          target_audience: 'Health-conscious professionals aged 25-45',
+          objectives: 'Increase course sign-ups by 20% through social media engagement',
+          created_by_user_id: demandUser.id,
+          created_by_agent_rep_id: demandRep.id,
+        },
+        {
+          name: 'Product Feature Announcement',
+          description: 'Announce new product features to existing customers',
+          status: 'approved' as const,
+          risk_level: 'low' as const,
+          target_platforms: ['linkedin', 'twitter'],
+          target_audience: 'Existing customers and partners',
+          objectives: 'Increase product awareness and feature adoption',
+          created_by_user_id: demandUser.id,
+          created_by_agent_rep_id: demandRep.id,
+        },
+      ];
+
+      for (const campaign of demoCampaigns) {
+        await prisma.campaign.upsert({
+          where: { name: campaign.name },
+          update: campaign,
+          create: campaign,
+        });
+        console.log(`  Campaign: ${campaign.name}`);
+      }
+    }
+  }
+
   // Seed mock MCP connectors (future/planned only)
   console.log('Seeding mock MCP connectors...');
   const MOCK_CONNECTORS = [

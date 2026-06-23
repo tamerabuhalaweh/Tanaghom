@@ -63,6 +63,18 @@ docker compose -f docker-compose.demo.yml up -d
 # Backend: http://localhost:4000
 ```
 
+### Demo Instructions
+
+1. Start demo stack: `docker compose -f docker-compose.demo.yml up -d`
+2. Wait 30 seconds for services to start
+3. Open browser: `http://localhost:3000`
+4. Follow the [Customer Demo Script](docs/demo/CUSTOMER_DEMO_SCRIPT.md)
+5. See [Golden Path](docs/demo/COMMERCIAL_SOCIAL_GOLDEN_PATH.md) for the full journey
+
+**Demo Principle**: AI prepares. Human approves. System records. External execution remains blocked.
+
+**Demo Labels**: All mock features are clearly labeled with "Mock provider", "Demo data", "External execution blocked", or "M5 disabled".
+
 ### Frontend
 
 ```bash
