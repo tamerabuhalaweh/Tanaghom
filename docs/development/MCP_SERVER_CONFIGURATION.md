@@ -36,7 +36,9 @@ frontend/src/components/ui/
 ├── button.tsx      — Button with variants
 ├── card.tsx        — Card, CardHeader, CardTitle, CardContent
 ├── badge.tsx       — Badge with variants
+├── variants.ts     — Shared CVA variants
 ├── index.ts        — Re-exports
+frontend/src/lib/
 └── utils.ts        — cn() utility
 ```
 

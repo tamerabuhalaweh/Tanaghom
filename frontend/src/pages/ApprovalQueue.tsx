@@ -80,9 +80,9 @@ export default function ApprovalQueue() {
               <div className="mt-4 pt-3 border-t border-gray-800 flex items-center gap-4 text-xs text-gray-500">
                 <span>Audit recorded by backend</span>
                 <span>|</span>
-                <span>SPINE lineage linked</span>
+                <span>Evidence available in audit/SPINE views</span>
                 <span>|</span>
-                <span>Actor: human</span>
+                <span>Human decision required</span>
               </div>
             </div>
           ))}
