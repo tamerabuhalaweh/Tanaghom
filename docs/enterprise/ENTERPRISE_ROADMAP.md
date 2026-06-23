@@ -1,6 +1,6 @@
 # Enterprise Sprint Roadmap
 
-> **Version**: 1.1
+> **Version**: 1.2
 > **Date**: 2026-06-23
 
 ## Overview
@@ -23,7 +23,7 @@ Enterprise sprint roadmap for the Tanaghom AI Enterprise Platform.
 | 23 | Demo Deployment Package | ✅ Complete | 856 |
 | 24 | Pilot Hardening & Evidence | ✅ Complete | 855 |
 | 25 | Enterprise Architecture Reconciliation | ✅ Complete | 855 |
-| 26 | Taxonomy Decision + Capability/Topology Registry | 🔄 In Progress | 871 |
+| 26 | Taxonomy Decision + Capability/Topology Registry | ✅ Complete | 871 |
 
 ## Next Sprint (After PR #27 Merge)
 
@@ -31,9 +31,9 @@ Enterprise sprint roadmap for the Tanaghom AI Enterprise Platform.
 |---|---|---|---|
 | 27 | Commercial/Social Media Demo Readiness & Golden Path | Commercial/Content | ⏳ Planned |
 
-## Planned Sprints (Deferred)
+## Deferred Sprints (After Demo Approval)
 
-### Phase 1: Enterprise Foundation (After Demo Approval)
+### Enterprise Domain Packs
 
 | Sprint | Name | Domain | Status |
 |---|---|---|---|
@@ -44,7 +44,7 @@ Enterprise sprint roadmap for the Tanaghom AI Enterprise Platform.
 | TBD | Purchase Management Domain Pack | Purchase | ⏳ Deferred |
 | TBD | Supply Chain Domain Pack | Supply Chain | ⏳ Deferred |
 
-### Phase 2: ERP Integration (After Domain Packs)
+### ERP Integration (After Domain Packs)
 
 | Sprint | Name | Domain | Status |
 |---|---|---|---|
@@ -52,36 +52,6 @@ Enterprise sprint roadmap for the Tanaghom AI Enterprise Platform.
 | TBD | Oracle Fusion Connector | ERP | ⏳ Deferred |
 | TBD | SAP Connector | ERP | ⏳ Deferred |
 | TBD | Microsoft Dynamics Connector | ERP | ⏳ Deferred |
-| 30 | Inventory Domain Pack | Inventory | ⏳ Planned |
-
-### Phase 2: Domain Implementation (Sprints 31–36)
-
-| Sprint | Name | Domain | Status |
-|---|---|---|---|
-| 31 | Purchase Management Domain Pack | Purchase | ⏳ Planned |
-| 32 | Supply Chain Domain Pack | Supply Chain | ⏳ Planned |
-| 33 | Cross-Domain Integration Layer | Cross-domain | ⏳ Planned |
-| 34 | Enterprise Dashboard UI | Cross-domain | ⏳ Planned |
-| 35 | Enterprise Analytics & Reporting | Cross-domain | ⏳ Planned |
-| 36 | Enterprise Governance & Compliance | Cross-domain | ⏳ Planned |
-
-### Phase 3: ERP Integration (Sprints 37–40+)
-
-| Sprint | Name | Domain | Status |
-|---|---|---|---|
-| 37 | ERP Connector Framework | ERP | ⏳ Planned |
-| 38 | Oracle Fusion Connector | ERP | ⏳ Planned |
-| 39 | SAP Connector | ERP | ⏳ Planned |
-| 40 | Microsoft Dynamics Connector | ERP | ⏳ Planned |
-
-## Domain Pack Structure
-
-Each domain pack follows:
-
-1. **Sprint N+1**: Domain pack documentation and architecture
-2. **Sprint N+2**: Domain pack implementation
-3. **Sprint N+3**: Domain pack testing and integration
-4. **Sprint N+4**: Domain pack deployment and evidence
 
 ## ERP Integration Rules
 
@@ -94,15 +64,6 @@ Each domain pack follows:
 | Separately approved | ERP approval separate |
 | Write-back blocked | ERP write-back blocked by default |
 | SAIF decision | ERP integration requires SAIF package |
-
-## Milestone Markers
-
-| Milestone | Sprint | Description |
-|---|---|---|
-| Enterprise Foundation | 30 | All domain packs documented |
-| Domain Implementation | 36 | All domains implemented |
-| ERP Integration | 40+ | ERP connectors available |
-| Production Ready | TBD | Platform ready for production |
 
 ## Dependencies
 
