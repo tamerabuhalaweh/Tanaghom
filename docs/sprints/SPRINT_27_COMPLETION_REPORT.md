@@ -67,14 +67,24 @@
 | Real WhatsApp messages | Blocked |
 | Real analytics pulls | Blocked |
 | Real rendering | Blocked |
+| Scraping | Blocked |
+| Fake engagement | Blocked |
+| Mass posting | Blocked |
+| Trend manipulation | Blocked |
 
-## Known Demo Limitations
+## Next Technical Track (After Demo Approval)
 
-1. Frontend is static mock — no API calls, no interactivity
-2. No login page exists — demo uses pre-seeded users
-3. 14 backend modules not exposed via HTTP
-4. Demo data is hardcoded in frontend pages
-5. No state management in frontend
+**Social Intelligence MCP Foundation**
+
+| Item | Description |
+|---|---|
+| Official analytics connector plan | Plan for pulling real social media analytics |
+| Postiz analytics ingestion | Ingest analytics from Postiz where available |
+| Platform metric normalization | Normalize metrics across platforms |
+| Read-only analytics snapshots | Safe, read-only analytics data |
+| Reach/readiness recommendation engine | AI-powered recommendations |
+| Compliance/risk scoring | Policy violation detection |
+| Learning loop from actual performance | Learn from real performance data |
 
 ## Safety Verification
 

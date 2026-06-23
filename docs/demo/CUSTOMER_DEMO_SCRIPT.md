@@ -1,6 +1,6 @@
 # Customer Demo Script
 
-> **Version**: 1.0
+> **Version**: 1.1
 > **Date**: 2026-06-23
 > **Sprint**: 27
 > **Duration**: ~20 minutes
@@ -16,7 +16,9 @@
 
 ### Opening (2 minutes)
 
-> "Welcome to the Tanaghum AI Enterprise Platform demo. Today I'll show you the Commercial / Social Media module — the first completed business model.
+> "Welcome to the Tanaghum AI Enterprise Platform demo. Today I'll show you the Commercial / Social Media module — the first working model for **Social Media Intelligence + AI-powered content preparation + human approval + safe publishing automation.**
+>
+> The architecture: Tanaghum owns strategy, AI recommendations, approval, audit, learning signals, platform scoring, and reach/readiness intelligence. Postiz is an execution/scheduling surface — not the intelligence brain.
 >
 > The key principle: **AI prepares, human approves, system records, external execution remains blocked.**
 >

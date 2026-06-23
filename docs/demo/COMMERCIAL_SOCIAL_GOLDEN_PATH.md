@@ -1,12 +1,26 @@
 # Commercial / Social Media Golden Path
 
-> **Version**: 1.0
+> **Version**: 1.1
 > **Date**: 2026-06-23
 > **Sprint**: 27
 
 ## Purpose
 
-Define the exact demo journey for the Commercial / Social Media module. This path proves the first completed business model.
+Define the exact demo journey for the Commercial / Social Media module. This path proves the first completed business model: **Social Media Intelligence + AI-powered content preparation + human approval + safe publishing automation.**
+
+## Architecture
+
+```
+Tanaghum Commercial/Social Agent
+    → Capability Resolution
+    → SAIF / Approval Gateway
+    → Social Intelligence MCP
+    → Official APIs / Postiz / Analytics Sources
+```
+
+**Tanaghum owns**: strategy, AI recommendations, approval, audit, learning signals, platform scoring, reach/readiness intelligence.
+
+**Postiz provides**: scheduling/publishing preparation, possibly analytics where available, external publishing surface later.
 
 ## Demo Principle
 
