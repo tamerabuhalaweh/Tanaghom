@@ -57,18 +57,26 @@ The Tanaghom AI Enterprise Platform has evolved from a Commercial/Social/Content
 - Packs reference STITCH objects, never redefine them
 - Packs are isolated and self-contained
 
-### 5. Canonical Taxonomy Model
+### 5. Tanaghum Business/Content Pillar Taxonomy
 
-**Status: ACCEPTED — 5-Pillar Model**
+**Status: ACCEPTED — 5-Pillar Model Confirmed**
 
-The customer has confirmed the 5-pillar model as the canonical taxonomy.
+The customer has confirmed that Tanaghum will use a 5-pillar business/content taxonomy.
 
-- **5-Pillar Model**: Agent, Capability, Topology, Pack, Decision
-- **4-Pillar Model**: Legacy/public/previous model (Agent, Capability, Topology, Pack)
+**Important**: STITCH architecture concepts (Agent, Capability, Topology, Pack, Decision) are NOT the same as Tanaghum business pillars. These are architecture primitives, not business taxonomy.
 
-The 5-pillar model adds Decision (SAIF DecisionPackage) as a first-class pillar, reflecting the enterprise requirement that all significant decisions must be governed by SAIF.
+| Item | Status |
+|---|---|
+| 5-pillar business taxonomy | ✅ Confirmed by customer |
+| Exact business pillar names | ⏳ Pending customer confirmation |
+| Exact business pillar definitions | ⏳ Pending customer confirmation |
+| Content/course/analytics mapping | ⏳ Pending pillar definitions |
 
-**Note**: Exact pillar names/definitions are pending customer confirmation. The canonical structure is 5 pillars.
+**Until pillar names are confirmed, use neutral placeholders:**
+- `tanaghum.pillar.1` through `tanaghum.pillar.5`
+- Or `Business Pillar 1` through `Business Pillar 5`
+
+**Do NOT** map STITCH architecture concepts to business pillars until the customer confirms the exact names and definitions.
 
 ### 6. Commercial/Content as Reference Implementation
 
@@ -113,7 +121,8 @@ ERP integrations are optional, separately scoped, separately quoted, separately 
 3. **Packs isolate doctrine** — Domain-specific rules don't contaminate STITCH Core
 4. **Topology is flexible** — Reorganize departments without changing capabilities
 5. **ERP remains optional** — No dependency on ERP for core platform
-6. **5-pillar model is canonical** — Decision (SAIF DecisionPackage) is a first-class pillar
+6. **5-pillar business taxonomy confirmed** — Exact names/definitions pending customer confirmation
+7. **STITCH architecture ≠ business pillars** — Architecture concepts are separate from business taxonomy
 
 ## Related ADRs
 

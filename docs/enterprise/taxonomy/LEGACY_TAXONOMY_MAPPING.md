@@ -1,23 +1,42 @@
 # Legacy Taxonomy Mapping
 
-> **Version**: 1.1
+> **Version**: 1.2
 > **Date**: 2026-06-22
-> **Status**: 5-Pillar Model Confirmed
+> **Status**: 5-Pillar Business Taxonomy Confirmed
 
 ## Purpose
 
 Map older terms and concepts to the new enterprise taxonomy model.
 
-## Canonical Model (5-Pillar)
+## STITCH Architecture Taxonomy
 
-The customer has confirmed the 5-pillar model:
-1. Agent
-2. Capability
-3. Topology
-4. Pack
-5. Decision
+STITCH defines architecture primitives. These are NOT business pillars.
 
-**Note**: Exact pillar names/definitions are pending customer confirmation. The canonical structure is 5 pillars.
+| Architecture Concept | Definition |
+|---|---|
+| Agent | Generic software agent |
+| AgentRep | Delegated identity |
+| Capability | Stable reusable unit |
+| TopologyNode | Organizational grouping |
+| Pack | Domain-specific doctrine |
+| DecisionPackage | SAIF-governed decision |
+
+## Tanaghum Business/Content Pillar Taxonomy
+
+The customer has confirmed a **5-pillar business/content taxonomy**.
+
+| Item | Status |
+|---|---|
+| 5-pillar business taxonomy | ✅ Confirmed |
+| Exact pillar names | ⏳ Pending customer confirmation |
+| Exact pillar definitions | ⏳ Pending customer confirmation |
+| Content/course/analytics mapping | ⏳ Pending pillar definitions |
+
+**Placeholders until customer confirms:**
+- `tanaghum.pillar.1` through `tanaghum.pillar.5`
+- Or `Business Pillar 1` through `Business Pillar 5`
+
+**Do NOT** map STITCH architecture concepts to business pillars until confirmed.
 
 ## Term Mappings
 

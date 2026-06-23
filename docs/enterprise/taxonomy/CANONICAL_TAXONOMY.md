@@ -1,23 +1,48 @@
 # Canonical Taxonomy
 
-> **Version**: 1.1
+> **Version**: 1.2
 > **Date**: 2026-06-22
 > **Sprint**: 26
-> **Status**: Accepted — 5-Pillar Model
+> **Status**: Accepted — 5-Pillar Business Taxonomy Confirmed
 
-## Canonical Model
+## STITCH Architecture Taxonomy
 
-The customer has confirmed the **5-pillar model** as the canonical taxonomy:
+STITCH defines architecture primitives. These are NOT business pillars.
 
-| Pillar | Description |
+| Architecture Concept | Definition | Source |
+|---|---|---|
+| Agent | Generic term for any software agent | STITCH Core |
+| AgentRep | Canonical delegated identity bound to a HumanUser | STITCH Core |
+| FunctionalAgent | M4 worker subordinate to AgentRep | STITCH Core |
+| GovernanceAgent | M5 support subordinate to AgentRep | STITCH Core |
+| Capability | Stable reusable architecture unit | STITCH Core |
+| CapabilityBundle | Named group of related capabilities | Enterprise Pack |
+| TopologyNode | Organizational grouping (department, team, function) | Enterprise Pack |
+| Pack | Self-contained domain-specific doctrine | Enterprise Pack |
+| DecisionPackage | SAIF-governed decision record | SAIF v1.2 |
+
+## Tanaghum Business/Content Pillar Taxonomy
+
+The customer has confirmed a **5-pillar business/content taxonomy** for Tanaghum.
+
+| Item | Status |
 |---|---|
-| Agent | Delegated identity (AgentRep, FunctionalAgent, GovernanceAgent) |
-| Capability | Stable reusable architecture unit |
-| Topology | Organizational grouping (departments as topology nodes) |
-| Pack | Self-contained domain-specific doctrine |
-| Decision | SAIF-governed decision record (DecisionPackage) |
+| 5-pillar business taxonomy | ✅ Confirmed by customer |
+| Exact business pillar names | ⏳ Pending customer confirmation |
+| Exact business pillar definitions | ⏳ Pending customer confirmation |
+| Content/course/analytics mapping | ⏳ Pending pillar definitions |
 
-**Note**: Exact pillar names/definitions are pending customer confirmation. The canonical structure is 5 pillars.
+**Placeholder mapping until customer confirms pillar names:**
+
+| Placeholder | Status |
+|---|---|
+| `tanaghum.pillar.1` / `Business Pillar 1` | ⏳ Pending name |
+| `tanaghum.pillar.2` / `Business Pillar 2` | ⏳ Pending name |
+| `tanaghum.pillar.3` / `Business Pillar 3` | ⏳ Pending name |
+| `tanaghum.pillar.4` / `Business Pillar 4` | ⏳ Pending name |
+| `tanaghum.pillar.5` / `Business Pillar 5` | ⏳ Pending name |
+
+**Do NOT** map STITCH architecture concepts to business pillars until the customer confirms the exact names and definitions.
 
 ## Approved Terms
 

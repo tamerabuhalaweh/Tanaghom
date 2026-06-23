@@ -43,16 +43,22 @@
 
 ## Taxonomy Decision Status
 
-**5-Pillar Model: ACCEPTED**
+**5-Pillar Business Taxonomy: ACCEPTED**
 
-The customer has confirmed the 5-pillar model as the canonical taxonomy:
-1. Agent
-2. Capability
-3. Topology
-4. Pack
-5. Decision
+The customer has confirmed that Tanaghum will use a 5-pillar business/content taxonomy.
 
-ADR-011 status updated to "Accepted". Exact pillar names/definitions pending customer confirmation.
+**Important**: STITCH architecture concepts are NOT business pillars.
+
+| Item | Status |
+|---|---|
+| 5-pillar business taxonomy | ✅ Confirmed |
+| Exact pillar names | ⏳ Pending customer confirmation |
+| Exact pillar definitions | ⏳ Pending customer confirmation |
+| Content/course/analytics mapping | ⏳ Pending pillar definitions |
+
+Until pillar names are confirmed, use neutral placeholders: `tanaghum.pillar.1` through `tanaghum.pillar.5`.
+
+ADR-011 status: Accepted.
 
 ## What Was Intentionally Not Implemented
 
