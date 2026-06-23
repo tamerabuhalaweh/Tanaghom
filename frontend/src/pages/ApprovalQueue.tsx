@@ -47,22 +47,23 @@ export default function ApprovalQueue() {
       )}
 
       <div className="space-y-3">
-        {(approvals as { id: string; targetType: string; targetId: string; riskCategory: string; status: string; requiredApprovals: number }[]).map(a => (
+        {(approvals as { id: string; targetType: string; targetId: string; riskCategory: string; approvalStatus: string; requiredDepartment: string | null; requiredRole: string | null }[]).map(a => (
           <div key={a.id} className="bg-white border rounded-lg p-4">
             <div className="flex justify-between items-start">
               <div>
                 <div className="font-medium">{a.targetType}: {a.targetId}</div>
                 <div className="text-sm text-gray-500 mt-1">
                   Risk: <span className={`px-1 py-0.5 rounded text-xs ${a.riskCategory === 'high' ? 'bg-red-100 text-red-700' : a.riskCategory === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{a.riskCategory}</span>
-                  {' • '}Required: {a.requiredApprovals} approver(s)
+                  {a.requiredDepartment && <> • Department: {a.requiredDepartment}</>}
+                  {a.requiredRole && <> • Role: {a.requiredRole}</>}
                 </div>
               </div>
-              <span className={`px-2 py-1 rounded text-xs font-medium ${a.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : a.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                {a.status}
+              <span className={`px-2 py-1 rounded text-xs font-medium ${a.approvalStatus === 'pending' ? 'bg-yellow-100 text-yellow-700' : a.approvalStatus === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {a.approvalStatus}
               </span>
             </div>
 
-            {a.status === 'pending' && (
+            {a.approvalStatus === 'pending' && (
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={() => handleAction(a.id, 'approve')}

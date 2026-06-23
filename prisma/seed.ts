@@ -179,7 +179,6 @@ async function seed() {
   // Seed demo campaigns
   console.log('Seeding demo campaigns...');
   const demandUser = await prisma.user.findUnique({ where: { email: 'demand.specialist@tanaghum.com' } });
-  const brandUser = await prisma.user.findUnique({ where: { email: 'brand.head@tanaghum.com' } });
 
   if (demandUser) {
     const demoCampaigns = [
@@ -208,9 +207,19 @@ async function seed() {
     ];
 
     for (const campaign of demoCampaigns) {
-      await prisma.contentRequest.create({
-        data: campaign,
+      const existing = await prisma.contentRequest.findFirst({
+        where: { raw_message: campaign.raw_message, requester_id: demandUser.id },
       });
+      if (existing) {
+        await prisma.contentRequest.update({
+          where: { id: existing.id },
+          data: campaign,
+        });
+      } else {
+        await prisma.contentRequest.create({
+          data: campaign,
+        });
+      }
       console.log(`  Campaign: ${campaign.raw_message}`);
     }
   }

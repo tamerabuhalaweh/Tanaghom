@@ -45,12 +45,13 @@ export default function CampaignWorkspace() {
   };
 
   const evaluateReach = async () => {
-    if (!draft) return;
+    if (!draft || !selected) return;
     setLoading('score');
     try {
       const result = await algoApi.score({
-        content: (draft as { content?: string }).content || 'Demo content',
+        contentItemId: draft.contentItemId || selected.id,
         platform: 'linkedin',
+        draftText: draft.draftText || 'Demo content for wellness campaign',
       }, token!);
       setScore(result as Record<string, unknown>);
       setMessage('Reach score calculated — deterministic scoring');
