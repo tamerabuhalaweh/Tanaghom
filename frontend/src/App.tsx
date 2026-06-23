@@ -18,6 +18,7 @@ import LearningSignals from './pages/LearningSignals'
 import CrmConversion from './pages/CrmConversion'
 import ProductionRendering from './pages/ProductionRendering'
 import SafetyStatus from './pages/SafetyStatus'
+import AIProviderSettings from './pages/AIProviderSettings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -48,6 +49,7 @@ function App() {
             <Route path="crm" element={<CrmConversion />} />
             <Route path="production" element={<ProductionRendering />} />
             <Route path="safety" element={<SafetyStatus />} />
+            <Route path="ai-settings" element={<AIProviderSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>
