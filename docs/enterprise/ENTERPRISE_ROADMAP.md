@@ -1,11 +1,13 @@
 # Enterprise Sprint Roadmap
 
-> **Version**: 1.0
-> **Date**: 2026-06-22
+> **Version**: 1.1
+> **Date**: 2026-06-23
 
 ## Overview
 
 Enterprise sprint roadmap for the Tanaghom AI Enterprise Platform.
+
+**Note**: STITCH architecture concepts are NOT Tanaghum business pillars. 5-pillar business taxonomy confirmed; exact names/definitions pending customer confirmation.
 
 ## Completed Sprints
 
@@ -20,19 +22,36 @@ Enterprise sprint roadmap for the Tanaghom AI Enterprise Platform.
 | 22 | Deployment & Security | ✅ Complete | 856 |
 | 23 | Demo Deployment Package | ✅ Complete | 856 |
 | 24 | Pilot Hardening & Evidence | ✅ Complete | 855 |
-| 25 | Enterprise Architecture Reconciliation | 🔄 In Progress | 855 |
+| 25 | Enterprise Architecture Reconciliation | ✅ Complete | 855 |
+| 26 | Taxonomy Decision + Capability/Topology Registry | 🔄 In Progress | 871 |
 
-## Planned Sprints
-
-### Phase 1: Enterprise Foundation (Sprints 25–30)
+## Next Sprint (After PR #27 Merge)
 
 | Sprint | Name | Domain | Status |
 |---|---|---|---|
-| 25 | Enterprise Architecture Reconciliation | Cross-domain | 🔄 In Progress |
-| 26 | Commercial/Content Overlay Model | Commercial/Content | ⏳ Planned |
-| 27 | Finance Domain Pack | Finance | ⏳ Planned |
-| 28 | HR Domain Pack | HR | ⏳ Planned |
-| 29 | Procurement Domain Pack | Procurement | ⏳ Planned |
+| 27 | Commercial/Social Media Demo Readiness & Golden Path | Commercial/Content | ⏳ Planned |
+
+## Planned Sprints (Deferred)
+
+### Phase 1: Enterprise Foundation (After Demo Approval)
+
+| Sprint | Name | Domain | Status |
+|---|---|---|---|
+| TBD | Finance Domain Pack | Finance | ⏳ Deferred |
+| TBD | HR Domain Pack | HR | ⏳ Deferred |
+| TBD | Procurement Domain Pack | Procurement | ⏳ Deferred |
+| TBD | Inventory Domain Pack | Inventory | ⏳ Deferred |
+| TBD | Purchase Management Domain Pack | Purchase | ⏳ Deferred |
+| TBD | Supply Chain Domain Pack | Supply Chain | ⏳ Deferred |
+
+### Phase 2: ERP Integration (After Domain Packs)
+
+| Sprint | Name | Domain | Status |
+|---|---|---|---|
+| TBD | ERP Connector Framework | ERP | ⏳ Deferred |
+| TBD | Oracle Fusion Connector | ERP | ⏳ Deferred |
+| TBD | SAP Connector | ERP | ⏳ Deferred |
+| TBD | Microsoft Dynamics Connector | ERP | ⏳ Deferred |
 | 30 | Inventory Domain Pack | Inventory | ⏳ Planned |
 
 ### Phase 2: Domain Implementation (Sprints 31–36)

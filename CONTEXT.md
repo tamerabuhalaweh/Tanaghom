@@ -45,9 +45,22 @@
 
 ## Taxonomy Decision Status
 
-**4-Pillar vs 5-Pillar: REQUIRES BUSINESS AUTHORITY DECISION**
+**5-Pillar Business Taxonomy: ACCEPTED**
 
-See ADR-011 for details. The customer must confirm which model is canonical before Sprint 27.
+The customer has confirmed that Tanaghum will use a 5-pillar business/content taxonomy.
+
+**Important**: STITCH architecture concepts are NOT business pillars.
+
+| Item | Status |
+|---|---|
+| 5-pillar business taxonomy | ✅ Confirmed |
+| Exact pillar names | ⏳ Pending customer confirmation |
+| Exact pillar definitions | ⏳ Pending customer confirmation |
+| Content/course/analytics mapping | ⏳ Pending pillar definitions |
+
+Until pillar names are confirmed, use neutral placeholders: `tanaghum.pillar.1` through `tanaghum.pillar.5`.
+
+ADR-011 status: Accepted.
 
 ## Next Sprint (Planned)
 
