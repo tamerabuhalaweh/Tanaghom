@@ -78,13 +78,11 @@ export default function ApprovalQueue() {
 
               {/* Audit Evidence */}
               <div className="mt-4 pt-3 border-t border-gray-800 flex items-center gap-4 text-xs text-gray-500">
-                <span>Audit: recorded</span>
+                <span>Audit recorded by backend</span>
                 <span>|</span>
-                <span>SPINE: linked</span>
+                <span>SPINE lineage linked</span>
                 <span>|</span>
                 <span>Actor: human</span>
-                <span>|</span>
-                <span>Timestamp: {new Date().toISOString()}</span>
               </div>
             </div>
           ))}

@@ -92,12 +92,15 @@ export default function DemoCommandCenter() {
 
           {/* System Health */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">System Health</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">System Health</h3>
+              <span className="text-[10px] text-gray-600">Demo readiness snapshot — not live runtime</span>
+            </div>
             <div className="grid grid-cols-4 gap-3">
               {[
-                { label: 'Backend', status: 'Healthy', color: 'green' },
-                { label: 'Database', status: 'Connected', color: 'green' },
-                { label: 'Redis', status: 'Connected', color: 'green' },
+                { label: 'Backend', status: 'Builds clean', color: 'green' },
+                { label: 'Database', status: 'Schema ready', color: 'green' },
+                { label: 'Redis', status: 'Config present', color: 'green' },
                 { label: 'CI/CD', status: '4/4 Green', color: 'green' },
               ].map(item => (
                 <div key={item.label} className="bg-gray-800/50 rounded-lg p-3 text-center">

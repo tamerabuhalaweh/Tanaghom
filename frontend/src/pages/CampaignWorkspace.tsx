@@ -77,7 +77,7 @@ export default function CampaignWorkspace() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="mock">Mock LLM</Badge>
-          <Badge variant="info">Working Locally</Badge>
+          <Badge variant="info">Controlled Demo</Badge>
         </div>
       </div>
 
