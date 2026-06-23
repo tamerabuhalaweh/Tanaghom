@@ -20,7 +20,8 @@ export default function ApprovalQueue() {
       if (action === 'approve') await approvalsApi.approve(id, { comment: 'Approved for demo' }, token!);
       else if (action === 'reject') await approvalsApi.reject(id, { comment: 'Rejected for demo' }, token!);
       else await approvalsApi.requestChanges(id, { comment: 'Please revise' }, token!);
-      setMessage(`Approval ${action === 'request-changes' ? 'changes requested' : action + 'd'} successfully`);
+      const actionLabel = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'changes requested';
+      setMessage(`Approval ${actionLabel} successfully`);
       approvalsApi.list(token!).then(d => setApprovals(d as Record<string, unknown>[])).catch(console.error);
     } catch (err) {
       setMessage(`Action failed: ${err instanceof Error ? err.message : 'Unknown error'}`);

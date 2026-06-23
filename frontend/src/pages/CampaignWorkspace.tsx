@@ -87,7 +87,7 @@ export default function CampaignWorkspace() {
     setLoading('');
   };
 
-  const scoreValue = score?.score as number | undefined;
+  const scoreValue = score?.totalScore as number | undefined;
   const scoreBand = scoreValue && scoreValue >= 75 ? 'approve' : scoreValue && scoreValue >= 60 ? 'optimize' : scoreValue && scoreValue >= 40 ? 'revise' : 'block';
 
   return (
@@ -205,12 +205,12 @@ export default function CampaignWorkspace() {
                     <MetricCard label="Platform" value={(selectedDraft?.platform as string) || 'linkedin'} />
                     <MetricCard label="Status" value={scoreValue && scoreValue >= 60 ? 'Ready' : 'Needs Work'} />
                   </div>
-                  {score.factors ? (
+                  {score.components ? (
                     <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                      {Object.entries(score.factors as Record<string, number>).map(([k, v]) => (
-                        <div key={k} className="flex justify-between bg-gray-50 px-3 py-2 rounded">
-                          <span className="text-gray-600 capitalize">{k}</span>
-                          <span className="font-medium">{String(v)}</span>
+                      {(score.components as { component: string; score: number; weight: number; explanation: string }[]).map((c, i) => (
+                        <div key={i} className="flex justify-between bg-gray-50 px-3 py-2 rounded">
+                          <span className="text-gray-600 capitalize">{c.component}</span>
+                          <span className="font-medium">{c.score}</span>
                         </div>
                       ))}
                     </div>
