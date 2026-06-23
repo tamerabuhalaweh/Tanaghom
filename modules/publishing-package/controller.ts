@@ -6,10 +6,31 @@ import { auditLog } from '@shared/logging';
 
 export const publishingPackageRouter = Router();
 
+const POSTIZ_SANDBOX_URL = process.env.POSTIZ_SANDBOX_URL || 'https://postiz.163-123-180-104.sslip.io';
+
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) throw new UnauthorizedError();
   return verifyToken(authHeader.substring(7));
+}
+
+async function checkPostizSandbox(): Promise<{ reachable: boolean; statusCode: number | null; checkedAt: string }> {
+  const checkedAt = new Date().toISOString();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const response = await fetch(`${POSTIZ_SANDBOX_URL}/auth/login`, {
+      method: 'GET',
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    return { reachable: response.status < 500, statusCode: response.status, checkedAt };
+  } catch {
+    return { reachable: false, statusCode: null, checkedAt };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 publishingPackageRouter.post('/create', async (req: Request, res: Response, next: NextFunction) => {
@@ -20,16 +41,18 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
     const campaign = await prisma.contentRequest.findUnique({ where: { id: campaignId } });
     if (!campaign) throw new NotFoundError('Campaign', campaignId);
 
+    const preparedAt = scheduledTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const platformPayloads = (platforms || ['linkedin', 'instagram']).map((platform: string) => ({
       platform,
       content: (campaign as Record<string, unknown>).raw_message,
-      scheduledTime: scheduledTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      scheduledTime: preparedAt,
       status: 'prepared',
       postizPayload: {
         platform,
         content: (campaign as Record<string, unknown>).raw_message,
-        scheduledAt: scheduledTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        _label: 'Mock Postiz payload — no real scheduling',
+        scheduledAt: preparedAt,
+        action: 'prepare_only',
+        _label: 'Postiz sandbox payload preview - no real scheduling',
       },
     }));
 
@@ -47,6 +70,8 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
       `Publishing package created for campaign ${campaignId}`,
     );
 
+    const postizSandbox = await checkPostizSandbox();
+
     res.json({
       id: pkg.id,
       campaignId,
@@ -59,8 +84,24 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
         scheduleConfirmed: true,
       },
       postizPreview: platformPayloads.map((p: Record<string, unknown>) => (p as Record<string, unknown>).postizPayload),
-      _label: 'Publishing package prepared — no real scheduling',
-      _postizStatus: 'Mock/sandbox — not connected',
+      postizSandbox: {
+        url: POSTIZ_SANDBOX_URL,
+        reachable: postizSandbox.reachable,
+        statusCode: postizSandbox.statusCode,
+        checkedAt: postizSandbox.checkedAt,
+        scheduling: 'blocked',
+        publishing: 'blocked',
+        message: postizSandbox.reachable
+          ? 'Postiz sandbox is reachable. Package can be reviewed there after approval, but STITCH does not schedule or publish.'
+          : 'Postiz sandbox is not reachable. Package remains available inside STITCH.',
+      },
+      executionBoundary: {
+        externalExecutionEnabled: false,
+        postizLiveEnabled: false,
+        m5WriteExecutionEnabled: false,
+      },
+      _label: 'Publishing package prepared - no real scheduling',
+      _postizStatus: postizSandbox.reachable ? 'Sandbox reachable - scheduling blocked' : 'Sandbox unreachable - scheduling blocked',
     });
   } catch (err) {
     next(err);

@@ -3,159 +3,225 @@ import { campaignsApi, approvalsApi, algoApi, aiGenerationApi, publishingPackage
 import { useAuth } from '../contexts/useAuth';
 import { ReadinessGauge, FlowTimeline, PlatformPreviewCard, RecommendationCard, Badge } from '../components/ExecutiveUI';
 
+type RecordMap = Record<string, unknown>;
+
+function asText(value: unknown, fallback = 'Not specified'): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function asArray(value: unknown): RecordMap[] {
+  return Array.isArray(value) ? value as RecordMap[] : [];
+}
+
 export default function CampaignWorkspace() {
   const { token } = useAuth();
-  const [campaigns, setCampaigns] = useState<Record<string, unknown>[]>([]);
-  const [selected, setSelected] = useState<Record<string, unknown> | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, unknown>[]>([]);
-  const [selectedDraft, setSelectedDraft] = useState<Record<string, unknown> | null>(null);
-  const [score, setScore] = useState<Record<string, unknown> | null>(null);
-  const [publishingPkg, setPublishingPkg] = useState<Record<string, unknown> | null>(null);
+  const [campaigns, setCampaigns] = useState<RecordMap[]>([]);
+  const [selected, setSelected] = useState<RecordMap | null>(null);
+  const [drafts, setDrafts] = useState<RecordMap[]>([]);
+  const [selectedDraft, setSelectedDraft] = useState<RecordMap | null>(null);
+  const [score, setScore] = useState<RecordMap | null>(null);
+  const [publishingPkg, setPublishingPkg] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
   const [step, setStep] = useState<'select' | 'generate' | 'score' | 'approve' | 'publish'>('select');
 
-  useEffect(() => {
-    if (token) campaignsApi.list(token).then(d => setCampaigns(d as Record<string, unknown>[])).catch(console.error);
-  }, [token]);
-
   const selectCampaign = async (id: string) => {
+    if (!token) return;
     setLoading('campaign');
     try {
-      const c = await campaignsApi.get(id, token!);
-      setSelected(c as Record<string, unknown>);
-      setDrafts([]); setSelectedDraft(null); setScore(null); setPublishingPkg(null); setMessage(''); setStep('generate');
-    } catch (err) { console.error(err); }
-    setLoading('');
+      const c = await campaignsApi.get(id, token);
+      setSelected(c as RecordMap);
+      setDrafts([]);
+      setSelectedDraft(null);
+      setScore(null);
+      setPublishingPkg(null);
+      setMessage('');
+      setStep('generate');
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setLoading('');
+    }
   };
 
+  useEffect(() => {
+    if (!token) return;
+    campaignsApi.list(token)
+      .then(d => {
+        const list = d as RecordMap[];
+        setCampaigns(list);
+        if (list.length > 0 && !selected) void selectCampaign(String(list[0].id));
+      })
+      .catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
   const generateDraft = async () => {
-    if (!selected) return;
-    setLoading('draft'); setMessage('');
+    if (!selected || !token) return;
+    setLoading('draft');
+    setMessage('');
     try {
-      const result = await aiGenerationApi.generate({ campaignRequestId: selected.id, platforms: ['linkedin', 'instagram'] }, token!);
-      const draftResults = Array.isArray(result) ? result as Record<string, unknown>[] : [result as Record<string, unknown>];
-      setDrafts(draftResults); setSelectedDraft(draftResults[0] || null);
-      setMessage('Draft generated — Mock LLM Provider'); setStep('score');
-    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
-    setLoading('');
+      const result = await aiGenerationApi.generate({ campaignRequestId: selected.id, platforms: ['linkedin', 'instagram'] }, token);
+      const draftResults = Array.isArray(result) ? result as RecordMap[] : [result as RecordMap];
+      setDrafts(draftResults);
+      setSelectedDraft(draftResults[0] || null);
+      setMessage('Draft generated through the STITCH LLM adapter. Mock remains the default provider.');
+      setStep('score');
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setLoading('');
+    }
   };
 
   const evaluateReach = async () => {
-    if (!selectedDraft) return;
-    setLoading('score'); setMessage('');
+    if (!selectedDraft || !token) return;
+    setLoading('score');
+    setMessage('');
     try {
       const result = await algoApi.score({
         contentItemId: selectedDraft.contentItemId as string,
-        platform: (selectedDraft.platform as string) || 'linkedin',
-        draftText: (selectedDraft.draftText as string) || 'Demo content',
-      }, token!);
-      setScore(result as Record<string, unknown>);
-      setMessage('Score calculated — deterministic scoring'); setStep('approve');
-    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
-    setLoading('');
+        platform: asText(selectedDraft.platform, 'linkedin'),
+        draftText: asText(selectedDraft.draftText, 'Demo content'),
+      }, token);
+      setScore(result as RecordMap);
+      setMessage('Reach readiness calculated with deterministic demo intelligence.');
+      setStep('approve');
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setLoading('');
+    }
   };
 
   const submitForApproval = async () => {
-    if (!selected) return;
+    if (!selected || !token) return;
     setLoading('approval');
     try {
-      await approvalsApi.submit({ targetId: selected.id as string, targetType: 'campaign', riskCategory: 'medium' }, token!);
-      setMessage('Submitted for approval — human decision required'); setStep('publish');
-    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
-    setLoading('');
+      await approvalsApi.submit({
+        targetId: selected.id as string,
+        targetType: 'campaign',
+        riskCategory: 'medium',
+        requiredDepartment: 'Commercial',
+        requiredRole: 'reviewer',
+      }, token);
+      setMessage('Submitted for human approval. Audit evidence is recorded by the backend.');
+      setStep('publish');
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setLoading('');
+    }
   };
 
   const createPublishingPackage = async () => {
-    if (!selected) return;
+    if (!selected || !token) return;
     setLoading('publishing');
     try {
       const result = await publishingPackageApi.create({
         campaignId: selected.id as string,
         draftId: selectedDraft?.contentItemId,
         platforms: ['linkedin', 'instagram'],
-      }, token!);
-      setPublishingPkg(result as Record<string, unknown>);
-      setMessage('Publishing package created — no real scheduling');
-    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
-    setLoading('');
+      }, token);
+      setPublishingPkg(result as RecordMap);
+      setMessage('Publishing package prepared. Postiz sandbox status checked; scheduling remains blocked.');
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setLoading('');
+    }
   };
 
   const scoreValue = (score?.totalScore as number) || 0;
+  const packagePlatforms = asArray(publishingPkg?.platforms);
+  const postizSandbox = publishingPkg?.postizSandbox as RecordMap | undefined;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Campaign Workspace</h1>
-          <p className="text-gray-500 text-sm mt-0.5">AI-powered social content creation</p>
+          <p className="text-slate-500 text-sm mt-0.5">Working Commercial/Social golden path</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="mock">Mock LLM</Badge>
-          <Badge variant="info">Controlled Demo</Badge>
+          <Badge variant="mock">Mock LLM default</Badge>
+          <Badge variant="info">Postiz sandbox</Badge>
+          <Badge variant="blocked">Scheduling blocked</Badge>
         </div>
       </div>
 
       <FlowTimeline steps={[
         { label: 'Select', status: step === 'select' ? 'active' : 'done' },
-        { label: 'Generate', status: step === 'generate' ? 'active' : step === 'select' ? 'pending' : 'done', badge: 'Mock LLM' },
+        { label: 'Generate', status: step === 'generate' ? 'active' : step === 'select' ? 'pending' : 'done', badge: 'LLM adapter' },
         { label: 'Score', status: step === 'score' ? 'active' : ['select', 'generate'].includes(step) ? 'pending' : 'done' },
         { label: 'Approve', status: step === 'approve' ? 'active' : step === 'publish' ? 'done' : 'pending' },
-        { label: 'Publish Prep', status: step === 'publish' ? 'active' : 'pending' },
+        { label: 'Package', status: step === 'publish' ? 'active' : 'pending', badge: 'Postiz preview' },
+        { label: 'Publish', status: 'blocked', badge: 'Blocked' },
       ]} />
 
-      {message && <div className={`border rounded-lg px-4 py-2 text-sm ${message.includes('Failed') ? 'bg-red-900/20 border-red-800 text-red-400' : 'bg-green-900/20 border-green-800 text-green-400'}`}>{message}</div>}
+      {message && (
+        <div className={`rounded-xl border px-4 py-3 text-sm ${message.includes('Failed') ? 'border-rose-800 bg-rose-950/40 text-rose-300' : 'border-emerald-800 bg-emerald-950/30 text-emerald-300'}`}>
+          {message}
+        </div>
+      )}
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-[360px_1fr] gap-6">
         <div className="space-y-3">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Demo Campaigns</h2>
+          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Campaigns from backend</h2>
           {campaigns.map(c => (
-            <button key={c.id as string} onClick={() => selectCampaign(c.id as string)}
-              className={`w-full text-left p-4 rounded-xl border transition-all ${selected?.id === c.id ? 'bg-blue-900/20 border-blue-500/50' : 'bg-gray-900 border-gray-800 hover:border-gray-700'}`}>
-              <div className="font-medium text-white text-sm">{c.topic as string}</div>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge variant={c.status === 'approved' ? 'success' : 'warning'}>{c.status as string}</Badge>
-                <Badge variant={c.riskCategory === 'high' ? 'danger' : c.riskCategory === 'medium' ? 'warning' : 'success'}>{c.riskCategory as string}</Badge>
+            <button key={String(c.id)} onClick={() => selectCampaign(String(c.id))}
+              className={`w-full text-left p-4 rounded-xl border transition-all ${selected?.id === c.id ? 'bg-sky-500/10 border-sky-500/50' : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'}`}>
+              <div className="font-medium text-white text-sm">{asText(c.topic)}</div>
+              <div className="flex items-center gap-2 mt-3">
+                <Badge variant={c.status === 'approved' ? 'success' : 'warning'}>{asText(c.status, 'draft')}</Badge>
+                <Badge variant={c.riskCategory === 'high' ? 'danger' : c.riskCategory === 'medium' ? 'warning' : 'success'}>{asText(c.riskCategory, 'medium')}</Badge>
               </div>
             </button>
           ))}
         </div>
 
-        <div className="col-span-2 space-y-4">
+        <div className="space-y-4">
           {!selected ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-500">Select a campaign to begin</div>
+            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-8 text-center text-slate-500">Loading campaign workspace...</div>
           ) : (
             <>
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3">{selected.topic as string}</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-gray-500">Objective:</span> <span className="text-gray-300">{selected.objective as string}</span></div>
-                  <div><span className="text-gray-500">Audience:</span> <span className="text-gray-300">{selected.audience as string}</span></div>
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{asText(selected.topic)}</h3>
+                    <p className="mt-2 text-sm text-slate-400">This is the working model for AI-assisted content preparation and governed publishing readiness.</p>
+                  </div>
+                  <Badge variant="info">Selected</Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
+                  <div className="rounded-lg bg-slate-900 p-3"><span className="block text-xs text-slate-500">Objective</span><span className="text-slate-200">{asText(selected.objective)}</span></div>
+                  <div className="rounded-lg bg-slate-900 p-3"><span className="block text-xs text-slate-500">Audience</span><span className="text-slate-200">{asText(selected.audience)}</span></div>
+                  <div className="rounded-lg bg-slate-900 p-3"><span className="block text-xs text-slate-500">Execution</span><span className="text-rose-300">External actions blocked</span></div>
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                <button onClick={generateDraft} disabled={loading === 'draft'} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm">
+              <div className="flex flex-wrap gap-3">
+                <button onClick={generateDraft} disabled={loading === 'draft'} className="px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-500 disabled:opacity-50 font-medium text-sm">
                   {loading === 'draft' ? 'Generating...' : 'Generate AI Draft'}
                 </button>
-                <button onClick={evaluateReach} disabled={!selectedDraft || loading === 'score'} className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm">
+                <button onClick={evaluateReach} disabled={!selectedDraft || loading === 'score'} className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 font-medium text-sm">
                   {loading === 'score' ? 'Scoring...' : 'Evaluate Reach'}
                 </button>
-                <button onClick={submitForApproval} disabled={loading === 'approval'} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium text-sm">
+                <button onClick={submitForApproval} disabled={loading === 'approval'} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50 font-medium text-sm">
                   {loading === 'approval' ? 'Submitting...' : 'Submit for Approval'}
                 </button>
-                <button onClick={createPublishingPackage} disabled={loading === 'publishing'} className="px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium text-sm">
+                <button onClick={createPublishingPackage} disabled={loading === 'publishing'} className="px-5 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-500 disabled:opacity-50 font-medium text-sm">
                   {loading === 'publishing' ? 'Creating...' : 'Create Publishing Package'}
                 </button>
               </div>
 
               {drafts.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">AI-Generated Drafts</h3>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">AI-generated platform drafts</h3>
                   <div className="grid grid-cols-2 gap-4">
                     {drafts.map((d, i) => (
-                      <div key={i} onClick={() => setSelectedDraft(d)} className={`cursor-pointer rounded-xl transition-all ${selectedDraft === d ? 'ring-2 ring-blue-500' : ''}`}>
-                        <PlatformPreviewCard platform={(d.platform as string) || 'linkedin'} content={(d.draftText as string) || 'AI-generated content'} />
+                      <div key={i} onClick={() => setSelectedDraft(d)} className={`cursor-pointer rounded-xl transition-all ${selectedDraft === d ? 'ring-2 ring-sky-500' : ''}`}>
+                        <PlatformPreviewCard platform={asText(d.platform, 'linkedin')} content={asText(d.draftText, 'AI-generated content')} />
                       </div>
                     ))}
                   </div>
@@ -163,35 +229,63 @@ export default function CampaignWorkspace() {
               )}
 
               {score && (
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-5">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Reach Readiness Score</h3>
-                    <Badge variant="mock">Deterministic Scoring</Badge>
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Reach readiness score</h3>
+                    <Badge variant="info">Deterministic scoring</Badge>
                   </div>
                   <div className="flex items-center gap-8">
                     <ReadinessGauge value={scoreValue} label="Score" />
                     <div className="flex-1 grid grid-cols-2 gap-3">
-                      <RecommendationCard title="Best Platform" value={(selectedDraft?.platform as string) || 'LinkedIn'} confidence={85} />
+                      <RecommendationCard title="Best Platform" value={asText(selectedDraft?.platform, 'LinkedIn')} confidence={85} />
                       <RecommendationCard title="Best Time" value="Tuesday 10:00 AM" confidence={78} />
                       <RecommendationCard title="Format" value="Educational post with image" confidence={82} />
-                      <RecommendationCard title="Band" value={scoreValue >= 75 ? 'Approve' : scoreValue >= 60 ? 'Optimize' : 'Revise'} />
+                      <RecommendationCard title="Decision Band" value={scoreValue >= 75 ? 'Ready for approval' : scoreValue >= 60 ? 'Optimize before approval' : 'Revise'} />
                     </div>
                   </div>
                 </div>
               )}
 
               {publishingPkg && (
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-5">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Publishing Package</h3>
-                    <Badge variant="mock">Mock Postiz</Badge>
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Publishing Package</h3>
+                      <p className="mt-1 text-sm text-slate-500">Prepared by STITCH. Postiz is a sandbox scheduling surface only.</p>
+                    </div>
+                    <Badge variant={postizSandbox?.reachable ? 'info' : 'warning'}>{asText(publishingPkg._postizStatus)}</Badge>
                   </div>
-                  <div className="bg-gray-800/50 rounded p-4 text-sm">
-                    <div className="text-gray-400 text-xs mb-2">Package ID: {String(publishingPkg.id)}</div>
-                    <div className="text-gray-400 text-xs mb-2">Status: {String(publishingPkg.status)}</div>
-                    <div className="text-gray-400 text-xs mb-2">Platforms: {Array.isArray(publishingPkg.platforms) ? (publishingPkg.platforms as Record<string, unknown>[]).map(p => String(p.platform)).join(', ') : 'N/A'}</div>
-                    <div className="text-yellow-400 text-xs mt-3">{String(publishingPkg._label)}</div>
-                    <div className="text-yellow-400 text-xs">{String(publishingPkg._postizStatus)}</div>
+                  <div className="grid grid-cols-[1fr_320px] gap-4">
+                    <div className="rounded-lg bg-slate-900 p-4 text-sm">
+                      <div className="text-slate-500 text-xs mb-2">Package ID: {String(publishingPkg.id)}</div>
+                      <div className="text-slate-300">Status: {asText(publishingPkg.status)}</div>
+                      <div className="text-slate-300 mt-1">Platforms: {packagePlatforms.map(p => asText(p.platform)).join(', ') || 'N/A'}</div>
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        {packagePlatforms.map(p => (
+                          <div key={asText(p.platform)} className="rounded border border-slate-800 bg-slate-950 p-3">
+                            <div className="text-xs font-semibold uppercase text-slate-500">{asText(p.platform)}</div>
+                            <div className="mt-2 text-xs text-slate-300 line-clamp-3">{asText(p.content)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-sky-500/20 bg-sky-500/10 p-4">
+                      <div className="text-sm font-semibold text-white">Postiz Sandbox</div>
+                      <p className="mt-2 text-xs leading-5 text-slate-300">{asText(postizSandbox?.message)}</p>
+                      <a
+                        href={asText(postizSandbox?.url, 'https://postiz.163-123-180-104.sslip.io')}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500"
+                      >
+                        Review sandbox
+                      </a>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Badge variant="blocked">Scheduling blocked</Badge>
+                        <Badge variant="blocked">Publishing blocked</Badge>
+                        <Badge variant="blocked">M5 blocked</Badge>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

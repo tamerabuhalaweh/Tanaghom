@@ -151,6 +151,8 @@ export const aiProviderApi = {
 export const demoApi = {
   status: (token: string) =>
     apiFetch<unknown>('/demo/status', { token }),
+  integrations: (token: string) =>
+    apiFetch<unknown>('/demo/integrations', { token }),
   auditTrail: (token: string) =>
     apiFetch<unknown[]>('/demo/audit-trail', { token }),
   leads: (token: string) =>

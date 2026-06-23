@@ -69,21 +69,21 @@ export default function AIProviderSettings() {
                     {!isActive && !isConfigured && <StatusBadge label="Not Configured" variant="default" />}
                   </div>
 
-                  <p className="text-sm text-gray-600">{p.description}</p>
+                  <p className="text-sm text-slate-400">{p.description}</p>
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Model:</span>
+                      <span className="text-slate-500">Model:</span>
                       <span className="font-mono">{providerStatus?.model || (p.type === 'mock' ? 'mock-v1' : 'Not set')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">API Key:</span>
+                      <span className="text-slate-500">API Key:</span>
                       <span className={isConfigured ? 'text-green-600' : 'text-red-600'}>
                         {p.type === 'mock' ? 'Not required' : (providerStatus?.apiKeyStatus === 'configured' ? 'Configured' : 'Missing')}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Env Variable:</span>
+                      <span className="text-slate-500">Env Variable:</span>
                       <span className="font-mono text-xs">{p.type === 'mock' ? 'LLM_PROVIDER=mock' : p.type === 'openai' ? 'OPENAI_API_KEY' : 'CLAUDE_API_KEY'}</span>
                     </div>
                   </div>
@@ -102,16 +102,16 @@ export default function AIProviderSettings() {
 
       <Card title="Configuration Instructions">
         <div className="space-y-3 text-sm">
-          <div className="bg-gray-50 rounded p-3">
+          <div className="bg-slate-900 rounded p-3">
             <div className="font-medium mb-1">To switch providers:</div>
             <div className="font-mono text-xs">LLM_PROVIDER=openai  # or claude, mock</div>
           </div>
-          <div className="bg-gray-50 rounded p-3">
+          <div className="bg-slate-900 rounded p-3">
             <div className="font-medium mb-1">To configure OpenAI:</div>
             <div className="font-mono text-xs">OPENAI_API_KEY=&lt;configured in deployment secrets&gt;</div>
             <div className="font-mono text-xs">OPENAI_MODEL=gpt-4o</div>
           </div>
-          <div className="bg-gray-50 rounded p-3">
+          <div className="bg-slate-900 rounded p-3">
             <div className="font-medium mb-1">To configure Claude:</div>
             <div className="font-mono text-xs">CLAUDE_API_KEY=&lt;configured in deployment secrets&gt;</div>
             <div className="font-mono text-xs">CLAUDE_MODEL=claude-sonnet-4-20250514</div>

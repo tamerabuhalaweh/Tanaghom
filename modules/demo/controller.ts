@@ -5,10 +5,94 @@ import { prisma } from '@shared/database';
 
 export const demoRouter = Router();
 
+const POSTIZ_SANDBOX_URL = process.env.POSTIZ_SANDBOX_URL || 'https://postiz.163-123-180-104.sslip.io';
+const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/health';
+
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) throw new UnauthorizedError();
   return verifyToken(authHeader.substring(7));
+}
+
+async function checkHttpEndpoint(url: string, timeoutMs = 2500): Promise<{ reachable: boolean; statusCode: number | null; checkedAt: string }> {
+  const checkedAt = new Date().toISOString();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    return { reachable: response.status < 500, statusCode: response.status, checkedAt };
+  } catch {
+    return { reachable: false, statusCode: null, checkedAt };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getIntegrationStatus(): Promise<Record<string, unknown>> {
+  const [postiz, openClaw] = await Promise.all([
+    checkHttpEndpoint(`${POSTIZ_SANDBOX_URL}/auth/login`),
+    checkHttpEndpoint(OPENCLAW_GATEWAY_URL),
+  ]);
+
+  return {
+    postiz: {
+      name: 'Postiz Scheduling Surface',
+      status: postiz.reachable ? 'sandbox_ready' : 'unreachable',
+      url: POSTIZ_SANDBOX_URL,
+      reachable: postiz.reachable,
+      statusCode: postiz.statusCode,
+      checkedAt: postiz.checkedAt,
+      mode: 'sandbox',
+      scheduling: 'blocked',
+      publishing: 'blocked',
+      credentialStatus: 'sandbox account configured; social provider credentials missing',
+      message: postiz.reachable
+        ? 'Postiz sandbox is reachable. STITCH prepares packages; real scheduling remains blocked.'
+        : 'Postiz sandbox is not reachable from the STITCH backend.',
+    },
+    openClaw: {
+      name: 'OpenClaw Gateway',
+      status: openClaw.reachable ? 'gateway_ready' : 'not_ready',
+      url: 'loopback-only',
+      reachable: openClaw.reachable,
+      statusCode: openClaw.statusCode,
+      checkedAt: openClaw.checkedAt,
+      mode: 'local_gateway',
+      channelExecution: 'blocked',
+      message: openClaw.reachable
+        ? 'OpenClaw gateway is installed and health-checkable on loopback only.'
+        : 'OpenClaw gateway is not reachable from the STITCH backend.',
+    },
+    goHighLevel: {
+      name: 'GoHighLevel CRM',
+      status: 'planned',
+      reachable: false,
+      mode: 'readiness_only',
+      writes: 'blocked',
+      message: 'GHL handoff is represented as a governed package only. No real CRM writes are enabled.',
+    },
+    socialAnalytics: {
+      name: 'Official Social Analytics APIs',
+      status: 'planned',
+      reachable: false,
+      mode: 'demo_data_only',
+      reads: 'blocked_until_scoped',
+      message: 'Current analytics are deterministic demo intelligence. Official read-only APIs require separate scope and credentials.',
+    },
+    voiceChat: {
+      name: 'AI Voice/Chat Agent Handoff',
+      status: 'planned',
+      reachable: false,
+      mode: 'handoff_package_only',
+      triggers: 'blocked',
+      message: 'No voice/chat call or message trigger is enabled.',
+    },
+  };
 }
 
 demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
@@ -51,6 +135,8 @@ demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction
       orderBy: { created_at: 'desc' },
       take: 5,
     });
+
+    const integrations = await getIntegrationStatus();
 
     res.json({
       campaigns: campaigns.map((c: Record<string, unknown>) => ({
@@ -110,8 +196,18 @@ demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction
         crmBlocked: process.env.CRM_LIVE_ENABLED !== 'true',
         whatsappBlocked: process.env.WHATSAPP_LIVE_ENABLED !== 'true',
       },
-      _label: 'Demo status — data from backend',
+      integrations,
+      _label: 'Demo status - data from backend',
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+demoRouter.get('/integrations', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    getPayload(req);
+    res.json(await getIntegrationStatus());
   } catch (err) {
     next(err);
   }
