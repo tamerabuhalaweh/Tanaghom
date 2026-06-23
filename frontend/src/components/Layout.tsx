@@ -1,12 +1,15 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 
 const NAV_ITEMS = [
+  { path: '/command-center', label: 'Command Center', icon: '🎯' },
   { path: '/', label: 'Dashboard', icon: '🏠' },
   { path: '/campaigns', label: 'Campaigns', icon: '📋' },
   { path: '/approvals', label: 'Approvals', icon: '✅' },
   { path: '/saif', label: 'SAIF Decisions', icon: '🧠' },
   { path: '/capabilities', label: 'Capabilities', icon: '⚙️' },
   { path: '/mcp', label: 'MCP Mediation', icon: '🔗' },
+  { path: '/mcp-engine', label: 'MCP Engine', icon: '🔌' },
+  { path: '/agent-skills', label: 'Agent Skills', icon: '🎯' },
   { path: '/publishing', label: 'Publishing Prep', icon: '📦' },
   { path: '/spine', label: 'SPINE Timeline', icon: '📊' },
   { path: '/observability', label: 'Observability', icon: '👁️' },
@@ -14,8 +17,10 @@ const NAV_ITEMS = [
   { path: '/analytics', label: 'Analytics', icon: '📈' },
   { path: '/learning', label: 'Learning Signals', icon: '🧪' },
   { path: '/crm', label: 'CRM/WhatsApp', icon: '💬' },
+  { path: '/ghl-readiness', label: 'GoHighLevel CRM', icon: '🏢' },
   { path: '/production', label: 'Production', icon: '🎬' },
   { path: '/safety', label: 'Safety Status', icon: '🛡️' },
+  { path: '/ai-settings', label: 'AI Provider', icon: '🤖' },
 ]
 
 export default function Layout() {
