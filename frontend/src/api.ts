@@ -1,4 +1,4 @@
-const API_BASE = '';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 interface ApiOptions {
   method?: string;
@@ -137,4 +137,12 @@ export const usersApi = {
     apiFetch<unknown[]>('/users', { token }),
   me: (token: string) =>
     apiFetch<unknown>('/users/me', { token }),
+};
+
+// AI Provider
+export const aiProviderApi = {
+  status: (token: string) =>
+    apiFetch<unknown>('/ai-provider/status', { token }),
+  active: (token: string) =>
+    apiFetch<unknown>('/ai-provider/active', { token }),
 };

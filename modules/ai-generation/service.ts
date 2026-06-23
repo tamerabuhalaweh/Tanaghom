@@ -2,8 +2,7 @@ import { ForbiddenError, NotFoundError, ExternalServiceError } from '@shared/err
 import { auditLog } from '@shared/logging';
 import { eventBus } from '@shared/events';
 import { prisma } from '@shared/database';
-import type { LLMProvider } from '@shared/providers/interfaces';
-import { MockLLMProvider } from '@shared/providers/mocks';
+import { createLLMProvider, type LLMProvider } from '@shared/providers/llm-provider';
 import {
   DRAFT_EVENTS,
   type DraftGeneratedEvent,
@@ -43,11 +42,11 @@ function checkPermission(role: string, permission: string): void {
 }
 
 // ============================================================
-// LLM Provider (mock by default)
+// LLM Provider (uses provider adapter, mock by default)
 // ============================================================
 
 function getLLMProvider(): LLMProvider {
-  return new MockLLMProvider();
+  return createLLMProvider();
 }
 
 // ============================================================
@@ -176,7 +175,7 @@ export async function reviseDraft(
   const llm = getLLMProvider();
   let revisedText: string;
   try {
-    revisedText = await llm.generateText(prompt);
+    revisedText = (await llm.generate(prompt)).text;
   } catch (err) {
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
   }
@@ -257,7 +256,7 @@ async function generateSingleDraft(
   const llm = getLLMProvider();
   let draftText: string;
   try {
-    draftText = await llm.generateText(prompt);
+    draftText = (await llm.generate(prompt)).text;
   } catch (err) {
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
   }

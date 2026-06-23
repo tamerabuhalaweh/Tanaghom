@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/useAuth';
+import { aiProviderApi } from '../api';
 import { Card, StatusBadge, Alert, DemoLabel } from '../components/UI';
 
 interface ProviderStatus {
@@ -13,14 +14,15 @@ interface ProviderStatus {
 export default function AIProviderSettings() {
   const { token } = useAuth();
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
+  const [activeProvider, setActiveProvider] = useState('mock');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (token) {
-      fetch('/ai-provider/status', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
+      aiProviderApi.status(token)
         .then(data => {
-          setProviders(data.providers || []);
+          setProviders((data as { providers: ProviderStatus[] }).providers || []);
+          setActiveProvider((data as { activeProvider: string }).activeProvider || 'mock');
           setLoading(false);
         })
         .catch(() => setLoading(false));
@@ -55,7 +57,7 @@ export default function AIProviderSettings() {
           ].map(p => {
             const providerStatus = providers.find(pr => pr.type === p.type);
             const isConfigured = providerStatus?.configured || p.type === 'mock';
-            const isActive = providerStatus?.type === (providers[0]?.type || 'mock');
+            const isActive = activeProvider === p.type;
 
             return (
               <Card key={p.type} className={isActive ? 'border-2 border-blue-500' : ''}>
@@ -106,11 +108,13 @@ export default function AIProviderSettings() {
           </div>
           <div className="bg-gray-50 rounded p-3">
             <div className="font-medium mb-1">To configure OpenAI:</div>
-            <div className="font-mono text-xs">OPENAI_API_KEY=sk-...<br/>OPENAI_MODEL=gpt-4o</div>
+            <div className="font-mono text-xs">OPENAI_API_KEY=&lt;configured in deployment secrets&gt;</div>
+            <div className="font-mono text-xs">OPENAI_MODEL=gpt-4o</div>
           </div>
           <div className="bg-gray-50 rounded p-3">
             <div className="font-medium mb-1">To configure Claude:</div>
-            <div className="font-mono text-xs">CLAUDE_API_KEY=sk-ant-...<br/>CLAUDE_MODEL=claude-sonnet-4-20250514</div>
+            <div className="font-mono text-xs">CLAUDE_API_KEY=&lt;configured in deployment secrets&gt;</div>
+            <div className="font-mono text-xs">CLAUDE_MODEL=claude-sonnet-4-20250514</div>
           </div>
         </div>
       </Card>
