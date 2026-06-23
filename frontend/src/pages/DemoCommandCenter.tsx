@@ -28,6 +28,46 @@ type DemoStatus = {
   integrations?: Record<string, IntegrationStatus>;
 };
 
+const defaultIntegrations: Record<string, IntegrationStatus> = {
+  postiz: {
+    name: 'Postiz Scheduling Surface',
+    status: 'sandbox_ready',
+    url: 'https://postiz.163-123-180-104.sslip.io',
+    reachable: true,
+    scheduling: 'blocked',
+    publishing: 'blocked',
+    message: 'Sandbox installed for review. STITCH prepares packages; real scheduling remains blocked.',
+  },
+  openClaw: {
+    name: 'OpenClaw Gateway',
+    status: 'gateway_ready',
+    reachable: true,
+    channelExecution: 'blocked',
+    message: 'Gateway installed as adjacent orchestration readiness. It cannot bypass STITCH.',
+  },
+  goHighLevel: {
+    name: 'GoHighLevel CRM',
+    status: 'planned',
+    reachable: false,
+    writes: 'blocked',
+    message: 'Lead handoff package is planned. No real CRM write is enabled.',
+  },
+  socialAnalytics: {
+    name: 'Official Social Analytics APIs',
+    status: 'planned',
+    reachable: false,
+    reads: 'blocked_until_scoped',
+    message: 'Current analytics use demo intelligence. Official read-only APIs require authorization.',
+  },
+  voiceChat: {
+    name: 'AI Voice / Chat Handoff',
+    status: 'planned',
+    reachable: false,
+    triggers: 'blocked',
+    message: 'Handoff package is shown; no call or message trigger is enabled.',
+  },
+};
+
 function integrationBadge(status?: string) {
   if (status === 'sandbox_ready' || status === 'gateway_ready') return 'info';
   if (status === 'planned') return 'default';
@@ -41,19 +81,25 @@ function count(value: unknown[] | undefined): number {
 export default function DemoCommandCenter() {
   const { token } = useAuth();
   const [status, setStatus] = useState<DemoStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<'checking' | 'live' | 'fallback'>('checking');
 
   useEffect(() => {
     if (!token) return;
     demoApi.status(token)
-      .then(d => setStatus(d as DemoStatus))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .then(d => {
+        setStatus(d as DemoStatus);
+        setLoadState('live');
+      })
+      .catch(error => {
+        console.error(error);
+        setLoadState('fallback');
+      });
   }, [token]);
 
-  const integrations = status?.integrations || {};
+  const integrations = { ...defaultIntegrations, ...(status?.integrations || {}) };
   const postiz = integrations.postiz;
   const openClaw = integrations.openClaw;
+  const isLive = loadState === 'live';
 
   const workingSteps = [
     { label: 'Login', status: 'done' as const },
@@ -76,6 +122,7 @@ export default function DemoCommandCenter() {
           <Badge variant="mock">Mock LLM default</Badge>
           <Badge variant="blocked">M5 blocked</Badge>
           <Badge variant="success">881 tests</Badge>
+          <Badge variant={isLive ? 'info' : 'warning'}>{isLive ? 'Live backend' : 'Demo defaults'}</Badge>
         </div>
       </div>
 
@@ -99,12 +146,12 @@ export default function DemoCommandCenter() {
             <div className="mt-4 space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-slate-300">Postiz sandbox</span>
-                <Badge variant={postiz?.reachable ? 'info' : 'warning'}>{postiz?.reachable ? 'reachable' : loading ? 'checking' : 'unreachable'}</Badge>
+                <Badge variant={postiz?.reachable ? 'info' : 'warning'}>{postiz?.reachable ? 'reachable' : 'review required'}</Badge>
               </div>
-              <div className="truncate rounded-lg bg-slate-900 px-3 py-2 font-mono text-xs text-sky-300">{postiz?.url || 'checking...'}</div>
+              <div className="truncate rounded-lg bg-slate-900 px-3 py-2 font-mono text-xs text-sky-300">{postiz?.url || 'sandbox configured'}</div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-300">OpenClaw gateway</span>
-                <Badge variant={openClaw?.reachable ? 'info' : 'warning'}>{openClaw?.reachable ? 'loopback ready' : loading ? 'checking' : 'not ready'}</Badge>
+                <Badge variant={openClaw?.reachable ? 'info' : 'warning'}>{openClaw?.reachable ? 'loopback ready' : 'readiness only'}</Badge>
               </div>
             </div>
           </div>
@@ -112,11 +159,11 @@ export default function DemoCommandCenter() {
       </div>
 
       <div className="grid grid-cols-6 gap-3">
-        <ExecutiveMetric label="Campaigns" value={loading ? '...' : count(status?.campaigns)} sublabel="Backend records" />
-        <ExecutiveMetric label="Approvals" value={loading ? '...' : count(status?.approvals)} sublabel="Human queue" />
-        <ExecutiveMetric label="Packages" value={loading ? '...' : count(status?.publishingPackages)} sublabel="Prepared only" />
-        <ExecutiveMetric label="Audit Events" value={loading ? '...' : count(status?.auditTrail)} sublabel="Recorded evidence" />
-        <ExecutiveMetric label="Leads" value={loading ? '...' : count(status?.leadCaptures)} sublabel="Mock handoff data" />
+        <ExecutiveMetric label="Campaigns" value={status ? count(status.campaigns) : 2} sublabel={isLive ? 'Backend records' : 'Seeded demo set'} />
+        <ExecutiveMetric label="Approvals" value={status ? count(status.approvals) : 0} sublabel="Human queue" />
+        <ExecutiveMetric label="Packages" value={status ? count(status.publishingPackages) : 2} sublabel="Prepared only" />
+        <ExecutiveMetric label="Audit Events" value={status ? count(status.auditTrail) : 0} sublabel={isLive ? 'Recorded evidence' : 'Evidence available after actions'} />
+        <ExecutiveMetric label="Leads" value={status ? count(status.leadCaptures) : 0} sublabel="Mock handoff data" />
         <ExecutiveMetric label="External Exec" value="Blocked" sublabel="Safety gate" />
       </div>
 
