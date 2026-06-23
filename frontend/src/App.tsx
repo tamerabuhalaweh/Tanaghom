@@ -19,6 +19,10 @@ import CrmConversion from './pages/CrmConversion'
 import ProductionRendering from './pages/ProductionRendering'
 import SafetyStatus from './pages/SafetyStatus'
 import AIProviderSettings from './pages/AIProviderSettings'
+import McpEngine from './pages/McpEngine'
+import AgentSkills from './pages/AgentSkills'
+import GhlReadiness from './pages/GhlReadiness'
+import DemoCommandCenter from './pages/DemoCommandCenter'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -50,6 +54,10 @@ function App() {
             <Route path="production" element={<ProductionRendering />} />
             <Route path="safety" element={<SafetyStatus />} />
             <Route path="ai-settings" element={<AIProviderSettings />} />
+            <Route path="mcp-engine" element={<McpEngine />} />
+            <Route path="agent-skills" element={<AgentSkills />} />
+            <Route path="ghl-readiness" element={<GhlReadiness />} />
+            <Route path="command-center" element={<DemoCommandCenter />} />
           </Route>
         </Routes>
       </BrowserRouter>
