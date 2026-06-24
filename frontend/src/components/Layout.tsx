@@ -2,16 +2,17 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { DemoBanner } from './ExecutiveUI'
 
 const NAV_ITEMS = [
-  { path: '/command-center', label: 'Command Center', icon: 'CC' },
-  { path: '/', label: 'Dashboard', icon: 'DB' },
-  { path: '/campaigns', label: 'Campaigns', icon: 'CP' },
-  { path: '/approvals', label: 'Approvals', icon: 'AP' },
-  { path: '/analytics', label: 'Analytics', icon: 'AN' },
-  { path: '/mcp-engine', label: 'MCP Engine', icon: 'MC' },
-  { path: '/agent-skills', label: 'Agent Skills', icon: 'SK' },
-  { path: '/ghl-readiness', label: 'GoHighLevel', icon: 'GH' },
-  { path: '/ai-settings', label: 'AI Provider', icon: 'AI' },
-  { path: '/safety', label: 'Safety', icon: 'SF' },
+  { path: '/command-center', label: 'Commercial/Social Demo', icon: 'CS', group: 'Customer Demo' },
+  { path: '/campaigns', label: 'Campaign Workspace', icon: 'CP', group: 'Customer Demo' },
+  { path: '/approvals', label: 'Approval Queue', icon: 'AP', group: 'Customer Demo' },
+  { path: '/analytics', label: 'Analytics Intelligence', icon: 'AN', group: 'Customer Demo' },
+  { path: '/crm', label: 'Lead Handoff', icon: 'LH', group: 'Customer Demo' },
+  { path: '/observability', label: 'Evidence', icon: 'EV', group: 'Customer Demo' },
+  { path: '/mcp-engine', label: 'MCP / Integrations', icon: 'MC', group: 'Admin / Technical' },
+  { path: '/agent-skills', label: 'Agent Skills', icon: 'SK', group: 'Admin / Technical' },
+  { path: '/ghl-readiness', label: 'GoHighLevel Readiness', icon: 'GH', group: 'Admin / Technical' },
+  { path: '/ai-settings', label: 'AI Provider', icon: 'AI', group: 'Admin / Technical' },
+  { path: '/safety', label: 'Safety Gates', icon: 'SF', group: 'Admin / Technical' },
 ]
 
 export default function Layout() {
@@ -24,20 +25,27 @@ export default function Layout() {
           <h1 className="text-base font-bold text-white tracking-tight">Tanaghum</h1>
           <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-widest">AI Operating Platform</p>
         </div>
-        <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-                location.pathname === item.path
-                  ? 'bg-sky-500/15 text-sky-300 font-medium border border-sky-500/30'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-              }`}
-            >
-              <span className="w-5 rounded bg-slate-900 px-1 py-0.5 text-center text-[9px] font-semibold text-slate-500">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
+        <div className="flex-1 overflow-y-auto p-2">
+          {['Customer Demo', 'Admin / Technical'].map(group => (
+            <div key={group} className="mb-4">
+              <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-600">{group}</div>
+              <div className="space-y-0.5">
+                {NAV_ITEMS.filter(item => item.group === group).map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all ${
+                      location.pathname === item.path || (location.pathname === '/' && item.path === '/command-center')
+                        ? 'border border-sky-500/30 bg-sky-500/15 font-medium text-sky-300'
+                        : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                    }`}
+                  >
+                    <span className="w-5 rounded bg-slate-900 px-1 py-0.5 text-center text-[9px] font-semibold text-slate-500">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
         <div className="p-3 border-t border-slate-800">

@@ -97,6 +97,7 @@ export function PlatformPreviewCard({ platform, content, engagement }: { platfor
   const platformStyles: Record<string, { bg: string; accent: string; icon: string }> = {
     linkedin: { bg: 'from-sky-900/30 to-sky-800/20', accent: 'text-sky-300', icon: 'in' },
     instagram: { bg: 'from-pink-900/30 to-violet-800/20', accent: 'text-pink-300', icon: 'ig' },
+    x: { bg: 'from-slate-800/50 to-slate-900/30', accent: 'text-slate-300', icon: 'x' },
     twitter: { bg: 'from-slate-800/50 to-slate-900/30', accent: 'text-slate-300', icon: 'x' },
   };
   const style = platformStyles[platform] || platformStyles.linkedin;

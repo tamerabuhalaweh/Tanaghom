@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/useAuth'
 export default function Login() {
   const { login, loading, error, token } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('demand.specialist@tanaghum.com')
+  const [email, setEmail] = useState('admin@tanaghum.com')
   const [password, setPassword] = useState('password123')
 
   useEffect(() => {
