@@ -27,10 +27,10 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Integration Credential Control Plane/i })).toBeVisible();
   await expect(page.getByText(/Secrets hidden/i)).toBeVisible();
 
-  await page.getByRole('link', { name: /Users & AgentReps/i }).click();
+  await page.getByRole('link', { name: /Users\/Roles/i }).click();
   await expect(page.getByRole('heading', { name: /Users, Roles & AgentReps/i })).toBeVisible();
 
-  await page.getByRole('link', { name: /GHL Wizard/i }).click();
+  await page.getByRole('link', { name: /GHL Setup/i }).click();
   await expect(page.getByRole('heading', { name: /GoHighLevel Integration Wizard/i })).toBeVisible();
   await expect(page.getByText(/Production Write Disabled/i)).toBeVisible();
 });
