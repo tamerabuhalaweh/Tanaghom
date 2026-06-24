@@ -4,6 +4,8 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: /Enter Commercial Workspace/i })).toBeVisible();
 
+  await page.getByLabel(/Email/i).fill('admin@tanaghum.com');
+  await page.getByLabel(/Password/i).fill('password123');
   await page.getByRole('button', { name: /Open Command Center/i }).click();
   await expect(page.getByRole('heading', { name: /Command Center|Commercial/i })).toBeVisible();
 

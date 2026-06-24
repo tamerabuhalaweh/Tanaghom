@@ -1,16 +1,16 @@
 import { cva } from "class-variance-authority"
 
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-info)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm",
-        destructive: "bg-red-600 text-white hover:bg-red-700 shadow-sm",
-        outline: "border border-gray-700 bg-transparent text-gray-200 hover:bg-gray-800",
-        secondary: "bg-gray-800 text-gray-200 hover:bg-gray-700",
-        ghost: "text-gray-400 hover:bg-gray-800 hover:text-gray-200",
-        link: "text-blue-400 underline-offset-4 hover:underline",
+        default: "bg-[var(--color-text-primary)] text-[var(--color-text-inverse)] hover:bg-[var(--color-brand-800)] shadow-sm",
+        destructive: "bg-[var(--color-danger)] text-[var(--color-text-inverse)] hover:brightness-95 shadow-sm",
+        outline: "border border-[var(--color-border-strong)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-surface-muted)]",
+        secondary: "bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] hover:bg-[var(--color-brand-100)]",
+        ghost: "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]",
+        link: "text-[var(--color-info)] underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -31,14 +31,29 @@ export const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-gray-700 bg-gray-800 text-gray-300",
-        secondary: "border-gray-600 bg-gray-700 text-gray-200",
-        destructive: "border-red-800 bg-red-900/50 text-red-400",
-        outline: "border-gray-700 text-gray-400",
-        success: "border-green-800 bg-green-900/50 text-green-400",
-        warning: "border-yellow-800 bg-yellow-900/50 text-yellow-400",
-        info: "border-blue-800 bg-blue-900/50 text-blue-400",
-        mock: "border-purple-800 bg-purple-900/50 text-purple-400",
+        default: "border-[var(--color-border-default)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]",
+        secondary: "border-[var(--color-border-strong)] bg-[var(--color-surface-card)] text-[var(--color-text-primary)]",
+        destructive: "border-red-200 bg-[var(--color-danger-light)] text-[var(--color-danger)]",
+        outline: "border-[var(--color-border-strong)] text-[var(--color-text-secondary)]",
+        success: "border-emerald-200 bg-[var(--color-success-light)] text-[var(--color-success)]",
+        warning: "border-amber-200 bg-[var(--color-warning-light)] text-[var(--color-warning)]",
+        info: "border-blue-200 bg-[var(--color-info-light)] text-[var(--color-info)]",
+        mock: "border-purple-200 bg-purple-50 text-purple-700",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+export const inputVariants = cva(
+  "flex h-10 w-full rounded-md border bg-[var(--color-surface-card)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none transition placeholder:text-[var(--color-text-muted)] focus-visible:ring-2 focus-visible:ring-[var(--color-info)] disabled:cursor-not-allowed disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "border-[var(--color-border-strong)] focus-visible:border-[var(--color-info)]",
+        error: "border-[var(--color-danger)] focus-visible:border-[var(--color-danger)] focus-visible:ring-[var(--color-danger)]",
       },
     },
     defaultVariants: {

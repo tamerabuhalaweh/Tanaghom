@@ -2,7 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthProvider'
 import { useAuth } from './contexts/useAuth'
 import Layout from './components/Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './pages/Login'
+import NotFound from './pages/NotFound'
 import CampaignWorkspace from './pages/CampaignWorkspace'
 import ApprovalQueue from './pages/ApprovalQueue'
 import SaifDecisions from './pages/SaifDecisions'
@@ -29,9 +31,18 @@ import AdminUsers from './pages/AdminUsers'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
-  if (loading) return <div className="p-8 text-center">Loading...</div>
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-b-blue-600" />
+          <span className="text-sm text-gray-500">Loading workspace...</span>
+        </div>
+      </div>
+    )
+  }
   if (!token) return <Navigate to="/login" />
-  return <>{children}</>
+  return <ErrorBoundary>{children}</ErrorBoundary>
 }
 
 function App() {
@@ -66,6 +77,7 @@ function App() {
             <Route path="command-center" element={<DemoCommandCenter />} />
             <Route path="ideas" element={<PostIdeas />} />
             <Route path="draft-studio" element={<PostIdeas />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

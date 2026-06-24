@@ -1,17 +1,194 @@
 @import "tailwindcss";
 
+/* ────────────────────────────────────────────────────────────
+   Design Token System
+   Single source of truth for colors, spacing, typography, etc.
+   ──────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Brand colors */
+  --color-brand-50: #f0f4f8;
+  --color-brand-100: #d9e2ec;
+  --color-brand-200: #bcccdc;
+  --color-brand-300: #9fb3c8;
+  --color-brand-400: #829ab1;
+  --color-brand-500: #627d98;
+  --color-brand-600: #486581;
+  --color-brand-700: #334e68;
+  --color-brand-800: #243b53;
+  --color-brand-900: #102a43;
+  --color-brand-950: #0a1929;
+
+  /* Accent */
+  --color-accent-50: #fef9e7;
+  --color-accent-100: #fef0c7;
+  --color-accent-400: #f5d56f;
+  --color-accent-500: #e8c44d;
+  --color-accent-600: #c9a83a;
+  --color-accent-700: #a88c2e;
+
+  /* Semantic: surfaces */
+  --color-surface: #f6f4ef;
+  --color-surface-card: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-muted: #f3f1ec;
+  --color-surface-dark: #10100f;
+  --color-surface-dark-elevated: #1a1a18;
+
+  /* Semantic: text */
+  --color-text-primary: #102a43;
+  --color-text-secondary: #486581;
+  --color-text-muted: #829ab1;
+  --color-text-inverse: #ffffff;
+  --color-text-inverse-muted: rgba(255, 255, 255, 0.58);
+
+  /* Semantic: borders */
+  --color-border-default: rgba(16, 42, 67, 0.08);
+  --color-border-strong: rgba(16, 42, 67, 0.14);
+  --color-border-dark: rgba(255, 255, 255, 0.1);
+
+  /* Status colors */
+  --color-success: #059669;
+  --color-success-light: #ecfdf5;
+  --color-warning: #d97706;
+  --color-warning-light: #fffbeb;
+  --color-danger: #dc2626;
+  --color-danger-light: #fef2f2;
+  --color-info: #2563eb;
+  --color-info-light: #eff6ff;
+
+  /* Radius scale */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  /* Shadow scale */
+  --shadow-xs: 0 1px 2px rgba(16, 42, 67, 0.04);
+  --shadow-sm: 0 1px 3px rgba(16, 42, 67, 0.06), 0 1px 2px rgba(16, 42, 67, 0.04);
+  --shadow-md: 0 4px 6px rgba(16, 42, 67, 0.07), 0 2px 4px rgba(16, 42, 67, 0.05);
+  --shadow-lg: 0 10px 15px rgba(16, 42, 67, 0.08), 0 4px 6px rgba(16, 42, 67, 0.05);
+  --shadow-xl: 0 16px 32px rgba(16, 42, 67, 0.10), 0 8px 16px rgba(16, 42, 67, 0.06);
+
+  /* Typography */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Base styles
+   ──────────────────────────────────────────────────────────── */
+
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #111111;
-  background: #f7f7f3;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
-  min-width: 320px;
-  background: #f7f7f3;
+  background: var(--color-surface);
+  /* Removed min-width: 320px — was forcing horizontal scroll on mobile */
+}
+
+/* Focus visible — accessible focus indicators */
+:focus-visible {
+  outline: 2px solid var(--color-info);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Remove default outline only when focus-visible is supported */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(16, 42, 67, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 42, 67, 0.25);
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skip to content link — accessibility */
+.skip-to-content {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  z-index: 9999;
+  padding: 12px 24px;
+  background: var(--color-text-primary);
+  color: var(--color-text-inverse);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 0 0 var(--radius-md) 0;
+  transition: top 0.2s ease;
+}
+
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* Animation utilities */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.25s ease-out;
 }

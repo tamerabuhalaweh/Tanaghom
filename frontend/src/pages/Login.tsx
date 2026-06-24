@@ -1,25 +1,44 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
   const { login, loading, error, token } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('admin@tanaghum.com')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [emailError, setEmailError] = useState('')
 
   useEffect(() => {
     if (token) navigate('/command-center', { replace: true })
   }, [navigate, token])
 
+  const validateEmail = (value: string): boolean => {
+    if (!value) {
+      setEmailError('Email is required')
+      return false
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setEmailError('Please enter a valid email address')
+      return false
+    }
+    setEmailError('')
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const isEmailValid = validateEmail(email)
+    if (!isEmailValid || !password) return
     await login(email, password)
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f0e] text-white">
+    <div className="min-h-screen bg-[var(--color-surface-dark)] text-white">
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.15fr_0.85fr]">
+        {/* Left panel — branding */}
         <section className="flex flex-col justify-between border-r border-white/10 p-8 lg:p-12">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-sm font-semibold text-black">
@@ -32,10 +51,10 @@ export default function Login() {
           </div>
 
           <div className="max-w-3xl py-16">
-            <div className="mb-5 inline-flex rounded-full border border-[#f5d56f]/25 bg-[#2a2411] px-3 py-1 text-xs font-medium text-[#f5d56f]">
+            <div className="mb-5 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-300">
               Sandbox Product Environment. External writes disabled by default.
             </div>
-            <h1 className="text-5xl font-semibold tracking-tight lg:text-6xl">
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
               AI prepares. Human approves. The system records.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/60">
@@ -44,7 +63,7 @@ export default function Login() {
             </p>
           </div>
 
-          <div className="grid max-w-3xl grid-cols-3 gap-3 text-sm">
+          <div className="grid max-w-3xl grid-cols-1 gap-3 text-sm sm:grid-cols-3">
             {[
               ['AI Provider', 'Backend governed'],
               ['Postiz', 'Sandbox reachable'],
@@ -58,55 +77,96 @@ export default function Login() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center bg-[#f7f7f3] p-8 text-black">
-          <div className="w-full max-w-md rounded-lg border border-black/10 bg-white p-8 shadow-[0_16px_60px_rgba(0,0,0,0.12)]">
+        {/* Right panel — login form */}
+        <section className="flex items-center justify-center bg-[var(--color-surface)] p-6 text-[var(--color-text-primary)] sm:p-8">
+          <div className="w-full max-w-md rounded-lg border border-black/10 bg-[var(--color-surface-card)] p-6 shadow-lg sm:p-8">
             <div>
               <h2 className="text-2xl font-semibold tracking-tight">Enter Commercial Workspace</h2>
-              <p className="mt-2 text-sm text-black/55">Use one of the prepared pilot identities.</p>
+              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Sign in to access the sandbox workspace.</p>
             </div>
 
-            <div className="mt-6 rounded-lg border border-black/10 bg-[#fafaf7] p-4 text-sm">
-              <div className="font-medium">Pilot users</div>
-              <div className="mt-3 space-y-1.5 text-black/60">
-                <div>demand.specialist@tanaghum.com</div>
-                <div>brand.head@tanaghum.com</div>
+            <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+              <div className="font-medium text-amber-800">Demo users</div>
+              <div className="mt-2 space-y-1 text-amber-700">
                 <div>admin@tanaghum.com</div>
+                <div>brand.head@tanaghum.com</div>
+                <div>demand.specialist@tanaghum.com</div>
               </div>
-              <div className="mt-3 text-xs font-medium text-black">Password: password123</div>
+              <div className="mt-2 text-xs font-medium text-amber-800">Password: password123</div>
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-black/70">Email</label>
+                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                  Email
+                </label>
                 <input
+                  id="email"
                   type="email"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full rounded-md border border-black/15 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-black focus:ring-4 focus:ring-black/5"
+                  onChange={e => {
+                    setEmail(e.target.value)
+                    if (emailError) validateEmail(e.target.value)
+                  }}
+                  onBlur={e => validateEmail(e.target.value)}
+                  placeholder="you@tanaghum.com"
+                  className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm outline-none transition focus:ring-4 focus:ring-blue-500/10 ${
+                    emailError
+                      ? 'border-red-400 focus:border-red-500'
+                      : 'border-black/15 focus:border-blue-600'
+                  }`}
                   required
+                  aria-invalid={!!emailError}
+                  aria-describedby={emailError ? 'email-error' : undefined}
                 />
+                {emailError && (
+                  <p id="email-error" className="mt-1.5 text-xs text-red-600" role="alert">
+                    {emailError}
+                  </p>
+                )}
               </div>
+
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-black/70">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full rounded-md border border-black/15 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-black focus:ring-4 focus:ring-black/5"
-                  required
-                />
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full rounded-md border border-black/15 bg-white px-3 py-2.5 pr-10 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
-              {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+
+              {error && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+                  {error}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-md bg-black py-3 text-sm font-medium text-white transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-md bg-[var(--color-text-primary)] py-3 text-sm font-medium text-white transition hover:bg-[var(--color-brand-800)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? 'Opening workspace...' : 'Open Command Center'}
               </button>
             </form>
 
-            <div className="mt-6 text-center text-xs text-black/40">
+            <div className="mt-6 text-center text-xs text-[var(--color-text-muted)]">
               Sandbox workspace. External publishing, CRM writes, WhatsApp, and voice triggers remain off by default.
             </div>
           </div>

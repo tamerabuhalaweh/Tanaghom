@@ -165,7 +165,7 @@ export function Badge({ children, variant = 'default' }: { children: ReactNode; 
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colors[variant]}`}>{children}</span>;
 }
 
-export function DemoBanner() {
+export function DemoBanner({ onDismiss }: { onDismiss?: () => void }) {
   return (
     <div className="rounded-xl border border-black/10 bg-white/80 px-4 py-2.5 shadow-sm shadow-black/[0.03] flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -176,7 +176,20 @@ export function DemoBanner() {
         <span className="text-black/20">/</span>
         <span className="text-black/35">Authorization required</span>
       </div>
-      <span className="text-[11px] font-medium text-black/40">Commercial/Social AI OS</span>
+      <div className="flex items-center gap-3">
+        <span className="hidden sm:inline text-[11px] font-medium text-black/40">Commercial/Social AI OS</span>
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            className="rounded-md p-1 text-black/30 hover:bg-black/5 hover:text-black/60 transition-colors"
+            aria-label="Dismiss banner"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
