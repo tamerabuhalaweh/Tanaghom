@@ -18,6 +18,7 @@ import { analyticsRouter } from '../modules/analytics-reporting/controller';
 import { spineRouter } from '../modules/spine/controller';
 import { observabilityRouter } from '../modules/observability/controller';
 import { aiProviderRouter } from '../modules/ai-provider/controller';
+import { mcpMediationRouter } from '../modules/mcp-mediation/controller';
 
 // Validate environment before startup
 const envValidation = validateEnvironment();
@@ -91,6 +92,7 @@ app.use('/analytics', analyticsRouter);
 app.use('/spine', spineRouter);
 app.use('/observability', observabilityRouter);
 app.use('/ai-provider', aiProviderRouter);
+app.use('/mcp-runtime', mcpMediationRouter);
 
 // Error handler (must be last) — preserves AppError status codes, hides stack traces
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {

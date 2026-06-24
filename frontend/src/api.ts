@@ -146,3 +146,23 @@ export const aiProviderApi = {
   active: (token: string) =>
     apiFetch<unknown>('/ai-provider/active', { token }),
 };
+
+// Leads
+export const leadsApi = {
+  list: (token: string) =>
+    apiFetch<unknown[]>('/leads', { token }),
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/leads', { method: 'POST', body: data, token }),
+  qualify: (id: string, token: string) =>
+    apiFetch<unknown>(`/leads/${id}/qualify`, { method: 'POST', token }),
+  stats: (token: string) =>
+    apiFetch<unknown>('/leads/stats', { token }),
+};
+
+// GHL Connector
+export const ghlApi = {
+  status: (token: string) =>
+    apiFetch<unknown>('/ghl/status', { token }),
+  handoff: (leadId: string, token: string) =>
+    apiFetch<unknown>('/ghl/handoff', { method: 'POST', body: { leadId }, token }),
+};

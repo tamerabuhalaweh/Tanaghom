@@ -22,6 +22,7 @@ import AIProviderSettings from './pages/AIProviderSettings'
 import McpEngine from './pages/McpEngine'
 import AgentSkills from './pages/AgentSkills'
 import GhlReadiness from './pages/GhlReadiness'
+import GhlWizard from './pages/GhlWizard'
 import DemoCommandCenter from './pages/DemoCommandCenter'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ function App() {
             <Route path="mcp-engine" element={<McpEngine />} />
             <Route path="agent-skills" element={<AgentSkills />} />
             <Route path="ghl-readiness" element={<GhlReadiness />} />
+            <Route path="ghl-wizard" element={<GhlWizard />} />
             <Route path="command-center" element={<DemoCommandCenter />} />
           </Route>
         </Routes>

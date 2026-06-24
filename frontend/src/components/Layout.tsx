@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: '/mcp-engine', label: 'MCP Engine', icon: '⬡' },
   { path: '/agent-skills', label: 'Agent Skills', icon: '⎔' },
   { path: '/ghl-readiness', label: 'GoHighLevel', icon: '◇' },
+  { path: '/ghl-wizard', label: 'GHL Wizard', icon: '⚙' },
   { path: '/ai-settings', label: 'AI Provider', icon: '◎' },
   { path: '/safety', label: 'Safety', icon: '△' },
 ]
