@@ -399,7 +399,7 @@ export default function DemoCommandCenter() {
           <Panel
             title="4. Human Approval"
             badge={approval ? titleCase(text(approval.approvalStatus)) : 'Human Approval Required'}
-            action={<ActionButton onClick={submitApproval} disabled={!selectedDraft || loading === 'approval'}>{loading === 'approval' ? 'Submitting...' : 'Submit for Approval'}</ActionButton>}
+            action={<ActionButton onClick={submitApproval} disabled={!selectedDraft || !!approval || loading === 'approval'}>{approval ? 'Approval Package Recorded' : loading === 'approval' ? 'Submitting...' : 'Submit for Approval'}</ActionButton>}
           >
             <div className="grid grid-cols-[1fr_auto] gap-4">
               <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
@@ -432,7 +432,7 @@ export default function DemoCommandCenter() {
           <Panel
             title="5. Publishing Preparation Package"
             badge={packageResult ? 'Sandbox Ready' : 'Blocked Until Approval'}
-            action={<ActionButton onClick={createPackage} disabled={approval?.approvalStatus !== 'approved' || loading === 'package'}>{loading === 'package' ? 'Preparing...' : 'Create Publishing Package'}</ActionButton>}
+            action={<ActionButton onClick={createPackage} disabled={approval?.approvalStatus !== 'approved' || !!packageResult || loading === 'package'}>{packageResult ? 'Package Prepared' : loading === 'package' ? 'Preparing...' : 'Create Publishing Package'}</ActionButton>}
           >
             {packageResult ? (
               <div className="grid grid-cols-[1fr_320px] gap-4">
