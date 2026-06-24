@@ -7,7 +7,7 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
   await page.getByRole('button', { name: /Open Command Center/i }).click();
   await expect(page.getByRole('heading', { name: /Command Center|Commercial/i })).toBeVisible();
 
-  await page.getByRole('link', { name: /AI Post Ideas/i }).click();
+  await page.getByRole('link', { name: /AI Draft Studio/i }).click();
   await expect(page.getByRole('heading', { name: /AI Post Ideas Studio/i })).toBeVisible();
   await page.getByRole('button', { name: /Generate Ideas/i }).click();
   await expect(page.getByText(/Generated .* ideas|Generation failed/i)).toBeVisible({ timeout: 30000 });
@@ -21,7 +21,7 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
 
   await page.getByRole('link', { name: /Campaign Workspace/i }).click();
   await expect(page.getByRole('heading', { name: /Campaign Workspace/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Generate AI Draft/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Generate Platform Drafts/i })).toBeVisible();
 
   await page.getByRole('link', { name: /Credentials/i }).click();
   await expect(page.getByRole('heading', { name: /Integration Credential Control Plane/i })).toBeVisible();

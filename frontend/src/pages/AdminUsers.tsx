@@ -36,8 +36,27 @@ export default function AdminUsers() {
   }
 
   useEffect(() => {
-    load().catch((err) => setMessage(err instanceof Error ? err.message : 'Failed to load users'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!token) return;
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const [userList, departmentList] = await Promise.all([
+          adminUsersApi.list(token as string),
+          usersApi.departments(token as string),
+        ]);
+        if (cancelled) return;
+        setUsers(userList as RecordMap[]);
+        setDepartments(departmentList as RecordMap[]);
+      } catch (err) {
+        if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load users');
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   async function createUser() {

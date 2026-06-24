@@ -51,24 +51,53 @@ export default function AIProviderSettings() {
     setProviders(statusMap.providers || []);
     setCredentials(creds.credentials || []);
     setActiveProvider(creds.activeProvider || statusMap.activeProvider || 'mock');
-    setSelectedProvider(creds.activeProvider || statusMap.activeProvider || 'mock');
+    const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
+    const credential = (creds.credentials || []).find((item) => item.provider === nextProvider);
+    const nextMeta = PROVIDERS.find((provider) => provider.type === nextProvider) || PROVIDERS[0];
+    setSelectedProvider(nextProvider);
+    setModel(credential?.model || nextMeta.defaultModel);
+    setApiKey('');
   }
 
   useEffect(() => {
-    load().catch((err) => setMessage(err instanceof Error ? err.message : 'Failed to load provider settings'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!token) return;
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const [status, credentialData] = await Promise.all([
+          aiProviderApi.status(token as string),
+          aiProviderApi.credentials(token as string),
+        ]);
+        if (cancelled) return;
+
+        const statusMap = status as { providers: ProviderStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
+        const creds = credentialData as { credentials: CredentialStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
+        const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
+        const credential = (creds.credentials || []).find((item) => item.provider === nextProvider);
+        const nextMeta = PROVIDERS.find((provider) => provider.type === nextProvider) || PROVIDERS[0];
+
+        setProviders(statusMap.providers || []);
+        setCredentials(creds.credentials || []);
+        setActiveProvider(nextProvider);
+        setSelectedProvider(nextProvider);
+        setModel(credential?.model || nextMeta.defaultModel);
+        setApiKey('');
+      } catch (err) {
+        if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load provider settings');
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const selectedMeta = useMemo(
     () => PROVIDERS.find((provider) => provider.type === selectedProvider) || PROVIDERS[0],
     [selectedProvider],
   );
-
-  useEffect(() => {
-    const credential = credentials.find((item) => item.provider === selectedProvider);
-    setModel(credential?.model || selectedMeta.defaultModel);
-    setApiKey('');
-  }, [credentials, selectedMeta.defaultModel, selectedProvider]);
 
   async function saveCredential() {
     if (!token || selectedProvider === 'mock') return;
@@ -140,7 +169,14 @@ export default function AIProviderSettings() {
               <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Provider</span>
               <select
                 value={selectedProvider}
-                onChange={(event) => setSelectedProvider(event.target.value as 'mock' | 'openai' | 'claude')}
+                onChange={(event) => {
+                  const provider = event.target.value as 'mock' | 'openai' | 'claude';
+                  const credential = credentials.find((item) => item.provider === provider);
+                  const nextMeta = PROVIDERS.find((item) => item.type === provider) || PROVIDERS[0];
+                  setSelectedProvider(provider);
+                  setModel(credential?.model || nextMeta.defaultModel);
+                  setApiKey('');
+                }}
                 className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-white"
               >
                 {PROVIDERS.map((provider) => (

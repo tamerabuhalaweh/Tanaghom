@@ -79,7 +79,7 @@ export default function CrmConversion() {
         <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-right">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Environment</div>
           <div className="mt-2 flex flex-wrap justify-end gap-2">
-            <Badge variant="mock">Sandbox POC</Badge>
+            <Badge variant="info">Sandbox Ready</Badge>
             <Badge variant="blocked">GHL write disabled</Badge>
             <Badge variant="blocked">Voice trigger disabled</Badge>
           </div>
@@ -147,7 +147,7 @@ export default function CrmConversion() {
                 `Campaign attribution: ${selected.campaign}`,
                 `Intent: ${selected.intent}`,
                 `Qualification score: ${selected.score}`,
-                'Opportunity pipeline: Commercial/Social POC',
+                'Opportunity pipeline: Commercial/Social',
                 `Stage: ${selected.stage}`,
               ]}
             />

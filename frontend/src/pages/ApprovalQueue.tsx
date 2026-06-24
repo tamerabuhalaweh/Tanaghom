@@ -111,7 +111,7 @@ export default function ApprovalQueue() {
 
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-800 pt-3">
                   <Badge variant="info">Audit recorded by backend</Badge>
-                  <Badge variant="default">SPINE evidence available</Badge>
+                  <Badge variant="default">Evidence timeline available</Badge>
                   <Badge variant="blocked">External execution blocked</Badge>
                 </div>
               </div>

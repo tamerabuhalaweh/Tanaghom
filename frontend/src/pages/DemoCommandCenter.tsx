@@ -296,6 +296,38 @@ export default function DemoCommandCenter() {
     { label: 'Voice/Chat Handoff Prepared', state: handoffPackage ? 'Active' : 'Waiting' },
     { label: 'Audit Recorded', state: approval || packageResult ? 'Active' : 'Waiting' },
   ];
+  const actionQueue = [
+    {
+      title: selected ? `Continue ${text(selected.topic)}` : 'Select a campaign',
+      body: selected ? 'Generate platform drafts, score the selected post, and route it for review.' : 'Choose the campaign that should move through today\'s social workflow.',
+      status: selected ? 'Ready for AI work' : 'Needs campaign',
+      active: !drafts.length,
+    },
+    {
+      title: 'Human approval',
+      body: approval?.approvalStatus === 'approved'
+        ? 'Approval is recorded. Publishing preparation is unlocked.'
+        : 'The selected draft must be approved before any publishing package is prepared.',
+      status: approval?.approvalStatus === 'approved' ? 'Approved' : 'Approval required',
+      active: !!score && approval?.approvalStatus !== 'approved',
+    },
+    {
+      title: 'Publishing preparation',
+      body: packageResult
+        ? 'Postiz-ready payload is prepared. Scheduling remains controlled by sandbox authorization.'
+        : 'Create the Postiz-ready package after approval.',
+      status: packageResult ? 'Package prepared' : 'Waiting on approval',
+      active: approval?.approvalStatus === 'approved' && !packageResult,
+    },
+    {
+      title: 'Lead handoff',
+      body: handoffPackage
+        ? 'Lead, CRM, and voice/chat handoff packages are ready for review.'
+        : 'Prepare lead intelligence after the publishing package is created.',
+      status: handoffPackage ? 'Handoff prepared' : 'Waiting on package',
+      active: !!packageResult && !handoffPackage,
+    },
+  ];
 
   return (
     <div className="space-y-5">
@@ -303,24 +335,39 @@ export default function DemoCommandCenter() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <div className="mb-3 flex flex-wrap gap-2">
-              <Badge variant="success">Commercial/Social POC MVP</Badge>
-              <Badge variant="info">Sandbox Product Environment</Badge>
+              <Badge variant="success">Commercial/Social AI Operating System</Badge>
+              <Badge variant="info">Sandbox Workspace</Badge>
               <Badge variant="blocked">External Writes OFF</Badge>
               <Badge variant="blocked">M5 Disabled</Badge>
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-white">Commercial Command Center</h1>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              A working sandbox product for campaign planning, AI-assisted social content, reach intelligence, human approval,
-              Postiz-ready publishing packages, lead qualification, CRM handoff preparation, and voice/chat follow-up readiness.
+              Run the Commercial/Social workflow from campaign brief to AI draft, optimization, approval, publishing preparation,
+              analytics intelligence, lead qualification, CRM handoff, voice/chat follow-up, and readable evidence.
             </p>
           </div>
           <div className="grid min-w-[360px] grid-cols-2 gap-2">
             <StatusPill label="Postiz" value={postiz.reachable ? 'Sandbox Ready' : 'Preparation Ready'} variant={postiz.reachable ? 'info' : 'warning'} />
             <StatusPill label="AI Provider" value={providerLabel} variant={providerBadge} />
-            <StatusPill label="GHL" value="Package Only" variant="default" />
+            <StatusPill label="GHL" value="Requires Credentials" variant="default" />
             <StatusPill label="Publishing" value="Blocked" variant="blocked" />
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-3 xl:grid-cols-4">
+        {actionQueue.map(item => (
+          <div
+            key={item.title}
+            className={`rounded-xl border p-4 ${item.active ? 'border-sky-400/50 bg-sky-500/10' : 'border-slate-800 bg-slate-950/70'}`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-white">{item.title}</h2>
+              <Badge variant={item.active ? 'info' : item.status.includes('Approved') || item.status.includes('prepared') ? 'success' : 'default'}>{item.status}</Badge>
+            </div>
+            <p className="mt-3 min-h-[54px] text-sm leading-6 text-slate-400">{item.body}</p>
+          </div>
+        ))}
       </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
@@ -557,7 +604,7 @@ export default function DemoCommandCenter() {
             )}
           </Panel>
 
-          <Panel title="Analytics Intelligence + Handoff Queues" badge="Sandbox Intelligence">
+          <Panel title="Analytics Intelligence + Handoff Queues" badge="Sandbox Ready">
             <div className="grid grid-cols-4 gap-3">
               <Metric label="Reach" value={text(analytics?.reach, '8,900')} />
               <Metric label="Impressions" value={text(analytics?.impressions, '12,500')} />
@@ -588,7 +635,7 @@ export default function DemoCommandCenter() {
               <ReadableList title="CRM + Voice/Chat Handoff Queues" items={[
                 `GHL status: ${text(ghl.status, 'Requires Credentials')} / ${text(ghl.executionState, 'Blocked')}`,
                 `GHL contact payload: source=${text((ghl.contactPayload as RecordMap | undefined)?.source, titleCase(text(selectedDraft?.platform, 'social')))}, campaign=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.campaignTopic, text(selected?.topic, 'selected campaign'))}, qualificationScore=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.qualificationScore, '82')}.`,
-                `GHL opportunity payload: pipeline=${text((ghl.opportunityPayload as RecordMap | undefined)?.pipeline, 'Commercial/Social POC')}, stage=${text((ghl.opportunityPayload as RecordMap | undefined)?.stage, 'Qualified Lead')}.`,
+                `GHL opportunity payload: pipeline=${text((ghl.opportunityPayload as RecordMap | undefined)?.pipeline, 'Commercial/Social')}, stage=${text((ghl.opportunityPayload as RecordMap | undefined)?.stage, 'Qualified Lead')}.`,
                 `Voice/chat status: ${text(voiceChat.status, 'Requires Credentials')} / ${text(voiceChat.executionState, 'Blocked')}`,
                 `Voice/chat handoff payload: ${text((voiceChat.payload as RecordMap | undefined)?.suggestedIntent, 'lead context and suggested script prepared')}.`,
                 'Push to GHL: disabled until sandbox flag and credentials are active.',
@@ -654,7 +701,7 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-bold text-white">{value}</div>
-      <Badge variant="mock">Sandbox Data</Badge>
+      <Badge variant="info">Sandbox Ready</Badge>
     </div>
   );
 }

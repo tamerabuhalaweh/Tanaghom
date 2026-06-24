@@ -65,6 +65,7 @@ function App() {
             <Route path="ghl-wizard" element={<GhlWizard />} />
             <Route path="command-center" element={<DemoCommandCenter />} />
             <Route path="ideas" element={<PostIdeas />} />
+            <Route path="draft-studio" element={<PostIdeas />} />
           </Route>
         </Routes>
       </BrowserRouter>

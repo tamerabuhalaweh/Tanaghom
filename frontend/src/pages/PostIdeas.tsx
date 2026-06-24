@@ -280,7 +280,7 @@ export default function PostIdeas() {
                 <div>
                   <h2 className="text-lg font-semibold text-white">Human Selection Gate</h2>
                   <p className="mt-1 text-sm text-slate-400">
-                    LangGraph checkpoint is paused until the operator selects an idea. No campaign is created before this step.
+                    The workflow pauses until the operator selects an idea. No campaign is created before this step.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -1,22 +1,41 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { DemoBanner } from './ExecutiveUI'
+import {
+  Activity,
+  Bot,
+  Brain,
+  ClipboardCheck,
+  FileCheck2,
+  Gauge,
+  KeyRound,
+  Layers3,
+  LayoutDashboard,
+  Megaphone,
+  Network,
+  PlugZap,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Workflow,
+} from 'lucide-react'
 
 const NAV_ITEMS = [
-  { path: '/command-center', label: 'Commercial Command Center', icon: 'CC', group: 'Commercial/Social Product' },
-  { path: '/campaigns', label: 'Campaign Workspace', icon: 'CW', group: 'Commercial/Social Product' },
-  { path: '/ideas', label: 'AI Post Ideas', icon: 'PI', group: 'Commercial/Social Product' },
-  { path: '/approvals', label: 'Approval Queue', icon: 'AQ', group: 'Commercial/Social Product' },
-  { path: '/analytics', label: 'Analytics Intelligence', icon: 'AI', group: 'Commercial/Social Product' },
-  { path: '/crm', label: 'Lead Intelligence', icon: 'LI', group: 'Commercial/Social Product' },
-  { path: '/ghl-wizard', label: 'GHL Wizard', icon: 'GH', group: 'Commercial/Social Product' },
-  { path: '/observability', label: 'Evidence / Audit', icon: 'EV', group: 'Commercial/Social Product' },
-  { path: '/mcp-engine', label: 'MCP / Integrations', icon: 'MC', group: 'Admin / Technical' },
-  { path: '/agent-skills', label: 'Agent Skills', icon: 'SK', group: 'Admin / Technical' },
-  { path: '/ghl-readiness', label: 'GoHighLevel Readiness', icon: 'GR', group: 'Admin / Technical' },
-  { path: '/ai-settings', label: 'AI Provider', icon: 'AP', group: 'Admin / Technical' },
-  { path: '/integration-credentials', label: 'Credentials', icon: 'CR', group: 'Admin / Technical' },
-  { path: '/admin-users', label: 'Users & AgentReps', icon: 'UR', group: 'Admin / Technical' },
-  { path: '/safety', label: 'Safety Gates', icon: 'SF', group: 'Admin / Technical' },
+  { path: '/command-center', label: 'Command Center', icon: LayoutDashboard, group: 'Commercial/Social' },
+  { path: '/campaigns', label: 'Campaigns', icon: Megaphone, group: 'Commercial/Social' },
+  { path: '/ideas', label: 'AI Draft Studio', icon: Sparkles, group: 'Commercial/Social' },
+  { path: '/approvals', label: 'Approvals', icon: ClipboardCheck, group: 'Commercial/Social' },
+  { path: '/publishing', label: 'Publishing', icon: FileCheck2, group: 'Commercial/Social' },
+  { path: '/analytics', label: 'Analytics', icon: Gauge, group: 'Commercial/Social' },
+  { path: '/crm', label: 'Leads', icon: Activity, group: 'Commercial/Social' },
+  { path: '/mcp-engine', label: 'Integrations', icon: PlugZap, group: 'Commercial/Social' },
+  { path: '/observability', label: 'Evidence', icon: Workflow, group: 'Commercial/Social' },
+  { path: '/ai-settings', label: 'AI Provider', icon: Brain, group: 'Admin' },
+  { path: '/admin-users', label: 'Users/Roles', icon: Users, group: 'Admin' },
+  { path: '/agent-skills', label: 'Agent Skills', icon: Bot, group: 'Admin' },
+  { path: '/ghl-wizard', label: 'GHL Setup', icon: Network, group: 'Admin' },
+  { path: '/integration-credentials', label: 'Credentials', icon: KeyRound, group: 'Admin' },
+  { path: '/ghl-readiness', label: 'GHL Evidence', icon: Layers3, group: 'Admin' },
+  { path: '/safety', label: 'Safety Gates', icon: ShieldCheck, group: 'Admin' },
 ]
 
 export default function Layout() {
@@ -24,36 +43,41 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100">
-      <nav className="w-60 bg-slate-950 border-r border-slate-800 flex flex-col">
-        <div className="p-4 border-b border-slate-800">
+      <nav className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col">
+        <div className="p-5 border-b border-slate-800">
           <h1 className="text-base font-bold text-white tracking-tight">Tanaghum</h1>
-          <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-widest">AI Operating Platform</p>
+          <p className="mt-1 text-[11px] font-medium text-slate-500">Commercial/Social AI Operating System</p>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          {['Commercial/Social Product', 'Admin / Technical'].map(group => (
-            <div key={group} className="mb-4">
+        <div className="flex-1 overflow-y-auto p-3">
+          {['Commercial/Social', 'Admin'].map(group => (
+            <div key={group} className="mb-5">
               <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-600">{group}</div>
               <div className="space-y-0.5">
-                {NAV_ITEMS.filter(item => item.group === group).map((item) => (
+                {NAV_ITEMS.filter(item => item.group === group).map((item) => {
+                  const Icon = item.icon
+                  const active = location.pathname === item.path || (location.pathname === '/' && item.path === '/command-center')
+                  return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all ${
-                      location.pathname === item.path || (location.pathname === '/' && item.path === '/command-center')
-                        ? 'border border-sky-500/30 bg-sky-500/15 font-medium text-sky-300'
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${
+                      active
+                        ? 'border border-sky-500/30 bg-sky-500/15 font-medium text-white shadow-sm shadow-sky-950/40'
                         : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
                     }`}
                   >
-                    <span className="w-5 rounded bg-slate-900 px-1 py-0.5 text-center text-[9px] font-semibold text-slate-500">{item.icon}</span>
+                    <Icon className={`h-4 w-4 ${active ? 'text-sky-300' : 'text-slate-500'}`} aria-hidden="true" />
                     <span>{item.label}</span>
                   </Link>
-                ))}
+                )})}
               </div>
             </div>
           ))}
         </div>
         <div className="p-3 border-t border-slate-800">
-          <div className="text-[10px] text-slate-600 text-center">Sandbox Product Environment</div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] font-medium text-emerald-300">
+            Sandbox Workspace
+          </div>
         </div>
       </nav>
 

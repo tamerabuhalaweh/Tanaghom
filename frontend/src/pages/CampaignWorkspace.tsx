@@ -63,11 +63,11 @@ export default function CampaignWorkspace() {
     setLoading('draft');
     setMessage('');
     try {
-      const result = await aiGenerationApi.generate({ campaignRequestId: selected.id, platforms: ['linkedin', 'instagram'] }, token);
+      const result = await aiGenerationApi.generate({ campaignRequestId: selected.id, platforms: ['linkedin', 'instagram', 'x'] }, token);
       const draftResults = Array.isArray(result) ? result as RecordMap[] : [result as RecordMap];
       setDrafts(draftResults);
       setSelectedDraft(draftResults[0] || null);
-      setMessage('Draft generated through the STITCH LLM adapter. Mock remains the default provider.');
+      setMessage('Drafts generated through the backend AI provider adapter for LinkedIn, Instagram, and X.');
       setStep('score');
     } catch (err) {
       setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
@@ -84,10 +84,10 @@ export default function CampaignWorkspace() {
       const result = await algoApi.score({
         contentItemId: selectedDraft.contentItemId as string,
         platform: asText(selectedDraft.platform, 'linkedin'),
-        draftText: asText(selectedDraft.draftText, 'Demo content'),
+        draftText: asText(selectedDraft.draftText, 'Prepared social content'),
       }, token);
       setScore(result as RecordMap);
-      setMessage('Reach readiness calculated with deterministic demo intelligence.');
+      setMessage('Reach readiness calculated for the selected draft.');
       setStep('approve');
     } catch (err) {
       setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
@@ -123,7 +123,7 @@ export default function CampaignWorkspace() {
       const result = await publishingPackageApi.create({
         campaignId: selected.id as string,
         draftId: selectedDraft?.contentItemId,
-        platforms: ['linkedin', 'instagram'],
+        platforms: ['linkedin', 'instagram', 'x'],
       }, token);
       setPublishingPkg(result as RecordMap);
       setMessage('Publishing package prepared. Postiz sandbox status checked; scheduling remains blocked.');
@@ -183,10 +183,10 @@ export default function CampaignWorkspace() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Campaign Workspace</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Working Commercial/Social golden path</p>
+          <p className="text-slate-500 text-sm mt-0.5">Campaign brief, platform drafts, reach optimization, approval, and publishing preparation.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="mock">Mock LLM default</Badge>
+          <Badge variant="info">Backend AI Provider</Badge>
           <Badge variant="info">Postiz sandbox</Badge>
           <Badge variant="blocked">Scheduling blocked</Badge>
         </div>
@@ -194,7 +194,7 @@ export default function CampaignWorkspace() {
 
       <FlowTimeline steps={[
         { label: 'Select', status: step === 'select' ? 'active' : 'done' },
-        { label: 'Generate', status: step === 'generate' ? 'active' : step === 'select' ? 'pending' : 'done', badge: 'LLM adapter' },
+        { label: 'Generate', status: step === 'generate' ? 'active' : step === 'select' ? 'pending' : 'done', badge: '3 platforms' },
         { label: 'Score', status: step === 'score' ? 'active' : ['select', 'generate'].includes(step) ? 'pending' : 'done' },
         { label: 'Approve', status: step === 'approve' ? 'active' : step === 'publish' ? 'done' : 'pending' },
         { label: 'Package', status: step === 'publish' ? 'active' : 'pending', badge: 'Postiz preview' },
@@ -231,7 +231,7 @@ export default function CampaignWorkspace() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-bold text-white">{asText(selected.topic)}</h3>
-                    <p className="mt-2 text-sm text-slate-400">This is the working model for AI-assisted content preparation and governed publishing readiness.</p>
+                    <p className="mt-2 text-sm text-slate-400">Prepare social content, optimize reach readiness, route approval, and produce a Postiz-ready scheduling package.</p>
                   </div>
                   <Badge variant="info">Selected</Badge>
                 </div>
@@ -244,7 +244,7 @@ export default function CampaignWorkspace() {
 
               <div className="flex flex-wrap gap-3">
                 <button onClick={generateDraft} disabled={loading === 'draft'} className="px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-500 disabled:opacity-50 font-medium text-sm">
-                  {loading === 'draft' ? 'Generating...' : 'Generate AI Draft'}
+                  {loading === 'draft' ? 'Generating...' : 'Generate Platform Drafts'}
                 </button>
                 <button onClick={evaluateReach} disabled={!selectedDraft || loading === 'score'} className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 font-medium text-sm">
                   {loading === 'score' ? 'Scoring...' : 'Evaluate Reach'}
@@ -293,7 +293,7 @@ export default function CampaignWorkspace() {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Publishing Package</h3>
-                      <p className="mt-1 text-sm text-slate-500">Prepared by STITCH. Postiz is a sandbox scheduling surface only.</p>
+                      <p className="mt-1 text-sm text-slate-500">Prepared by the backend workflow. Postiz is the sandbox scheduling surface.</p>
                     </div>
                     <Badge variant={postizSandbox?.reachable ? 'info' : 'warning'}>{asText(publishingPkg._postizStatus)}</Badge>
                   </div>

@@ -27,7 +27,7 @@ export default function Login() {
             </div>
             <div>
               <div className="font-semibold tracking-tight">Tanaghum</div>
-              <div className="text-xs text-white/50">Commercial/Social POC MVP</div>
+              <div className="text-xs text-white/50">Commercial/Social AI Operating System</div>
             </div>
           </div>
 
@@ -107,7 +107,7 @@ export default function Login() {
             </form>
 
             <div className="mt-6 text-center text-xs text-black/40">
-              Sandbox POC. External publishing, CRM writes, WhatsApp, and voice triggers remain off by default.
+              Sandbox workspace. External publishing, CRM writes, WhatsApp, and voice triggers remain off by default.
             </div>
           </div>
         </section>
