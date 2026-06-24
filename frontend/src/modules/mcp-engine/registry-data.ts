@@ -87,7 +87,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
   {
     id: 'mcp-postiz-scheduling',
     name: 'Postiz Scheduling MCP',
-    purpose: 'Post scheduling, publishing preparation, sandbox publishing',
+    purpose: 'Postiz sandbox scheduling surface for prepared publishing packages',
     tools: ['prepare_package', 'get_status'],
     boundCapability: 'PreparePublishingPackage',
     allowedRoles: ['specialist', 'department_head', 'admin'],
@@ -96,10 +96,10 @@ export const MCP_CONNECTORS: McpConnector[] = [
     requiresApproval: true,
     requiresM5: false,
     sourceOfTruth: 'STITCH',
-    credentialStatus: 'missing',
-    lastHealthCheck: 'Mock — sandbox not connected',
-    externalExecution: 'Blocked until authorized',
-    envVars: ['POSTIZ_API_KEY', 'POSTIZ_URL'],
+    credentialStatus: 'configured',
+    lastHealthCheck: 'Sandbox installed on VPS; scheduling remains blocked',
+    externalExecution: 'Blocked until separate authorization',
+    envVars: ['POSTIZ_SANDBOX_URL', 'POSTIZ_API_KEY (future only)'],
   },
   {
     id: 'mcp-social-analytics',

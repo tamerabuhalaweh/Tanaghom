@@ -35,7 +35,7 @@ For each idea, provide:
 - estimatedReach: low/medium/high
 - rationale: why this would work`;
 
-    const result = await llm.generate(prompt);
+    await llm.generate(prompt);
 
     const ideas = [
       {
@@ -91,6 +91,7 @@ ideasRouter.post('/convert-to-campaign', async (req: Request, res: Response, nex
     const payload = getPayload(req);
     const { idea, platforms } = req.body;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const campaign = await (prisma as any).contentRequest.create({
       data: {
         raw_message: idea.title,

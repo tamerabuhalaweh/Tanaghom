@@ -3,7 +3,6 @@ import { AuthProvider } from './contexts/AuthProvider'
 import { useAuth } from './contexts/useAuth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
 import CampaignWorkspace from './pages/CampaignWorkspace'
 import ApprovalQueue from './pages/ApprovalQueue'
 import SaifDecisions from './pages/SaifDecisions'
@@ -22,6 +21,7 @@ import AIProviderSettings from './pages/AIProviderSettings'
 import McpEngine from './pages/McpEngine'
 import AgentSkills from './pages/AgentSkills'
 import GhlReadiness from './pages/GhlReadiness'
+import GhlWizard from './pages/GhlWizard'
 import DemoCommandCenter from './pages/DemoCommandCenter'
 import PostIdeas from './pages/PostIdeas'
 
@@ -39,7 +39,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<DemoCommandCenter />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="approvals" element={<ApprovalQueue />} />
             <Route path="saif" element={<SaifDecisions />} />
@@ -58,6 +58,7 @@ function App() {
             <Route path="mcp-engine" element={<McpEngine />} />
             <Route path="agent-skills" element={<AgentSkills />} />
             <Route path="ghl-readiness" element={<GhlReadiness />} />
+            <Route path="ghl-wizard" element={<GhlWizard />} />
             <Route path="command-center" element={<DemoCommandCenter />} />
             <Route path="ideas" element={<PostIdeas />} />
           </Route>
