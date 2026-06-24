@@ -50,6 +50,13 @@ export function validateEnvironment(): EnvValidationResult {
     }
   }
 
+  if (process.env.NODE_ENV === 'production' && !process.env.LLM_CREDENTIAL_ENCRYPTION_KEY) {
+    warnings.push('LLM_CREDENTIAL_ENCRYPTION_KEY is not configured. User-owned LLM API keys cannot be saved.');
+  }
+  if (process.env.LLM_CREDENTIAL_ENCRYPTION_KEY && process.env.LLM_CREDENTIAL_ENCRYPTION_KEY.length < 32) {
+    errors.push('LLM_CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters when configured.');
+  }
+
   // Validate execution kill switches — hard failures in demo mode
   const isDemo = process.env.DEMO_MODE === 'true' || !process.env.DEMO_MODE;
   for (const switchName of EXECUTION_KILL_SWITCHES) {

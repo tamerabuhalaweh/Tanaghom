@@ -128,6 +128,13 @@ export const usersApi = {
 export const aiProviderApi = {
   status: (token: string) => apiFetch<unknown>('/ai-provider/status', { token }),
   active: (token: string) => apiFetch<unknown>('/ai-provider/active', { token }),
+  credentials: (token: string) => apiFetch<unknown>('/ai-provider/credentials', { token }),
+  saveCredential: (data: unknown, token: string) =>
+    apiFetch<unknown>('/ai-provider/credentials', { method: 'POST', body: data, token }),
+  select: (provider: string, token: string) =>
+    apiFetch<unknown>('/ai-provider/select', { method: 'POST', body: { provider }, token }),
+  test: (provider: string, token: string) =>
+    apiFetch<unknown>('/ai-provider/test', { method: 'POST', body: { provider }, token }),
 };
 
 export const demoApi = {

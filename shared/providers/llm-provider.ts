@@ -62,9 +62,9 @@ export class OpenAILLMProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
 
-  constructor() {
-    this.apiKey = process.env.OPENAI_API_KEY || '';
-    this.model = process.env.OPENAI_MODEL || 'gpt-4o';
+  constructor(config?: { apiKey?: string; model?: string }) {
+    this.apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
+    this.model = config?.model || process.env.OPENAI_MODEL || 'gpt-4o';
   }
 
   async generate(prompt: string, options?: GenerateOptions): Promise<LLMResponse> {
@@ -131,9 +131,9 @@ export class ClaudeLLMProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
 
-  constructor() {
-    this.apiKey = process.env.CLAUDE_API_KEY || '';
-    this.model = process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514';
+  constructor(config?: { apiKey?: string; model?: string }) {
+    this.apiKey = config?.apiKey || process.env.CLAUDE_API_KEY || '';
+    this.model = config?.model || process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514';
   }
 
   async generate(prompt: string, options?: GenerateOptions): Promise<LLMResponse> {
@@ -206,6 +206,21 @@ export function createLLMProvider(): LLMProvider {
       return new ClaudeLLMProvider();
     default:
       return new MockLLMProvider();
+  }
+}
+
+export function createConfiguredLLMProvider(config: {
+  provider?: string | null;
+  apiKey?: string | null;
+  model?: string | null;
+}): LLMProvider {
+  switch (config.provider) {
+    case 'openai':
+      return new OpenAILLMProvider({ apiKey: config.apiKey || undefined, model: config.model || undefined });
+    case 'claude':
+      return new ClaudeLLMProvider({ apiKey: config.apiKey || undefined, model: config.model || undefined });
+    default:
+      return createLLMProvider();
   }
 }
 

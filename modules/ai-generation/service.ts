@@ -2,7 +2,8 @@ import { ForbiddenError, NotFoundError, ExternalServiceError } from '@shared/err
 import { auditLog } from '@shared/logging';
 import { eventBus } from '@shared/events';
 import { prisma } from '@shared/database';
-import { createLLMProvider, type LLMProvider } from '@shared/providers/llm-provider';
+import type { LLMProvider } from '@shared/providers/llm-provider';
+import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
 import {
   DRAFT_EVENTS,
   type DraftGeneratedEvent,
@@ -45,8 +46,8 @@ function checkPermission(role: string, permission: string): void {
 // LLM Provider (uses provider adapter, mock by default)
 // ============================================================
 
-function getLLMProvider(): LLMProvider {
-  return createLLMProvider();
+async function getLLMProvider(userId: string): Promise<LLMProvider> {
+  return resolveUserLLMProvider(userId);
 }
 
 // ============================================================
@@ -172,7 +173,7 @@ export async function reviseDraft(
     tone,
   );
 
-  const llm = getLLMProvider();
+  const llm = await getLLMProvider(requesterId);
   let revisedText: string;
   try {
     revisedText = (await llm.generate(prompt)).text;
@@ -253,7 +254,7 @@ async function generateSingleDraft(
   const constraints = PLATFORM_CONSTRAINTS[platform] || PLATFORM_CONSTRAINTS.linkedin;
   const prompt = buildGenerationPrompt(campaign, platform, constraints.maxTextLength, tone);
 
-  const llm = getLLMProvider();
+  const llm = await getLLMProvider(requesterId);
   let draftText: string;
   try {
     draftText = (await llm.generate(prompt)).text;

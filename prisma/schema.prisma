@@ -80,8 +80,33 @@ model User {
   spine_artifacts_created SpineArtifact[]
   assets_created          Asset[]
   asset_lineage_created   AssetLineage[]
+  llm_provider_credentials LlmProviderCredential[]
 
   @@map("users")
+}
+
+enum LlmProviderType {
+  openai
+  claude
+}
+
+model LlmProviderCredential {
+  id                String          @id @default(uuid()) @db.Uuid
+  owner_user_id     String          @db.Uuid
+  provider          LlmProviderType
+  model             String
+  encrypted_api_key String          @db.Text
+  key_fingerprint   String
+  is_active         Boolean         @default(true)
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @updatedAt
+  last_used_at      DateTime?
+
+  owner User @relation(fields: [owner_user_id], references: [id])
+
+  @@unique([owner_user_id, provider])
+  @@index([owner_user_id])
+  @@map("llm_provider_credentials")
 }
 
 model AgentRep {

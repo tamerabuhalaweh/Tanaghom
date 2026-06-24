@@ -5,7 +5,7 @@ import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
-import { createLLMProvider } from '@shared/providers/llm-provider';
+import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
 import {
   postIdeaSchema,
   resumeIdeaSelectionWorkflow,
@@ -50,7 +50,7 @@ ideasRouter.post('/generate', async (req: Request, res: Response, next: NextFunc
     const payload = getPayload(req);
     const input = generateIdeasSchema.parse(req.body);
 
-    const llm = createLLMProvider();
+    const llm = await resolveUserLLMProvider(payload.sub);
     const providerStatus = llm.getStatus();
     const prompt = buildIdeaPrompt(input);
     const llmResult = await llm.generate(prompt, {
