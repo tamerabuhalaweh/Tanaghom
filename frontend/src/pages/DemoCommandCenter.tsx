@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   aiGenerationApi,
+  aiProviderApi,
   algoApi,
   analyticsApi,
   approvalsApi,
@@ -8,7 +9,7 @@ import {
   demoApi,
   publishingPackageApi,
 } from '../api';
-import { Badge, FlowTimeline, PlatformPreviewCard, ReadinessGauge, RecommendationCard, SafetyGateCard } from '../components/ExecutiveUI';
+import { Badge, FlowTimeline, ReadinessGauge, RecommendationCard, SafetyGateCard } from '../components/ExecutiveUI';
 import { useAuth } from '../contexts/useAuth';
 
 type RecordMap = Record<string, unknown>;
@@ -52,12 +53,14 @@ export default function DemoCommandCenter() {
   const [campaigns, setCampaigns] = useState<RecordMap[]>([]);
   const [selected, setSelected] = useState<RecordMap | null>(null);
   const [drafts, setDrafts] = useState<RecordMap[]>([]);
+  const [draftTextById, setDraftTextById] = useState<Record<string, string>>({});
   const [selectedDraftId, setSelectedDraftId] = useState<string>('');
   const [score, setScore] = useState<RecordMap | null>(null);
   const [approval, setApproval] = useState<RecordMap | null>(null);
   const [packageResult, setPackageResult] = useState<RecordMap | null>(null);
   const [analytics, setAnalytics] = useState<RecordMap | null>(null);
   const [demoStatus, setDemoStatus] = useState<RecordMap | null>(null);
+  const [aiProvider, setAiProvider] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState('');
   const [notice, setNotice] = useState('');
   const [step, setStep] = useState<Step>('campaign');
@@ -87,6 +90,7 @@ export default function DemoCommandCenter() {
       })
       .catch(error => setNotice(`Campaign load failed: ${error instanceof Error ? error.message : 'Unknown error'}`));
     analyticsApi.demo(token).then(data => setAnalytics(data as RecordMap)).catch(() => undefined);
+    aiProviderApi.active(token).then(data => setAiProvider(data as RecordMap)).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -103,6 +107,7 @@ export default function DemoCommandCenter() {
   function chooseCampaign(campaign: RecordMap) {
     setSelected(campaign);
     setDrafts([]);
+    setDraftTextById({});
     setSelectedDraftId('');
     setScore(null);
     setApproval(null);
@@ -122,7 +127,9 @@ export default function DemoCommandCenter() {
         tone: 'professional',
       }, token);
       const generated = Array.isArray(result) ? (result as RecordMap[]) : [result as RecordMap];
+      const draftTextMap = Object.fromEntries(generated.map(draft => [String(draft.contentItemId), text(draft.draftText, '')]));
       setDrafts(generated);
+      setDraftTextById(draftTextMap);
       setSelectedDraftId(String(generated[0]?.contentItemId || ''));
       setScore(null);
       setApproval(null);
@@ -144,10 +151,11 @@ export default function DemoCommandCenter() {
     try {
       const metadata = (selectedDraft.metadata || {}) as RecordMap;
       const cta = text(metadata.cta || selected.cta, '');
+      const activeDraftText = draftTextById[String(selectedDraft.contentItemId)] || text(selectedDraft.draftText);
       const result = await algoApi.score({
         contentItemId: selectedDraft.contentItemId,
         platform: selectedDraft.platform,
-        draftText: selectedDraft.draftText,
+        draftText: activeDraftText,
         objective: selected.objective,
         audience: selected.audience,
         ...(cta ? { cta } : {}),
@@ -248,6 +256,10 @@ export default function DemoCommandCenter() {
     format: scoreComponent(score, 'formatFit'),
   };
   const postiz = ((demoStatus?.integrations as RecordMap | undefined)?.postiz || packageResult?.postizSandbox || {}) as RecordMap;
+  const providerType = text(aiProvider?.type, 'mock');
+  const providerName = text(aiProvider?.name, providerType === 'mock' ? 'Mock LLM' : 'Live AI Provider');
+  const providerLabel = providerType === 'mock' ? 'Mock Provider Active' : 'Live AI Provider Active';
+  const providerBadge = providerType === 'mock' ? 'mock' : 'success';
   const packagePlatforms = list(packageResult?.platforms);
   const auditTrail = list(demoStatus?.auditTrail).slice(0, 5);
   const events = list(demoStatus?.observability).slice(0, 5);
@@ -272,7 +284,7 @@ export default function DemoCommandCenter() {
           </div>
           <div className="grid min-w-[360px] grid-cols-2 gap-2">
             <StatusPill label="Postiz" value={postiz.reachable ? 'Sandbox Ready' : 'Preparation Ready'} variant={postiz.reachable ? 'info' : 'warning'} />
-            <StatusPill label="AI Provider" value="Mock Provider" variant="mock" />
+            <StatusPill label="AI Provider" value={providerLabel} variant={providerBadge} />
             <StatusPill label="GHL" value="Package Only" variant="default" />
             <StatusPill label="Publishing" value="Blocked" variant="blocked" />
           </div>
@@ -352,13 +364,24 @@ export default function DemoCommandCenter() {
             {drafts.length ? (
               <div className="grid grid-cols-3 gap-4">
                 {drafts.map(draft => (
-                  <button
+                  <div
                     key={String(draft.contentItemId)}
                     onClick={() => setSelectedDraftId(String(draft.contentItemId))}
-                    className={`rounded-xl text-left transition ${selectedDraft?.contentItemId === draft.contentItemId ? 'ring-2 ring-sky-400' : ''}`}
+                    className={`rounded-xl border bg-slate-900/70 p-4 text-left transition ${selectedDraft?.contentItemId === draft.contentItemId ? 'border-sky-400 ring-2 ring-sky-400/40' : 'border-slate-800'}`}
                   >
-                    <PlatformPreviewCard platform={text(draft.platform)} content={text(draft.draftText)} />
-                  </button>
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <Badge variant="info">{titleCase(text(draft.platform))}</Badge>
+                      <Badge variant={providerBadge}>{providerName}</Badge>
+                    </div>
+                    <textarea
+                      value={draftTextById[String(draft.contentItemId)] || text(draft.draftText)}
+                      onChange={event => setDraftTextById(current => ({ ...current, [String(draft.contentItemId)]: event.target.value }))}
+                      className="min-h-[132px] w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm leading-6 text-slate-200 outline-none focus:border-sky-500"
+                    />
+                    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs leading-5 text-slate-400">
+                      {text((draft.metadata as RecordMap | undefined)?.rationale, 'Adapted to platform rules and campaign audience.')}
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -446,6 +469,12 @@ export default function DemoCommandCenter() {
                       </div>
                     ))}
                   </div>
+                  <div className="mt-4">
+                    <ReadableList
+                      title="Prepared Postiz Payload"
+                      items={list(packageResult.postizPreview).slice(0, 3).map(item => `${titleCase(text(item.platform))}: ${text(item.action, 'prepare_only')} for ${text(item.scheduledAt, 'sandbox review')}`)}
+                    />
+                  </div>
                 </div>
                 <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-4">
                   <div className="flex items-center justify-between">
@@ -486,9 +515,11 @@ export default function DemoCommandCenter() {
                 return `${text(item.name, 'Lead')}: ${text(item.intent, text(item.source))} - score ${text(item.score || item.qualificationScore, 'prepared')}`;
               })} />
               <ReadableList title="GHL + Voice/Chat Handoff" items={[
-                'GoHighLevel package: prepared only, no CRM write.',
-                'WhatsApp package: prepared only, no message sent.',
-                'Voice/chat handoff: prepared only, no call trigger.',
+                `GHL contact payload: source=${titleCase(text(selectedDraft?.platform, 'social'))}, campaign=${text(selected?.topic, 'selected campaign')}, qualificationScore=82, status=prepared.`,
+                'GHL opportunity payload: pipeline=Commercial/Social Demo, stage=Qualified Lead, write blocked until sandbox authorization.',
+                'Voice/chat handoff payload: lead context, campaign source, suggested script, intent, risk notes, and approval evidence prepared.',
+                'WhatsApp package: template/context prepared only, no message sent.',
+                'Voice/chat API trigger: blocked until explicit test approval.',
               ]} />
             </div>
           </Panel>
