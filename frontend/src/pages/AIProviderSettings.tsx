@@ -147,16 +147,16 @@ export default function AIProviderSettings() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="rounded-2xl border border-slate-800 bg-slate-950/80 p-6">
+      <header className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap gap-2">
           <DemoLabel>User-Owned Credentials</DemoLabel>
           <StatusBadge label="Encrypted at rest" variant="success" />
           <StatusBadge label="Raw keys never displayed" variant="success" />
           <StatusBadge label="Backend-only model calls" variant="info" />
         </div>
-        <h1 className="mt-4 text-3xl font-semibold text-white">AI Provider Settings</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-          Choose your LLM provider, store your own API key securely, and keep model execution isolated to your account. STITCH uses your active provider only through the backend.
+        <h1 className="mt-4 text-3xl font-semibold text-neutral-950">AI Provider Settings</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
+          Choose your LLM provider, store your own API key securely, and keep model execution isolated to your account. Model calls use the backend provider adapter only.
         </p>
       </header>
 
@@ -166,7 +166,7 @@ export default function AIProviderSettings() {
         <Card title="Provider Setup">
           <div className="space-y-4">
             <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Provider</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Provider</span>
               <select
                 value={selectedProvider}
                 onChange={(event) => {
@@ -177,7 +177,7 @@ export default function AIProviderSettings() {
                   setModel(credential?.model || nextMeta.defaultModel);
                   setApiKey('');
                 }}
-                className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-white"
+                className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
               >
                 {PROVIDERS.map((provider) => (
                   <option key={provider.type} value={provider.type}>{provider.name}</option>
@@ -186,24 +186,24 @@ export default function AIProviderSettings() {
             </label>
 
             <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Model</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Model</span>
               <input
                 value={model}
                 onChange={(event) => setModel(event.target.value)}
                 disabled={selectedProvider === 'mock'}
-                className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-white disabled:opacity-60"
+                className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 disabled:bg-neutral-50 disabled:text-neutral-500"
               />
             </label>
 
             {selectedProvider !== 'mock' && (
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">{selectedMeta.keyLabel}</span>
+                <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">{selectedMeta.keyLabel}</span>
                 <input
                   type="password"
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
                   placeholder="Paste key once. It will be encrypted and never shown again."
-                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-white"
+                  className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
                 />
               </label>
             )}
@@ -212,14 +212,14 @@ export default function AIProviderSettings() {
               <button
                 onClick={selectProvider}
                 disabled={loading === 'select'}
-                className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-50"
+                className="rounded-md bg-neutral-950 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
               >
                 {loading === 'select' ? 'Selecting...' : 'Use Provider'}
               </button>
               <button
                 onClick={saveCredential}
                 disabled={selectedProvider === 'mock' || !apiKey || loading === 'save'}
-                className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                className="rounded-md border border-neutral-200 bg-white px-4 py-3 text-sm font-medium text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
               >
                 {loading === 'save' ? 'Saving...' : 'Save Key'}
               </button>
@@ -234,12 +234,12 @@ export default function AIProviderSettings() {
               const credential = credentials.find((item) => item.provider === provider.type);
               const active = activeProvider === provider.type;
               return (
-                <Card key={provider.type} className={active ? 'border-sky-500/60 ring-1 ring-sky-500/30' : ''}>
+                <Card key={provider.type} className={active ? 'border-blue-300 ring-1 ring-blue-200' : ''}>
                   <div className="space-y-4">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="text-lg font-semibold text-white">{provider.name}</h3>
-                        <p className="mt-1 text-xs text-slate-500">{status?.scope === 'user' ? 'User credential' : provider.type === 'mock' ? 'Built-in fallback' : 'Environment or missing'}</p>
+                        <h3 className="text-lg font-semibold text-neutral-950">{provider.name}</h3>
+                        <p className="mt-1 text-xs text-neutral-500">{status?.scope === 'user' ? 'User credential' : provider.type === 'mock' ? 'Built-in fallback' : 'Environment or missing'}</p>
                       </div>
                       <StatusBadge label={active ? 'Active' : status?.configured ? 'Configured' : 'Missing'} variant={active ? 'success' : status?.configured ? 'info' : 'warning'} />
                     </div>
@@ -254,7 +254,7 @@ export default function AIProviderSettings() {
                       <button
                         onClick={() => testProvider(provider.type)}
                         disabled={!credential || loading === `test-${provider.type}`}
-                        className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
                       >
                         {loading === `test-${provider.type}` ? 'Testing...' : 'Test Backend Connection'}
                       </button>
@@ -277,8 +277,8 @@ export default function AIProviderSettings() {
 function Line({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="truncate text-right font-mono text-xs text-slate-300">{value}</span>
+      <span className="text-neutral-500">{label}</span>
+      <span className="truncate text-right font-mono text-xs text-neutral-700">{value}</span>
     </div>
   );
 }

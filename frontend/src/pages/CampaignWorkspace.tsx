@@ -3,6 +3,10 @@ import { aiGenerationApi, algoApi, approvalsApi, campaignsApi, postizApi, publis
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
+  EmptyProductState,
+  Notice,
+  PlatformPill,
+  ProgressBar,
   PrimaryAction,
   ProductCard,
   ProductPage,
@@ -191,8 +195,8 @@ export default function CampaignWorkspace() {
   return (
     <ProductPage
       eyebrow="Campaign operations"
-      title="Campaigns"
-      subtitle="Review the campaign brief, generate platform drafts, optimize the selected draft, and prepare it for approval and publishing."
+      title="Campaign workspace"
+      subtitle="Select a campaign, prepare platform drafts, score the selected post, capture human approval, and prepare a Postiz-ready publishing package."
       action={<ProductStatus tone={selected ? 'good' : 'warn'}>{selected ? 'Campaign Active' : 'Select Campaign'}</ProductStatus>}
     >
       <WorkflowRail steps={[
@@ -207,9 +211,7 @@ export default function CampaignWorkspace() {
       ]} />
 
       {message && (
-        <div className={`rounded-2xl px-4 py-3 text-sm ${message.includes('failed') ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'}`}>
-          {message}
-        </div>
+        <Notice tone={message.includes('failed') ? 'danger' : 'good'}>{message}</Notice>
       )}
 
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -220,10 +222,10 @@ export default function CampaignWorkspace() {
                 key={String(campaign.id)}
                 type="button"
                 onClick={() => selectCampaign(campaign)}
-                className={`w-full rounded-2xl p-4 text-left transition ${selected?.id === campaign.id ? 'bg-black text-white' : 'bg-stone-50 text-black hover:bg-stone-100'}`}
+                className={`w-full rounded-lg border p-4 text-left transition ${selected?.id === campaign.id ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'}`}
               >
                 <div className="line-clamp-3 font-semibold">{text(campaign.topic)}</div>
-                <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/58' : 'text-black/50'}`}>
+                <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/60' : 'text-neutral-500'}`}>
                   {titleCase(text(campaign.status, 'idea'))} / {titleCase(text(campaign.riskCategory, 'medium'))} risk
                 </div>
               </button>
@@ -241,7 +243,7 @@ export default function CampaignWorkspace() {
                 { label: 'CTA', value: text(selected.cta, 'Prepared during drafting') },
               ]} />
             ) : (
-              <Empty message="Select a campaign to begin." />
+              <EmptyProductState message="Select a campaign to begin." />
             )}
           </ProductCard>
 
@@ -256,24 +258,24 @@ export default function CampaignWorkspace() {
                   const id = String(draft.contentItemId);
                   const active = selectedDraft?.contentItemId === draft.contentItemId;
                   return (
-                    <article key={id} className={`rounded-2xl p-4 ring-1 ${active ? 'bg-black text-white ring-black' : 'bg-stone-50 text-black ring-black/6'}`}>
+                    <article key={id} className={`rounded-lg border p-4 ${active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white'}`}>
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <h3 className="font-semibold">{titleCase(text(draft.platform))}</h3>
-                        <button type="button" onClick={() => setSelectedDraftId(id)} className={`rounded-full px-3 py-1 text-xs font-semibold ${active ? 'bg-white text-black' : 'bg-white text-black shadow-sm'}`}>
-                          {active ? 'Selected' : 'Select'}
+                        <button type="button" onClick={() => setSelectedDraftId(id)} className="focus:outline-none">
+                          <PlatformPill active={active}>{active ? 'Selected' : 'Select'}</PlatformPill>
                         </button>
                       </div>
                       <textarea
                         value={draftTextById[id] || text(draft.draftText)}
                         onChange={event => setDraftTextById(current => ({ ...current, [id]: event.target.value }))}
-                        className={`min-h-[180px] w-full resize-y rounded-xl border p-3 text-sm leading-6 outline-none ${active ? 'border-white/15 bg-white/8 text-white' : 'border-black/8 bg-white text-black'}`}
+                        className={`min-h-[180px] w-full resize-y rounded-md border p-3 text-sm leading-6 outline-none ${active ? 'border-white/15 bg-white/10 text-white placeholder:text-white/40' : 'border-neutral-200 bg-neutral-50 text-neutral-950'}`}
                       />
                     </article>
                   );
                 })}
               </div>
             ) : (
-              <Empty message="Generate platform-specific drafts when the brief is ready." />
+              <EmptyProductState message="Generate platform-specific drafts when the brief is ready." />
             )}
           </ProductCard>
 
@@ -281,10 +283,17 @@ export default function CampaignWorkspace() {
             <ProductCard title="Optimize Selected Draft" subtitle="Score the selected draft before approval." action={<PrimaryAction onClick={scoreDraft} disabled={!selectedDraft || loading === 'score'}>{loading === 'score' ? 'Scoring...' : 'Score Draft'}</PrimaryAction>}>
               {score ? (
                 <div className="space-y-4">
-                  <div className="rounded-2xl bg-black p-5 text-white">
-                    <div className="text-sm text-white/55">Readiness score</div>
-                    <div className="mt-2 text-5xl font-semibold">{scoreValue}</div>
-                    <div className="mt-2 text-sm text-white/65">{text(score.bandLabel, 'Ready for review')}</div>
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-950 p-5 text-white">
+                    <div className="flex items-end justify-between gap-4">
+                      <div>
+                        <div className="text-sm text-white/60">Readiness score</div>
+                        <div className="mt-2 text-5xl font-semibold">{scoreValue}</div>
+                      </div>
+                      <ProductStatus tone="muted">{text(score.bandLabel, 'Ready for review')}</ProductStatus>
+                    </div>
+                    <div className="mt-5">
+                      <ProgressBar value={scoreValue} />
+                    </div>
                   </div>
                   <ReadableQueue items={[
                     { title: 'Best platform', meta: titleCase(text(selectedDraft?.platform, 'linkedin')), status: 'Recommended', tone: 'good' },
@@ -293,7 +302,7 @@ export default function CampaignWorkspace() {
                   ]} />
                 </div>
               ) : (
-                <Empty message="Score the selected draft to review readiness." />
+                <EmptyProductState message="Score the selected draft to review readiness." />
               )}
             </ProductCard>
 
@@ -332,9 +341,9 @@ export default function CampaignWorkspace() {
                   </SecondaryAction>
                 </div>
                 {postizPayload && (
-                  <div className="rounded-2xl bg-stone-50 p-4">
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                     <div className="font-semibold text-black">Postiz payload preview</div>
-                    <div className="mt-2 text-sm text-black/55">
+                    <div className="mt-2 text-sm text-neutral-600">
                       Type: {text((postizPayload.payload as RecordMap | undefined)?.type, 'schedule')} / Posts: {Array.isArray((postizPayload.payload as RecordMap | undefined)?.posts) ? ((postizPayload.payload as RecordMap).posts as unknown[]).length : 1}
                     </div>
                     <div className="mt-3"><ProductStatus tone="warn">Sandbox Scheduling Disabled</ProductStatus></div>
@@ -347,8 +356,4 @@ export default function CampaignWorkspace() {
       </div>
     </ProductPage>
   );
-}
-
-function Empty({ message }: { message: string }) {
-  return <div className="rounded-2xl bg-stone-50 p-6 text-center text-sm text-black/48">{message}</div>;
 }

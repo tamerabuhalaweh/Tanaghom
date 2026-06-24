@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   aiGenerationApi,
   algoApi,
@@ -11,7 +12,11 @@ import {
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
+  EmptyProductState,
   MetricCard,
+  Notice,
+  PlatformPill,
+  ProgressBar,
   PrimaryAction,
   ProductCard,
   ProductPage,
@@ -302,15 +307,15 @@ export default function DemoCommandCenter() {
     <ProductPage
       eyebrow="Commercial/Social"
       title="Commercial Command Center"
-      subtitle="Run the social campaign workflow from brief to drafts, approval, publishing preparation, performance intelligence, and lead handoff."
-      action={<ProductStatus tone="good">Sandbox Workspace</ProductStatus>}
+      subtitle="Operate the full Commercial/Social workflow from campaign brief to AI drafts, human approval, publishing package, performance intelligence, and lead handoff."
+      action={<ProductStatus tone="good">Product Workspace</ProductStatus>}
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Active Campaign" value={selected ? '1' : '0'} detail={selected ? text(selected.topic) : 'Select a campaign'} />
-        <MetricCard label="Next Action" value={nextAction} detail="Primary operator task" />
-        <MetricCard label="Readiness" value={score ? `${totalScore}/100` : 'Pending'} detail={score ? text(score.bandLabel, 'Ready for review') : 'Score selected draft'} />
-        <MetricCard label="Publishing" value={packageResult ? 'Package Ready' : 'Waiting'} detail={postiz.reachable ? 'Postiz sandbox reachable' : 'Scheduling disabled'} />
-        <MetricCard label="Leads" value={handoffPackage ? 'Handoff Ready' : leads.length || 'Pending'} detail="CRM and voice follow-up gated" />
+        <MetricCard tone="info" label="Active Campaign" value={selected ? '1' : '0'} detail={selected ? text(selected.topic) : 'Select a campaign'} />
+        <MetricCard tone="warn" label="Next Action" value={nextAction} detail="Primary operator task" />
+        <MetricCard tone={score ? 'good' : 'muted'} label="Readiness" value={score ? `${totalScore}/100` : 'Pending'} detail={score ? text(score.bandLabel, 'Ready for review') : 'Score selected draft'} />
+        <MetricCard tone={packageResult ? 'good' : 'muted'} label="Publishing" value={packageResult ? 'Package Ready' : 'Waiting'} detail={postiz.reachable ? 'Postiz sandbox reachable' : 'Scheduling disabled'} />
+        <MetricCard tone={handoffPackage ? 'good' : 'info'} label="Leads" value={handoffPackage ? 'Handoff Ready' : leads.length || 'Pending'} detail="CRM and voice follow-up gated" />
       </div>
 
       <ProductCard title="Workflow" subtitle="The same campaign moves through preparation, approval, publishing package, intelligence, and handoff.">
@@ -327,9 +332,7 @@ export default function DemoCommandCenter() {
       </ProductCard>
 
       {notice && (
-        <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm ${notice.includes('failed') ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'}`}>
-          {notice}
-        </div>
+        <Notice tone={notice.includes('failed') ? 'danger' : 'good'}>{notice}</Notice>
       )}
 
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -340,12 +343,12 @@ export default function DemoCommandCenter() {
                 key={String(campaign.id)}
                 type="button"
                 onClick={() => chooseCampaign(campaign)}
-                className={`w-full rounded-2xl p-4 text-left transition ${
-                  selected?.id === campaign.id ? 'bg-black text-white' : 'bg-stone-50 text-black hover:bg-stone-100'
+                className={`w-full rounded-lg border p-4 text-left transition ${
+                  selected?.id === campaign.id ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'
                 }`}
               >
                 <div className="line-clamp-3 font-semibold">{text(campaign.topic)}</div>
-                <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/58' : 'text-black/48'}`}>
+                <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/60' : 'text-neutral-500'}`}>
                   {titleCase(text(campaign.status, 'idea'))} / {titleCase(text(campaign.riskCategory, 'medium'))} risk
                 </div>
               </button>
@@ -367,7 +370,10 @@ export default function DemoCommandCenter() {
                 { label: 'CTA', value: text(selected.cta, 'CTA prepared during drafting') },
               ]} />
             ) : (
-              <EmptyProductState message="Select a campaign to begin." />
+              <EmptyProductState
+                message="Select an existing campaign or create a new campaign idea from AI Draft Studio."
+                action={<Link to="/ideas" className="inline-flex min-h-10 items-center justify-center rounded-md bg-neutral-950 px-4 py-2 text-sm font-medium text-white">Create Campaign Idea</Link>}
+              />
             )}
           </ProductCard>
 
@@ -382,22 +388,22 @@ export default function DemoCommandCenter() {
                   const draftId = String(draft.contentItemId);
                   const selectedCard = selectedDraft?.contentItemId === draft.contentItemId;
                   return (
-                    <article key={draftId} className={`rounded-2xl p-4 ring-1 ${selectedCard ? 'bg-black text-white ring-black' : 'bg-stone-50 text-black ring-black/6'}`}>
+                    <article key={draftId} className={`rounded-lg border p-4 ${selectedCard ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white'}`}>
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div className="text-sm font-semibold">{titleCase(text(draft.platform))}</div>
                         <button
                           type="button"
                           onClick={() => setSelectedDraftId(draftId)}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${selectedCard ? 'bg-white text-black' : 'bg-white text-black shadow-sm'}`}
+                          className="focus:outline-none"
                         >
-                          {selectedCard ? 'Selected' : 'Select'}
+                          <PlatformPill active={selectedCard}>{selectedCard ? 'Selected' : 'Select'}</PlatformPill>
                         </button>
                       </div>
                       <textarea
                         value={draftTextById[draftId] || text(draft.draftText)}
                         onChange={event => setDraftTextById(current => ({ ...current, [draftId]: event.target.value }))}
-                        className={`min-h-[164px] w-full resize-y rounded-xl border p-3 text-sm leading-6 outline-none ${
-                          selectedCard ? 'border-white/15 bg-white/8 text-white placeholder:text-white/30' : 'border-black/8 bg-white text-black'
+                        className={`min-h-[164px] w-full resize-y rounded-md border p-3 text-sm leading-6 outline-none ${
+                          selectedCard ? 'border-white/15 bg-white/10 text-white placeholder:text-white/30' : 'border-neutral-200 bg-neutral-50 text-neutral-950'
                         }`}
                       />
                     </article>
@@ -417,14 +423,19 @@ export default function DemoCommandCenter() {
             >
               {score ? (
                 <div className="space-y-4">
-                  <div className="flex items-end justify-between rounded-2xl bg-black p-5 text-white">
-                    <div>
-                      <div className="text-sm text-white/58">Readiness score</div>
-                      <div className="mt-2 text-5xl font-semibold">{totalScore}</div>
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-950 p-5 text-white">
+                    <div className="flex items-end justify-between gap-4">
+                      <div>
+                        <div className="text-sm text-white/60">Readiness score</div>
+                        <div className="mt-2 text-5xl font-semibold">{totalScore}</div>
+                      </div>
+                      <div className="text-right">
+                        <ProductStatus tone="muted">{text(score.bandLabel, 'Ready for review')}</ProductStatus>
+                        <div className="mt-2 text-xs text-white/50">{titleCase(text(selectedDraft?.platform, 'linkedin'))}</div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold">{text(score.bandLabel, 'Ready for review')}</div>
-                      <div className="mt-1 text-xs text-white/45">{titleCase(text(selectedDraft?.platform, 'linkedin'))}</div>
+                    <div className="mt-5">
+                      <ProgressBar value={totalScore} />
                     </div>
                   </div>
                   <DetailGrid items={[
@@ -437,9 +448,9 @@ export default function DemoCommandCenter() {
                   ]} />
                 </div>
               ) : (
-                <EmptyProductState message="Score the selected draft to unlock recommendations." />
-              )}
-            </ProductCard>
+              <EmptyProductState message="Score the selected draft to unlock recommendations." />
+            )}
+          </ProductCard>
 
             <ProductCard
               title="Approval & Publishing"
@@ -498,7 +509,7 @@ export default function DemoCommandCenter() {
                 { title: 'Best time', meta: text(analytics?.bestTime, 'Tuesday 10:00 AM'), status: 'Recommended', tone: 'good' },
               ]} />
               <ReadableQueue items={[
-                { title: 'LinkedIn Lead - Enterprise Training Inquiry', meta: 'Score 82 / CRM handoff ready', status: handoffPackage ? 'Ready' : 'Prepared after package', tone: handoffPackage ? 'good' : 'default' },
+                { title: leads.length ? 'Captured lead package' : 'Lead handoff package', meta: handoffPackage ? 'Qualification context prepared for CRM review.' : 'Prepared after approved publishing package and lead capture.', status: handoffPackage ? 'Ready' : 'Waiting', tone: handoffPackage ? 'good' : 'default' },
                 { title: 'Voice follow-up', meta: handoffPackage ? 'Script and intent prepared; trigger requires authorization.' : 'Prepared after lead handoff.', status: handoffPackage ? 'Voice Follow-up Ready' : 'Waiting', tone: handoffPackage ? 'info' : 'default' },
               ]} />
             </div>
@@ -506,13 +517,5 @@ export default function DemoCommandCenter() {
         </div>
       </div>
     </ProductPage>
-  );
-}
-
-function EmptyProductState({ message }: { message: string }) {
-  return (
-    <div className="rounded-2xl bg-stone-50 p-6 text-center text-sm text-black/48">
-      {message}
-    </div>
   );
 }

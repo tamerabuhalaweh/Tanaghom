@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { analyticsApi, demoApi } from '../api';
-import { DetailGrid, MetricCard, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
+import { DetailGrid, EmptyProductState, MetricCard, Notice, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
 
 type RecordMap = Record<string, unknown>;
@@ -14,48 +14,23 @@ type AnalyticsSnapshot = {
   bestTime?: string;
 };
 
-const SANDBOX_LEADS = [
-  {
-    title: 'LinkedIn Lead - Enterprise Training Inquiry',
-    platform: 'LinkedIn',
-    campaign: 'Premium Social Intelligence Campaign',
-    intent: 'Enterprise training inquiry',
-    score: 82,
-    owner: 'Commercial operations',
-    stage: 'CRM Handoff Ready',
-    nextAction: 'Review GHL contact and opportunity payload.',
-  },
-  {
-    title: 'Instagram Lead - Course Follow-up Request',
-    platform: 'Instagram',
-    campaign: 'Premium Social Intelligence Campaign',
-    intent: 'Course follow-up request',
-    score: 74,
-    owner: 'Demand generation',
-    stage: 'Needs Human Review',
-    nextAction: 'Confirm consent and route to nurture.',
-  },
-  {
-    title: 'X Lead - Partnership Information Request',
-    platform: 'X / Twitter',
-    campaign: 'Premium Social Intelligence Campaign',
-    intent: 'Partnership information request',
-    score: 68,
-    owner: 'Revenue operations',
-    stage: 'Qualification In Progress',
-    nextAction: 'Ask one qualifying question before handoff.',
-  },
-];
-
 function list(value: unknown): RecordMap[] {
   return Array.isArray(value) ? value as RecordMap[] : [];
+}
+
+function text(value: unknown, fallback = 'Not available'): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function titleCase(value: string): string {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 }
 
 export default function Analytics() {
   const { token } = useAuth();
   const [analytics, setAnalytics] = useState<AnalyticsSnapshot | null>(null);
   const [status, setStatus] = useState<RecordMap | null>(null);
-  const [selectedLead, setSelectedLead] = useState(SANDBOX_LEADS[0]);
+  const [selectedLeadIndex, setSelectedLeadIndex] = useState(0);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -85,7 +60,8 @@ export default function Analytics() {
   const reach = analytics?.reach ?? 0;
   const impressions = analytics?.impressions ?? 0;
   const leadCaptures = list(status?.leadCaptures);
-  const liveLeadCount = leadCaptures.length || SANDBOX_LEADS.length;
+  const selectedLead = leadCaptures[selectedLeadIndex] || leadCaptures[0] || null;
+  const liveLeadCount = leadCaptures.length;
 
   return (
     <ProductPage
@@ -94,7 +70,7 @@ export default function Analytics() {
       subtitle="Review campaign performance signals, learning recommendations, qualified leads, and gated CRM or voice follow-up packages."
       action={<ProductStatus tone="info">Read-only intelligence</ProductStatus>}
     >
-      {message && <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-100">{message}</div>}
+      {message && <Notice tone="danger">{message}</Notice>}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Reach" value={reach ? reach.toLocaleString() : '8,900'} detail="Campaign audience reached" />
@@ -107,10 +83,10 @@ export default function Analytics() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <ProductCard title="Performance Intelligence" subtitle="Signals the marketing team can use for the next campaign decision.">
           <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-            <div className="rounded-2xl bg-black p-6 text-white">
-              <div className="text-sm text-white/55">Learning signal</div>
+            <div className="rounded-lg border border-neutral-200 bg-neutral-950 p-6 text-white">
+              <div className="text-sm text-white/60">Learning signal</div>
               <h2 className="mt-3 text-2xl font-semibold leading-tight">{analytics?.topContent || 'Educational posts with image formats are performing above baseline'}</h2>
-              <p className="mt-4 text-sm leading-6 text-white/58">
+              <p className="mt-4 text-sm leading-6 text-white/65">
                 Keep the educational format, tighten the CTA, and prioritize the best performing platform window for the next approved package.
               </p>
             </div>
@@ -124,46 +100,61 @@ export default function Analytics() {
         </ProductCard>
 
         <ProductCard title="Lead Queue" subtitle="Qualified campaign responses ready for review.">
-          <div className="space-y-3">
-            {SANDBOX_LEADS.map(lead => (
-              <button
-                key={lead.title}
-                type="button"
-                onClick={() => setSelectedLead(lead)}
-                className={`w-full rounded-2xl p-4 text-left transition ${selectedLead.title === lead.title ? 'bg-black text-white' : 'bg-stone-50 text-black hover:bg-stone-100'}`}
-              >
-                <div className="font-semibold">{lead.title}</div>
-                <div className={`mt-2 text-sm ${selectedLead.title === lead.title ? 'text-white/58' : 'text-black/48'}`}>
-                  {lead.intent} / Score {lead.score}
-                </div>
-              </button>
-            ))}
-          </div>
+          {leadCaptures.length ? (
+            <div className="space-y-3">
+              {leadCaptures.map((lead, index) => {
+                const active = selectedLeadIndex === index;
+                const title = `${titleCase(text(lead.source, 'Social'))} lead`;
+                return (
+                  <button
+                    key={`${title}-${index}`}
+                    type="button"
+                    onClick={() => setSelectedLeadIndex(index)}
+                    className={`w-full rounded-lg border p-4 text-left transition ${active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'}`}
+                  >
+                    <div className="font-semibold">{title}</div>
+                    <div className={`mt-2 text-sm ${active ? 'text-white/60' : 'text-neutral-500'}`}>
+                      {titleCase(text(lead.status, 'Qualification in progress'))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyProductState
+              title="No captured leads yet"
+              message="When approved posts generate qualified responses, leads will appear here for review, CRM handoff, and voice/chat follow-up preparation."
+            />
+          )}
         </ProductCard>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
         <ProductCard title="Selected Lead" subtitle="Business context for the handoff decision.">
-          <DetailGrid items={[
-            { label: 'Platform', value: selectedLead.platform },
-            { label: 'Campaign', value: selectedLead.campaign },
-            { label: 'Intent', value: selectedLead.intent },
-            { label: 'Owner', value: selectedLead.owner },
-            { label: 'Stage', value: selectedLead.stage },
-            { label: 'Next Action', value: selectedLead.nextAction },
-          ]} />
+          {selectedLead ? (
+            <DetailGrid items={[
+              { label: 'Platform', value: titleCase(text(selectedLead.source, 'Social')) },
+              { label: 'Campaign', value: 'Current Commercial/Social campaign' },
+              { label: 'Intent', value: 'Captured response requires qualification' },
+              { label: 'Owner', value: 'Marketing manager' },
+              { label: 'Stage', value: titleCase(text(selectedLead.status, 'Qualification in progress')) },
+              { label: 'Next Action', value: 'Review consent and prepare CRM handoff package' },
+            ]} />
+          ) : (
+            <EmptyProductState message="Select a captured lead when one is available." />
+          )}
         </ProductCard>
 
         <ProductCard title="CRM & Voice Follow-up Packages" subtitle="Prepared payloads are visible; execution remains authorization-gated.">
           <div className="grid gap-4 lg:grid-cols-2">
             <ReadableQueue items={[
-              { title: 'GHL contact payload', meta: `${selectedLead.platform} source / ${selectedLead.intent}`, status: 'CRM Handoff Ready', tone: 'good' },
-              { title: 'GHL opportunity payload', meta: `Pipeline: Commercial/Social / Stage: ${selectedLead.stage}`, status: 'Requires Authorization', tone: 'warn' },
+              { title: 'GHL contact payload', meta: selectedLead ? `${titleCase(text(selectedLead.source, 'Social'))} source / qualification package prepared` : 'Waiting for captured lead', status: selectedLead ? 'CRM Handoff Ready' : 'Waiting', tone: selectedLead ? 'good' : 'default' },
+              { title: 'GHL opportunity payload', meta: selectedLead ? `Pipeline: Commercial/Social / Stage: ${titleCase(text(selectedLead.status, 'Review'))}` : 'Available after lead selection', status: 'Requires Authorization', tone: 'warn' },
               { title: 'Write to CRM', meta: 'Requires customer credentials and sandbox authorization.', status: 'Disabled', tone: 'default' },
             ]} />
             <ReadableQueue items={[
               { title: 'Voice follow-up package', meta: 'Suggested script and lead context prepared.', status: 'Voice Follow-up Ready', tone: 'info' },
-              { title: 'Consent state', meta: selectedLead.score >= 80 ? 'Ready for human review' : 'Needs confirmation', status: selectedLead.score >= 80 ? 'Reviewed' : 'Pending', tone: selectedLead.score >= 80 ? 'good' : 'warn' },
+              { title: 'Consent state', meta: selectedLead ? 'Needs human confirmation before any outreach' : 'Waiting for captured lead', status: selectedLead ? 'Pending' : 'Waiting', tone: selectedLead ? 'warn' : 'default' },
               { title: 'Trigger call/chat', meta: 'Requires approved test lead and explicit authorization.', status: 'Disabled', tone: 'default' },
             ]} />
           </div>

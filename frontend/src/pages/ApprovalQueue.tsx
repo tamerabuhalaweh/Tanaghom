@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { approvalsApi, publishingPackageApi } from '../api';
-import { ProductCard, ProductPage, ProductStatus, PrimaryAction, ReadableQueue, SecondaryAction } from '../components/ProductUI';
+import { EmptyProductState, Notice, PrimaryAction, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
 
 type RecordMap = Record<string, unknown>;
@@ -78,13 +78,11 @@ export default function ApprovalQueue() {
     <ProductPage
       eyebrow="Governed workflow"
       title="Approvals & Publishing"
-      subtitle="Review content decisions, approve or request changes, and inspect publishing packages prepared for Postiz scheduling."
+      subtitle="Review content decisions, approve or request changes, and inspect publishing packages prepared for scheduling review."
       action={<ProductStatus tone={pendingApprovals.length ? 'warn' : 'good'}>{pendingApprovals.length ? `${pendingApprovals.length} Pending` : 'Queue Clear'}</ProductStatus>}
     >
       {message && (
-        <div className={`rounded-2xl px-4 py-3 text-sm ${message.includes('failed') || message.includes('Decision failed') ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'}`}>
-          {message}
-        </div>
+        <Notice tone={message.includes('failed') || message.includes('Decision failed') ? 'danger' : 'good'}>{message}</Notice>
       )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
@@ -96,14 +94,14 @@ export default function ApprovalQueue() {
                 const status = text(approval.approvalStatus, 'pending');
                 const pending = status === 'pending';
                 return (
-                  <article key={id} className="rounded-2xl bg-stone-50 p-5">
+                  <article key={id} className="rounded-lg border border-neutral-200 bg-white p-5">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="text-lg font-semibold text-black">{titleCase(text(approval.targetType, 'Content'))}</h2>
                           <ProductStatus tone={status === 'approved' ? 'good' : status === 'rejected' ? 'danger' : 'warn'}>{titleCase(status)}</ProductStatus>
                         </div>
-                        <p className="mt-2 max-w-2xl text-sm leading-6 text-black/55">
+                        <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
                           Review the selected social draft, readiness score, and campaign intent before publishing preparation.
                         </p>
                         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -125,9 +123,7 @@ export default function ApprovalQueue() {
               })}
             </div>
           ) : (
-            <div className="rounded-2xl bg-stone-50 p-8 text-center text-sm text-black/50">
-              No approval package is pending. Send a selected draft for review from Campaigns.
-            </div>
+            <EmptyProductState message="No approval package is pending. Send a selected draft for review from Campaigns." />
           )}
         </ProductCard>
 
@@ -140,8 +136,8 @@ export default function ApprovalQueue() {
           })) : [
             { title: 'No package ready yet', meta: 'Approve content to unlock publishing preparation.', status: 'Waiting', tone: 'default' as const },
           ]} />
-          <div className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-            Postiz scheduling is visible as a payload and sandbox surface. Scheduling remains disabled until credentials and authorization are approved.
+          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+            Scheduling is visible as a payload and sandbox surface. Real scheduling remains disabled until credentials and authorization are approved.
           </div>
         </ProductCard>
       </div>
@@ -151,9 +147,9 @@ export default function ApprovalQueue() {
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-white p-3">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">{label}</div>
-      <div className="mt-1 text-sm font-medium text-black/72">{value}</div>
+    <div className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-neutral-800">{value}</div>
     </div>
   );
 }

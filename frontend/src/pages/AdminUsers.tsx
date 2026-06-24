@@ -94,15 +94,15 @@ export default function AdminUsers() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="rounded-2xl border border-slate-800 bg-slate-950/80 p-6">
+      <header className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap gap-2">
           <StatusBadge label="Admin / CCO only" variant="info" />
           <StatusBadge label="AgentRep required" variant="success" />
           <StatusBadge label="Session Context Lock" variant="success" />
         </div>
-        <h1 className="mt-4 text-3xl font-semibold text-white">Users, Roles & AgentReps</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-          Create operators, assign roles/departments, and verify each account has an active AgentRep for governed STITCH execution.
+        <h1 className="mt-4 text-3xl font-semibold text-neutral-950">Users, Roles & AgentReps</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
+          Create operators, assign roles/departments, and verify each account has an AgentRep for governed work preparation.
         </p>
       </header>
 
@@ -114,20 +114,20 @@ export default function AdminUsers() {
             <Field label="Name" value={form.name} onChange={(value) => setForm({ ...form, name: value })} />
             <Field label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} />
             <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Role</span>
-              <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-white">
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Role</span>
+              <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950">
                 {ROLES.map((role) => <option key={role} value={role}>{role.replaceAll('_', ' ')}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Department</span>
-              <select value={form.departmentId} onChange={(event) => setForm({ ...form, departmentId: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-white">
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Department</span>
+              <select value={form.departmentId} onChange={(event) => setForm({ ...form, departmentId: event.target.value })} className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950">
                 <option value="">No department</option>
                 {departments.map((department) => <option key={String(department.id)} value={String(department.id)}>{text(department.name)}</option>)}
               </select>
             </label>
             <Field label="Temporary Password" value={form.password} onChange={(value) => setForm({ ...form, password: value })} />
-            <button disabled={loading || !form.email || !form.name} onClick={createUser} className="w-full rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-50">
+            <button disabled={loading || !form.email || !form.name} onClick={createUser} className="w-full rounded-md bg-neutral-950 px-5 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50">
               {loading ? 'Creating...' : 'Create User + AgentRep'}
             </button>
           </div>
@@ -139,26 +139,26 @@ export default function AdminUsers() {
               const agentRep = user.agentRep as RecordMap | null;
               const active = Boolean(user.isActive);
               return (
-                <div key={String(user.id)} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <div key={String(user.id)} className="rounded-lg border border-neutral-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="font-semibold text-white">{text(user.name)}</div>
-                      <div className="mt-1 text-sm text-slate-400">{text(user.email)}</div>
+                      <div className="font-semibold text-neutral-950">{text(user.name)}</div>
+                      <div className="mt-1 text-sm text-neutral-500">{text(user.email)}</div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <StatusBadge label={text(user.role).replaceAll('_', ' ')} variant="info" />
                         <StatusBadge label={text(user.department)} variant="default" />
                         <StatusBadge label={active ? 'Active' : 'Inactive'} variant={active ? 'success' : 'danger'} />
                       </div>
                     </div>
-                    <button disabled={loading} onClick={() => setActive(String(user.id), !active)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
+                    <button disabled={loading} onClick={() => setActive(String(user.id), !active)} className="rounded-md border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
                       {active ? 'Deactivate' : 'Activate'}
                     </button>
                   </div>
-                  <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                  <div className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">AgentRep</div>
-                        <div className="mt-1 text-sm text-slate-300">{text(agentRep?.name, 'Missing AgentRep')}</div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">AgentRep</div>
+                        <div className="mt-1 text-sm text-neutral-700">{text(agentRep?.name, 'Missing AgentRep')}</div>
                       </div>
                       <StatusBadge label={text(agentRep?.status, 'missing')} variant={agentRep?.status === 'active' ? 'success' : 'danger'} />
                     </div>
@@ -176,8 +176,8 @@ export default function AdminUsers() {
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="block">
-      <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">{label}</span>
-      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-white outline-none focus:border-sky-500" />
+      <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
     </label>
   );
 }
