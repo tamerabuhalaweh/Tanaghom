@@ -157,6 +157,8 @@ export const demoApi = {
     apiFetch<unknown[]>('/demo/audit-trail', { token }),
   leads: (token: string) =>
     apiFetch<unknown[]>('/demo/leads', { token }),
+  handoffPackage: (data: unknown, token: string) =>
+    apiFetch<unknown>('/demo/handoff-package', { method: 'POST', body: data, token }),
 };
 
 // Publishing Package

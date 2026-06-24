@@ -7,6 +7,9 @@ export const demoRouter = Router();
 
 const POSTIZ_SANDBOX_URL = process.env.POSTIZ_SANDBOX_URL || 'https://postiz.163-123-180-104.sslip.io';
 const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/health';
+const POSTIZ_SANDBOX_SCHEDULING_ENABLED = process.env.POSTIZ_SANDBOX_SCHEDULING_ENABLED === 'true';
+const GHL_SANDBOX_ENABLED = process.env.GHL_SANDBOX_ENABLED === 'true';
+const VOICE_CHAT_SANDBOX_ENABLED = process.env.VOICE_CHAT_SANDBOX_ENABLED === 'true';
 
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
@@ -42,55 +45,136 @@ async function getIntegrationStatus(): Promise<Record<string, unknown>> {
   return {
     postiz: {
       name: 'Postiz Scheduling Surface',
-      status: postiz.reachable ? 'sandbox_ready' : 'unreachable',
+      status: postiz.reachable ? 'Sandbox Ready' : 'Requires Credentials',
       url: POSTIZ_SANDBOX_URL,
       reachable: postiz.reachable,
       statusCode: postiz.statusCode,
       checkedAt: postiz.checkedAt,
       mode: 'sandbox',
-      scheduling: 'blocked',
-      publishing: 'blocked',
-      credentialStatus: 'sandbox account configured; social provider credentials missing',
+      scheduling: POSTIZ_SANDBOX_SCHEDULING_ENABLED ? 'Requires Authorization' : 'Blocked',
+      publishing: 'Blocked',
+      credentialStatus: postiz.reachable ? 'Sandbox reachable; social account credentials not enabled by default' : 'Requires Credentials',
+      sandboxSchedulingEnabled: POSTIZ_SANDBOX_SCHEDULING_ENABLED,
       message: postiz.reachable
-        ? 'Postiz sandbox is reachable. STITCH prepares packages; real scheduling remains blocked.'
+        ? 'Postiz sandbox is reachable. STITCH prepares packages; scheduling remains blocked unless sandbox execution is explicitly enabled.'
         : 'Postiz sandbox is not reachable from the STITCH backend.',
     },
     openClaw: {
       name: 'OpenClaw Gateway',
-      status: openClaw.reachable ? 'gateway_ready' : 'not_ready',
+      status: openClaw.reachable ? 'Sandbox Ready' : 'Requires Credentials',
       url: 'loopback-only',
       reachable: openClaw.reachable,
       statusCode: openClaw.statusCode,
       checkedAt: openClaw.checkedAt,
       mode: 'local_gateway',
-      channelExecution: 'blocked',
+      channelExecution: 'Blocked',
       message: openClaw.reachable
         ? 'OpenClaw gateway is installed and health-checkable on loopback only.'
         : 'OpenClaw gateway is not reachable from the STITCH backend.',
     },
     goHighLevel: {
       name: 'GoHighLevel CRM',
-      status: 'planned',
-      reachable: false,
-      mode: 'readiness_only',
-      writes: 'blocked',
-      message: 'GHL handoff is represented as a governed package only. No real CRM writes are enabled.',
+      status: process.env.GHL_API_KEY ? 'Sandbox Ready' : 'Requires Credentials',
+      reachable: !!process.env.GHL_API_KEY,
+      mode: GHL_SANDBOX_ENABLED ? 'sandbox_ready' : 'handoff_package_only',
+      writes: GHL_SANDBOX_ENABLED ? 'Requires Authorization' : 'Blocked',
+      credentialStatus: process.env.GHL_API_KEY ? 'configured' : 'missing',
+      sandboxEnabled: GHL_SANDBOX_ENABLED,
+      message: 'GHL handoff is represented as a governed package. No real CRM write is enabled unless sandbox credentials and authorization flags are present.',
     },
     socialAnalytics: {
       name: 'Official Social Analytics APIs',
-      status: 'planned',
+      status: 'Requires Credentials',
       reachable: false,
       mode: 'demo_data_only',
-      reads: 'blocked_until_scoped',
+      reads: 'Requires Authorization',
       message: 'Current analytics are deterministic demo intelligence. Official read-only APIs require separate scope and credentials.',
     },
     voiceChat: {
       name: 'AI Voice/Chat Agent Handoff',
-      status: 'planned',
-      reachable: false,
-      mode: 'handoff_package_only',
-      triggers: 'blocked',
-      message: 'No voice/chat call or message trigger is enabled.',
+      status: process.env.VOICE_CHAT_API_URL ? 'Sandbox Ready' : 'Requires Credentials',
+      reachable: !!process.env.VOICE_CHAT_API_URL,
+      mode: VOICE_CHAT_SANDBOX_ENABLED ? 'api_ready' : 'handoff_package_only',
+      triggers: VOICE_CHAT_SANDBOX_ENABLED ? 'Requires Authorization' : 'Blocked',
+      credentialStatus: process.env.VOICE_CHAT_API_URL ? 'configured' : 'missing',
+      sandboxEnabled: VOICE_CHAT_SANDBOX_ENABLED,
+      message: 'Voice/chat handoff package is prepared by STITCH. No call or chat trigger is enabled unless explicitly authorized for a test lead.',
+    },
+  };
+}
+
+function buildHandoffPackage(input: Record<string, unknown>, payload: JwtPayload): Record<string, unknown> {
+  const campaignId = String(input.campaignId || '');
+  const campaignTopic = String(input.campaignTopic || 'Commercial/Social campaign');
+  const platform = String(input.platform || 'linkedin');
+  const publishingPackageId = String(input.publishingPackageId || '');
+  const qualificationScore = Number(input.qualificationScore || 82);
+  const consentStatus = String(input.consentStatus || 'pending');
+
+  return {
+    id: `handoff-${Date.now()}`,
+    createdByUserId: payload.sub,
+    createdByAgentRepId: payload.agentRepId || '',
+    status: 'Prepared',
+    executionState: 'Blocked',
+    requiresAuthorization: true,
+    campaignAttribution: {
+      campaignId,
+      campaignTopic,
+      platform,
+      publishingPackageId,
+      source: `${platform}:commercial-social-poc`,
+    },
+    leadQualification: {
+      leadReference: 'sandbox-lead-reference',
+      qualificationScore,
+      intent: qualificationScore >= 80 ? 'High intent product interest' : 'Nurture and qualify',
+      consentStatus,
+      recommendedNextStep: 'Human review before CRM or voice/chat execution',
+    },
+    goHighLevel: {
+      status: process.env.GHL_API_KEY ? 'Sandbox Ready' : 'Requires Credentials',
+      executionState: GHL_SANDBOX_ENABLED ? 'Requires Authorization' : 'Blocked',
+      contactPayload: {
+        firstName: 'Sandbox',
+        lastName: 'Lead',
+        source: platform,
+        tags: ['tanaghum-poc', 'commercial-social', platform],
+        customFields: {
+          campaignId,
+          campaignTopic,
+          qualificationScore,
+          approvalRequired: true,
+        },
+      },
+      opportunityPayload: {
+        pipeline: 'Commercial/Social POC',
+        stage: 'Qualified Lead',
+        monetaryValue: 0,
+        status: 'open',
+      },
+      writeEnabled: false,
+    },
+    voiceChat: {
+      status: process.env.VOICE_CHAT_API_URL ? 'Sandbox Ready' : 'Requires Credentials',
+      executionState: VOICE_CHAT_SANDBOX_ENABLED ? 'Requires Authorization' : 'Blocked',
+      apiUrlConfigured: !!process.env.VOICE_CHAT_API_URL,
+      payload: {
+        leadContext: 'Sandbox lead from approved Commercial/Social content',
+        campaignSource: campaignTopic,
+        qualificationScore,
+        consentStatus,
+        suggestedIntent: 'Introduce offer, confirm interest, route to human sales owner',
+        suggestedScript: 'Hello, this is a test-approved Tanaghum follow-up about the SmartLab campaign. Is this a good time to continue?',
+      },
+      triggerEnabled: false,
+    },
+    safety: {
+      crmWrite: 'Blocked',
+      whatsappMessage: 'Blocked',
+      voiceCall: 'Blocked',
+      m5: 'M5 Disabled',
+      note: 'This is a sandbox handoff package only. External execution requires credentials, human approval, sandbox flag, and audit.',
     },
   };
 }
@@ -216,6 +300,15 @@ demoRouter.get('/integrations', async (req: Request, res: Response, next: NextFu
   try {
     getPayload(req);
     res.json(await getIntegrationStatus());
+  } catch (err) {
+    next(err);
+  }
+});
+
+demoRouter.post('/handoff-package', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    res.status(201).json(buildHandoffPackage(req.body as Record<string, unknown>, payload));
   } catch (err) {
     next(err);
   }

@@ -58,6 +58,7 @@ export default function DemoCommandCenter() {
   const [score, setScore] = useState<RecordMap | null>(null);
   const [approval, setApproval] = useState<RecordMap | null>(null);
   const [packageResult, setPackageResult] = useState<RecordMap | null>(null);
+  const [handoffPackage, setHandoffPackage] = useState<RecordMap | null>(null);
   const [analytics, setAnalytics] = useState<RecordMap | null>(null);
   const [demoStatus, setDemoStatus] = useState<RecordMap | null>(null);
   const [aiProvider, setAiProvider] = useState<RecordMap | null>(null);
@@ -112,6 +113,7 @@ export default function DemoCommandCenter() {
     setScore(null);
     setApproval(null);
     setPackageResult(null);
+    setHandoffPackage(null);
     setNotice('Campaign selected. Ready for AI preparation.');
     setStep('drafts');
   }
@@ -134,6 +136,7 @@ export default function DemoCommandCenter() {
       setScore(null);
       setApproval(null);
       setPackageResult(null);
+      setHandoffPackage(null);
       setStep('score');
       setNotice('Drafts generated through the STITCH backend LLM adapter for LinkedIn, Instagram, and X.');
       void refreshOverview();
@@ -236,7 +239,17 @@ export default function DemoCommandCenter() {
         platforms: PLATFORMS,
         scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       }, token);
-      setPackageResult(result as RecordMap);
+      const pkg = result as RecordMap;
+      setPackageResult(pkg);
+      const handoff = await demoApi.handoffPackage({
+        campaignId: selected.id,
+        campaignTopic: selected.topic,
+        platform: selectedDraft?.platform,
+        publishingPackageId: pkg.id,
+        qualificationScore: 82,
+        consentStatus: 'pending',
+      }, token);
+      setHandoffPackage(handoff as RecordMap);
       setStep('intelligence');
       setNotice('Publishing package prepared. Postiz sandbox status checked. Scheduling and publishing are blocked.');
       void refreshOverview();
@@ -264,6 +277,9 @@ export default function DemoCommandCenter() {
   const auditTrail = list(demoStatus?.auditTrail).slice(0, 5);
   const events = list(demoStatus?.observability).slice(0, 5);
   const leads = list(demoStatus?.leadCaptures);
+  const ghl = (handoffPackage?.goHighLevel || {}) as RecordMap;
+  const voiceChat = (handoffPackage?.voiceChat || {}) as RecordMap;
+  const leadQualification = (handoffPackage?.leadQualification || {}) as RecordMap;
 
   return (
     <div className="space-y-5">
@@ -510,16 +526,22 @@ export default function DemoCommandCenter() {
                 'Recommendation: keep educational format, strengthen CTA before approval.',
                 'Learning evidence is review-only; it cannot auto-change strategy.',
               ]} />
-              <ReadableList title="Lead Capture / Qualification" items={(leads.length ? leads : FALLBACK_LEADS).map(lead => {
+              <ReadableList title="Lead Capture / Qualification" items={handoffPackage ? [
+                `Lead reference: ${text(leadQualification.leadReference, 'sandbox-lead-reference')}`,
+                `Intent: ${text(leadQualification.intent, 'Product interest')}`,
+                `Qualification score: ${text(leadQualification.qualificationScore, '82')}`,
+                `Consent status: ${text(leadQualification.consentStatus, 'pending')}`,
+              ] : (leads.length ? leads : FALLBACK_LEADS).map(lead => {
                 const item = lead as RecordMap;
                 return `${text(item.name, 'Lead')}: ${text(item.intent, text(item.source))} - score ${text(item.score || item.qualificationScore, 'prepared')}`;
               })} />
               <ReadableList title="GHL + Voice/Chat Handoff" items={[
-                `GHL contact payload: source=${titleCase(text(selectedDraft?.platform, 'social'))}, campaign=${text(selected?.topic, 'selected campaign')}, qualificationScore=82, status=prepared.`,
-                'GHL opportunity payload: pipeline=Commercial/Social Demo, stage=Qualified Lead, write blocked until sandbox authorization.',
-                'Voice/chat handoff payload: lead context, campaign source, suggested script, intent, risk notes, and approval evidence prepared.',
+                `GHL status: ${text(ghl.status, 'Requires Credentials')} / ${text(ghl.executionState, 'Blocked')}`,
+                `GHL contact payload: source=${text((ghl.contactPayload as RecordMap | undefined)?.source, titleCase(text(selectedDraft?.platform, 'social')))}, campaign=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.campaignTopic, text(selected?.topic, 'selected campaign'))}, qualificationScore=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.qualificationScore, '82')}.`,
+                `GHL opportunity payload: pipeline=${text((ghl.opportunityPayload as RecordMap | undefined)?.pipeline, 'Commercial/Social POC')}, stage=${text((ghl.opportunityPayload as RecordMap | undefined)?.stage, 'Qualified Lead')}.`,
+                `Voice/chat status: ${text(voiceChat.status, 'Requires Credentials')} / ${text(voiceChat.executionState, 'Blocked')}`,
+                `Voice/chat handoff payload: ${text((voiceChat.payload as RecordMap | undefined)?.suggestedIntent, 'lead context and suggested script prepared')}.`,
                 'WhatsApp package: template/context prepared only, no message sent.',
-                'Voice/chat API trigger: blocked until explicit test approval.',
               ]} />
             </div>
           </Panel>
