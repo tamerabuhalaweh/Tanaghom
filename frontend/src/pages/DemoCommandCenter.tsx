@@ -17,11 +17,6 @@ type Step = 'campaign' | 'drafts' | 'score' | 'approval' | 'package' | 'intellig
 
 const PLATFORMS = ['linkedin', 'instagram', 'x'];
 
-const FALLBACK_LEADS = [
-  { name: 'Lead A', source: 'LinkedIn demo campaign', intent: 'Product interest', score: 82, status: 'qualified package' },
-  { name: 'Lead B', source: 'Instagram demo campaign', intent: 'Follow-up request', score: 74, status: 'nurture package' },
-];
-
 function text(value: unknown, fallback = 'Not specified'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
@@ -31,7 +26,14 @@ function numberValue(value: unknown, fallback = 0): number {
 }
 
 function list(value: unknown): RecordMap[] {
-  return Array.isArray(value) ? (value as RecordMap[]) : [];
+  if (Array.isArray(value)) return value as RecordMap[];
+  if (value && typeof value === 'object') {
+    const wrapped = value as Record<string, unknown>;
+    if (Array.isArray(wrapped.value)) return wrapped.value as RecordMap[];
+    if (Array.isArray(wrapped.items)) return wrapped.items as RecordMap[];
+    if (Array.isArray(wrapped.data)) return wrapped.data as RecordMap[];
+  }
+  return [];
 }
 
 function titleCase(value: string): string {
@@ -85,7 +87,7 @@ export default function DemoCommandCenter() {
     void refreshOverview();
     campaignsApi.list(token)
       .then(data => {
-        const campaignList = data as RecordMap[];
+        const campaignList = list(data);
         setCampaigns(campaignList);
         setSelected(current => current || campaignList[0] || null);
       })
@@ -531,10 +533,13 @@ export default function DemoCommandCenter() {
                 `Intent: ${text(leadQualification.intent, 'Product interest')}`,
                 `Qualification score: ${text(leadQualification.qualificationScore, '82')}`,
                 `Consent status: ${text(leadQualification.consentStatus, 'pending')}`,
-              ] : (leads.length ? leads : FALLBACK_LEADS).map(lead => {
+              ] : leads.length ? leads.map(lead => {
                 const item = lead as RecordMap;
                 return `${text(item.name, 'Lead')}: ${text(item.intent, text(item.source))} - score ${text(item.score || item.qualificationScore, 'prepared')}`;
-              })} />
+              }) : [
+                'Lead qualification package is generated after human approval and publishing preparation.',
+                'No CRM write, WhatsApp message, or voice/chat trigger runs from this screen.',
+              ]} />
               <ReadableList title="GHL + Voice/Chat Handoff" items={[
                 `GHL status: ${text(ghl.status, 'Requires Credentials')} / ${text(ghl.executionState, 'Blocked')}`,
                 `GHL contact payload: source=${text((ghl.contactPayload as RecordMap | undefined)?.source, titleCase(text(selectedDraft?.platform, 'social')))}, campaign=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.campaignTopic, text(selected?.topic, 'selected campaign'))}, qualificationScore=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.qualificationScore, '82')}.`,
