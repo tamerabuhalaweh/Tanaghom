@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { observabilityApi } from '../api';
+import { demoApi } from '../api';
 import { Badge } from '../components/ExecutiveUI';
 import { useAuth } from '../contexts/useAuth';
 
@@ -18,9 +18,14 @@ export default function Observability() {
 
   useEffect(() => {
     if (!token) return;
-    observabilityApi.events(token).then(data => setEvents(data as EvidenceRecord[])).catch(() => undefined);
-    observabilityApi.audit(token).then(data => setAudit(data as EvidenceRecord[])).catch(() => undefined);
-    observabilityApi.learningSignals(token).then(data => setSignals(data as EvidenceRecord[])).catch(() => undefined);
+    demoApi.status(token)
+      .then(data => {
+        const status = data as Record<string, unknown>;
+        setEvents((status.observability as EvidenceRecord[]) || []);
+        setAudit((status.auditTrail as EvidenceRecord[]) || []);
+        setSignals([]);
+      })
+      .catch(() => undefined);
   }, [token]);
 
   const rows = tab === 'audit' ? audit : tab === 'events' ? events : signals;
