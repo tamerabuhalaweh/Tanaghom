@@ -26,29 +26,29 @@ export default function Login() {
               T
             </div>
             <div>
-              <div className="font-semibold tracking-tight">Tanaghum STITCH</div>
-              <div className="text-xs text-white/50">Commercial/Social operating demo</div>
+              <div className="font-semibold tracking-tight">Tanaghum</div>
+              <div className="text-xs text-white/50">Commercial/Social POC MVP</div>
             </div>
           </div>
 
           <div className="max-w-3xl py-16">
             <div className="mb-5 inline-flex rounded-full border border-[#f5d56f]/25 bg-[#2a2411] px-3 py-1 text-xs font-medium text-[#f5d56f]">
-              Controlled demo. M5 blocked. External execution disabled.
+              Sandbox Product Environment. External writes disabled by default.
             </div>
             <h1 className="text-5xl font-semibold tracking-tight lg:text-6xl">
               AI prepares. Human approves. The system records.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/60">
-              A working Commercial/Social model for campaign preparation, platform adaptation,
+              A working Commercial/Social sandbox product for campaign preparation, platform adaptation,
               reach scoring, approval routing, publishing readiness, and audit evidence.
             </p>
           </div>
 
           <div className="grid max-w-3xl grid-cols-3 gap-3 text-sm">
             {[
-              ['Mock LLM', 'Default provider'],
-              ['Postiz', 'Sandbox ready'],
-              ['GHL', 'Write blocked'],
+              ['AI Provider', 'Backend governed'],
+              ['Postiz', 'Sandbox reachable'],
+              ['GHL', 'Handoff prepared'],
             ].map(([label, detail]) => (
               <div key={label} className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
                 <div className="font-medium">{label}</div>
@@ -61,12 +61,12 @@ export default function Login() {
         <section className="flex items-center justify-center bg-[#f7f7f3] p-8 text-black">
           <div className="w-full max-w-md rounded-lg border border-black/10 bg-white p-8 shadow-[0_16px_60px_rgba(0,0,0,0.12)]">
             <div>
-              <h2 className="text-2xl font-semibold tracking-tight">Enter demo workspace</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">Enter Commercial Workspace</h2>
               <p className="mt-2 text-sm text-black/55">Use one of the prepared pilot identities.</p>
             </div>
 
             <div className="mt-6 rounded-lg border border-black/10 bg-[#fafaf7] p-4 text-sm">
-              <div className="font-medium">Demo users</div>
+              <div className="font-medium">Pilot users</div>
               <div className="mt-3 space-y-1.5 text-black/60">
                 <div>demand.specialist@tanaghum.com</div>
                 <div>brand.head@tanaghum.com</div>
@@ -107,7 +107,7 @@ export default function Login() {
             </form>
 
             <div className="mt-6 text-center text-xs text-black/40">
-              Mock providers only. Live publishing, CRM, WhatsApp, voice, and M5 are blocked.
+              Sandbox POC. External publishing, CRM writes, WhatsApp, and voice triggers remain off by default.
             </div>
           </div>
         </section>

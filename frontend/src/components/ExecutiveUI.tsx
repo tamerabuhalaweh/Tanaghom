@@ -167,17 +167,17 @@ export function Badge({ children, variant = 'default' }: { children: ReactNode; 
 
 export function DemoBanner() {
   return (
-    <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-sky-500/10 border border-slate-800 rounded-lg px-4 py-2 flex items-center justify-between">
+    <div className="bg-gradient-to-r from-emerald-500/10 via-slate-900 to-sky-500/10 border border-slate-800 rounded-lg px-4 py-2 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <span className="text-amber-300 text-sm font-bold">DEMO MODE</span>
+        <span className="text-emerald-300 text-sm font-bold">Sandbox POC</span>
         <span className="text-slate-600 text-xs">|</span>
-        <span className="text-slate-400 text-xs">External execution blocked</span>
+        <span className="text-slate-400 text-xs">External Writes OFF</span>
         <span className="text-slate-600 text-xs">|</span>
-        <span className="text-slate-400 text-xs">M5 disabled</span>
+        <span className="text-slate-400 text-xs">M5 Disabled</span>
         <span className="text-slate-600 text-xs">|</span>
-        <span className="text-slate-400 text-xs">Postiz sandbox ready</span>
+        <span className="text-slate-400 text-xs">Postiz Sandbox Reachable</span>
       </div>
-      <span className="text-[10px] text-slate-600 font-mono">v0.1-stitch-foundation-demo</span>
+      <span className="text-[10px] text-slate-600 font-mono">Commercial/Social POC MVP</span>
     </div>
   );
 }

@@ -116,7 +116,7 @@ export default function DemoCommandCenter() {
     setApproval(null);
     setPackageResult(null);
     setHandoffPackage(null);
-    setNotice('Campaign selected. Ready for AI preparation.');
+      setNotice('Campaign selected. Ready for AI preparation.');
     setStep('drafts');
   }
 
@@ -140,7 +140,7 @@ export default function DemoCommandCenter() {
       setPackageResult(null);
       setHandoffPackage(null);
       setStep('score');
-      setNotice('Drafts generated through the STITCH backend LLM adapter for LinkedIn, Instagram, and X.');
+      setNotice('Drafts generated through the governed backend AI provider for LinkedIn, Instagram, and X.');
       void refreshOverview();
     } catch (error) {
       setNotice(`Draft generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -191,7 +191,7 @@ export default function DemoCommandCenter() {
         approvalType: 'brand_review',
         requiredDepartment: 'Brand & Market Intelligence',
         requiredRole: 'department_head',
-        comment: 'CEO demo: human approval required before any publishing preparation.',
+        comment: 'Human approval required before any publishing preparation.',
       }, token);
       setApproval(result as RecordMap);
       setNotice('Submitted to human approval. External execution remains blocked.');
@@ -212,7 +212,7 @@ export default function DemoCommandCenter() {
       const comment = action === 'approve'
         ? 'Approved for publishing package preparation only. No live scheduling.'
         : action === 'reject'
-          ? 'Rejected in demo review.'
+          ? 'Rejected during sandbox review.'
           : 'Request changes before package preparation.';
       const result = action === 'approve'
         ? await approvalsApi.approve(approvalId, { comment }, token)
@@ -282,6 +282,18 @@ export default function DemoCommandCenter() {
   const ghl = (handoffPackage?.goHighLevel || {}) as RecordMap;
   const voiceChat = (handoffPackage?.voiceChat || {}) as RecordMap;
   const leadQualification = (handoffPackage?.leadQualification || {}) as RecordMap;
+  const workflowStates = [
+    { label: 'Campaign Drafted', state: selected ? 'Active' : 'Waiting' },
+    { label: 'Drafts Generated', state: drafts.length ? 'Active' : 'Waiting' },
+    { label: 'Scored', state: score ? 'Active' : 'Waiting' },
+    { label: 'Submitted for Approval', state: approval ? 'Active' : 'Waiting' },
+    { label: 'Publishing Package Ready', state: packageResult ? 'Active' : 'Waiting' },
+    { label: 'Postiz Sandbox Ready', state: postiz.reachable ? 'Active' : 'Requires Check' },
+    { label: 'Lead Qualified', state: handoffPackage ? 'Active' : 'Waiting' },
+    { label: 'CRM Handoff Prepared', state: handoffPackage ? 'Active' : 'Waiting' },
+    { label: 'Voice/Chat Handoff Prepared', state: handoffPackage ? 'Active' : 'Waiting' },
+    { label: 'Audit Recorded', state: approval || packageResult ? 'Active' : 'Waiting' },
+  ];
 
   return (
     <div className="space-y-5">
@@ -289,15 +301,15 @@ export default function DemoCommandCenter() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <div className="mb-3 flex flex-wrap gap-2">
-              <Badge variant="success">Working Commercial/Social model</Badge>
-              <Badge variant="info">Human Approval Required</Badge>
-              <Badge variant="blocked">External Execution Blocked</Badge>
+              <Badge variant="success">Commercial/Social POC MVP</Badge>
+              <Badge variant="info">Sandbox Product Environment</Badge>
+              <Badge variant="blocked">External Writes OFF</Badge>
               <Badge variant="blocked">M5 Disabled</Badge>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white">AI prepares. Human approves. System records.</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-white">Commercial Command Center</h1>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              This customer demo shows the marketing operating flow: content generation, platform adaptation, readiness scoring,
-              approval, Postiz package preparation, analytics intelligence, lead handoff preparation, and readable evidence.
+              A working sandbox product for campaign planning, AI-assisted social content, reach intelligence, human approval,
+              Postiz-ready publishing packages, lead qualification, CRM handoff preparation, and voice/chat follow-up readiness.
             </p>
           </div>
           <div className="grid min-w-[360px] grid-cols-2 gap-2">
@@ -313,13 +325,24 @@ export default function DemoCommandCenter() {
         <FlowTimeline steps={[
           { label: 'Campaign', status: statusForStep('campaign', step, completed) },
           { label: 'Drafts', status: statusForStep('drafts', step, completed), badge: '3 platforms' },
-          { label: 'Score', status: statusForStep('score', step, completed), badge: 'actual draft' },
-          { label: 'Approve', status: statusForStep('approval', step, completed), badge: 'human' },
-          { label: 'Package', status: statusForStep('package', step, completed), badge: 'Postiz prep' },
-          { label: 'Intelligence', status: statusForStep('intelligence', step, completed) },
+          { label: 'Readiness', status: statusForStep('score', step, completed), badge: 'actual draft' },
+          { label: 'Approval', status: statusForStep('approval', step, completed), badge: 'human' },
+          { label: 'Publishing', status: statusForStep('package', step, completed), badge: 'Postiz-ready' },
+          { label: 'Lead Handoff', status: statusForStep('intelligence', step, completed) },
           { label: 'Evidence', status: statusForStep('evidence', step, completed) },
-          { label: 'External Action', status: 'blocked', badge: 'blocked' },
+          { label: 'External Writes', status: 'blocked', badge: 'off' },
         ]} />
+      </section>
+
+      <section className="grid grid-cols-5 gap-3">
+        {workflowStates.map(item => (
+          <div key={item.label} className="rounded-xl border border-slate-800 bg-slate-950/75 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{item.label}</div>
+            <div className="mt-2">
+              <Badge variant={item.state === 'Active' ? 'success' : item.state === 'Requires Check' ? 'warning' : 'default'}>{item.state}</Badge>
+            </div>
+          </div>
+        ))}
       </section>
 
       {notice && (
@@ -330,7 +353,7 @@ export default function DemoCommandCenter() {
 
       <div className="grid grid-cols-[340px_1fr] gap-5">
         <section className="space-y-3">
-          <Panel title="1. Select Campaign" badge="Working">
+          <Panel title="Active Campaign" badge="Working">
             <div className="space-y-3">
               {campaigns.map(campaign => (
                 <button
@@ -361,7 +384,7 @@ export default function DemoCommandCenter() {
         </section>
 
         <section className="space-y-5">
-          <Panel title="Campaign Brief" badge={selected ? 'Backend Data' : 'Required'}>
+          <Panel title="Campaign Workspace" badge={selected ? 'Active Campaign' : 'Required'}>
             {selected ? (
               <div className="grid grid-cols-4 gap-3">
                 <Info label="Objective" value={text(selected.objective)} />
@@ -370,12 +393,12 @@ export default function DemoCommandCenter() {
                 <Info label="Target Platforms" value={(selected.targetPlatforms as string[] | undefined)?.join(', ') || PLATFORMS.join(', ')} />
               </div>
             ) : (
-              <EmptyState text="Select a campaign to begin the demo flow." />
+              <EmptyState text="Select a campaign to begin the product workflow." />
             )}
           </Panel>
 
           <Panel
-            title="2. AI Social Drafts"
+            title="Social Intelligence Workspace"
             badge={drafts.length ? 'Working' : 'Action Required'}
             action={<ActionButton onClick={generateDrafts} disabled={!selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate AI Drafts'}</ActionButton>}
           >
@@ -408,7 +431,7 @@ export default function DemoCommandCenter() {
           </Panel>
 
           <Panel
-            title="3. Reach Readiness Intelligence"
+            title="Reach Readiness Intelligence"
             badge={score ? 'Working' : 'Action Required'}
             action={<ActionButton onClick={scoreDraft} disabled={!selectedDraft || loading === 'score'}>{loading === 'score' ? 'Scoring...' : 'Score Selected Draft'}</ActionButton>}
           >
@@ -438,7 +461,7 @@ export default function DemoCommandCenter() {
           </Panel>
 
           <Panel
-            title="4. Human Approval"
+            title="Approval Queue"
             badge={approval ? titleCase(text(approval.approvalStatus)) : 'Human Approval Required'}
             action={<ActionButton onClick={submitApproval} disabled={!selectedDraft || !!approval || loading === 'approval'}>{approval ? 'Approval Package Recorded' : loading === 'approval' ? 'Submitting...' : 'Submit for Approval'}</ActionButton>}
           >
@@ -471,7 +494,7 @@ export default function DemoCommandCenter() {
           </Panel>
 
           <Panel
-            title="5. Publishing Preparation Package"
+            title="Publishing Workspace"
             badge={packageResult ? 'Sandbox Ready' : 'Blocked Until Approval'}
             action={<ActionButton onClick={createPackage} disabled={approval?.approvalStatus !== 'approved' || !!packageResult || loading === 'package'}>{packageResult ? 'Package Prepared' : loading === 'package' ? 'Preparing...' : 'Create Publishing Package'}</ActionButton>}
           >
@@ -499,14 +522,19 @@ export default function DemoCommandCenter() {
                     <div className="text-sm font-semibold text-white">Postiz Sandbox</div>
                     <Badge variant={postiz.reachable ? 'info' : 'warning'}>{postiz.reachable ? 'Reachable' : 'Prep Only'}</Badge>
                   </div>
+                  <div className="mt-3 space-y-2 text-xs text-slate-300">
+                    <div>URL: {text((packageResult.postizSandbox as RecordMap | undefined)?.url, 'https://postiz.163-123-180-104.sslip.io')}</div>
+                    <div>Status: {postiz.reachable ? 'Sandbox Ready' : 'Requires check'}</div>
+                    <div>Connector Type: Scheduling surface</div>
+                    <div>Next Action: Customer sandbox credentials + authorization flag</div>
+                  </div>
                   <p className="mt-2 text-xs leading-5 text-slate-300">{text((packageResult.postizSandbox as RecordMap | undefined)?.message, 'Package prepared for Postiz review. No scheduling is executed.')}</p>
                   <a href={text((packageResult.postizSandbox as RecordMap | undefined)?.url, 'https://postiz.163-123-180-104.sslip.io')} target="_blank" rel="noreferrer" className="mt-4 inline-flex rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500">
                     Open Postiz Sandbox
                   </a>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Badge variant="blocked">No scheduling</Badge>
-                    <Badge variant="blocked">No publishing</Badge>
-                    <Badge variant="blocked">M5 disabled</Badge>
+                    <button disabled className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-500">Create Postiz Draft - Requires Credentials</button>
+                    <button disabled className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-500">Send to Postiz Sandbox - Sandbox Flag OFF</button>
                   </div>
                 </div>
               </div>
@@ -515,7 +543,7 @@ export default function DemoCommandCenter() {
             )}
           </Panel>
 
-          <Panel title="6. Analytics, Learning, Leads, and Handoffs" badge="Demo Intelligence">
+          <Panel title="Analytics Intelligence + Handoff Queues" badge="Sandbox Intelligence">
             <div className="grid grid-cols-4 gap-3">
               <Metric label="Reach" value={text(analytics?.reach, '8,900')} />
               <Metric label="Impressions" value={text(analytics?.impressions, '12,500')} />
@@ -524,34 +552,38 @@ export default function DemoCommandCenter() {
             </div>
             <div className="mt-4 grid grid-cols-3 gap-4">
               <ReadableList title="Learning Signal" items={[
-                `${text(analytics?.topContent, 'Educational posts with images')} performed above baseline in demo intelligence.`,
+                `${text(analytics?.topContent, 'Educational posts with images')} performed above baseline in sandbox intelligence.`,
                 'Recommendation: keep educational format, strengthen CTA before approval.',
                 'Learning evidence is review-only; it cannot auto-change strategy.',
               ]} />
-              <ReadableList title="Lead Capture / Qualification" items={handoffPackage ? [
-                `Lead reference: ${text(leadQualification.leadReference, 'sandbox-lead-reference')}`,
+              <ReadableList title="Lead Intelligence" items={handoffPackage ? [
+                `LinkedIn Lead - Enterprise Training Inquiry`,
+                `Campaign: ${text(selected?.topic, 'Selected campaign')}`,
                 `Intent: ${text(leadQualification.intent, 'Product interest')}`,
                 `Qualification score: ${text(leadQualification.qualificationScore, '82')}`,
-                `Consent status: ${text(leadQualification.consentStatus, 'pending')}`,
+                `Stage: CRM handoff prepared`,
+                `Owner: Commercial operations`,
+                `Approval status: ${text(approval?.approvalStatus, 'pending')}`,
               ] : leads.length ? leads.map(lead => {
                 const item = lead as RecordMap;
                 return `${text(item.name, 'Lead')}: ${text(item.intent, text(item.source))} - score ${text(item.score || item.qualificationScore, 'prepared')}`;
               }) : [
                 'Lead qualification package is generated after human approval and publishing preparation.',
-                'No CRM write, WhatsApp message, or voice/chat trigger runs from this screen.',
+                'CRM and voice/chat execution buttons remain governed by sandbox credentials and authorization flags.',
               ]} />
-              <ReadableList title="GHL + Voice/Chat Handoff" items={[
+              <ReadableList title="CRM + Voice/Chat Handoff Queues" items={[
                 `GHL status: ${text(ghl.status, 'Requires Credentials')} / ${text(ghl.executionState, 'Blocked')}`,
                 `GHL contact payload: source=${text((ghl.contactPayload as RecordMap | undefined)?.source, titleCase(text(selectedDraft?.platform, 'social')))}, campaign=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.campaignTopic, text(selected?.topic, 'selected campaign'))}, qualificationScore=${text(((ghl.contactPayload as RecordMap | undefined)?.customFields as RecordMap | undefined)?.qualificationScore, '82')}.`,
                 `GHL opportunity payload: pipeline=${text((ghl.opportunityPayload as RecordMap | undefined)?.pipeline, 'Commercial/Social POC')}, stage=${text((ghl.opportunityPayload as RecordMap | undefined)?.stage, 'Qualified Lead')}.`,
                 `Voice/chat status: ${text(voiceChat.status, 'Requires Credentials')} / ${text(voiceChat.executionState, 'Blocked')}`,
                 `Voice/chat handoff payload: ${text((voiceChat.payload as RecordMap | undefined)?.suggestedIntent, 'lead context and suggested script prepared')}.`,
-                'WhatsApp package: template/context prepared only, no message sent.',
+                'Push to GHL: disabled until sandbox flag and credentials are active.',
+                'Trigger Voice/Chat: disabled until sandbox flag, credentials, and approved test lead are active.',
               ]} />
             </div>
           </Panel>
 
-          <Panel title="7. Audit / SPINE / Observability Evidence" badge="Readable Evidence">
+          <Panel title="Evidence / Audit" badge="Readable Evidence">
             <div className="grid grid-cols-2 gap-4">
               <ReadableList title="Recent Audit Records" items={(auditTrail.length ? auditTrail : [
                 { action: 'draft_generated', result: 'success' },
@@ -608,7 +640,7 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-bold text-white">{value}</div>
-      <Badge variant="mock">Demo Data</Badge>
+      <Badge variant="mock">Sandbox Data</Badge>
     </div>
   );
 }

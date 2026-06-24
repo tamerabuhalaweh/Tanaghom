@@ -42,7 +42,7 @@ export default function Observability() {
           { eventType: 'approval', severity: 'info', message: 'Human approval required' },
         ]
       : [
-          { signalType: 'performance', status: 'under_review', summary: 'Educational content performs above demo baseline' },
+          { signalType: 'performance', status: 'under_review', summary: 'Educational content performs above sandbox baseline' },
           { signalType: 'quality', status: 'review_only', summary: 'CTA clarity should be improved before scheduling' },
         ];
 
@@ -50,8 +50,8 @@ export default function Observability() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Evidence</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Readable audit, SPINE, observability, and learning evidence for the demo flow.</p>
+          <h1 className="text-2xl font-bold text-white">Evidence / Audit</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Readable product workflow evidence, audit records, and learning signals.</p>
         </div>
         <div className="flex gap-2">
           <Badge variant="info">System Records</Badge>

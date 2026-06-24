@@ -2,12 +2,12 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { DemoBanner } from './ExecutiveUI'
 
 const NAV_ITEMS = [
-  { path: '/command-center', label: 'Commercial/Social Demo', icon: 'CS', group: 'Customer Demo' },
-  { path: '/campaigns', label: 'Campaign Workspace', icon: 'CP', group: 'Customer Demo' },
-  { path: '/approvals', label: 'Approval Queue', icon: 'AP', group: 'Customer Demo' },
-  { path: '/analytics', label: 'Analytics Intelligence', icon: 'AN', group: 'Customer Demo' },
-  { path: '/crm', label: 'Lead Handoff', icon: 'LH', group: 'Customer Demo' },
-  { path: '/observability', label: 'Evidence', icon: 'EV', group: 'Customer Demo' },
+  { path: '/command-center', label: 'Commercial Command Center', icon: 'CC', group: 'Commercial/Social POC' },
+  { path: '/campaigns', label: 'Campaign Workspace', icon: 'CW', group: 'Commercial/Social POC' },
+  { path: '/approvals', label: 'Approval Queue', icon: 'AQ', group: 'Commercial/Social POC' },
+  { path: '/analytics', label: 'Analytics Intelligence', icon: 'AI', group: 'Commercial/Social POC' },
+  { path: '/crm', label: 'Lead Intelligence', icon: 'LI', group: 'Commercial/Social POC' },
+  { path: '/observability', label: 'Evidence / Audit', icon: 'EV', group: 'Commercial/Social POC' },
   { path: '/mcp-engine', label: 'MCP / Integrations', icon: 'MC', group: 'Admin / Technical' },
   { path: '/agent-skills', label: 'Agent Skills', icon: 'SK', group: 'Admin / Technical' },
   { path: '/ghl-readiness', label: 'GoHighLevel Readiness', icon: 'GH', group: 'Admin / Technical' },
@@ -26,7 +26,7 @@ export default function Layout() {
           <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-widest">AI Operating Platform</p>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
-          {['Customer Demo', 'Admin / Technical'].map(group => (
+          {['Commercial/Social POC', 'Admin / Technical'].map(group => (
             <div key={group} className="mb-4">
               <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-600">{group}</div>
               <div className="space-y-0.5">
@@ -49,7 +49,7 @@ export default function Layout() {
           ))}
         </div>
         <div className="p-3 border-t border-slate-800">
-          <div className="text-[10px] text-slate-600 text-center">STITCH v1.0 | SAIF v1.2</div>
+          <div className="text-[10px] text-slate-600 text-center">Sandbox Product Environment</div>
         </div>
       </nav>
 
