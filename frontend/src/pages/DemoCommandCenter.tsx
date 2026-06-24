@@ -64,6 +64,7 @@ export default function DemoCommandCenter() {
   const [analytics, setAnalytics] = useState<RecordMap | null>(null);
   const [demoStatus, setDemoStatus] = useState<RecordMap | null>(null);
   const [aiProvider, setAiProvider] = useState<RecordMap | null>(null);
+  const [lastGenerationAt, setLastGenerationAt] = useState('');
   const [loading, setLoading] = useState('');
   const [notice, setNotice] = useState('');
   const [step, setStep] = useState<Step>('campaign');
@@ -135,6 +136,7 @@ export default function DemoCommandCenter() {
       setDrafts(generated);
       setDraftTextById(draftTextMap);
       setSelectedDraftId(String(generated[0]?.contentItemId || ''));
+      setLastGenerationAt(new Date().toLocaleString());
       setScore(null);
       setApproval(null);
       setPackageResult(null);
@@ -403,27 +405,39 @@ export default function DemoCommandCenter() {
             action={<ActionButton onClick={generateDrafts} disabled={!selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate AI Drafts'}</ActionButton>}
           >
             {drafts.length ? (
-              <div className="grid grid-cols-3 gap-4">
-                {drafts.map(draft => (
-                  <div
-                    key={String(draft.contentItemId)}
-                    onClick={() => setSelectedDraftId(String(draft.contentItemId))}
-                    className={`rounded-xl border bg-slate-900/70 p-4 text-left transition ${selectedDraft?.contentItemId === draft.contentItemId ? 'border-sky-400 ring-2 ring-sky-400/40' : 'border-slate-800'}`}
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <Badge variant="info">{titleCase(text(draft.platform))}</Badge>
-                      <Badge variant={providerBadge}>{providerName}</Badge>
+              <div className="space-y-4">
+                <div className="grid grid-cols-4 gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                  <Info label="Provider" value={providerName} />
+                  <Info label="Status" value={providerLabel} />
+                  <Info label="Route" value="Backend Adapter / Governed" />
+                  <Info label="Last Generation" value={lastGenerationAt || 'Waiting'} />
+                  <Info label="Draft Artifact ID" value={text(selectedDraft?.contentItemId, 'Waiting')} />
+                  <Info label="Selected Platform" value={titleCase(text(selectedDraft?.platform, 'Waiting'))} />
+                  <Info label="Model" value={text(aiProvider?.model, 'Configured provider default')} />
+                  <Info label="Execution" value="External writes OFF" />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  {drafts.map(draft => (
+                    <div
+                      key={String(draft.contentItemId)}
+                      onClick={() => setSelectedDraftId(String(draft.contentItemId))}
+                      className={`rounded-xl border bg-slate-900/70 p-4 text-left transition ${selectedDraft?.contentItemId === draft.contentItemId ? 'border-sky-400 ring-2 ring-sky-400/40' : 'border-slate-800'}`}
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <Badge variant="info">{titleCase(text(draft.platform))}</Badge>
+                        <Badge variant={providerBadge}>{providerName}</Badge>
+                      </div>
+                      <textarea
+                        value={draftTextById[String(draft.contentItemId)] || text(draft.draftText)}
+                        onChange={event => setDraftTextById(current => ({ ...current, [String(draft.contentItemId)]: event.target.value }))}
+                        className="min-h-[132px] w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm leading-6 text-slate-200 outline-none focus:border-sky-500"
+                      />
+                      <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs leading-5 text-slate-400">
+                        {text((draft.metadata as RecordMap | undefined)?.rationale, 'Adapted to platform rules and campaign audience.')}
+                      </div>
                     </div>
-                    <textarea
-                      value={draftTextById[String(draft.contentItemId)] || text(draft.draftText)}
-                      onChange={event => setDraftTextById(current => ({ ...current, [String(draft.contentItemId)]: event.target.value }))}
-                      className="min-h-[132px] w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm leading-6 text-slate-200 outline-none focus:border-sky-500"
-                    />
-                    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs leading-5 text-slate-400">
-                      {text((draft.metadata as RecordMap | undefined)?.rationale, 'Adapted to platform rules and campaign audience.')}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
               <EmptyState text="Generate platform-adapted drafts for LinkedIn, Instagram, and X/Twitter." />
