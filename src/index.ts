@@ -20,6 +20,13 @@ import { observabilityRouter } from '../modules/observability/controller';
 import { aiProviderRouter } from '../modules/ai-provider/controller';
 import { demoRouter } from '../modules/demo/controller';
 import { publishingPackageRouter } from '../modules/publishing-package/controller';
+import { crmConversionRouter } from '../modules/crm-conversion/controller';
+import { postizIntegrationRouter } from '../modules/postiz-integration/controller';
+import { integrationStatusRouter } from '../modules/integration-status/controller';
+import { adminUsersRouter } from '../modules/admin-users/controller';
+import { integrationsRouter } from '../modules/integrations/controller';
+import { leadsRouter } from '../modules/leads/controller';
+import { ghlRouter } from '../modules/ghl-connector/controller';
 
 // Validate environment before startup
 const envValidation = validateEnvironment();
@@ -95,6 +102,13 @@ app.use('/observability', observabilityRouter);
 app.use('/ai-provider', aiProviderRouter);
 app.use('/demo', demoRouter);
 app.use('/publishing-package', publishingPackageRouter);
+app.use('/crm-conversion', crmConversionRouter);
+app.use('/postiz', postizIntegrationRouter);
+app.use('/integration-status', integrationStatusRouter);
+app.use('/admin/users', adminUsersRouter);
+app.use('/integrations', integrationsRouter);
+app.use('/leads', leadsRouter);
+app.use('/ghl', ghlRouter);
 
 // Error handler (must be last) — preserves AppError status codes, hides stack traces
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -177,3 +177,49 @@ export const publishingPackageApi = {
   list: (token: string) =>
     apiFetch<unknown[]>('/publishing-package/list', { token }),
 };
+
+// Admin Users
+export const adminUsersApi = {
+  list: (token: string) =>
+    apiFetch<unknown[]>('/admin/users', { token }),
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/admin/users', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/admin/users/${id}`, { method: 'PUT', body: data, token }),
+  deactivate: (id: string, token: string) =>
+    apiFetch<unknown>(`/admin/users/${id}/deactivate`, { method: 'POST', token }),
+  activate: (id: string, token: string) =>
+    apiFetch<unknown>(`/admin/users/${id}/activate`, { method: 'POST', token }),
+};
+
+// Integrations
+export const integrationsApi = {
+  list: (token: string) =>
+    apiFetch<unknown[]>('/integrations', { token }),
+  get: (name: string, token: string) =>
+    apiFetch<unknown>(`/integrations/${name}`, { token }),
+  healthCheck: (name: string, token: string) =>
+    apiFetch<unknown>(`/integrations/${name}/health-check`, { method: 'POST', token }),
+};
+
+// Leads
+export const leadsApi = {
+  list: (token: string) =>
+    apiFetch<unknown[]>('/leads', { token }),
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/leads', { method: 'POST', body: data, token }),
+  qualify: (id: string, token: string) =>
+    apiFetch<unknown>(`/leads/${id}/qualify`, { method: 'POST', token }),
+  stats: (token: string) =>
+    apiFetch<unknown>('/leads/stats', { token }),
+};
+
+// GHL Connector
+export const ghlApi = {
+  status: (token: string) =>
+    apiFetch<unknown>('/ghl/status', { token }),
+  handoff: (leadId: string, token: string) =>
+    apiFetch<unknown>('/ghl/handoff', { method: 'POST', body: { leadId }, token }),
+  push: (token: string) =>
+    apiFetch<unknown>('/ghl/push', { method: 'POST', token }),
+};
