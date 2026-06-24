@@ -183,3 +183,11 @@ export const ghlApi = {
   handoff: (leadId: string, token: string) => apiFetch<unknown>('/ghl/handoff', { method: 'POST', body: { leadId }, token }),
   push: (token: string) => apiFetch<unknown>('/ghl/push', { method: 'POST', token }),
 };
+
+export const ideasApi = {
+  generate: (data: unknown, token: string) => apiFetch<unknown>('/ideas/generate', { method: 'POST', body: data, token }),
+  resumeWorkflow: (threadId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/ideas/workflows/${threadId}/resume`, { method: 'POST', body: data, token }),
+  convertToCampaign: (data: unknown, token: string) =>
+    apiFetch<unknown>('/ideas/convert-to-campaign', { method: 'POST', body: data, token }),
+};
