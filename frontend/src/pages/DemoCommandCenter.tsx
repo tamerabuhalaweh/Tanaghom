@@ -143,13 +143,14 @@ export default function DemoCommandCenter() {
     setNotice('');
     try {
       const metadata = (selectedDraft.metadata || {}) as RecordMap;
+      const cta = text(metadata.cta || selected.cta, '');
       const result = await algoApi.score({
         contentItemId: selectedDraft.contentItemId,
         platform: selectedDraft.platform,
         draftText: selectedDraft.draftText,
         objective: selected.objective,
         audience: selected.audience,
-        cta: metadata.cta || selected.cta,
+        ...(cta ? { cta } : {}),
         hashtags: metadata.hashtags || [],
         contentType: selectedDraft.contentType,
         riskCategory: selected.riskCategory,
