@@ -222,7 +222,7 @@ export default function CampaignWorkspace() {
                 onClick={() => selectCampaign(campaign)}
                 className={`w-full rounded-2xl p-4 text-left transition ${selected?.id === campaign.id ? 'bg-black text-white' : 'bg-stone-50 text-black hover:bg-stone-100'}`}
               >
-                <div className="font-semibold">{text(campaign.topic)}</div>
+                <div className="line-clamp-3 font-semibold">{text(campaign.topic)}</div>
                 <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/58' : 'text-black/50'}`}>
                   {titleCase(text(campaign.status, 'idea'))} / {titleCase(text(campaign.riskCategory, 'medium'))} risk
                 </div>

@@ -98,10 +98,12 @@ export function SecondaryAction({ children, onClick, disabled }: { children: Rea
 }
 
 export function MetricCard({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
+  const valueText = String(value);
+  const compact = valueText.length > 12;
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm shadow-black/[0.04] ring-1 ring-black/8">
+    <div className="min-h-[156px] rounded-2xl bg-white p-5 shadow-sm shadow-black/[0.04] ring-1 ring-black/8">
       <div className="text-xs font-semibold uppercase tracking-[0.16em] text-black/38">{label}</div>
-      <div className="mt-3 text-3xl font-semibold tracking-tight text-black">{value}</div>
+      <div className={`mt-3 font-semibold tracking-tight text-black ${compact ? 'text-2xl leading-tight' : 'text-3xl'}`}>{value}</div>
       {detail && <div className="mt-2 text-sm text-black/50">{detail}</div>}
     </div>
   );
