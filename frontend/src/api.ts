@@ -119,6 +119,10 @@ export const observabilityApi = {
 export const usersApi = {
   list: (token: string) => apiFetch<unknown[]>('/users', { token }),
   me: (token: string) => apiFetch<unknown>('/users/me', { token }),
+  departments: (token: string) => apiFetch<unknown[]>('/departments', { token }),
+  agentReps: (token: string) => apiFetch<unknown[]>('/agent-reps', { token }),
+  createAgentRep: (data: unknown, token: string) =>
+    apiFetch<unknown>('/agent-reps', { method: 'POST', body: data, token }),
 };
 
 export const aiProviderApi = {
@@ -139,6 +143,14 @@ export const publishingPackageApi = {
   create: (data: unknown, token: string) =>
     apiFetch<unknown>('/publishing-package/create', { method: 'POST', body: data, token }),
   list: (token: string) => apiFetch<unknown[]>('/publishing-package/list', { token }),
+};
+
+export const postizApi = {
+  status: (token: string) => apiFetch<unknown>('/postiz/status', { token }),
+  schedulePayload: (data: unknown, token: string) =>
+    apiFetch<unknown>('/postiz/schedule-payload', { method: 'POST', body: data, token }),
+  sandboxSchedule: (data: unknown, token: string) =>
+    apiFetch<unknown>('/postiz/sandbox-schedule', { method: 'POST', body: data, token }),
 };
 
 export const adminUsersApi = {
@@ -180,7 +192,9 @@ export const leadsApi = {
 
 export const ghlApi = {
   status: (token: string) => apiFetch<unknown>('/ghl/status', { token }),
+  wizardOptions: (token: string) => apiFetch<unknown>('/ghl/wizard-options', { token }),
   handoff: (leadId: string, token: string) => apiFetch<unknown>('/ghl/handoff', { method: 'POST', body: { leadId }, token }),
+  sandboxContact: (data: unknown, token: string) => apiFetch<unknown>('/ghl/sandbox-contact', { method: 'POST', body: data, token }),
   push: (token: string) => apiFetch<unknown>('/ghl/push', { method: 'POST', token }),
 };
 

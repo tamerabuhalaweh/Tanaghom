@@ -14,6 +14,8 @@ const NAV_ITEMS = [
   { path: '/agent-skills', label: 'Agent Skills', icon: 'SK', group: 'Admin / Technical' },
   { path: '/ghl-readiness', label: 'GoHighLevel Readiness', icon: 'GR', group: 'Admin / Technical' },
   { path: '/ai-settings', label: 'AI Provider', icon: 'AP', group: 'Admin / Technical' },
+  { path: '/integration-credentials', label: 'Credentials', icon: 'CR', group: 'Admin / Technical' },
+  { path: '/admin-users', label: 'Users & AgentReps', icon: 'UR', group: 'Admin / Technical' },
   { path: '/safety', label: 'Safety Gates', icon: 'SF', group: 'Admin / Technical' },
 ]
 

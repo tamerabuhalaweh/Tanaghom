@@ -15,8 +15,8 @@ function getPayload(req: Request): JwtPayload {
 }
 
 function requireAdmin(role: string): void {
-  if (role !== 'admin' && role !== 'owner') {
-    throw new ForbiddenError('Admin or owner access required');
+  if (role !== 'admin' && role !== 'cco') {
+    throw new ForbiddenError('Admin or CCO access required');
   }
 }
 
@@ -26,7 +26,7 @@ adminUsersRouter.get('/', async (req: Request, res: Response, next: NextFunction
     requireAdmin(payload.role);
 
     const users = await prisma.user.findMany({
-      include: { department: true },
+      include: { department: true, agent_reps: true },
       orderBy: { created_at: 'desc' },
     });
 
@@ -37,6 +37,12 @@ adminUsersRouter.get('/', async (req: Request, res: Response, next: NextFunction
       role: u.role,
       department: (u.department as Record<string, unknown>)?.name || null,
       departmentId: u.department_id,
+      agentRep: Array.isArray(u.agent_reps) && u.agent_reps.length > 0 ? {
+        id: (u.agent_reps[0] as Record<string, unknown>).id,
+        name: (u.agent_reps[0] as Record<string, unknown>).name,
+        status: (u.agent_reps[0] as Record<string, unknown>).status,
+        agentType: (u.agent_reps[0] as Record<string, unknown>).agent_type,
+      } : null,
       isActive: u.is_active,
       createdAt: u.created_at,
     })));
@@ -69,6 +75,19 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
         is_active: true,
       },
     });
+    const agentRep = await prisma.agentRep.create({
+      data: {
+        user_id: user.id,
+        name: `${user.name} AgentRep`,
+        agent_type: 'functional',
+        status: 'active',
+        permissions_context: {
+          role: user.role,
+          departmentId: user.department_id,
+          source: 'admin_user_creation',
+        },
+      },
+    });
 
     auditLog(
       { actor: `user:${payload.sub}`, action: 'user_created', object_type: 'user', object_id: user.id, result: 'success' },
@@ -81,6 +100,11 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
       name: user.name,
       role: user.role,
       departmentId: user.department_id,
+      agentRep: {
+        id: agentRep.id,
+        name: agentRep.name,
+        status: agentRep.status,
+      },
       isActive: user.is_active,
       _label: 'User created — password must be changed on first login',
     });

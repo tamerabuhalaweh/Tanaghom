@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { campaignsApi, approvalsApi, algoApi, aiGenerationApi, publishingPackageApi } from '../api';
+import { campaignsApi, approvalsApi, algoApi, aiGenerationApi, publishingPackageApi, postizApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import { ReadinessGauge, FlowTimeline, PlatformPreviewCard, RecommendationCard, Badge } from '../components/ExecutiveUI';
 
@@ -21,6 +21,7 @@ export default function CampaignWorkspace() {
   const [selectedDraft, setSelectedDraft] = useState<RecordMap | null>(null);
   const [score, setScore] = useState<RecordMap | null>(null);
   const [publishingPkg, setPublishingPkg] = useState<RecordMap | null>(null);
+  const [postizPayload, setPostizPayload] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
   const [step, setStep] = useState<'select' | 'generate' | 'score' | 'approve' | 'publish'>('select');
@@ -35,6 +36,7 @@ export default function CampaignWorkspace() {
       setSelectedDraft(null);
       setScore(null);
       setPublishingPkg(null);
+      setPostizPayload(null);
       setMessage('');
       setStep('generate');
     } catch (err) {
@@ -127,6 +129,46 @@ export default function CampaignWorkspace() {
       setMessage('Publishing package prepared. Postiz sandbox status checked; scheduling remains blocked.');
     } catch (err) {
       setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setLoading('');
+    }
+  };
+
+  const preparePostizPayload = async () => {
+    if (!selectedDraft || !selected || !token) return;
+    setLoading('postiz-payload');
+    try {
+      const result = await postizApi.schedulePayload({
+        platform: asText(selectedDraft.platform, 'linkedin'),
+        content: asText(selectedDraft.draftText, asText(selected.rawMessage, 'Prepared social content')),
+        scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        timezone: 'Asia/Amman',
+        tags: ['tanaghum', 'commercial-social'],
+      }, token);
+      setPostizPayload(result as RecordMap);
+      setMessage('Postiz scheduling payload prepared. No external call was performed.');
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setLoading('');
+    }
+  };
+
+  const attemptSandboxSchedule = async () => {
+    if (!selectedDraft || !selected || !token) return;
+    setLoading('postiz-schedule');
+    try {
+      const result = await postizApi.sandboxSchedule({
+        platform: asText(selectedDraft.platform, 'linkedin'),
+        content: asText(selectedDraft.draftText, asText(selected.rawMessage, 'Prepared social content')),
+        scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        timezone: 'Asia/Amman',
+        tags: ['tanaghum', 'commercial-social'],
+      }, token);
+      setPostizPayload(result as RecordMap);
+      setMessage('Sandbox schedule request completed.');
+    } catch (err) {
+      setMessage(`Sandbox schedule blocked: ${err instanceof Error ? err.message : 'Unknown'}`);
     } finally {
       setLoading('');
     }
@@ -280,6 +322,14 @@ export default function CampaignWorkspace() {
                       >
                         Review sandbox
                       </a>
+                      <div className="mt-3 grid grid-cols-1 gap-2">
+                        <button onClick={preparePostizPayload} disabled={loading === 'postiz-payload'} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-white disabled:opacity-50">
+                          {loading === 'postiz-payload' ? 'Preparing...' : 'Generate Postiz Payload'}
+                        </button>
+                        <button onClick={attemptSandboxSchedule} disabled={loading === 'postiz-schedule'} className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs font-semibold text-rose-100 hover:bg-rose-500/10 disabled:opacity-50">
+                          {loading === 'postiz-schedule' ? 'Checking gate...' : 'Attempt Sandbox Schedule'}
+                        </button>
+                      </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Badge variant="blocked">Scheduling blocked</Badge>
                         <Badge variant="blocked">Publishing blocked</Badge>
@@ -287,6 +337,39 @@ export default function CampaignWorkspace() {
                       </div>
                     </div>
                   </div>
+                  {postizPayload && (
+                    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-white">Postiz API Payload</div>
+                          <div className="mt-1 text-xs text-slate-500">{asText(postizPayload._label)}</div>
+                        </div>
+                        <Badge variant={postizPayload.status === 'blocked' ? 'blocked' : 'info'}>{asText(postizPayload.status, 'prepared')}</Badge>
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-lg bg-slate-950 p-3">
+                          <div className="text-xs text-slate-500">Endpoint</div>
+                          <div className="mt-1 break-all text-xs text-slate-300">{asText(postizPayload.endpoint, 'Configured on server')}</div>
+                        </div>
+                        <div className="rounded-lg bg-slate-950 p-3">
+                          <div className="text-xs text-slate-500">Execution</div>
+                          <div className="mt-1 text-xs text-slate-300">{((postizPayload.safety as RecordMap | undefined)?.executionPerformed) ? 'Performed' : 'Not performed'}</div>
+                        </div>
+                        <div className="rounded-lg bg-slate-950 p-3">
+                          <div className="text-xs text-slate-500">Publishing</div>
+                          <div className="mt-1 text-xs text-rose-300">Production publishing disabled</div>
+                        </div>
+                      </div>
+                      <div className="mt-4 rounded-lg bg-slate-950 p-3">
+                        <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">Readable payload summary</div>
+                        <div className="mt-2 text-sm text-slate-300">
+                          Type: {asText((postizPayload.payload as RecordMap | undefined)?.type, 'schedule')} |
+                          Scheduled: {asText((postizPayload.payload as RecordMap | undefined)?.date)} |
+                          Posts: {Array.isArray((postizPayload.payload as RecordMap | undefined)?.posts) ? ((postizPayload.payload as RecordMap).posts as unknown[]).length : 0}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>

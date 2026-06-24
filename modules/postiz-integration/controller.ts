@@ -4,6 +4,7 @@ import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/aut
 import { UnauthorizedError } from '@shared/errors';
 import { validateOrThrow } from '@shared/validation';
 import { evaluateExternalExecution } from '@shared/policy';
+import { auditLog } from '@shared/logging';
 import {
   createAccountReferenceSchema,
   createExecutionRequestSchema,
@@ -16,6 +17,7 @@ import * as service from './service';
 export const postizIntegrationRouter = Router();
 
 const POSTIZ_SANDBOX_URL = process.env.POSTIZ_SANDBOX_URL || process.env.POSTIZ_BASE_URL || '';
+const POSTIZ_PUBLIC_API_PATH = '/api/public/v1/posts';
 
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
@@ -241,6 +243,130 @@ postizIntegrationRouter.post('/execution-requests/:id/prepare-schedule', async (
       input.timezone ?? 'UTC',
     );
     res.status(201).json({ ...job, _label: 'Postiz-ready schedule payload prepared - no real scheduling' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const postizPayloadSchema = z.object({
+  platform: z.string().min(1),
+  content: z.string().min(1),
+  scheduledAt: z.string().datetime(),
+  timezone: z.string().min(1).default('UTC'),
+  integrationId: z.string().min(1).optional(),
+  tags: z.array(z.string()).default([]),
+});
+
+function buildPostizCreatePostPayload(input: z.infer<typeof postizPayloadSchema>) {
+  return {
+    type: 'schedule',
+    date: input.scheduledAt,
+    shortLink: false,
+    tags: input.tags.map((tag) => ({ value: tag })),
+    posts: [
+      {
+        integration: {
+          id: input.integrationId || process.env.POSTIZ_SANDBOX_INTEGRATION_ID || '<configured sandbox integration id>',
+        },
+        value: [
+          {
+            content: input.content,
+            image: [],
+          },
+        ],
+        settings: {
+          __type: input.platform,
+        },
+      },
+    ],
+  };
+}
+
+function sandboxSchedulingGate(): { allowed: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (process.env.DEMO_MODE === 'true') reasons.push('DEMO_MODE=true blocks real sandbox scheduling');
+  if (process.env.EXTERNAL_EXECUTION_ENABLED !== 'true') reasons.push('EXTERNAL_EXECUTION_ENABLED is not true');
+  if (process.env.POSTIZ_SANDBOX_SCHEDULING_ENABLED !== 'true') reasons.push('POSTIZ_SANDBOX_SCHEDULING_ENABLED is not true');
+  if (process.env.POSTIZ_LIVE_ENABLED !== 'true') reasons.push('POSTIZ_LIVE_ENABLED is not true');
+  if (!POSTIZ_SANDBOX_URL) reasons.push('POSTIZ_SANDBOX_URL or POSTIZ_BASE_URL is missing');
+  if (!process.env.POSTIZ_API_KEY) reasons.push('POSTIZ_API_KEY is missing');
+  if (!process.env.POSTIZ_SANDBOX_INTEGRATION_ID) reasons.push('POSTIZ_SANDBOX_INTEGRATION_ID is missing');
+  return { allowed: reasons.length === 0, reasons };
+}
+
+postizIntegrationRouter.post('/schedule-payload', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    getSession(req);
+    const input = postizPayloadSchema.parse(req.body);
+    const payload = buildPostizCreatePostPayload(input);
+    res.json({
+      status: 'prepared',
+      endpoint: POSTIZ_SANDBOX_URL ? `${POSTIZ_SANDBOX_URL.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}` : null,
+      payload,
+      safety: {
+        executionPerformed: false,
+        livePublishing: false,
+        schedulingGate: sandboxSchedulingGate(),
+      },
+      _label: 'Postiz-ready scheduling payload prepared - no external call performed',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const input = postizPayloadSchema.parse(req.body);
+    const payload = buildPostizCreatePostPayload(input);
+    const gate = sandboxSchedulingGate();
+
+    if (!gate.allowed) {
+      auditLog(
+        { actor: `user:${session.humanUserId}`, action: 'postiz_sandbox_schedule_blocked', object_type: 'system', object_id: undefined, result: 'blocked' },
+        `Postiz sandbox schedule blocked: ${gate.reasons.join('; ')}`,
+      );
+      res.status(403).json({
+        status: 'blocked',
+        reasons: gate.reasons,
+        payload,
+        safety: {
+          executionPerformed: false,
+          livePublishing: false,
+        },
+        _label: 'Blocked - sandbox scheduling requires explicit deployment flags and credentials',
+      });
+      return;
+    }
+
+    const response = await fetch(`${POSTIZ_SANDBOX_URL.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}`, {
+      method: 'POST',
+      headers: {
+        Authorization: process.env.POSTIZ_API_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({ statusText: response.statusText }));
+
+    auditLog(
+      { actor: `user:${session.humanUserId}`, action: 'postiz_sandbox_schedule_executed', object_type: 'system', object_id: undefined, result: response.ok ? 'success' : 'failed' },
+      `Postiz sandbox schedule API returned ${response.status}`,
+    );
+
+    res.status(response.ok ? 200 : 502).json({
+      status: response.ok ? 'sandbox_scheduled' : 'failed',
+      postizStatus: response.status,
+      response: body,
+      payload,
+      safety: {
+        executionPerformed: true,
+        livePublishing: false,
+        sandboxOnly: true,
+      },
+      _label: response.ok ? 'Sandbox schedule created in Postiz test account' : 'Postiz sandbox API call failed',
+    });
   } catch (err) {
     next(err);
   }

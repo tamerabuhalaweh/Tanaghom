@@ -61,6 +61,7 @@ export default function GhlWizard() {
     if (token) {
       ghlApi.status(token).then(d => setGhlStatus(d as Record<string, unknown>)).catch(console.error);
       leadsApi.list(token).then(d => setLeads(d as Record<string, unknown>[])).catch(console.error);
+      ghlApi.wizardOptions(token).catch(console.error);
     }
   }, [token]);
 
@@ -73,6 +74,19 @@ export default function GhlWizard() {
       setMessage('Handoff package prepared');
     } catch (err) {
       setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    }
+    setLoading(false);
+  };
+
+  const handleSandboxContact = async (mode: 'preview' | 'execute') => {
+    if (!selectedLead || !token) return;
+    setLoading(true);
+    try {
+      const result = await ghlApi.sandboxContact({ leadId: selectedLead, mode }, token);
+      setHandoffResult(result as Record<string, unknown>);
+      setMessage(mode === 'preview' ? 'GHL sandbox contact payload prepared' : 'Sandbox write completed');
+    } catch (err) {
+      setMessage(`Blocked: ${err instanceof Error ? err.message : 'Unknown'}`);
     }
     setLoading(false);
   };
@@ -282,18 +296,63 @@ export default function GhlWizard() {
               </select>
             </div>
 
-            <button
-              onClick={handleHandoff}
-              disabled={!selectedLead || loading}
-              className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
-            >
-              {loading ? 'Preparing...' : 'Prepare Handoff Package'}
-            </button>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={handleHandoff}
+                disabled={!selectedLead || loading}
+                className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
+              >
+                Handoff Package
+              </button>
+              <button
+                onClick={() => handleSandboxContact('preview')}
+                disabled={!selectedLead || loading}
+                className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              >
+                Preview CRM Payload
+              </button>
+              <button
+                onClick={() => handleSandboxContact('execute')}
+                disabled={!selectedLead || loading}
+                className="px-4 py-3 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 font-medium"
+              >
+                Try Sandbox Write
+              </button>
+            </div>
 
             {handoffResult && (
               <div className="bg-gray-800/50 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-400 mb-2">Handoff Result</h3>
-                <pre className="text-xs text-gray-300 overflow-auto">{JSON.stringify(handoffResult, null, 2)}</pre>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-medium text-gray-400">Handoff Result</h3>
+                  <Badge variant={handoffResult.status === 'blocked' ? 'blocked' : 'success'}>{(handoffResult.status as string) || 'prepared'}</Badge>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-lg bg-gray-900 p-3">
+                    <div className="text-xs text-gray-500">Execution</div>
+                    <div className="mt-1 text-white">{((handoffResult.safety as Record<string, unknown> | undefined)?.executionPerformed) ? 'Performed' : 'Not performed'}</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-900 p-3">
+                    <div className="text-xs text-gray-500">Endpoint</div>
+                    <div className="mt-1 truncate text-white">{(handoffResult.endpoint as string) || 'Prepared internally'}</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-900 p-3">
+                    <div className="text-xs text-gray-500">Label</div>
+                    <div className="mt-1 text-white">{(handoffResult._label as string) || 'Prepared'}</div>
+                  </div>
+                </div>
+                {'payload' in handoffResult && (
+                  <div className="mt-4 rounded-lg bg-gray-900 p-3">
+                    <div className="text-xs font-semibold uppercase tracking-widest text-gray-500">Readable CRM Payload</div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-300">
+                      {Object.entries((handoffResult.payload as Record<string, unknown>) || {}).slice(0, 8).map(([key, value]) => (
+                        <div key={key} className="rounded border border-gray-800 p-2">
+                          <span className="block text-xs text-gray-500">{key}</span>
+                          <span className="break-words">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
