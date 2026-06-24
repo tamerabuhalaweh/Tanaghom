@@ -1,4 +1,13 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (configured) return configured;
+  if (typeof window !== 'undefined' && window.location.port === '3000') {
+    return `${window.location.protocol}//${window.location.hostname}:4000`;
+  }
+  return '';
+}
+
+const API_BASE = resolveApiBase();
 
 interface ApiOptions {
   method?: string;
