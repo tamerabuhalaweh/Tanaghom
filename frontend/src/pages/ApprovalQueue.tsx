@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { approvalsApi } from '../api';
-import { Badge } from '../components/ExecutiveUI';
+import { approvalsApi, publishingPackageApi } from '../api';
+import { ProductCard, ProductPage, ProductStatus, PrimaryAction, ReadableQueue, SecondaryAction } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
 
-type Approval = Record<string, unknown>;
+type RecordMap = Record<string, unknown>;
 
 function text(value: unknown, fallback = 'Not specified'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
@@ -15,119 +15,145 @@ function titleCase(value: string): string {
 
 export default function ApprovalQueue() {
   const { token } = useAuth();
-  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [approvals, setApprovals] = useState<RecordMap[]>([]);
+  const [packages, setPackages] = useState<RecordMap[]>([]);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
 
-  async function loadApprovals() {
+  async function load() {
     if (!token) return;
-    const data = await approvalsApi.list(token);
-    setApprovals(data as Approval[]);
+    const [approvalData, packageData] = await Promise.all([
+      approvalsApi.list(token),
+      publishingPackageApi.list(token).catch(() => []),
+    ]);
+    setApprovals(approvalData as RecordMap[]);
+    setPackages(packageData as RecordMap[]);
   }
 
   useEffect(() => {
     if (!token) return;
-    approvalsApi.list(token).then(data => setApprovals(data as Approval[])).catch(() => undefined);
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const [approvalData, packageData] = await Promise.all([
+          approvalsApi.list(token as string),
+          publishingPackageApi.list(token as string).catch(() => []),
+        ]);
+        if (cancelled) return;
+        setApprovals(approvalData as RecordMap[]);
+        setPackages(packageData as RecordMap[]);
+      } catch (error) {
+        if (!cancelled) setMessage(`Approval queue failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   async function handleAction(id: string, action: 'approve' | 'reject' | 'request-changes') {
     if (!token) return;
     setLoading(`${action}-${id}`);
+    setMessage('');
     try {
-      if (action === 'approve') await approvalsApi.approve(id, { comment: 'Approved for preparation only. No live scheduling.' }, token);
+      if (action === 'approve') await approvalsApi.approve(id, { comment: 'Approved for publishing preparation.' }, token);
       else if (action === 'reject') await approvalsApi.reject(id, { comment: 'Rejected by human reviewer.' }, token);
       else await approvalsApi.requestChanges(id, { comment: 'Please revise before publishing preparation.' }, token);
-      const actionLabel = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'changes requested';
-      setMessage(`Approval ${actionLabel} - audit recorded`);
-      await loadApprovals();
+      setMessage(action === 'approve' ? 'Approved. Publishing preparation is now available.' : action === 'reject' ? 'Rejected.' : 'Changes requested.');
+      await load();
     } catch (error) {
-      setMessage(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Decision failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading('');
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Approval Queue</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Human governance - all decisions are recorded before publishing preparation.</p>
-        </div>
-        <div className="flex gap-2">
-          <Badge variant="info">Human Approval Required</Badge>
-          <Badge variant="blocked">Auto Publishing Blocked</Badge>
-        </div>
-      </div>
+  const pendingApprovals = approvals.filter(approval => text(approval.approvalStatus, 'pending') === 'pending');
+  const readyPackages = packages.slice(0, 5);
 
+  return (
+    <ProductPage
+      eyebrow="Governed workflow"
+      title="Approvals & Publishing"
+      subtitle="Review content decisions, approve or request changes, and inspect publishing packages prepared for Postiz scheduling."
+      action={<ProductStatus tone={pendingApprovals.length ? 'warn' : 'good'}>{pendingApprovals.length ? `${pendingApprovals.length} Pending` : 'Queue Clear'}</ProductStatus>}
+    >
       {message && (
-        <div className={`rounded-lg border px-4 py-2 text-sm ${message.includes('Failed') ? 'border-rose-800 bg-rose-950/30 text-rose-300' : 'border-emerald-800 bg-emerald-950/30 text-emerald-300'}`}>
+        <div className={`rounded-2xl px-4 py-3 text-sm ${message.includes('failed') || message.includes('Decision failed') ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-100' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'}`}>
           {message}
         </div>
       )}
 
-      {approvals.length === 0 ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-950/75 p-8 text-center text-sm text-slate-500">
-          No approval package is currently pending. Submit one from the Commercial/Social Command Center.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {approvals.map(approval => {
-            const id = String(approval.id);
-            const status = text(approval.approvalStatus);
-            const pending = status === 'pending';
-            return (
-              <div key={id} className="rounded-xl border border-slate-800 bg-slate-950/75 p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="font-bold text-white">{titleCase(text(approval.targetType))}</h3>
-                      <Badge variant={status === 'approved' ? 'success' : status === 'rejected' ? 'danger' : 'warning'}>{titleCase(status)}</Badge>
-                      <Badge variant={approval.riskCategory === 'high' ? 'danger' : approval.riskCategory === 'medium' ? 'warning' : 'success'}>
-                        {text(approval.riskCategory, 'medium')} risk
-                      </Badge>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+        <ProductCard title="Approval Queue" subtitle="Human decisions required before publishing preparation.">
+          {approvals.length ? (
+            <div className="space-y-4">
+              {approvals.map(approval => {
+                const id = String(approval.id);
+                const status = text(approval.approvalStatus, 'pending');
+                const pending = status === 'pending';
+                return (
+                  <article key={id} className="rounded-2xl bg-stone-50 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-lg font-semibold text-black">{titleCase(text(approval.targetType, 'Content'))}</h2>
+                          <ProductStatus tone={status === 'approved' ? 'good' : status === 'rejected' ? 'danger' : 'warn'}>{titleCase(status)}</ProductStatus>
+                        </div>
+                        <p className="mt-2 max-w-2xl text-sm leading-6 text-black/55">
+                          Review the selected social draft, readiness score, and campaign intent before publishing preparation.
+                        </p>
+                        <div className="mt-4 grid gap-3 md:grid-cols-3">
+                          <Mini label="Department" value={text(approval.requiredDepartment, 'Commercial')} />
+                          <Mini label="Reviewer" value={text(approval.requiredRole, 'Human reviewer')} />
+                          <Mini label="Risk" value={titleCase(text(approval.riskCategory, 'medium'))} />
+                        </div>
+                      </div>
+                      {pending && (
+                        <div className="flex min-w-[220px] flex-col gap-2">
+                          <PrimaryAction onClick={() => handleAction(id, 'approve')} disabled={!!loading}>{loading === `approve-${id}` ? 'Approving...' : 'Approve'}</PrimaryAction>
+                          <SecondaryAction onClick={() => handleAction(id, 'request-changes')} disabled={!!loading}>Request Changes</SecondaryAction>
+                          <SecondaryAction onClick={() => handleAction(id, 'reject')} disabled={!!loading}>Reject</SecondaryAction>
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-                      <Info label="Target" value={text(approval.targetId)} />
-                      <Info label="Department" value={text(approval.requiredDepartment, 'Commercial/Social')} />
-                      <Info label="Role" value={text(approval.requiredRole, 'Human reviewer')} />
-                    </div>
-                  </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-stone-50 p-8 text-center text-sm text-black/50">
+              No approval package is pending. Send a selected draft for review from Campaigns.
+            </div>
+          )}
+        </ProductCard>
 
-                  {pending && (
-                    <div className="flex min-w-[330px] flex-col gap-2">
-                      <button onClick={() => handleAction(id, 'approve')} disabled={!!loading} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-40">
-                        {loading === `approve-${id}` ? 'Approving...' : 'Approve'}
-                      </button>
-                      <button onClick={() => handleAction(id, 'request-changes')} disabled={!!loading} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-40">
-                        {loading === `request-changes-${id}` ? 'Recording...' : 'Request Changes'}
-                      </button>
-                      <button onClick={() => handleAction(id, 'reject')} disabled={!!loading} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-40">
-                        {loading === `reject-${id}` ? 'Rejecting...' : 'Reject'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-800 pt-3">
-                  <Badge variant="info">Audit recorded by backend</Badge>
-                  <Badge variant="default">Evidence timeline available</Badge>
-                  <Badge variant="blocked">External execution blocked</Badge>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+        <ProductCard title="Publishing Preparation" subtitle="Approved packages prepared for scheduling review.">
+          <ReadableQueue items={readyPackages.length ? readyPackages.map(pkg => ({
+            title: 'Publishing package',
+            meta: `Status: ${titleCase(text(pkg.status || pkg.packageStatus, 'prepared'))}`,
+            status: 'Package Ready',
+            tone: 'good' as const,
+          })) : [
+            { title: 'No package ready yet', meta: 'Approve content to unlock publishing preparation.', status: 'Waiting', tone: 'default' as const },
+          ]} />
+          <div className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+            Postiz scheduling is visible as a payload and sandbox surface. Scheduling remains disabled until credentials and authorization are approved.
+          </div>
+        </ProductCard>
+      </div>
+    </ProductPage>
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="mt-1 truncate text-sm text-slate-300">{value}</div>
+    <div className="rounded-xl bg-white p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">{label}</div>
+      <div className="mt-1 text-sm font-medium text-black/72">{value}</div>
     </div>
   );
 }

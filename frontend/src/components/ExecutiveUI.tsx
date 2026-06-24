@@ -167,17 +167,16 @@ export function Badge({ children, variant = 'default' }: { children: ReactNode; 
 
 export function DemoBanner() {
   return (
-    <div className="bg-gradient-to-r from-emerald-500/10 via-slate-900 to-sky-500/10 border border-slate-800 rounded-lg px-4 py-2 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-emerald-300 text-sm font-bold">Sandbox Workspace</span>
-        <span className="text-slate-600 text-xs">|</span>
-        <span className="text-slate-400 text-xs">External Writes OFF</span>
-        <span className="text-slate-600 text-xs">|</span>
-        <span className="text-slate-400 text-xs">M5 Disabled</span>
-        <span className="text-slate-600 text-xs">|</span>
-        <span className="text-slate-400 text-xs">Postiz Sandbox Ready</span>
+    <div className="rounded-xl border border-black/10 bg-white/80 px-4 py-2.5 shadow-sm shadow-black/[0.03] flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">Sandbox Workspace</span>
+        <span className="text-black/35">External writes off</span>
+        <span className="text-black/20">/</span>
+        <span className="text-black/35">Scheduling disabled</span>
+        <span className="text-black/20">/</span>
+        <span className="text-black/35">Authorization required</span>
       </div>
-      <span className="text-[10px] text-slate-600 font-mono">Commercial/Social AI OS</span>
+      <span className="text-[11px] font-medium text-black/40">Commercial/Social AI OS</span>
     </div>
   );
 }
