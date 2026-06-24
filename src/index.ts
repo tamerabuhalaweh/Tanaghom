@@ -19,8 +19,16 @@ import { spineRouter } from '../modules/spine/controller';
 import { observabilityRouter } from '../modules/observability/controller';
 import { aiProviderRouter } from '../modules/ai-provider/controller';
 import { mcpMediationRouter } from '../modules/mcp-mediation/controller';
+import { demoRouter } from '../modules/demo/controller';
+import { publishingPackageRouter } from '../modules/publishing-package/controller';
+import { crmConversionRouter } from '../modules/crm-conversion/controller';
+import { postizIntegrationRouter } from '../modules/postiz-integration/controller';
+import { integrationStatusRouter } from '../modules/integration-status/controller';
+import { adminUsersRouter } from '../modules/admin-users/controller';
+import { integrationsRouter } from '../modules/integrations/controller';
+import { leadsRouter } from '../modules/leads/controller';
+import { ghlRouter } from '../modules/ghl-connector/controller';
 
-// Validate environment before startup
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
   logger.error({ errors: envValidation.errors }, 'Environment validation failed');
@@ -30,7 +38,6 @@ if (envValidation.warnings.length > 0) {
   logger.warn({ warnings: envValidation.warnings }, 'Environment warnings');
 }
 
-// Enforce demo safety
 assertDemoSafe();
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -38,7 +45,6 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
 const app = express();
 
-// Security middleware
 app.use(helmet());
 app.use(cors({
   origin: CORS_ORIGIN,
@@ -46,7 +52,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// Rate limiting (simple in-memory for demo)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction): void {
   const ip = req.ip || 'unknown';
@@ -69,7 +74,6 @@ function rateLimit(req: express.Request, res: express.Response, next: express.Ne
 }
 app.use(rateLimit);
 
-// Demo mode header
 if (isDemoMode()) {
   app.use((req, res, next) => {
     res.setHeader('X-Demo-Mode', 'true');
@@ -79,7 +83,6 @@ if (isDemoMode()) {
   });
 }
 
-// Routes
 app.get('/health', healthCheck);
 app.use('/auth', authRouter);
 app.use('/', usersDepartmentsRouter);
@@ -93,12 +96,19 @@ app.use('/spine', spineRouter);
 app.use('/observability', observabilityRouter);
 app.use('/ai-provider', aiProviderRouter);
 app.use('/mcp-runtime', mcpMediationRouter);
+app.use('/demo', demoRouter);
+app.use('/publishing-package', publishingPackageRouter);
+app.use('/crm-conversion', crmConversionRouter);
+app.use('/postiz', postizIntegrationRouter);
+app.use('/integration-status', integrationStatusRouter);
+app.use('/admin/users', adminUsersRouter);
+app.use('/integrations', integrationsRouter);
+app.use('/leads', leadsRouter);
+app.use('/ghl', ghlRouter);
 
-// Error handler (must be last) — preserves AppError status codes, hides stack traces
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error({ err, path: req.path }, 'Unhandled error');
 
-  // Preserve AppError status codes
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       error: err.message,
@@ -107,7 +117,6 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
     return;
   }
 
-  // Generic errors — no stack traces in production/demo
   res.status(500).json({
     error: 'Internal server error',
   });
@@ -119,7 +128,7 @@ async function start(): Promise<void> {
     logger.info('Database connected');
 
     if (isDemoMode()) {
-      logger.info('DEMO MODE — All live integrations disabled, M5 execution blocked');
+      logger.info('DEMO MODE - All live integrations disabled, M5 execution blocked');
     }
 
     app.listen(PORT, () => {

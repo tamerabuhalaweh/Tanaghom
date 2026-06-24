@@ -3,7 +3,6 @@ import { AuthProvider } from './contexts/AuthProvider'
 import { useAuth } from './contexts/useAuth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
 import CampaignWorkspace from './pages/CampaignWorkspace'
 import ApprovalQueue from './pages/ApprovalQueue'
 import SaifDecisions from './pages/SaifDecisions'
@@ -39,7 +38,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<DemoCommandCenter />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="approvals" element={<ApprovalQueue />} />
             <Route path="saif" element={<SaifDecisions />} />

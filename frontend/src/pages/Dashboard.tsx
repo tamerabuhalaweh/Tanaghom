@@ -1,84 +1,88 @@
-import { StatusBadge, Card, MetricCard, Alert, DemoLabel } from '../components/UI';
+import { useEffect, useState } from 'react';
+import { demoApi } from '../api';
+import { useAuth } from '../contexts/useAuth';
+import { Badge, ExecutiveMetric, FlowTimeline, SafetyGateCard } from '../components/ExecutiveUI';
+
+type DemoStatus = {
+  campaigns?: unknown[];
+  approvals?: unknown[];
+  publishingPackages?: unknown[];
+  auditTrail?: unknown[];
+  integrations?: Record<string, { reachable?: boolean; status?: string; message?: string }>;
+};
+
+function count(items?: unknown[]) {
+  return Array.isArray(items) ? items.length : 0;
+}
 
 export default function Dashboard() {
+  const { token } = useAuth();
+  const [status, setStatus] = useState<DemoStatus | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    demoApi.status(token).then(d => setStatus(d as DemoStatus)).catch(console.error);
+  }, [token]);
+
+  const postizReady = status?.integrations?.postiz?.reachable === true;
+  const openClawReady = status?.integrations?.openClaw?.reachable === true;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Commercial / Social Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-1">Social Media Intelligence + AI Content Preparation + Human Approval</p>
+          <h1 className="text-2xl font-bold text-white">Commercial / Social Dashboard</h1>
+          <p className="text-slate-500 text-sm mt-1">Operational view for the CEO demo path</p>
         </div>
-        <DemoLabel>Controlled Demo Mode</DemoLabel>
+        <div className="flex items-center gap-2">
+          <Badge variant="info">Controlled Demo</Badge>
+          <Badge variant="blocked">Live execution disabled</Badge>
+        </div>
       </div>
 
-      <Alert type="info">
-        <strong>Demo Principle:</strong> AI prepares. Human approves. System records. External execution remains blocked unless separately authorized.
-      </Alert>
-
-      {/* Key Metrics */}
       <div className="grid grid-cols-5 gap-4">
-        <MetricCard label="Active Campaigns" value="2" sublabel="Demo data" />
-        <MetricCard label="Pending Approvals" value="1" sublabel="Human required" />
-        <MetricCard label="AI Drafts" value="3" sublabel="Mock LLM" />
-        <MetricCard label="Reach Scores" value="3" sublabel="Deterministic" />
-        <MetricCard label="Safety Gates" value="9/11" sublabel="Blocked" />
+        <ExecutiveMetric label="Campaigns" value={status ? count(status.campaigns) : '...'} sublabel="Backend records" />
+        <ExecutiveMetric label="Approvals" value={status ? count(status.approvals) : '...'} sublabel="Human queue" />
+        <ExecutiveMetric label="Packages" value={status ? count(status.publishingPackages) : '...'} sublabel="Prepared only" />
+        <ExecutiveMetric label="Postiz" value={postizReady ? 'Ready' : 'Checking'} sublabel="Sandbox surface" />
+        <ExecutiveMetric label="OpenClaw" value={openClawReady ? 'Ready' : 'Checking'} sublabel="Loopback gateway" />
       </div>
 
-      {/* Safety Status */}
-      <Card title="Safety Status">
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'M5 Execution', status: 'Blocked', variant: 'danger' as const },
-            { label: 'External APIs', status: 'Blocked', variant: 'danger' as const },
-            { label: 'Live Publishing', status: 'Blocked', variant: 'danger' as const },
-            { label: 'Real CRM', status: 'Blocked', variant: 'danger' as const },
-            { label: 'Real WhatsApp', status: 'Blocked', variant: 'danger' as const },
-            { label: 'Real Analytics', status: 'Blocked', variant: 'danger' as const },
-            { label: 'AI Draft Gen', status: 'Working', variant: 'success' as const },
-            { label: 'Approval Flow', status: 'Working', variant: 'success' as const },
-            { label: 'Audit Trail', status: 'Working', variant: 'success' as const },
-          ].map(item => (
-            <div key={item.label} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-              <span className="text-sm text-gray-700">{item.label}</span>
-              <StatusBadge label={item.status} variant={item.variant} />
+      <div className="grid grid-cols-[1.3fr_1fr] gap-6">
+        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-5">
+          <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Commercial/Social Golden Path</h2>
+          <FlowTimeline steps={[
+            { label: 'Login', status: 'done' },
+            { label: 'Campaign', status: 'done' },
+            { label: 'AI Draft', status: 'done' },
+            { label: 'Reach Score', status: 'done' },
+            { label: 'Approval', status: 'active' },
+            { label: 'Package', status: postizReady ? 'done' : 'active', badge: 'Postiz sandbox' },
+            { label: 'External Action', status: 'blocked', badge: 'Blocked' },
+          ]} />
+
+          <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="text-sm font-semibold text-white">Architecture Boundary</div>
+            <div className="mt-3 font-mono text-xs leading-6 text-slate-300">
+              STITCH Core - Capability Resolution - SAIF Approval Gateway - MCP Connector Layer - Postiz / CRM / Voice APIs
             </div>
-          ))}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge variant="success">STITCH is source of truth</Badge>
+              <Badge variant="info">Postiz is scheduling surface</Badge>
+              <Badge variant="blocked">M5 blocked</Badge>
+            </div>
+          </div>
         </div>
-      </Card>
 
-      {/* Demo Flow */}
-      <Card title="Commercial/Social Golden Path">
-        <div className="flex items-center gap-1.5 overflow-x-auto py-2">
-          {[
-            'Login', 'Dashboard', 'Campaign', 'AI Draft', 'Platform Adapt', 'Reach Score',
-            'Best Time/Format', 'Approval', 'Publishing Prep', 'Mock Postiz', 'Analytics',
-            'Lead Capture', 'GoHighLevel', 'Voice/Chat', 'Audit Trail'
-          ].map((step, i) => (
-            <span key={step}>
-              <span className={`px-2.5 py-1.5 rounded-lg text-xs font-medium ${i < 8 ? 'bg-green-100 text-green-800' : i < 11 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>
-                {step}
-              </span>
-              {i < 14 && <span className="mx-0.5 text-gray-300">→</span>}
-            </span>
-          ))}
-        </div>
-        <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-400 rounded-full"></span> Working</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 bg-yellow-400 rounded-full"></span> Mock/Sandbox</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 bg-gray-300 rounded-full"></span> Planned</span>
-        </div>
-      </Card>
-
-      {/* Architecture */}
-      <Card title="Architecture">
-        <div className="bg-gray-50 rounded p-4 font-mono text-sm text-gray-700">
-          Tanaghum STITCH Core → Capability Resolution → SAIF Approval Gateway → MCP Connector Layer → Postiz / Social APIs
-        </div>
-        <div className="flex items-center gap-4 mt-3 text-xs">
-          <DemoLabel>Tanaghum owns: strategy, AI, approval, audit, learning</DemoLabel>
-          <DemoLabel>Postiz: scheduling surface only</DemoLabel>
-        </div>
-      </Card>
+        <SafetyGateCard gates={[
+          { label: 'M5 Execution', status: 'blocked' },
+          { label: 'Live Publishing', status: 'blocked' },
+          { label: 'Real CRM Write', status: 'blocked' },
+          { label: 'WhatsApp Message', status: 'blocked' },
+          { label: 'Voice Trigger', status: 'blocked' },
+          { label: 'Postiz Sandbox', status: postizReady ? 'clear' : 'required' },
+        ]} />
+      </div>
     </div>
   );
 }
