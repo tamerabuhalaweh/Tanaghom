@@ -36,7 +36,7 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
   await page.getByRole('link', { name: /Users & Roles/i }).click();
   await expect(page.getByRole('heading', { name: /Users, Roles & AgentReps/i })).toBeVisible();
   await expect(page.getByText(/Business Role Template/i)).toBeVisible();
-  await expect(page.getByText(/Social Media Manager/i)).toBeVisible();
+  await expect(page.getByText(/Creates campaigns, generates drafts/i).first()).toBeVisible();
 
   await page.getByRole('link', { name: /Agent Skills/i }).click();
   await expect(page.getByRole('heading', { name: /Agent Skills/i })).toBeVisible();
