@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   aiGenerationApi,
+  aiProviderApi,
   algoApi,
   analyticsApi,
   approvalsApi,
@@ -84,6 +85,8 @@ export default function DemoCommandCenter() {
   const [loading, setLoading] = useState('');
   const [notice, setNotice] = useState('');
   const [step, setStep] = useState<Step>('brief');
+  const [providerReady, setProviderReady] = useState(false);
+  const [providerLabel, setProviderLabel] = useState('Requires LLM provider');
 
   const selectedDraft = useMemo(
     () => drafts.find(draft => String(draft.contentItemId) === selectedDraftId) || drafts[0] || null,
@@ -118,6 +121,14 @@ export default function DemoCommandCenter() {
         setSelected(current => current || campaignList[0] || null);
         setAnalytics(analyticsData as RecordMap);
         setStatus(statusData as RecordMap);
+        try {
+          const active = await aiProviderApi.active(token as string) as RecordMap;
+          setProviderReady(active.apiKeyStatus === 'configured');
+          setProviderLabel(`${text(active.name, 'LLM provider')} / ${text(active.model, 'model configured')}`);
+        } catch (providerError) {
+          setProviderReady(false);
+          setProviderLabel(providerError instanceof Error ? providerError.message : 'Configure OpenAI or Claude before draft generation');
+        }
       } catch (error) {
         if (!cancelled) setNotice(`Workspace load failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
@@ -153,7 +164,7 @@ export default function DemoCommandCenter() {
   }
 
   async function generateDrafts() {
-    if (!token || !selected) return;
+    if (!token || !selected || !providerReady) return;
     setLoading('drafts');
     setNotice('');
     try {
@@ -294,6 +305,8 @@ export default function DemoCommandCenter() {
 
   const nextAction = !selected
     ? 'Select a campaign'
+    : !providerReady
+      ? 'Configure AI provider'
     : !drafts.length
       ? 'Generate platform drafts'
       : !score
@@ -362,6 +375,13 @@ export default function DemoCommandCenter() {
         <Notice tone={notice.includes('failed') ? 'danger' : 'good'}>{notice}</Notice>
       )}
 
+      {!providerReady && (
+        <Notice tone="warn">
+          Real AI draft generation is blocked until this user configures OpenAI or Claude. {providerLabel}{' '}
+          <Link to="/ai-settings" className="font-semibold underline">Open AI Provider Settings</Link>
+        </Notice>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <ProductCard title="Campaigns" subtitle="Choose the campaign to move through today's workflow.">
           <div className="space-y-3">
@@ -407,7 +427,7 @@ export default function DemoCommandCenter() {
           <ProductCard
             title="AI Draft Studio"
             subtitle="Generate, edit, and select platform-specific social drafts."
-            action={<PrimaryAction onClick={generateDrafts} disabled={!selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Platform Drafts'}</PrimaryAction>}
+            action={<PrimaryAction onClick={generateDrafts} disabled={!providerReady || !selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Platform Drafts'}</PrimaryAction>}
           >
             {drafts.length ? (
               <div className="grid gap-4 lg:grid-cols-3">

@@ -11,17 +11,30 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
 
   await page.getByRole('link', { name: /AI Draft Studio/i }).click();
   await expect(page.getByRole('heading', { name: /Create campaign ideas/i })).toBeVisible();
-  await page.getByRole('button', { name: /Generate Ideas/i }).click();
-  await expect(page.getByText(/Generated .* ideas|Generation failed/i)).toBeVisible({ timeout: 30000 });
-  await expect(page.getByRole('button', { name: /Record Human Selection/i })).toBeVisible();
 
-  await page.getByRole('button', { name: /Record Human Selection/i }).click();
-  await expect(page.getByText(/Human selection recorded|Selection failed/i)).toBeVisible({ timeout: 30000 });
+  let generatedCampaign = false;
+  const providerBlocked = page.getByText(/Real AI generation is blocked|Real AI draft generation is blocked/i);
+  if (await providerBlocked.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await expect(providerBlocked).toBeVisible();
+    await expect(page.getByRole('link', { name: /Open AI Provider Settings/i })).toBeVisible();
+  } else {
+    await page.getByRole('button', { name: /Generate Ideas/i }).click();
+    await expect(page.getByText(/Generated .* ideas|Generation failed/i)).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('button', { name: /Record Human Selection/i })).toBeVisible();
 
-  await page.getByRole('button', { name: /Create Campaign/i }).click();
-  await expect(page.getByText(/Campaign created|Campaign creation failed/i)).toBeVisible({ timeout: 30000 });
+    await page.getByRole('button', { name: /Record Human Selection/i }).click();
+    await expect(page.getByText(/Human selection recorded|Selection failed/i)).toBeVisible({ timeout: 30000 });
 
-  await page.getByRole('link', { name: /Open Campaigns/i }).click();
+    await page.getByRole('button', { name: /Create Campaign/i }).click();
+    await expect(page.getByText(/Campaign created|Campaign creation failed/i)).toBeVisible({ timeout: 30000 });
+    generatedCampaign = true;
+  }
+
+  if (generatedCampaign) {
+    await page.getByRole('link', { name: /Open Campaigns/i }).click();
+  } else {
+    await page.getByRole('link', { name: /^Campaigns$/i }).click();
+  }
   await expect(page.getByRole('heading', { name: /Campaign workspace/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /Generate Platform Drafts/i })).toBeVisible();
 

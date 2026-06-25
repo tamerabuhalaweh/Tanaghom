@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ideasApi } from '../api';
+import { aiProviderApi, ideasApi } from '../api';
 import {
   EmptyProductState,
   Field,
@@ -106,13 +106,38 @@ export default function PostIdeas() {
   const [campaign, setCampaign] = useState<CampaignResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [providerReady, setProviderReady] = useState(false);
+  const [providerLabel, setProviderLabel] = useState('Requires LLM provider');
 
   const selectedIdea = useMemo(() => ideas.find((idea) => idea.id === selectedIdeaId) || null, [ideas, selectedIdeaId]);
   const goalPayload = buildGoalPayload(brief);
   const audiencePayload = buildAudiencePayload(brief);
 
-  async function generateIdeas() {
+  useEffect(() => {
     if (!token) return;
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const active = await aiProviderApi.active(token as string) as { name?: string; model?: string; apiKeyStatus?: string; _label?: string };
+        if (cancelled) return;
+        setProviderReady(active.apiKeyStatus === 'configured');
+        setProviderLabel(`${active.name || 'LLM provider'} / ${active.model || 'model configured'}`);
+      } catch (error) {
+        if (cancelled) return;
+        setProviderReady(false);
+        setProviderLabel(error instanceof Error ? error.message : 'Configure OpenAI or Claude before generation');
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  async function generateIdeas() {
+    if (!token || !providerReady) return;
     setLoading(true);
     setMessage('');
     setCampaign(null);
@@ -191,7 +216,7 @@ export default function PostIdeas() {
       eyebrow="AI Draft Studio"
       title="Create campaign ideas"
       subtitle="Give your AgentRep a practical marketing brief, generate platform-aware ideas, choose the strongest direction, then create a campaign for drafting."
-      action={<ProductStatus tone={provider?.apiKeyStatus === 'configured' ? 'good' : 'info'}>{provider ? `${provider.generationMode || provider.provider} / ${provider.model}` : 'Provider ready'}</ProductStatus>}
+      action={<ProductStatus tone={providerReady ? 'good' : 'warn'}>{provider ? `${provider.generationMode || provider.provider} / ${provider.model}` : providerReady ? 'Live Provider Active' : 'Requires Provider'}</ProductStatus>}
     >
       <WorkflowRail steps={[
         { label: 'Brief', state: 'done' },
@@ -206,6 +231,13 @@ export default function PostIdeas() {
 
       {message && (
         <Notice tone={message.includes('failed') ? 'danger' : 'good'}>{message}</Notice>
+      )}
+
+      {!providerReady && (
+        <Notice tone="warn">
+          Real AI generation is blocked until this user configures OpenAI or Claude. {providerLabel}{' '}
+          <Link to="/ai-settings" className="font-semibold underline">Open AI Provider Settings</Link>
+        </Notice>
       )}
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -254,7 +286,7 @@ export default function PostIdeas() {
                 ))}
               </div>
             </Field>
-            <PrimaryAction onClick={generateIdeas} disabled={loading || brief.objective.trim().length < 6 || brief.audience.trim().length < 3}>
+            <PrimaryAction onClick={generateIdeas} disabled={!providerReady || loading || brief.objective.trim().length < 6 || brief.audience.trim().length < 3}>
               {loading ? 'Working...' : 'Generate Ideas'}
             </PrimaryAction>
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { aiGenerationApi, algoApi, approvalsApi, campaignsApi, postizApi, publishingPackageApi } from '../api';
+import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, campaignsApi, postizApi, publishingPackageApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -44,6 +44,8 @@ export default function CampaignWorkspace() {
   const [postizPayload, setPostizPayload] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
+  const [providerReady, setProviderReady] = useState(false);
+  const [providerLabel, setProviderLabel] = useState('Requires LLM provider');
 
   const selectedDraft = drafts.find(draft => String(draft.contentItemId) === selectedDraftId) || drafts[0] || null;
 
@@ -58,6 +60,14 @@ export default function CampaignWorkspace() {
         const campaignList = list(data);
         setCampaigns(campaignList);
         setSelected(current => current || campaignList[0] || null);
+        try {
+          const active = await aiProviderApi.active(token as string) as RecordMap;
+          setProviderReady(active.apiKeyStatus === 'configured');
+          setProviderLabel(`${text(active.name, 'LLM provider')} / ${text(active.model, 'model configured')}`);
+        } catch (providerError) {
+          setProviderReady(false);
+          setProviderLabel(providerError instanceof Error ? providerError.message : 'Configure OpenAI or Claude before draft generation');
+        }
       } catch (error) {
         if (!cancelled) setMessage(`Campaigns failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
@@ -82,7 +92,7 @@ export default function CampaignWorkspace() {
   }
 
   async function generateDrafts() {
-    if (!selected || !token) return;
+    if (!selected || !token || !providerReady) return;
     setLoading('drafts');
     setMessage('');
     try {
@@ -214,6 +224,13 @@ export default function CampaignWorkspace() {
         <Notice tone={message.includes('failed') ? 'danger' : 'good'}>{message}</Notice>
       )}
 
+      {!providerReady && (
+        <Notice tone="warn">
+          Real draft generation is blocked until this user configures OpenAI or Claude. {providerLabel}{' '}
+          <a href="/ai-settings" className="font-semibold underline">Open AI Provider Settings</a>
+        </Notice>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <ProductCard title="Campaign Queue" subtitle="Campaigns available for social preparation.">
           <div className="space-y-3">
@@ -250,7 +267,7 @@ export default function CampaignWorkspace() {
           <ProductCard
             title="Platform Drafts"
             subtitle="Generate editable drafts for each platform."
-            action={<PrimaryAction onClick={generateDrafts} disabled={!selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Platform Drafts'}</PrimaryAction>}
+            action={<PrimaryAction onClick={generateDrafts} disabled={!providerReady || !selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Platform Drafts'}</PrimaryAction>}
           >
             {drafts.length ? (
               <div className="grid gap-4 lg:grid-cols-3">
