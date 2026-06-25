@@ -38,7 +38,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[var(--color-surface-dark)] text-white">
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.15fr_0.85fr]">
-        {/* Left panel — branding */}
+        {/* Left panel - branding */}
         <section className="flex flex-col justify-between border-r border-white/10 p-8 lg:p-12">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-sm font-semibold text-black">
@@ -77,7 +77,7 @@ export default function Login() {
           </div>
         </section>
 
-        {/* Right panel — login form */}
+        {/* Right panel - login form */}
         <section className="flex items-center justify-center bg-[var(--color-surface)] p-6 text-[var(--color-text-primary)] sm:p-8">
           <div className="w-full max-w-md rounded-lg border border-black/10 bg-[var(--color-surface-card)] p-6 shadow-lg sm:p-8">
             <div>
