@@ -7,17 +7,22 @@ import {
   analyticsApi,
   approvalsApi,
   campaignsApi,
+  integrationCredentialsApi,
+  integrationStatusApi,
   leadsApi,
   postizApi,
   publishingPackageApi,
+  runtimeBridgesApi,
 } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
   EmptyProductState,
   BarList,
+  ExecutiveGauge,
+  ExecutiveKpiCard,
+  ExecutiveStatusGrid,
   FunnelChart,
-  MetricCard,
   Notice,
   PlatformPill,
   ProgressBar,
@@ -51,6 +56,8 @@ function list(value: unknown): RecordMap[] {
     if (Array.isArray(wrapped.value)) return wrapped.value as RecordMap[];
     if (Array.isArray(wrapped.items)) return wrapped.items as RecordMap[];
     if (Array.isArray(wrapped.data)) return wrapped.data as RecordMap[];
+    if (Array.isArray(wrapped.rows)) return wrapped.rows as RecordMap[];
+    if (Array.isArray(wrapped.statuses)) return wrapped.statuses as RecordMap[];
   }
   return [];
 }
@@ -104,6 +111,10 @@ export default function DemoCommandCenter() {
   const [leadStats, setLeadStats] = useState<RecordMap | null>(null);
   const [postizStatus, setPostizStatus] = useState<RecordMap | null>(null);
   const [packages, setPackages] = useState<RecordMap[]>([]);
+  const [approvals, setApprovals] = useState<RecordMap[]>([]);
+  const [integrationStatus, setIntegrationStatus] = useState<RecordMap | null>(null);
+  const [credentialRows, setCredentialRows] = useState<RecordMap[]>([]);
+  const [runtimeStatuses, setRuntimeStatuses] = useState<RecordMap[]>([]);
   const [loading, setLoading] = useState('');
   const [notice, setNotice] = useState('');
   const [step, setStep] = useState<Step>('brief');
@@ -126,13 +137,58 @@ export default function DemoCommandCenter() {
   const postiz = ((packageResult?.postizSandbox || postizStatus?.health || postizStatus || {}) as RecordMap);
   const platformPayloads = list(packageResult?.platforms);
   const leads = leadRecords;
+  const connectors = list(integrationStatus?.connectors);
+  const pendingApprovals = approvals.filter(item => text(item.approvalStatus || item.status, '').toLowerCase() === 'pending').length;
+  const approvedApprovals = approvals.filter(item => text(item.approvalStatus || item.status, '').toLowerCase() === 'approved').length;
+  const configuredConnectors = connectors.filter(item => text(item.credentialStatus, '').toLowerCase() === 'configured').length;
+  const configuredCredentials = credentialRows.filter(item => text(item.status, '').toLowerCase() === 'configured').length;
+  const reachableRuntimeBridges = runtimeStatuses.filter(item => Boolean(item.reachable) || text(item.status, '').toLowerCase().includes('connected')).length;
+  const postizCredentialStatus = text((postizStatus?.health as RecordMap | undefined)?.credentialStatus, text(postiz.credentialStatus, 'missing'));
+  const workflowSignals = [
+    selected ? 1 : 0,
+    providerReady ? 1 : 0,
+    drafts.length ? 1 : 0,
+    score ? 1 : 0,
+    approval ? 1 : 0,
+    approval?.approvalStatus === 'approved' ? 1 : 0,
+    packageResult || packages.length ? 1 : 0,
+    leads.length ? 1 : 0,
+  ];
+  const workflowReadiness = Math.round((workflowSignals.reduce((sum, value) => sum + value, 0) / workflowSignals.length) * 100);
+  const executionSafety = (integrationStatus?.safety || {}) as RecordMap;
+  const externalWritesEnabled = Boolean(executionSafety.externalExecutionEnabled);
+  const m5Enabled = Boolean(executionSafety.m5WriteExecutionEnabled);
+  const connectorGapCount = Math.max(0, credentialRows.length - configuredCredentials);
+  const liveBlockers = [
+    !providerReady ? 'Configure this user with OpenAI or Claude credentials.' : '',
+    postizCredentialStatus !== 'configured' ? 'Add Postiz API key, base URL, and sandbox integration ID.' : '',
+    !postiz.reachable ? 'Verify the Postiz sandbox URL is reachable from the backend.' : '',
+    connectorGapCount ? `${connectorGapCount} tenant integration credential set(s) are still missing.` : '',
+    !externalWritesEnabled ? 'External execution flag is disabled.' : '',
+    !m5Enabled ? 'M5 write execution remains disabled.' : '',
+    runtimeStatuses.length && !reachableRuntimeBridges ? 'OpenClaw / agentgateway / AgentScope endpoints are not reachable.' : '',
+  ].filter(Boolean);
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
 
     async function run() {
       try {
-        const [campaignData, sourceData, snapshotData, reportData, leadData, leadStatData, postizData, packageData] = await Promise.all([
+        const [
+          campaignData,
+          sourceData,
+          snapshotData,
+          reportData,
+          leadData,
+          leadStatData,
+          postizData,
+          packageData,
+          approvalData,
+          integrationData,
+          credentialData,
+          runtimeData,
+        ] = await Promise.all([
           campaignsApi.list(token as string),
           analyticsApi.sources(token as string),
           analyticsApi.snapshots(token as string),
@@ -141,6 +197,10 @@ export default function DemoCommandCenter() {
           leadsApi.stats(token as string),
           postizApi.status(token as string),
           publishingPackageApi.list(token as string).catch(() => []),
+          approvalsApi.list(token as string).catch(() => []),
+          integrationStatusApi.get(token as string).catch(() => null),
+          integrationCredentialsApi.matrix(token as string).catch(() => null),
+          runtimeBridgesApi.status(token as string).catch(() => null),
         ]);
         if (cancelled) return;
         const campaignList = list(campaignData);
@@ -150,6 +210,10 @@ export default function DemoCommandCenter() {
         setLeadStats(leadStatData as RecordMap);
         setPostizStatus(postizData as RecordMap);
         setPackages(list(packageData));
+        setApprovals(list(approvalData));
+        setIntegrationStatus(integrationData as RecordMap | null);
+        setCredentialRows(list(credentialData));
+        setRuntimeStatuses(list(runtimeData));
         setAnalytics(buildAnalyticsSummary(list(sourceData), list(snapshotData), list(reportData)));
         try {
           const active = await aiProviderApi.active(token as string) as RecordMap;
@@ -173,16 +237,24 @@ export default function DemoCommandCenter() {
   async function refreshStatus() {
     if (!token) return;
     try {
-      const [leadData, leadStatData, postizData, packageData] = await Promise.all([
+      const [leadData, leadStatData, postizData, packageData, approvalData, integrationData, credentialData, runtimeData] = await Promise.all([
         leadsApi.list(token),
         leadsApi.stats(token),
         postizApi.status(token),
         publishingPackageApi.list(token).catch(() => []),
+        approvalsApi.list(token).catch(() => []),
+        integrationStatusApi.get(token).catch(() => null),
+        integrationCredentialsApi.matrix(token).catch(() => null),
+        runtimeBridgesApi.status(token).catch(() => null),
       ]);
       setLeadRecords(list(leadData));
       setLeadStats(leadStatData as RecordMap);
       setPostizStatus(postizData as RecordMap);
       setPackages(list(packageData));
+      setApprovals(list(approvalData));
+      setIntegrationStatus(integrationData as RecordMap | null);
+      setCredentialRows(list(credentialData));
+      setRuntimeStatuses(list(runtimeData));
     } catch {
       setLeadRecords([]);
       setLeadStats(null);
@@ -355,13 +427,102 @@ export default function DemoCommandCenter() {
       subtitle="Operate the full Commercial/Social workflow from campaign brief to AI drafts, human approval, publishing package, performance intelligence, and lead handoff."
       action={<ProductStatus tone="good">Product Workspace</ProductStatus>}
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard tone="info" label="Active Campaign" value={selected ? '1' : '0'} detail={selected ? text(selected.topic) : 'Select a campaign'} />
-        <MetricCard tone="warn" label="Next Action" value={nextAction} detail="Primary operator task" />
-        <MetricCard tone={score ? 'good' : 'muted'} label="Readiness" value={score ? `${totalScore}/100` : 'Pending'} detail={score ? text(score.bandLabel, 'Ready for review') : 'Score selected draft'} />
-        <MetricCard tone={packages.length || packageResult ? 'good' : 'muted'} label="Publishing" value={packageResult ? 'Package Ready' : packages.length} detail={postiz.reachable ? 'Postiz sandbox reachable' : 'Scheduling disabled'} />
-        <MetricCard tone={numberValue(leadStats?.qualified) ? 'good' : 'info'} label="Leads" value={numberValue(leadStats?.total)} detail={`${numberValue(leadStats?.qualified)} qualified`} />
-      </div>
+      <section className="rounded-2xl bg-[#0f0c1f] p-4 shadow-[0_24px_70px_rgba(15,15,22,0.30)] sm:p-5">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-cyan-200/70">Executive analytics</div>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-white">Commercial/Social control room</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+              These cards use live STITCH records and connector status. Empty values mean the platform has no connected source or captured record yet.
+            </p>
+          </div>
+          <ProductStatus tone={externalWritesEnabled && m5Enabled ? 'warn' : 'danger'}>
+            {externalWritesEnabled && m5Enabled ? 'External Execution Armed' : 'External Execution Blocked'}
+          </ProductStatus>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+            <ExecutiveKpiCard
+              label="Workflow readiness"
+              value={`${workflowReadiness}%`}
+              detail={selected ? text(selected.topic) : 'No campaign selected'}
+              tone={workflowReadiness >= 75 ? 'good' : workflowReadiness >= 45 ? 'warn' : 'danger'}
+              series={[campaigns.length, drafts.length, score ? 1 : 0, approval ? 1 : 0, packageResult || packages.length ? 1 : 0, leads.length]}
+              secondary="campaign to handoff"
+            />
+            <ExecutiveKpiCard
+              label="Approval load"
+              value={pendingApprovals}
+              detail={`${approvedApprovals} approved decisions recorded`}
+              tone={pendingApprovals ? 'warn' : 'good'}
+              series={[approvals.length, pendingApprovals, approvedApprovals]}
+              secondary="human gate"
+            />
+            <ExecutiveKpiCard
+              label="Connector readiness"
+              value={`${configuredConnectors}/${connectors.length || 0}`}
+              detail={`${configuredCredentials}/${credentialRows.length || 0} credential sets configured`}
+              tone={configuredConnectors && configuredConnectors === connectors.length ? 'good' : 'warn'}
+              series={[configuredCredentials, configuredConnectors, reachableRuntimeBridges]}
+              secondary="integration vault"
+            />
+            <ExecutiveKpiCard
+              label="Lead pipeline"
+              value={numberValue(leadStats?.total)}
+              detail={`${numberValue(leadStats?.qualified)} qualified leads`}
+              tone={numberValue(leadStats?.qualified) ? 'good' : 'info'}
+              series={[packages.length + (packageResult ? 1 : 0), leads.length, numberValue(leadStats?.qualified)]}
+              secondary="captured records only"
+            />
+          </div>
+          <ExecutiveGauge
+            value={workflowReadiness}
+            label="Boardroom readiness"
+            detail={liveBlockers.length ? `${liveBlockers.length} blocker(s) remain before full live operation.` : 'Core workflow and integration controls are ready for the current configured scope.'}
+          />
+        </div>
+        <div className="mt-4">
+          <ExecutiveStatusGrid items={[
+            {
+              label: 'AI provider',
+              value: providerReady ? providerLabel : 'Requires user OpenAI or Claude key',
+              tone: providerReady ? 'good' : 'warn',
+              detail: 'Keys are stored per user and never returned to the browser after save.',
+            },
+            {
+              label: 'Postiz sandbox',
+              value: postiz.reachable ? 'Reachable from backend' : 'Not reachable or not configured',
+              tone: postiz.reachable ? 'good' : 'warn',
+              detail: postizCredentialStatus === 'configured' ? 'API credential configured.' : 'API key/base URL/integration ID required.',
+            },
+            {
+              label: 'Runtime bridges',
+              value: `${reachableRuntimeBridges}/${runtimeStatuses.length || 0} reachable`,
+              tone: reachableRuntimeBridges ? 'good' : 'warn',
+              detail: 'OpenClaw, agentgateway, and AgentScope require live endpoints before they can execute runtime orchestration.',
+            },
+          ]} />
+        </div>
+      </section>
+
+      <ProductCard
+        title="Full Live Operation Requirements"
+        subtitle="Real blockers detected from backend status. These must be resolved before production scheduling, CRM writes, messaging, voice handoff, or external orchestration."
+        action={<ProductStatus tone={liveBlockers.length ? 'warn' : 'good'}>{liveBlockers.length ? `${liveBlockers.length} blocker(s)` : 'No detected blockers'}</ProductStatus>}
+      >
+        {liveBlockers.length ? (
+          <ReadableQueue
+            items={liveBlockers.map((blocker, index) => ({
+              title: `Required item ${index + 1}`,
+              meta: blocker,
+              status: 'Required',
+              tone: 'warn',
+            }))}
+          />
+        ) : (
+          <EmptyProductState title="No detected blockers" message="The currently configured backend status does not report missing provider credentials, connector credentials, runtime bridge reachability, or execution flags." />
+        )}
+      </ProductCard>
 
       <ProductCard title="Executive Operating Snapshot" subtitle="One-screen view of business progress, current blocker, and external execution safety.">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px_320px]">
@@ -437,7 +598,7 @@ export default function DemoCommandCenter() {
         </ProductCard>
         <ProductCard title="Lead Funnel" subtitle="Current journey from campaign package to qualified handoff.">
           <FunnelChart stages={[
-            { label: 'Campaigns', value: campaigns.length || 1, tone: 'info' },
+            { label: 'Campaigns', value: campaigns.length, tone: campaigns.length ? 'info' : 'default' },
             { label: 'Drafts', value: drafts.length || 0, tone: drafts.length ? 'good' : 'default' },
             { label: 'Approvals', value: approval ? 1 : 0, tone: approval ? 'good' : 'default' },
             { label: 'Packages', value: packages.length + (packageResult ? 1 : 0), tone: (packages.length || packageResult) ? 'good' : 'default' },

@@ -22,6 +22,37 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
 }
 
+function toneDot(tone: Tone): string {
+  if (tone === 'good') return 'bg-emerald-400';
+  if (tone === 'warn') return 'bg-amber-400';
+  if (tone === 'danger') return 'bg-rose-400';
+  if (tone === 'info') return 'bg-cyan-400';
+  return 'bg-white/30';
+}
+
+function toneStroke(tone: Tone): string {
+  if (tone === 'good') return '#34d399';
+  if (tone === 'warn') return '#fbbf24';
+  if (tone === 'danger') return '#fb7185';
+  if (tone === 'info') return '#22d3ee';
+  return '#c4b5fd';
+}
+
+function normalizeSeries(series: number[]): string {
+  if (!series.length) return '';
+  const max = Math.max(1, ...series);
+  const width = 180;
+  const height = 56;
+  const lastIndex = Math.max(1, series.length - 1);
+  return series
+    .map((value, index) => {
+      const x = Math.round((index / lastIndex) * width);
+      const y = Math.round(height - (Math.max(0, value) / max) * (height - 8) - 4);
+      return `${x},${y}`;
+    })
+    .join(' ');
+}
+
 export function ProductPage({
   title,
   subtitle,
@@ -158,6 +189,122 @@ export function MetricCard({
         {value}
       </div>
       {detail && <div className="mt-2 line-clamp-2 text-sm leading-5 text-neutral-500">{detail}</div>}
+    </div>
+  );
+}
+
+export function ExecutiveKpiCard({
+  label,
+  value,
+  detail,
+  tone = 'info',
+  series = [],
+  secondary,
+}: {
+  label: string;
+  value: string | number;
+  detail?: string;
+  tone?: Tone;
+  series?: number[];
+  secondary?: string;
+}) {
+  const points = normalizeSeries(series);
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#17152a] p-5 text-white shadow-[0_16px_44px_rgba(15,15,22,0.22)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-white/75">{label}</div>
+          <div className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">{value}</div>
+          {detail && <div className="mt-2 text-sm leading-5 text-white/62">{detail}</div>}
+        </div>
+        <span className={cx('mt-1 h-3 w-3 shrink-0 rounded-full shadow-[0_0_20px_currentColor]', toneDot(tone))} />
+      </div>
+      <div className="mt-5 h-16">
+        {points ? (
+          <svg viewBox="0 0 180 60" role="img" aria-label={`${label} trend`} className="h-full w-full">
+            <path d="M0 56H180" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+            <path d="M0 32H180" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+            <polyline
+              points={points}
+              fill="none"
+              stroke={toneStroke(tone)}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="3"
+            />
+          </svg>
+        ) : (
+          <div className="flex h-full items-center rounded-lg border border-dashed border-white/12 px-3 text-xs text-white/42">
+            No trend signal yet
+          </div>
+        )}
+      </div>
+      {secondary && <div className="mt-2 text-xs font-medium uppercase tracking-wide text-white/42">{secondary}</div>}
+    </div>
+  );
+}
+
+export function ExecutiveGauge({
+  value,
+  label,
+  detail,
+}: {
+  value: number;
+  label: string;
+  detail?: string;
+}) {
+  const safeValue = Math.max(0, Math.min(100, Math.round(value)));
+  const radius = 62;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (safeValue / 100) * circumference;
+  const stroke = safeValue >= 75 ? '#34d399' : safeValue >= 50 ? '#fbbf24' : '#fb7185';
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#17152a] p-5 text-white shadow-[0_16px_44px_rgba(15,15,22,0.22)]">
+      <div className="text-sm font-semibold text-white/75">{label}</div>
+      <div className="mt-4 flex items-center gap-5">
+        <div className="relative h-36 w-36 shrink-0">
+          <svg viewBox="0 0 150 150" className="-rotate-90">
+            <circle cx="75" cy="75" r={radius} fill="none" stroke="rgba(255,255,255,0.11)" strokeWidth="14" />
+            <circle
+              cx="75"
+              cy="75"
+              r={radius}
+              fill="none"
+              stroke={stroke}
+              strokeLinecap="round"
+              strokeWidth="14"
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-3xl font-semibold tracking-tight">{safeValue}%</span>
+          </div>
+        </div>
+        <p className="text-sm leading-6 text-white/62">{detail || 'Calculated from real workflow and connector statuses.'}</p>
+      </div>
+    </div>
+  );
+}
+
+export function ExecutiveStatusGrid({
+  items,
+}: {
+  items: { label: string; value: string; tone?: Tone; detail?: string }[];
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {items.map(item => (
+        <div key={item.label} className="rounded-lg border border-white/10 bg-white/[0.06] p-4 text-white">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold">{item.label}</div>
+            <span className={cx('h-2.5 w-2.5 rounded-full', toneDot(item.tone || 'muted'))} />
+          </div>
+          <div className="mt-2 text-sm text-white/65">{item.value}</div>
+          {item.detail && <div className="mt-2 text-xs leading-5 text-white/42">{item.detail}</div>}
+        </div>
+      ))}
     </div>
   );
 }

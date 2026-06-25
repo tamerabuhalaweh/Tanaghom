@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, type JwtPayload } from '@shared/auth';
-import { AppError, UnauthorizedError, ForbiddenError } from '@shared/errors';
+import { AppError, UnauthorizedError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { decryptSecret, encryptSecret, secretFingerprint } from '@shared/crypto/secret-vault';
@@ -24,16 +24,9 @@ function getPayload(req: Request): JwtPayload {
   return verifyToken(authHeader.substring(7));
 }
 
-function requireAdmin(role: string): void {
-  if (role !== 'admin' && role !== 'cco') {
-    throw new ForbiddenError('Admin access required');
-  }
-}
-
 aiProviderRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    requireAdmin(payload.role);
 
     const userCredentials = await listSafeCredentials(payload.sub);
     const activeProvider = await getUserSelectedProvider(payload.sub);
@@ -50,7 +43,7 @@ aiProviderRouter.get('/status', async (req: Request, res: Response, next: NextFu
       environmentProvider: envProviderType,
       providers,
       credentialStorage: {
-        encryptedAtRest: Boolean(process.env.LLM_CREDENTIAL_ENCRYPTION_KEY),
+        encryptedAtRest: isCredentialVaultConfigured(),
         scope: 'user',
         rawKeysReturned: false,
       },
@@ -67,7 +60,7 @@ aiProviderRouter.get('/credentials', async (req: Request, res: Response, next: N
       activeProvider: await getUserSelectedProvider(payload.sub),
       credentials: await listSafeCredentials(payload.sub),
       encryption: {
-        enabled: Boolean(process.env.LLM_CREDENTIAL_ENCRYPTION_KEY),
+        enabled: isCredentialVaultConfigured(),
         rawKeyReturned: false,
         scope: 'user',
       },
@@ -297,4 +290,8 @@ async function setUserSelectedProvider(userId: string, provider: 'mock' | 'opena
 
 function isMockLLMAllowed(): boolean {
   return process.env.ALLOW_MOCK_LLM === 'true' || process.env.NODE_ENV === 'test';
+}
+
+function isCredentialVaultConfigured(): boolean {
+  return Boolean(process.env.SECRET_VAULT_ENCRYPTION_KEY || process.env.LLM_CREDENTIAL_ENCRYPTION_KEY);
 }

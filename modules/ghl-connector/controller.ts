@@ -177,10 +177,11 @@ async function ghlSandboxWriteGate(config?: GhlRuntimeConfig): Promise<{ allowed
 }
 
 function buildGhlContactPayload(lead: Record<string, unknown>, config?: GhlRuntimeConfig) {
+  const leadName = String(lead.lead_name_placeholder || '').trim();
   return {
     locationId: config?.locationId || process.env.GHL_LOCATION_ID || '<configured sandbox location id>',
-    firstName: String(lead.lead_name_placeholder || 'Sandbox Lead').split(' ')[0],
-    name: lead.lead_name_placeholder || 'Sandbox Lead',
+    firstName: leadName ? leadName.split(' ')[0] : undefined,
+    name: leadName || undefined,
     email: lead.lead_email_placeholder || undefined,
     phone: lead.lead_phone_placeholder || undefined,
     source: lead.lead_source || 'Tanaghum Commercial/Social',
