@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateGenerateDraft, validateReviseDraft } from '../validators';
+import { validateGenerateDraft, validateReviseDraft, validateSaveEditedDraft } from '../validators';
 import { ValidationError } from '@shared/errors';
 
 describe('ai-generation/validators', () => {
@@ -91,6 +91,35 @@ describe('ai-generation/validators', () => {
         validateReviseDraft({
           contentItemId: 'bad',
           feedback: 'Please revise',
+        }),
+      ).toThrow(ValidationError);
+    });
+  });
+
+  describe('saveEditedDraft', () => {
+    it('accepts valid human-edited draft text', () => {
+      const result = validateSaveEditedDraft({
+        contentItemId: '550e8400-e29b-41d4-a716-446655440000',
+        draftText: 'Approved human-edited LinkedIn copy.',
+        editNote: 'Tightened CTA',
+      });
+      expect(result.draftText).toBe('Approved human-edited LinkedIn copy.');
+    });
+
+    it('rejects empty human-edited draft text', () => {
+      expect(() =>
+        validateSaveEditedDraft({
+          contentItemId: '550e8400-e29b-41d4-a716-446655440000',
+          draftText: '',
+        }),
+      ).toThrow(ValidationError);
+    });
+
+    it('rejects invalid content item id', () => {
+      expect(() =>
+        validateSaveEditedDraft({
+          contentItemId: 'bad',
+          draftText: 'Copy',
         }),
       ).toThrow(ValidationError);
     });

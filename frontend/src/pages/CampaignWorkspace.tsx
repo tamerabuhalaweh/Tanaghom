@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, campaignsApi, postizApi, publishingPackageApi } from '../api';
+import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, campaignsApi, postizApi, publishingPackageApi, usersApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
   EmptyProductState,
+  Field,
   Notice,
   PlatformPill,
   ProgressBar,
@@ -32,8 +33,9 @@ function titleCase(value: string): string {
 }
 
 export default function CampaignWorkspace() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [campaigns, setCampaigns] = useState<RecordMap[]>([]);
+  const [departments, setDepartments] = useState<RecordMap[]>([]);
   const [selected, setSelected] = useState<RecordMap | null>(null);
   const [drafts, setDrafts] = useState<RecordMap[]>([]);
   const [draftTextById, setDraftTextById] = useState<Record<string, string>>({});
@@ -46,6 +48,18 @@ export default function CampaignWorkspace() {
   const [message, setMessage] = useState('');
   const [providerReady, setProviderReady] = useState(false);
   const [providerLabel, setProviderLabel] = useState('Requires LLM provider');
+  const [showCreate, setShowCreate] = useState(false);
+  const [campaignForm, setCampaignForm] = useState({
+    topic: '',
+    objective: '',
+    audience: '',
+    targetPlatforms: ['linkedin', 'instagram', 'x'],
+    cta: '',
+    mediaRequirements: '',
+    ownerDepartmentId: '',
+    contentType: 'campaign',
+    riskCategory: 'medium',
+  });
 
   const selectedDraft = drafts.find(draft => String(draft.contentItemId) === selectedDraftId) || drafts[0] || null;
 
@@ -55,11 +69,20 @@ export default function CampaignWorkspace() {
 
     async function run() {
       try {
-        const data = await campaignsApi.list(token as string);
+        const [data, departmentData] = await Promise.all([
+          campaignsApi.list(token as string),
+          usersApi.departments(token as string),
+        ]);
         if (cancelled) return;
         const campaignList = list(data);
+        const departmentList = list(departmentData);
         setCampaigns(campaignList);
+        setDepartments(departmentList);
         setSelected(current => current || campaignList[0] || null);
+        setCampaignForm(current => ({
+          ...current,
+          ownerDepartmentId: current.ownerDepartmentId || String(departmentList[0]?.id || ''),
+        }));
         try {
           const active = await aiProviderApi.active(token as string) as RecordMap;
           setProviderReady(active.apiKeyStatus === 'configured');
@@ -91,6 +114,26 @@ export default function CampaignWorkspace() {
     setMessage('Campaign selected.');
   }
 
+  async function createCampaign() {
+    if (!token) return;
+    setLoading('create-campaign');
+    setMessage('');
+    try {
+      const created = await campaignsApi.create({
+        ...campaignForm,
+        targetPlatforms: campaignForm.targetPlatforms,
+      }, token) as RecordMap;
+      setCampaigns(current => [created, ...current]);
+      selectCampaign(created);
+      setShowCreate(false);
+      setMessage('Campaign created and selected. Next step: generate platform drafts.');
+    } catch (error) {
+      setMessage(`Campaign creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
   async function generateDrafts() {
     if (!selected || !token || !providerReady) return;
     setLoading('drafts');
@@ -108,6 +151,30 @@ export default function CampaignWorkspace() {
       setMessage('Platform drafts are ready.');
     } catch (error) {
       setMessage(`Draft generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function saveEditedDraft() {
+    if (!selectedDraft || !token) return;
+    const draftId = String(selectedDraft.contentItemId);
+    const draftText = draftTextById[draftId] || text(selectedDraft.draftText);
+    setLoading('save-edit');
+    setMessage('');
+    try {
+      const saved = await aiGenerationApi.saveEdit({
+        contentItemId: draftId,
+        draftText,
+        editNote: 'Saved from Campaign Workspace',
+      }, token) as RecordMap;
+      setDrafts(current => current.map(draft => (
+        String(draft.contentItemId) === draftId ? { ...draft, ...saved } : draft
+      )));
+      setDraftTextById(current => ({ ...current, [draftId]: text(saved.draftText, draftText) }));
+      setMessage(`Edited draft saved as version ${text(saved.versionNo, 'latest')}.`);
+    } catch (error) {
+      setMessage(`Draft save failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading('');
     }
@@ -201,6 +268,18 @@ export default function CampaignWorkspace() {
 
   const scoreValue = typeof score?.totalScore === 'number' ? score.totalScore : 0;
   const packagePlatforms = list(publishingPackage?.platforms);
+  const currentUserId = text((user as RecordMap | null)?.id, '');
+  const createdByCurrentUser = selected ? text(selected.requesterId, '') === currentUserId : false;
+  const pendingWork = [
+    !selected ? 'Create or select a campaign brief.' : '',
+    selected && !providerReady ? 'Configure OpenAI or Claude before AI generation.' : '',
+    selected && providerReady && !drafts.length ? 'Generate LinkedIn, Instagram, and X drafts.' : '',
+    drafts.length && !score ? 'Score the selected saved draft.' : '',
+    score && !approval ? 'Send the selected draft for approval.' : '',
+    approval?.approvalStatus === 'pending' ? 'Reviewer decision is required.' : '',
+    approval?.approvalStatus === 'approved' && !publishingPackage ? 'Prepare the publishing package.' : '',
+    publishingPackage && !postizPayload ? 'Preview the Postiz-ready payload.' : '',
+  ].filter(Boolean);
 
   return (
     <ProductPage
@@ -209,6 +288,27 @@ export default function CampaignWorkspace() {
       subtitle="Select a campaign, prepare platform drafts, score the selected post, capture human approval, and prepare a Postiz-ready publishing package."
       action={<ProductStatus tone={selected ? 'good' : 'warn'}>{selected ? 'Campaign Active' : 'Select Campaign'}</ProductStatus>}
     >
+      <ProductCard title="What this workspace does" subtitle="Operational path for one Commercial/Social campaign.">
+        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+          <ReadableQueue items={[
+            { title: 'Create campaign brief', meta: 'Marketing or social manager defines audience, objective, platforms, CTA, and risk.', status: selected ? 'Available' : 'Required', tone: selected ? 'good' : 'warn' },
+            { title: 'Generate and edit drafts', meta: 'LLM creates platform-specific copy. Human edits are saved as real draft versions.', status: providerReady ? 'Ready' : 'Needs Provider', tone: providerReady ? 'good' : 'warn' },
+            { title: 'Score and approve', meta: 'Readiness score and human approval decide whether publishing preparation is allowed.', status: score ? 'Scored' : 'Waiting', tone: score ? 'good' : 'default' },
+            { title: 'Prepare Postiz payload', meta: 'Approved content becomes a Postiz-ready payload. Scheduling remains blocked unless authorized.', status: publishingPackage ? 'Package Ready' : 'Waiting', tone: publishingPackage ? 'good' : 'default' },
+          ]} />
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <div className="text-sm font-semibold text-neutral-950">Next required action</div>
+            <div className="mt-3 space-y-2">
+              {pendingWork.length ? pendingWork.slice(0, 3).map(item => (
+                <div key={item} className="rounded-md bg-white px-3 py-2 text-sm text-neutral-700">{item}</div>
+              )) : (
+                <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">This campaign path is ready for review.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </ProductCard>
+
       <WorkflowRail steps={[
         { label: 'Brief', state: selected ? 'done' : 'active' },
         { label: 'Drafts', state: drafts.length ? 'done' : selected ? 'active' : 'waiting' },
@@ -232,7 +332,64 @@ export default function CampaignWorkspace() {
       )}
 
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <ProductCard title="Campaign Queue" subtitle="Campaigns available for social preparation.">
+        <ProductCard
+          title="Campaign Queue"
+          subtitle="Campaigns created by your team. Create a campaign here or choose one to operate."
+          action={<PrimaryAction onClick={() => setShowCreate(current => !current)}>{showCreate ? 'Close Builder' : 'New Campaign'}</PrimaryAction>}
+        >
+          {showCreate && (
+            <div className="mb-5 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+              <Field label="Campaign Topic">
+                <input value={campaignForm.topic} onChange={event => setCampaignForm(current => ({ ...current, topic: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="e.g. Ramadan social intelligence launch" />
+              </Field>
+              <Field label="Business Objective">
+                <textarea value={campaignForm.objective} onChange={event => setCampaignForm(current => ({ ...current, objective: event.target.value }))} className="min-h-20 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="What business outcome should this campaign create?" />
+              </Field>
+              <Field label="Target Audience">
+                <textarea value={campaignForm.audience} onChange={event => setCampaignForm(current => ({ ...current, audience: event.target.value }))} className="min-h-16 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="Who is this campaign for?" />
+              </Field>
+              <Field label="Call to Action">
+                <input value={campaignForm.cta} onChange={event => setCampaignForm(current => ({ ...current, cta: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="e.g. Book a consultation" />
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Owner Department">
+                  <select value={campaignForm.ownerDepartmentId} onChange={event => setCampaignForm(current => ({ ...current, ownerDepartmentId: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950">
+                    {departments.map(department => <option key={String(department.id)} value={String(department.id)}>{text(department.name)}</option>)}
+                  </select>
+                </Field>
+                <Field label="Risk">
+                  <select value={campaignForm.riskCategory} onChange={event => setCampaignForm(current => ({ ...current, riskCategory: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Platforms">
+                <div className="flex flex-wrap gap-2">
+                  {['linkedin', 'instagram', 'x', 'facebook', 'tiktok'].map(platform => {
+                    const active = campaignForm.targetPlatforms.includes(platform);
+                    return (
+                      <button key={platform} type="button" onClick={() => setCampaignForm(current => ({
+                        ...current,
+                        targetPlatforms: active
+                          ? current.targetPlatforms.length === 1 ? current.targetPlatforms : current.targetPlatforms.filter(item => item !== platform)
+                          : [...current.targetPlatforms, platform],
+                      }))}>
+                        <PlatformPill active={active}>{titleCase(platform)}</PlatformPill>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+              <PrimaryAction
+                onClick={createCampaign}
+                disabled={loading === 'create-campaign' || !campaignForm.topic.trim() || !campaignForm.objective.trim() || !campaignForm.audience.trim() || !campaignForm.ownerDepartmentId}
+              >
+                {loading === 'create-campaign' ? 'Creating...' : 'Create Campaign'}
+              </PrimaryAction>
+            </div>
+          )}
           <div className="space-y-3">
             {campaigns.map(campaign => (
               <button
@@ -245,8 +402,14 @@ export default function CampaignWorkspace() {
                 <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/60' : 'text-neutral-500'}`}>
                   {titleCase(text(campaign.status, 'idea'))} / {titleCase(text(campaign.riskCategory, 'medium'))} risk
                 </div>
+                <div className={`mt-2 text-xs ${selected?.id === campaign.id ? 'text-white/45' : 'text-neutral-400'}`}>
+                  {text(campaign.requesterId) === currentUserId ? 'Created by you' : `Created by ${text(campaign.requesterName, 'another team member')}`}
+                </div>
               </button>
             ))}
+            {!campaigns.length && (
+              <EmptyProductState message="No campaigns exist yet. Create a campaign brief to begin the Commercial/Social workflow." />
+            )}
           </div>
         </ProductCard>
 
@@ -258,6 +421,7 @@ export default function CampaignWorkspace() {
                 { label: 'Audience', value: text(selected.audience) },
                 { label: 'Platforms', value: ((selected.targetPlatforms as string[] | undefined) || ['linkedin', 'instagram', 'x']).map(titleCase).join(', ') },
                 { label: 'CTA', value: text(selected.cta, 'Prepared during drafting') },
+                { label: 'Owner', value: createdByCurrentUser ? 'Created by you' : text(selected.requesterName, 'Team workspace') },
               ]} />
             ) : (
               <EmptyProductState message="Select a campaign to begin." />
@@ -266,7 +430,7 @@ export default function CampaignWorkspace() {
 
           <ProductCard
             title="Platform Drafts"
-            subtitle="Generate editable drafts for each platform."
+            subtitle="Drafts are platform-specific post copy. Select one, edit it, save the human version, then score it."
             action={<PrimaryAction onClick={generateDrafts} disabled={!providerReady || !selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Platform Drafts'}</PrimaryAction>}
           >
             {drafts.length ? (
@@ -293,6 +457,14 @@ export default function CampaignWorkspace() {
               </div>
             ) : (
               <EmptyProductState message="Generate platform-specific drafts when the brief is ready." />
+            )}
+            {selectedDraft && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <SecondaryAction onClick={saveEditedDraft} disabled={loading === 'save-edit'}>
+                  {loading === 'save-edit' ? 'Saving...' : 'Save Edited Draft Version'}
+                </SecondaryAction>
+                <ProductStatus tone="info">Selected draft: {titleCase(text(selectedDraft.platform))}</ProductStatus>
+              </div>
             )}
           </ProductCard>
 

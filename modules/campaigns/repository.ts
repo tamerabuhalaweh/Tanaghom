@@ -48,6 +48,7 @@ export async function createCampaign(
       channel,
       raw_message: input.topic,
       objective: input.objective,
+      audience: input.audience,
       content_type: input.contentType,
       risk_category: input.riskCategory,
       target_platforms: input.targetPlatforms,

@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
-import { generateDrafts, reviseDraft } from './service';
-import { validateGenerateDraft, validateReviseDraft } from './validators';
+import { generateDrafts, reviseDraft, saveEditedDraft } from './service';
+import { validateGenerateDraft, validateReviseDraft, validateSaveEditedDraft } from './validators';
 
 export const aiGenerationRouter = Router();
 
@@ -28,6 +28,17 @@ aiGenerationRouter.post('/revise', async (req: Request, res: Response, next: Nex
     const payload = getPayload(req);
     const input = validateReviseDraft(req.body);
     const draft = await reviseDraft(payload.role, payload.sub, input);
+    res.json(draft);
+  } catch (err) {
+    next(err);
+  }
+});
+
+aiGenerationRouter.post('/save-edit', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const input = validateSaveEditedDraft(req.body);
+    const draft = await saveEditedDraft(payload.role, payload.sub, input);
     res.json(draft);
   } catch (err) {
     next(err);

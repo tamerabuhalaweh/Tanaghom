@@ -29,8 +29,15 @@ export const reviseDraftSchema = z.object({
   tone: z.enum(TONE_OPTIONS).optional(),
 });
 
+export const saveEditedDraftSchema = z.object({
+  contentItemId: z.string().uuid('Invalid content item ID'),
+  draftText: z.string().trim().min(1, 'Draft text is required').max(10000),
+  editNote: z.string().trim().max(1000).optional(),
+});
+
 export type GenerateDraftInput = z.infer<typeof generateDraftSchema>;
 export type ReviseDraftInput = z.infer<typeof reviseDraftSchema>;
+export type SaveEditedDraftInput = z.infer<typeof saveEditedDraftSchema>;
 
 // ============================================================
 // Response Types

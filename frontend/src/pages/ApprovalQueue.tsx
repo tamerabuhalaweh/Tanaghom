@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { approvalsApi, publishingPackageApi } from '../api';
-import { EmptyProductState, Notice, PrimaryAction, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
+import { EmptyProductState, MetricCard, Notice, PrimaryAction, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
 
 type RecordMap = Record<string, unknown>;
@@ -84,6 +84,20 @@ export default function ApprovalQueue() {
       {message && (
         <Notice tone={message.includes('failed') || message.includes('Decision failed') ? 'danger' : 'good'}>{message}</Notice>
       )}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard label="Pending Decisions" value={pendingApprovals.length} detail="Need approve, reject, or changes" tone={pendingApprovals.length ? 'warn' : 'good'} />
+        <MetricCard label="Prepared Packages" value={packages.length} detail="Created after approval" tone={packages.length ? 'good' : 'muted'} />
+        <MetricCard label="External Publishing" value="0" detail="Scheduling/publishing remains blocked" tone="danger" />
+      </div>
+
+      <ProductCard title="Who uses this page" subtitle="This is the human decision desk, not a reporting page.">
+        <ReadableQueue items={[
+          { title: 'Reviewer / Marketing Manager', meta: 'Approves, rejects, or requests changes on submitted social drafts.', status: 'Decision Owner', tone: 'warn' },
+          { title: 'Social Media Manager', meta: 'Sees whether submitted work is approved before preparing publishing payloads.', status: 'Requester', tone: 'info' },
+          { title: 'System Boundary', meta: 'Approval can unlock publishing preparation, but cannot publish or schedule externally by itself.', status: 'External Writes Blocked', tone: 'danger' },
+        ]} />
+      </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
         <ProductCard title="Approval Queue" subtitle="Human decisions required before publishing preparation.">

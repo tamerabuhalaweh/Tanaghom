@@ -7,7 +7,8 @@ import {
   analyticsApi,
   approvalsApi,
   campaignsApi,
-  demoApi,
+  leadsApi,
+  postizApi,
   publishingPackageApi,
 } from '../api';
 import { useAuth } from '../contexts/useAuth';
@@ -69,6 +70,25 @@ function stateFor(done: boolean, active: boolean): 'done' | 'active' | 'waiting'
   return 'waiting';
 }
 
+function buildAnalyticsSummary(sources: RecordMap[], snapshots: RecordMap[], reports: RecordMap[]): RecordMap {
+  const totals = snapshots.reduce<{ reach: number; impressions: number; engagement: number }>((acc, snapshot) => {
+    const metrics = ((snapshot.normalizedMetrics || snapshot.metrics || {}) as RecordMap);
+    return {
+      reach: acc.reach + numberValue(metrics.reach),
+      impressions: acc.impressions + numberValue(metrics.impressions),
+      engagement: acc.engagement + numberValue(metrics.engagement),
+    };
+  }, { reach: 0, impressions: 0, engagement: 0 });
+
+  return {
+    ...totals,
+    sourceCount: sources.length,
+    reportCount: reports.length,
+    sourceLabel: sources.length ? `${sources.length} analytics source${sources.length === 1 ? '' : 's'} configured` : '',
+    reportLabel: text(reports[0]?.summary, ''),
+  };
+}
+
 export default function DemoCommandCenter() {
   const { token } = useAuth();
   const [campaigns, setCampaigns] = useState<RecordMap[]>([]);
@@ -79,9 +99,11 @@ export default function DemoCommandCenter() {
   const [score, setScore] = useState<RecordMap | null>(null);
   const [approval, setApproval] = useState<RecordMap | null>(null);
   const [packageResult, setPackageResult] = useState<RecordMap | null>(null);
-  const [handoffPackage, setHandoffPackage] = useState<RecordMap | null>(null);
   const [analytics, setAnalytics] = useState<RecordMap | null>(null);
-  const [status, setStatus] = useState<RecordMap | null>(null);
+  const [leadRecords, setLeadRecords] = useState<RecordMap[]>([]);
+  const [leadStats, setLeadStats] = useState<RecordMap | null>(null);
+  const [postizStatus, setPostizStatus] = useState<RecordMap | null>(null);
+  const [packages, setPackages] = useState<RecordMap[]>([]);
   const [loading, setLoading] = useState('');
   const [notice, setNotice] = useState('');
   const [step, setStep] = useState<Step>('brief');
@@ -101,26 +123,34 @@ export default function DemoCommandCenter() {
     risk: scoreComponent(score, 'complianceRisk'),
   };
 
-  const postiz = ((status?.integrations as RecordMap | undefined)?.postiz || packageResult?.postizSandbox || {}) as RecordMap;
+  const postiz = ((packageResult?.postizSandbox || postizStatus?.health || postizStatus || {}) as RecordMap);
   const platformPayloads = list(packageResult?.platforms);
-  const leads = list(status?.leadCaptures);
+  const leads = leadRecords;
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
 
     async function run() {
       try {
-        const [campaignData, analyticsData, statusData] = await Promise.all([
+        const [campaignData, sourceData, snapshotData, reportData, leadData, leadStatData, postizData, packageData] = await Promise.all([
           campaignsApi.list(token as string),
-          analyticsApi.demo(token as string),
-          demoApi.status(token as string),
+          analyticsApi.sources(token as string),
+          analyticsApi.snapshots(token as string),
+          analyticsApi.reports(token as string),
+          leadsApi.list(token as string),
+          leadsApi.stats(token as string),
+          postizApi.status(token as string),
+          publishingPackageApi.list(token as string).catch(() => []),
         ]);
         if (cancelled) return;
         const campaignList = list(campaignData);
         setCampaigns(campaignList);
         setSelected(current => current || campaignList[0] || null);
-        setAnalytics(analyticsData as RecordMap);
-        setStatus(statusData as RecordMap);
+        setLeadRecords(list(leadData));
+        setLeadStats(leadStatData as RecordMap);
+        setPostizStatus(postizData as RecordMap);
+        setPackages(list(packageData));
+        setAnalytics(buildAnalyticsSummary(list(sourceData), list(snapshotData), list(reportData)));
         try {
           const active = await aiProviderApi.active(token as string) as RecordMap;
           setProviderReady(active.apiKeyStatus === 'configured');
@@ -143,10 +173,19 @@ export default function DemoCommandCenter() {
   async function refreshStatus() {
     if (!token) return;
     try {
-      const nextStatus = await demoApi.status(token);
-      setStatus(nextStatus as RecordMap);
+      const [leadData, leadStatData, postizData, packageData] = await Promise.all([
+        leadsApi.list(token),
+        leadsApi.stats(token),
+        postizApi.status(token),
+        publishingPackageApi.list(token).catch(() => []),
+      ]);
+      setLeadRecords(list(leadData));
+      setLeadStats(leadStatData as RecordMap);
+      setPostizStatus(postizData as RecordMap);
+      setPackages(list(packageData));
     } catch {
-      setStatus(null);
+      setLeadRecords([]);
+      setLeadStats(null);
     }
   }
 
@@ -158,7 +197,6 @@ export default function DemoCommandCenter() {
     setScore(null);
     setApproval(null);
     setPackageResult(null);
-    setHandoffPackage(null);
     setNotice('Campaign selected. Prepare platform drafts when ready.');
     setStep('drafts');
   }
@@ -180,7 +218,6 @@ export default function DemoCommandCenter() {
       setScore(null);
       setApproval(null);
       setPackageResult(null);
-      setHandoffPackage(null);
       setStep('score');
       setNotice('Platform drafts are ready for review.');
       void refreshStatus();
@@ -284,17 +321,8 @@ export default function DemoCommandCenter() {
       }, token);
       const pkg = result as RecordMap;
       setPackageResult(pkg);
-      const handoff = await demoApi.handoffPackage({
-        campaignId: selected.id,
-        campaignTopic: selected.topic,
-        platform: selectedDraft?.platform,
-        publishingPackageId: pkg.id,
-        qualificationScore: 82,
-        consentStatus: 'pending',
-      }, token);
-      setHandoffPackage(handoff as RecordMap);
       setStep('handoff');
-      setNotice('Publishing package and handoff previews are ready.');
+      setNotice('Publishing package is ready. Lead handoff appears only after real lead records exist.');
       void refreshStatus();
     } catch (error) {
       setNotice(`Publishing preparation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -330,8 +358,8 @@ export default function DemoCommandCenter() {
         <MetricCard tone="info" label="Active Campaign" value={selected ? '1' : '0'} detail={selected ? text(selected.topic) : 'Select a campaign'} />
         <MetricCard tone="warn" label="Next Action" value={nextAction} detail="Primary operator task" />
         <MetricCard tone={score ? 'good' : 'muted'} label="Readiness" value={score ? `${totalScore}/100` : 'Pending'} detail={score ? text(score.bandLabel, 'Ready for review') : 'Score selected draft'} />
-        <MetricCard tone={packageResult ? 'good' : 'muted'} label="Publishing" value={packageResult ? 'Package Ready' : 'Waiting'} detail={postiz.reachable ? 'Postiz sandbox reachable' : 'Scheduling disabled'} />
-        <MetricCard tone={handoffPackage ? 'good' : 'info'} label="Leads" value={handoffPackage ? 'Handoff Ready' : leads.length || 'Pending'} detail="CRM and voice follow-up gated" />
+        <MetricCard tone={packages.length || packageResult ? 'good' : 'muted'} label="Publishing" value={packageResult ? 'Package Ready' : packages.length} detail={postiz.reachable ? 'Postiz sandbox reachable' : 'Scheduling disabled'} />
+        <MetricCard tone={numberValue(leadStats?.qualified) ? 'good' : 'info'} label="Leads" value={numberValue(leadStats?.total)} detail={`${numberValue(leadStats?.qualified)} qualified`} />
       </div>
 
       <ProductCard title="Workflow" subtitle="The same campaign moves through preparation, approval, publishing package, intelligence, and handoff.">
@@ -342,7 +370,7 @@ export default function DemoCommandCenter() {
           { label: 'Approval', state: stateFor(!!approval, step === 'approval') },
           { label: 'Publishing', state: stateFor(!!packageResult, step === 'publishing') },
           { label: 'Analytics', state: stateFor(!!analytics, false) },
-          { label: 'Leads', state: stateFor(!!handoffPackage, step === 'handoff') },
+          { label: 'Leads', state: stateFor(leads.length > 0, step === 'handoff') },
           { label: 'Evidence', state: stateFor(!!approval || !!packageResult, false) },
         ]} />
       </ProductCard>
@@ -365,7 +393,7 @@ export default function DemoCommandCenter() {
             { label: 'Campaigns', value: campaigns.length || 1, tone: 'info' },
             { label: 'Drafts', value: drafts.length || 0, tone: drafts.length ? 'good' : 'default' },
             { label: 'Approvals', value: approval ? 1 : 0, tone: approval ? 'good' : 'default' },
-            { label: 'Packages', value: packageResult ? 1 : 0, tone: packageResult ? 'good' : 'default' },
+            { label: 'Packages', value: packages.length + (packageResult ? 1 : 0), tone: (packages.length || packageResult) ? 'good' : 'default' },
             { label: 'Leads', value: leads.length || 0, tone: leads.length ? 'good' : 'default' },
           ]} />
         </ProductCard>
@@ -487,7 +515,7 @@ export default function DemoCommandCenter() {
                   </div>
                   <DetailGrid items={[
                     { label: 'Best Platform', value: titleCase(text(selectedDraft?.platform, 'linkedin')) },
-                    { label: 'Best Time', value: text(analytics?.bestTime, 'Tuesday 10:00 AM') },
+                    { label: 'Analytics Data', value: numberValue(analytics?.sourceCount) ? 'Connected source available' : 'No source connected' },
                     { label: 'Hook Quality', value: text(components.hook?.explanation, 'Hook checked') },
                     { label: 'CTA Strength', value: text(components.cta?.explanation, 'CTA checked') },
                     { label: 'Hashtag Hygiene', value: text(components.hashtag?.explanation, 'Hashtags checked') },
@@ -552,12 +580,12 @@ export default function DemoCommandCenter() {
                 },
               ]} />
               <ReadableQueue items={[
-                { title: 'Top content signal', meta: text(analytics?.topContent, 'Educational posts with image formats'), status: 'Learning Signal', tone: 'info' },
-                { title: 'Best time', meta: text(analytics?.bestTime, 'Tuesday 10:00 AM'), status: 'Recommended', tone: 'good' },
+                { title: 'Analytics source', meta: text(analytics?.sourceLabel, 'No analytics source connected yet'), status: numberValue(analytics?.sourceCount) ? 'Available' : 'No Data', tone: numberValue(analytics?.sourceCount) ? 'info' : 'default' },
+                { title: 'Latest report', meta: text(analytics?.reportLabel, 'No generated performance report yet'), status: numberValue(analytics?.reportCount) ? 'Available' : 'Waiting', tone: numberValue(analytics?.reportCount) ? 'good' : 'default' },
               ]} />
               <ReadableQueue items={[
-                { title: leads.length ? 'Captured lead package' : 'Lead handoff package', meta: handoffPackage ? 'Qualification context prepared for CRM review.' : 'Prepared after approved publishing package and lead capture.', status: handoffPackage ? 'Ready' : 'Waiting', tone: handoffPackage ? 'good' : 'default' },
-                { title: 'Voice follow-up', meta: handoffPackage ? 'Script and intent prepared; trigger requires authorization.' : 'Prepared after lead handoff.', status: handoffPackage ? 'Voice Follow-up Ready' : 'Waiting', tone: handoffPackage ? 'info' : 'default' },
+                { title: leads.length ? 'Captured lead package' : 'Lead handoff package', meta: leads.length ? 'Real lead records are available for CRM review.' : 'No lead records exist yet.', status: leads.length ? 'Ready' : 'Waiting', tone: leads.length ? 'good' : 'default' },
+                { title: 'Voice follow-up', meta: leads.length ? 'Prepare follow-up only after consent review.' : 'Requires lead capture and explicit authorization.', status: leads.length ? 'Review Required' : 'Waiting', tone: leads.length ? 'info' : 'default' },
               ]} />
             </div>
           </ProductCard>

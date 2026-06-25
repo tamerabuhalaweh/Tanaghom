@@ -57,15 +57,15 @@ const PLATFORM_OPTIONS = [
 ];
 
 const DEFAULT_BRIEF = {
-  campaignName: 'Premium social intelligence launch',
-  objective: 'Generate qualified leads for a premium social media intelligence service',
-  audience: 'Marketing directors and CEOs who need safer AI-assisted campaign execution',
-  geography: 'GCC and Jordan',
-  tone: 'confident, practical, executive-friendly',
-  cta: 'Book a strategy walkthrough',
-  offer: 'Commercial/Social AI operating system pilot',
-  postingWindow: 'Next business week, morning window',
-  pillar: 'Social media intelligence',
+  campaignName: '',
+  objective: '',
+  audience: '',
+  geography: '',
+  tone: 'professional',
+  cta: '',
+  offer: '',
+  postingWindow: '',
+  pillar: '',
   riskLevel: 'medium',
 };
 
@@ -215,7 +215,7 @@ export default function PostIdeas() {
     <ProductPage
       eyebrow="AI Draft Studio"
       title="Create campaign ideas"
-      subtitle="Give your AgentRep a practical marketing brief, generate platform-aware ideas, choose the strongest direction, then create a campaign for drafting."
+      subtitle="For social media and marketing managers: write a campaign brief, generate platform-aware directions with your configured LLM, choose one direction, then create a campaign for drafting."
       action={<ProductStatus tone={providerReady ? 'good' : 'warn'}>{provider ? `${provider.generationMode || provider.provider} / ${provider.model}` : providerReady ? 'Live Provider Active' : 'Requires Provider'}</ProductStatus>}
     >
       <WorkflowRail steps={[
@@ -293,7 +293,7 @@ export default function PostIdeas() {
         </ProductCard>
 
         <div className="space-y-6">
-          <ProductCard title="Generated Ideas" subtitle="Choose one idea. The system records the human selection before campaign creation.">
+          <ProductCard title="Generated Ideas" subtitle="Choose one AI-generated direction before creating the campaign.">
             {ideas.length ? (
               <div className="grid gap-4 lg:grid-cols-2">
                 {ideas.map((idea) => {
@@ -331,13 +331,13 @@ export default function PostIdeas() {
             )}
           </ProductCard>
 
-          <ProductCard title="Human Selection" subtitle="A campaign is created only after a human chooses the direction.">
+          <ProductCard title="Campaign Decision" subtitle="The campaign is created only after a human chooses the direction.">
             <div className="flex flex-wrap items-center gap-3">
               <PrimaryAction onClick={approveSelectedIdea} disabled={loading || !selectedIdea || workflowDecision?.status === 'selected'}>
-                Record Human Selection
+                Select This Idea
               </PrimaryAction>
               <SecondaryAction onClick={convertToCampaign} disabled={loading || workflowDecision?.status !== 'selected' || Boolean(campaign)}>
-                Create Campaign
+                Create Campaign From Selected Idea
               </SecondaryAction>
               {campaign && (
                 <Link to="/campaigns" className="inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">

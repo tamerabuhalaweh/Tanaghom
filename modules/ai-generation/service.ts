@@ -14,6 +14,7 @@ import * as repo from './repository';
 import type {
   GenerateDraftInput,
   ReviseDraftInput,
+  SaveEditedDraftInput,
   DraftResult,
   DraftMetadata,
   Platform,
@@ -223,6 +224,59 @@ export async function reviseDraft(
       rationale: `Revised based on feedback: ${input.feedback.substring(0, 100)}`,
       tone,
       hookType: 'revision',
+      mediaSuggestions: [],
+    },
+    riskNotes: item.risk_reason || '',
+    createdAt: new Date(),
+  };
+}
+
+export async function saveEditedDraft(
+  requesterRole: string,
+  requesterId: string,
+  input: SaveEditedDraftInput,
+): Promise<DraftResult> {
+  checkPermission(requesterRole, 'drafts:revise');
+
+  const item = await repo.getContentItem(input.contentItemId);
+  if (!item.request) throw new NotFoundError('Campaign request for content item');
+
+  const latestVersion = await repo.getLatestVersion(input.contentItemId);
+  const newVersionNo = (latestVersion?.version_no || 0) + 1;
+
+  await repo.createDraftVersion(
+    input.contentItemId,
+    newVersionNo,
+    input.draftText,
+    'human-edit',
+  );
+  await repo.updateContentItemDraft(input.contentItemId, input.draftText);
+
+  auditLog(
+    {
+      actor: `user:${requesterId}`,
+      action: 'draft_human_edit_saved',
+      object_type: 'content_item',
+      object_id: input.contentItemId,
+      result: 'success',
+    },
+    `Human edited draft saved to version ${newVersionNo}`,
+  );
+
+  return {
+    contentItemId: input.contentItemId,
+    platform: item.platform as Platform,
+    contentType: item.content_type as DraftContentType,
+    draftText: input.draftText,
+    versionNo: newVersionNo,
+    metadata: {
+      objective: item.request.objective,
+      audience: item.request.audience || '',
+      cta: item.request.cta,
+      hashtags: [],
+      rationale: input.editNote || 'Saved human edit',
+      tone: 'professional',
+      hookType: 'human_edit',
       mediaSuggestions: [],
     },
     riskNotes: item.risk_reason || '',

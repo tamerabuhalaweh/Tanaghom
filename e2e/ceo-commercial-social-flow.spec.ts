@@ -20,12 +20,12 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
   } else {
     await page.getByRole('button', { name: /Generate Ideas/i }).click();
     await expect(page.getByText(/Generated .* ideas|Generation failed/i)).toBeVisible({ timeout: 30000 });
-    await expect(page.getByRole('button', { name: /Record Human Selection/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Select This Idea/i })).toBeVisible();
 
-    await page.getByRole('button', { name: /Record Human Selection/i }).click();
+    await page.getByRole('button', { name: /Select This Idea/i }).click();
     await expect(page.getByText(/Human selection recorded|Selection failed/i)).toBeVisible({ timeout: 30000 });
 
-    await page.getByRole('button', { name: /Create Campaign/i }).click();
+    await page.getByRole('button', { name: /Create Campaign From Selected Idea/i }).click();
     await expect(page.getByText(/Campaign created|Campaign creation failed/i)).toBeVisible({ timeout: 30000 });
     generatedCampaign = true;
   }

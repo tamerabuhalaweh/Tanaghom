@@ -60,6 +60,8 @@ export const aiGenerationApi = {
     apiFetch<unknown>('/ai-generation/generate', { method: 'POST', body: data, token }),
   revise: (data: unknown, token: string) =>
     apiFetch<unknown>('/ai-generation/revise', { method: 'POST', body: data, token }),
+  saveEdit: (data: unknown, token: string) =>
+    apiFetch<unknown>('/ai-generation/save-edit', { method: 'POST', body: data, token }),
 };
 
 export const algoApi = {
