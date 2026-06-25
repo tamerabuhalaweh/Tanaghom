@@ -41,6 +41,8 @@ export const authApi = {
     apiFetch<{ user: unknown; agentRep: unknown }>('/auth/session', { token }),
   createOnboardingToken: (data: unknown, token: string) =>
     apiFetch<unknown>('/auth/onboarding-token', { method: 'POST', body: data, token }),
+  onboardingEmailStatus: (token: string) =>
+    apiFetch<unknown>('/auth/onboarding-email-status', { token }),
   acceptOnboarding: (data: unknown) =>
     apiFetch<unknown>('/auth/accept-onboarding', { method: 'POST', body: data }),
 };
@@ -206,6 +208,20 @@ export const integrationCredentialsApi = {
     apiFetch<unknown>(`/integration-credentials/${id}`, { method: 'DELETE', token }),
 };
 
+export const socialOAuthApi = {
+  connections: (token: string) => apiFetch<unknown>('/social-oauth/connections', { token }),
+  start: (data: unknown, token: string) =>
+    apiFetch<unknown>('/social-oauth/start', { method: 'POST', body: data, token }),
+};
+
+export const runtimeBridgesApi = {
+  status: (token: string) => apiFetch<unknown>('/runtime-bridges/status', { token }),
+  openClawOrchestrate: (data: unknown, token: string) =>
+    apiFetch<unknown>('/runtime-bridges/openclaw/orchestrate', { method: 'POST', body: data, token }),
+  agentScopeProcess: (data: unknown, token: string) =>
+    apiFetch<unknown>('/runtime-bridges/agentscope/process', { method: 'POST', body: data, token }),
+};
+
 export const mcpRuntimeApi = {
   connectors: (token: string) => apiFetch<unknown[]>('/mcp-runtime/connectors', { token }),
   createConnector: (data: unknown, token: string) =>
@@ -214,8 +230,8 @@ export const mcpRuntimeApi = {
     apiFetch<unknown>('/mcp-runtime/discover', { method: 'POST', body: data, token }),
   discoveredTools: (id: string, token: string) =>
     apiFetch<unknown>(`/mcp-runtime/connectors/${id}/discovered-tools`, { token }),
-  mockHealthCheck: (id: string, token: string) =>
-    apiFetch<unknown>(`/mcp-runtime/connectors/${id}/mock-health-check`, { method: 'POST', token }),
+  healthCheck: (id: string, token: string) =>
+    apiFetch<unknown>(`/mcp-runtime/connectors/${id}/health-check`, { method: 'POST', token }),
   toolPreview: (id: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/mcp-runtime/connectors/${id}/tool-preview`, { method: 'POST', body: data, token }),
 };

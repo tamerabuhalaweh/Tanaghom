@@ -34,9 +34,9 @@ function deriveQualificationScore(lead: Record<string, unknown>): number {
 
 ghlRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
 
-    const config = await resolveGhlRuntimeConfig();
+    const config = await resolveGhlRuntimeConfig(payload.tenantKey || 'default');
     const hasApiKey = Boolean(config.apiKey);
     const hasLocationId = Boolean(config.locationId);
     const sandboxEnabled = process.env.GHL_SANDBOX_ENABLED === 'true';
@@ -59,8 +59,8 @@ ghlRouter.get('/status', async (req: Request, res: Response, next: NextFunction)
 
 ghlRouter.get('/wizard-options', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
-    const config = await resolveGhlRuntimeConfig();
+    const payload = getPayload(req);
+    const config = await resolveGhlRuntimeConfig(payload.tenantKey || 'default');
     res.json({
       connectionLevels: [
         { id: 'readiness', label: 'Readiness Only', executable: true, risk: 'low' },
@@ -146,8 +146,8 @@ ghlRouter.post('/push', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
-async function resolveGhlRuntimeConfig(): Promise<GhlRuntimeConfig> {
-  const credential = await getActiveIntegrationCredential('gohighlevel', 'api_key');
+async function resolveGhlRuntimeConfig(tenantKey = 'default'): Promise<GhlRuntimeConfig> {
+  const credential = await getActiveIntegrationCredential('gohighlevel', 'api_key', tenantKey);
   if (credential) {
     return {
       baseUrl: credential.secrets.baseUrl || GHL_BASE_URL,
@@ -204,7 +204,7 @@ ghlRouter.post('/sandbox-contact', async (req: Request, res: Response, next: Nex
     const lead = await prisma.leadCaptureRecord.findUnique({ where: { id: input.leadId } }) as Record<string, unknown> | null;
     if (!lead) throw new NotFoundError('Lead', input.leadId);
 
-    const config = await resolveGhlRuntimeConfig();
+    const config = await resolveGhlRuntimeConfig(payload.tenantKey || 'default');
     const contactPayload = buildGhlContactPayload(lead, config);
     const gate = await ghlSandboxWriteGate(config);
 

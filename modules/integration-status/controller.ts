@@ -17,27 +17,27 @@ function envCredentialStatus(...names: string[]): 'configured' | 'missing' {
   return names.some((name) => Boolean(process.env[name])) ? 'configured' : 'missing';
 }
 
-async function credentialStatus(provider: Parameters<typeof hasActiveIntegrationCredential>[0], credentialType: Parameters<typeof hasActiveIntegrationCredential>[1], envNames: string[]): Promise<'configured' | 'missing'> {
-  if (await hasActiveIntegrationCredential(provider, credentialType)) return 'configured';
+async function credentialStatus(provider: Parameters<typeof hasActiveIntegrationCredential>[0], credentialType: Parameters<typeof hasActiveIntegrationCredential>[1], envNames: string[], tenantKey: string): Promise<'configured' | 'missing'> {
+  if (await hasActiveIntegrationCredential(provider, credentialType, tenantKey)) return 'configured';
   return envCredentialStatus(...envNames);
 }
 
 integrationStatusRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    resolveSessionContext(getPayload(req));
+    const session = resolveSessionContext(getPayload(req));
     const llm = getProviderStatus();
-    const postizCredential = await credentialStatus('postiz', 'api_key', ['POSTIZ_API_KEY']);
-    const ghlCredential = await credentialStatus('gohighlevel', 'api_key', ['GHL_API_KEY', 'GOHIGHLEVEL_API_KEY']);
-    const whatsappCredential = await credentialStatus('whatsapp', 'api_key', ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID']);
-    const telegramCredential = await credentialStatus('telegram', 'bot_token', ['TELEGRAM_BOT_TOKEN']);
-    const voiceCredential = await credentialStatus('voice_chat', 'service_endpoint', ['VOICE_CHAT_API_URL', 'VOICE_CHAT_API_KEY']);
+    const postizCredential = await credentialStatus('postiz', 'api_key', ['POSTIZ_API_KEY'], session.tenantKey);
+    const ghlCredential = await credentialStatus('gohighlevel', 'api_key', ['GHL_API_KEY', 'GOHIGHLEVEL_API_KEY'], session.tenantKey);
+    const whatsappCredential = await credentialStatus('whatsapp', 'api_key', ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'], session.tenantKey);
+    const telegramCredential = await credentialStatus('telegram', 'bot_token', ['TELEGRAM_BOT_TOKEN'], session.tenantKey);
+    const voiceCredential = await credentialStatus('voice_chat', 'service_endpoint', ['VOICE_CHAT_API_URL', 'VOICE_CHAT_API_KEY'], session.tenantKey);
     res.json({
       generatedAt: new Date().toISOString(),
       aiProvider: {
         provider: llm.type,
         model: llm.model,
-        credentialStatus: llm.apiKeyStatus,
-        label: llm.type === 'mock' ? 'Mock Provider' : 'Live Provider Active',
+        credentialStatus: llm.type === 'mock' && process.env.ALLOW_MOCK_LLM !== 'true' ? 'missing' : llm.apiKeyStatus,
+        label: llm.type === 'mock' && process.env.ALLOW_MOCK_LLM !== 'true' ? 'Requires User LLM Credential' : 'Live Provider Active',
       },
       connectors: [
         {

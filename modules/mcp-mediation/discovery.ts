@@ -54,7 +54,7 @@ export async function discoverRemoteMcpTools(input: {
     m4Allowed: true,
     m5Allowed: false,
     credentialRequired: true,
-    ownerSubstrate: `remote_mcp:${url.origin}`,
+    ownerSubstrate: `remote_mcp:${url.toString()}`,
   });
 
   const tools = await Promise.all(discoveredTools.map(async (tool) => {
@@ -107,6 +107,27 @@ export async function listDiscoveredTools(connectorId: string): Promise<Discover
     orderBy: { tool_name: 'asc' },
   });
   return tools.map(mapDiscoveredTool);
+}
+
+export async function probeRemoteMcpEndpoint(endpointUrl: string): Promise<{
+  reachable: boolean;
+  toolCount: number;
+  error?: string;
+}> {
+  try {
+    const url = new URL(endpointUrl);
+    const tools = await listToolsFromMcpEndpoint(url);
+    return {
+      reachable: true,
+      toolCount: tools.length,
+    };
+  } catch (err) {
+    return {
+      reachable: false,
+      toolCount: 0,
+      error: err instanceof Error ? err.message : 'MCP endpoint probe failed',
+    };
+  }
 }
 
 async function listToolsFromMcpEndpoint(url: URL): Promise<Array<{

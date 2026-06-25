@@ -31,6 +31,7 @@ export const upsertIntegrationCredentialSchema = z.object({
   tenantKey: z.string().trim().min(1).max(80).default('default'),
   provider: integrationProviderSchema,
   credentialType: credentialTypeSchema,
+  connectionKey: z.string().trim().min(1).max(120).regex(/^[a-z0-9._:-]+$/i, 'Connection key may contain letters, numbers, dots, underscores, colons, and dashes').default('default'),
   displayName: z.string().trim().min(2).max(160),
   secrets: z.record(z.string().trim().min(1).max(20000)).refine((value) => Object.keys(value).length > 0, {
     message: 'At least one secret field is required',
@@ -45,6 +46,7 @@ export interface SafeIntegrationCredential {
   tenantKey: string;
   provider: string;
   credentialType: string;
+  connectionKey: string;
   displayName: string;
   secretFields: string[];
   secretFingerprints: Record<string, string>;
@@ -62,6 +64,7 @@ export interface DecryptedIntegrationCredential {
   tenantKey: string;
   provider: string;
   credentialType: string;
+  connectionKey: string;
   displayName: string;
   secrets: Record<string, string>;
   metadata: Record<string, unknown>;
@@ -92,16 +95,18 @@ export async function upsertIntegrationCredential(
   const fingerprints = fingerprintPayload(input.secrets);
   const credential = await prisma.integrationCredential.upsert({
     where: {
-      tenant_key_provider_credential_type: {
+      tenant_key_provider_credential_type_connection_key: {
         tenant_key: input.tenantKey,
         provider: input.provider,
         credential_type: input.credentialType,
+        connection_key: input.connectionKey,
       },
     },
     create: {
       tenant_key: input.tenantKey,
       provider: input.provider,
       credential_type: input.credentialType,
+      connection_key: input.connectionKey,
       display_name: input.displayName,
       encrypted_payload: encryptedPayload as Prisma.InputJsonValue,
       secret_fingerprints: fingerprints as Prisma.InputJsonValue,
@@ -157,13 +162,15 @@ export async function getActiveIntegrationCredential(
   provider: z.infer<typeof integrationProviderSchema>,
   credentialType: z.infer<typeof credentialTypeSchema>,
   tenantKey = 'default',
+  connectionKey = 'default',
 ): Promise<DecryptedIntegrationCredential | null> {
   const credential = await prisma.integrationCredential.findUnique({
     where: {
-      tenant_key_provider_credential_type: {
+      tenant_key_provider_credential_type_connection_key: {
         tenant_key: tenantKey,
         provider,
         credential_type: credentialType,
+        connection_key: connectionKey,
       },
     },
   });
@@ -173,6 +180,7 @@ export async function getActiveIntegrationCredential(
     tenantKey: credential.tenant_key,
     provider: credential.provider,
     credentialType: credential.credential_type,
+    connectionKey: credential.connection_key,
     displayName: credential.display_name,
     secrets: decryptPayload(credential.encrypted_payload),
     metadata: normalizeMetadata(credential.metadata),
@@ -183,12 +191,14 @@ export async function hasActiveIntegrationCredential(
   provider: z.infer<typeof integrationProviderSchema>,
   credentialType: z.infer<typeof credentialTypeSchema>,
   tenantKey = 'default',
+  connectionKey = 'default',
 ): Promise<boolean> {
   const count = await prisma.integrationCredential.count({
     where: {
       tenant_key: tenantKey,
       provider,
       credential_type: credentialType,
+      connection_key: connectionKey,
       is_active: true,
     },
   });
@@ -226,6 +236,7 @@ function toSafeCredential(credential: {
   tenant_key: string;
   provider: string;
   credential_type: string;
+  connection_key: string;
   display_name: string;
   encrypted_payload: unknown;
   secret_fingerprints: unknown;
@@ -242,6 +253,7 @@ function toSafeCredential(credential: {
     tenantKey: credential.tenant_key,
     provider: credential.provider,
     credentialType: credential.credential_type,
+    connectionKey: credential.connection_key,
     displayName: credential.display_name,
     secretFields: Object.keys(encrypted),
     secretFingerprints: normalizeMetadata(credential.secret_fingerprints) as Record<string, string>,

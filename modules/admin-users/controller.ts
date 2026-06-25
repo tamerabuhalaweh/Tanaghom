@@ -5,6 +5,7 @@ import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { hashPassword } from '@shared/auth';
 import type { Prisma, Role as PrismaRole } from '@prisma/client';
+import { randomBytes } from 'node:crypto';
 
 export const adminUsersRouter = Router();
 
@@ -61,7 +62,7 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
     const payload = getPayload(req);
     requireAdmin(payload.role);
 
-    const { email, name, role, departmentId, password, businessRole, roleTemplate } = req.body;
+    const { email, name, role, departmentId, businessRole, roleTemplate } = req.body;
 
     const tenantKey = payload.tenantKey || 'default';
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -69,9 +70,18 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
       throw new Error('User with this email already exists');
     }
 
-    const passwordHash = await hashPassword(password || 'TempPassword123!');
+    const passwordHash = await hashPassword(randomBytes(48).toString('base64url'));
 
     const { user, agentRep } = await prisma.$transaction(async (tx) => {
+      await tx.tenant.upsert({
+        where: { tenant_key: tenantKey },
+        create: {
+          tenant_key: tenantKey,
+          name: tenantKey === 'default' ? 'Tanaghum Default Tenant' : tenantKey,
+          status: 'active',
+        },
+        update: {},
+      });
       const createdUser = await tx.user.create({
         data: {
           email,
@@ -80,6 +90,14 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
           role: role || 'specialist',
           department_id: departmentId || null,
           password_hash: passwordHash,
+          is_active: false,
+        },
+      });
+      await tx.tenantMembership.create({
+        data: {
+          tenant_key: tenantKey,
+          user_id: createdUser.id,
+          role: createdUser.role,
           is_active: true,
         },
       });
@@ -127,7 +145,7 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
         metadata: agentRep.metadata,
       },
       isActive: user.is_active,
-      _label: 'User created - password must be changed on first login',
+      _label: 'User created inactive - send invite email or onboarding link before login',
     });
   } catch (err) {
     next(err);

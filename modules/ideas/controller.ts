@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError } from '@shared/errors';
+import { ExternalServiceError, UnauthorizedError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
@@ -60,10 +60,15 @@ ideasRouter.post('/generate', async (req: Request, res: Response, next: NextFunc
     });
 
     const parsed = parseIdeas(llmResult.text, input);
-    const ideas = parsed.ideas.length > 0 ? parsed.ideas : buildFallbackIdeas(input);
+    if (!parsed.fromModel || parsed.ideas.length === 0) {
+      throw new ExternalServiceError('LLM', 'Provider response did not match the required post idea JSON contract');
+    }
+    const ideas = parsed.ideas;
     const threadId = `post-idea-${randomUUID()}`;
     const workflow = await startIdeaSelectionWorkflow({
       threadId,
+      tenantKey: payload.tenantKey || 'default',
+      humanUserId: payload.sub,
       goal: input.goal,
       audience: input.audience,
       ideas,
@@ -87,7 +92,7 @@ ideasRouter.post('/generate', async (req: Request, res: Response, next: NextFunc
       providerType: providerStatus.type,
       model: llmResult.model || providerStatus.model,
       apiKeyStatus: providerStatus.apiKeyStatus,
-      generationMode: parsed.fromModel ? 'Live Provider Active' : 'Mock Provider',
+      generationMode: 'Live Provider Active',
       safety: {
         externalExecution: 'Blocked',
         m5: 'Disabled',
@@ -245,36 +250,4 @@ function extractJsonObject(text: string): string | null {
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
   const match = trimmed.match(/\{[\s\S]*\}/);
   return match?.[0] || null;
-}
-
-function buildFallbackIdeas(input: z.infer<typeof generateIdeasSchema>): PostIdea[] {
-  const platformFormats: Record<string, string> = {
-    linkedin: 'carousel',
-    instagram: 'short_video',
-    twitter: 'thread',
-    x: 'thread',
-  };
-
-  return Array.from({ length: input.count }, (_, index) => {
-    const platform = input.platforms[index % input.platforms.length];
-    const focus = [
-      'proof-led customer story',
-      'problem/solution breakdown',
-      'before-and-after workflow',
-      'expert checklist',
-      'lead magnet CTA',
-      'objection-handling post',
-    ][index] || 'commercial social post';
-
-    return {
-      id: `idea-${Date.now()}-${index + 1}`,
-      title: `${focus.charAt(0).toUpperCase()}${focus.slice(1)} for ${input.goal.slice(0, 54)}`,
-      hook: `If ${input.audience} care about this outcome, this is the angle to test first.`,
-      platform,
-      format: platformFormats[platform] || 'text',
-      hashtags: ['#marketing', '#growth', '#socialmedia', '#leadgeneration'],
-      estimatedReach: index === 0 ? 'high' : index === 1 ? 'medium' : 'low',
-      rationale: `Generated from the campaign goal and audience. Uses ${platform} format conventions without external execution.`,
-    };
-  });
 }

@@ -4,6 +4,7 @@ import { auditLog } from '@shared/logging';
 import { eventBus } from '@shared/events';
 import { randomBytes, createHash } from 'node:crypto';
 import { prisma } from '@shared/database';
+import { getEmailDeliveryStatus, sendOnboardingEmail } from '@shared/notifications/email';
 import { AUTH_EVENTS, type UserAuthenticatedEvent, type UserLoginFailedEvent } from './events';
 import { findUserByEmail, findUserById, findAgentRepByUserId } from './repository';
 import type { LoginInput, LoginResult, SessionUser } from './types';
@@ -84,13 +85,26 @@ export async function getSession(token: string): Promise<SessionUser> {
 export async function createOnboardingToken(input: {
   requesterRole: string;
   requesterUserId: string;
+  requesterTenantKey?: string;
   userId: string;
   purpose: 'invite' | 'password_reset';
-}): Promise<{ token: string; expiresAt: Date; purpose: string; rawTokenReturnedOnce: true }> {
+  sendEmail?: boolean;
+}): Promise<{
+  token?: string;
+  expiresAt: Date;
+  purpose: string;
+  rawTokenReturnedOnce: boolean;
+  delivery: { mode: 'email' | 'manual'; sent: boolean; messageId?: string | null };
+}> {
   if (input.requesterRole !== 'admin' && input.requesterRole !== 'cco') {
     throw new ForbiddenError('Admin or CCO access required');
   }
-  const user = await prisma.user.findUnique({ where: { id: input.userId } });
+  const user = await prisma.user.findFirst({
+    where: {
+      id: input.userId,
+      tenant_key: input.requesterTenantKey || 'default',
+    },
+  });
   if (!user) throw new UnauthorizedError('User not found');
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
@@ -106,7 +120,33 @@ export async function createOnboardingToken(input: {
     { actor: `user:${input.requesterUserId}`, action: 'onboarding_token_created', object_type: 'user', object_id: input.userId, result: 'success' },
     `Onboarding token created for ${input.purpose}`,
   );
-  return { token, expiresAt, purpose: input.purpose, rawTokenReturnedOnce: true };
+
+  if (input.sendEmail) {
+    const delivery = await sendOnboardingEmail({
+      to: user.email,
+      name: user.name,
+      token,
+      purpose: input.purpose,
+    });
+    auditLog(
+      { actor: `user:${input.requesterUserId}`, action: 'onboarding_email_sent', object_type: 'user', object_id: input.userId, result: 'success' },
+      `Onboarding email sent for ${input.purpose}`,
+    );
+    return {
+      expiresAt,
+      purpose: input.purpose,
+      rawTokenReturnedOnce: false,
+      delivery: { mode: 'email', sent: true, messageId: delivery.messageId },
+    };
+  }
+
+  return {
+    token,
+    expiresAt,
+    purpose: input.purpose,
+    rawTokenReturnedOnce: true,
+    delivery: { mode: 'manual', sent: false },
+  };
 }
 
 export async function acceptOnboardingToken(input: { token: string; password: string }): Promise<{ status: 'accepted'; userId: string }> {
@@ -135,4 +175,8 @@ export async function acceptOnboardingToken(input: { token: string; password: st
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+
+export function getOnboardingEmailStatus() {
+  return getEmailDeliveryStatus();
 }

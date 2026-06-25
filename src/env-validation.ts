@@ -22,6 +22,8 @@ export const EXECUTION_KILL_SWITCHES = [
   'RESOURCESPACE_LIVE_ENABLED',
   'PAPERCLIP_SYNC_ENABLED',
   'ANALYTICS_LIVE_ENABLED',
+  'OPENCLAW_ORCHESTRATION_ENABLED',
+  'AGENTSCOPE_PROCESS_ENABLED',
 ] as const;
 
 export interface EnvValidationResult {
@@ -61,6 +63,13 @@ export function validateEnvironment(): EnvValidationResult {
   }
   if (process.env.SECRET_VAULT_ENCRYPTION_KEY && process.env.SECRET_VAULT_ENCRYPTION_KEY.length < 32) {
     errors.push('SECRET_VAULT_ENCRYPTION_KEY must be at least 32 characters when configured.');
+  }
+  if (process.env.EMAIL_DELIVERY_ENABLED === 'true') {
+    for (const varName of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_FROM', 'APP_BASE_URL']) {
+      if (!process.env[varName]) {
+        errors.push(`${varName} is required when EMAIL_DELIVERY_ENABLED=true`);
+      }
+    }
   }
 
   // Validate execution kill switches — hard failures in demo mode

@@ -1,5 +1,6 @@
 import { Annotation, Command, END, interrupt, MemorySaver, START, StateGraph } from '@langchain/langgraph';
 import { z } from 'zod';
+import { prisma } from '@shared/database';
 
 export const postIdeaSchema = z.object({
   id: z.string(),
@@ -87,6 +88,8 @@ const ideaSelectionGraph = new StateGraph(ideaWorkflowState)
 
 export async function startIdeaSelectionWorkflow(input: {
   threadId: string;
+  tenantKey: string;
+  humanUserId: string;
   goal: string;
   audience: string;
   ideas: PostIdea[];
@@ -99,12 +102,43 @@ export async function startIdeaSelectionWorkflow(input: {
   }, {
     configurable: { thread_id: input.threadId },
   });
+  const interruptPayload = getInterruptValue(result);
+  if (isDurableWorkflowStoreAvailable()) {
+    await prisma.langGraphWorkflow.upsert({
+      where: { thread_id: input.threadId },
+      create: {
+        thread_id: input.threadId,
+        tenant_key: input.tenantKey,
+        workflow_type: 'commercial_social_post_idea_selection',
+        status: 'interrupted',
+        human_user_id: input.humanUserId,
+        checkpoint_strategy: 'langgraph_interrupt_with_database_state_snapshot',
+        state_snapshot: {
+          goal: input.goal,
+          audience: input.audience,
+          ideas: input.ideas,
+          status: 'awaiting_human_selection',
+        },
+        interrupt_payload: toJsonObject(interruptPayload),
+      },
+      update: {
+        status: 'interrupted',
+        state_snapshot: {
+          goal: input.goal,
+          audience: input.audience,
+          ideas: input.ideas,
+          status: 'awaiting_human_selection',
+        },
+        interrupt_payload: toJsonObject(interruptPayload),
+      },
+    });
+  }
 
   return {
     threadId: input.threadId,
     status: 'awaiting_human_selection',
     ideas: input.ideas,
-    interrupt: getInterruptValue(result),
+    interrupt: interruptPayload,
   };
 }
 
@@ -114,6 +148,35 @@ export async function resumeIdeaSelectionWorkflow(input: {
   ideaId?: string;
   notes?: string;
 }): Promise<IdeaWorkflowResumeResult> {
+  const durableWorkflow = isDurableWorkflowStoreAvailable()
+    ? await prisma.langGraphWorkflow.findUnique({ where: { thread_id: input.threadId } })
+    : null;
+  if (durableWorkflow) {
+    const snapshot = durableWorkflow.state_snapshot as Record<string, unknown>;
+    const ideas = z.array(postIdeaSchema).parse(snapshot.ideas);
+    if (input.action === 'select') {
+      if (!input.ideaId || !ideas.some((idea) => idea.id === input.ideaId)) {
+        throw new Error('Selected idea does not exist in this workflow.');
+      }
+    }
+    const result: IdeaWorkflowResumeResult = {
+      threadId: input.threadId,
+      status: input.action === 'select' ? 'selected' : 'rejected',
+      selectedIdeaId: input.action === 'select' ? input.ideaId : undefined,
+      reviewerNotes: input.notes || (input.action === 'select' ? 'Human selected idea for campaign conversion.' : 'Human rejected generated ideas.'),
+      ideas,
+    };
+    await prisma.langGraphWorkflow.update({
+      where: { thread_id: input.threadId },
+      data: {
+        status: 'completed',
+        result_payload: toJsonObject(result),
+        completed_at: new Date(),
+      },
+    });
+    return result;
+  }
+
   const result = await ideaSelectionGraph.invoke(new Command({
     resume: {
       action: input.action,
@@ -142,4 +205,12 @@ function getInterruptValue(result: unknown): unknown {
   const first = interrupts[0];
   if (!first || typeof first !== 'object') return first;
   return (first as Record<string, unknown>).value ?? first;
+}
+
+function toJsonObject(value: unknown) {
+  return JSON.parse(JSON.stringify(value ?? null));
+}
+
+function isDurableWorkflowStoreAvailable(): boolean {
+  return Boolean(process.env.DATABASE_URL);
 }

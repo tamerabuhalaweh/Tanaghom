@@ -30,6 +30,8 @@ import { leadsRouter } from '../modules/leads/controller';
 import { ghlRouter } from '../modules/ghl-connector/controller';
 import { ideasRouter } from '../modules/ideas/controller';
 import { integrationCredentialsRouter } from '../modules/integration-credentials/controller';
+import { socialOAuthRouter } from '../modules/social-oauth/controller';
+import { runtimeBridgesRouter } from '../modules/runtime-bridges/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -104,6 +106,8 @@ app.use('/crm-conversion', crmConversionRouter);
 app.use('/postiz', postizIntegrationRouter);
 app.use('/integration-status', integrationStatusRouter);
 app.use('/integration-credentials', integrationCredentialsRouter);
+app.use('/social-oauth', socialOAuthRouter);
+app.use('/runtime-bridges', runtimeBridgesRouter);
 app.use('/admin/users', adminUsersRouter);
 app.use('/integrations', integrationsRouter);
 app.use('/leads', leadsRouter);

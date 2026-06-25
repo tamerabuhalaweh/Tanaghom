@@ -82,17 +82,14 @@ export default function Login() {
           <div className="w-full max-w-md rounded-lg border border-black/10 bg-[var(--color-surface-card)] p-6 shadow-lg sm:p-8">
             <div>
               <h2 className="text-2xl font-semibold tracking-tight">Enter Commercial Workspace</h2>
-              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Sign in to access the sandbox workspace.</p>
+              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Sign in with your organization account.</p>
             </div>
 
             <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
-              <div className="font-medium text-amber-800">Demo users</div>
-              <div className="mt-2 space-y-1 text-amber-700">
-                <div>admin@tanaghum.com</div>
-                <div>brand.head@tanaghum.com</div>
-                <div>demand.specialist@tanaghum.com</div>
+              <div className="font-medium text-amber-800">Account access</div>
+              <div className="mt-2 text-amber-700">
+                New users receive an invite link from the platform admin. Passwords are set by each user and are never shown in the UI.
               </div>
-              <div className="mt-2 text-xs font-medium text-amber-800">Password: password123</div>
             </div>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>

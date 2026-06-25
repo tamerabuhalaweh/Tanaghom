@@ -37,7 +37,7 @@ function getSession(req: Request) {
   return resolveSessionContext(getPayload(req));
 }
 
-async function checkPostizHealth(): Promise<{
+async function checkPostizHealth(tenantKey: string): Promise<{
   url: string | null;
   reachable: boolean;
   statusCode: number | null;
@@ -45,7 +45,7 @@ async function checkPostizHealth(): Promise<{
   credentialStatus: 'configured' | 'missing';
 }> {
   const checkedAt = new Date().toISOString();
-  const config = await resolvePostizRuntimeConfig();
+  const config = await resolvePostizRuntimeConfig(tenantKey);
   const credentialStatus = config.apiKey ? 'configured' : 'missing';
   if (!config.baseUrl) {
     return { url: null, reachable: false, statusCode: null, checkedAt, credentialStatus };
@@ -75,8 +75,8 @@ async function checkPostizHealth(): Promise<{
 
 postizIntegrationRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getSession(req);
-    const health = await checkPostizHealth();
+    const session = getSession(req);
+    const health = await checkPostizHealth(session.tenantKey);
     const policy = evaluateExternalExecution({ system: 'postiz', action: 'schedule', executionMode: 'sandbox' });
     res.json({
       name: 'Postiz Scheduling',
@@ -266,8 +266,8 @@ const postizPayloadSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
-async function resolvePostizRuntimeConfig(): Promise<PostizRuntimeConfig> {
-  const credential = await getActiveIntegrationCredential('postiz', 'api_key');
+async function resolvePostizRuntimeConfig(tenantKey = 'default'): Promise<PostizRuntimeConfig> {
+  const credential = await getActiveIntegrationCredential('postiz', 'api_key', tenantKey);
   if (credential) {
     return {
       baseUrl: credential.secrets.baseUrl || POSTIZ_SANDBOX_URL,
@@ -324,9 +324,9 @@ async function sandboxSchedulingGate(config?: PostizRuntimeConfig): Promise<{ al
 
 postizIntegrationRouter.post('/schedule-payload', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getSession(req);
     const input = postizPayloadSchema.parse(req.body);
-    const config = await resolvePostizRuntimeConfig();
+    const session = getSession(req);
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
     const payload = buildPostizCreatePostPayload(input, config);
     res.json({
       status: 'prepared',
@@ -349,7 +349,7 @@ postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Resp
   try {
     const session = getSession(req);
     const input = postizPayloadSchema.parse(req.body);
-    const config = await resolvePostizRuntimeConfig();
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
     const payload = buildPostizCreatePostPayload(input, config);
     const gate = await sandboxSchedulingGate(config);
 

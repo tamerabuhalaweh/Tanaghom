@@ -240,7 +240,7 @@ export default function AgentSkills() {
                     {activeConnectors.map(connector => <option key={String(connector.id)} value={String(connector.id)}>{text(connector.name)}</option>)}
                   </select>
                 </Field>
-                <Field label="Tool Name" helper="Manual binding only. Remote MCP tool discovery is a remaining gap until a real discovery endpoint is added.">
+                <Field label="Tool Name" helper="Use a discovered MCP tool name or enter a governed tool contract manually. Tool execution remains blocked until mediation and approval are implemented.">
                   <input value={form.toolName} onChange={(event) => setForm({ ...form, toolName: event.target.value })} placeholder="e.g. search_social_posts" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
                 </Field>
               </div>
@@ -329,7 +329,7 @@ export default function AgentSkills() {
           </ProductCard>
 
           <Notice tone="warn">
-            Remote MCP discovery and GitHub import now persist metadata only. Runtime execution is still blocked until human review, capability governance, approval, and MCP mediation are complete.
+            Remote MCP discovery and GitHub import persist skill/tool metadata only. Runtime execution is still blocked until human review, capability governance, approval, and MCP mediation are complete.
           </Notice>
         </div>
       </div>

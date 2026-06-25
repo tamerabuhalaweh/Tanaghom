@@ -71,7 +71,9 @@ describe('Execution Kill Switches', () => {
     expect(EXECUTION_KILL_SWITCHES).toContain('RESOURCESPACE_LIVE_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('PAPERCLIP_SYNC_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('ANALYTICS_LIVE_ENABLED');
-    expect(EXECUTION_KILL_SWITCHES).toHaveLength(13);
+    expect(EXECUTION_KILL_SWITCHES).toContain('OPENCLAW_ORCHESTRATION_ENABLED');
+    expect(EXECUTION_KILL_SWITCHES).toContain('AGENTSCOPE_PROCESS_ENABLED');
+    expect(EXECUTION_KILL_SWITCHES).toHaveLength(15);
   });
 
   it('all kill switches default to false', () => {

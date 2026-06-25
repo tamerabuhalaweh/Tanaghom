@@ -40,6 +40,44 @@ enum AgentStatus {
   suspended
 }
 
+enum TenantStatus {
+  active
+  suspended
+  archived
+}
+
+model Tenant {
+  id          String       @id @default(uuid()) @db.Uuid
+  tenant_key  String       @unique
+  name        String
+  status      TenantStatus @default(active)
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+
+  users       User[]
+  memberships TenantMembership[]
+
+  @@map("tenants")
+}
+
+model TenantMembership {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenant_key  String
+  user_id     String   @db.Uuid
+  role        Role
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
+  user   User   @relation(fields: [user_id], references: [id])
+
+  @@unique([tenant_key, user_id])
+  @@index([tenant_key])
+  @@index([user_id])
+  @@map("tenant_memberships")
+}
+
 model Department {
   id                  String   @id @default(uuid()) @db.Uuid
   name                String   @unique
@@ -84,7 +122,12 @@ model User {
   llm_provider_credentials LlmProviderCredential[]
   integration_credentials_created IntegrationCredential[]
   onboarding_tokens UserOnboardingToken[]
+  tenant_memberships TenantMembership[]
+  social_account_connections SocialAccountConnection[]
+  oauth_connection_states OAuthConnectionState[]
+  langgraph_workflows LangGraphWorkflow[]
 
+  tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
   @@map("users")
   @@index([tenant_key])
 }
@@ -140,6 +183,7 @@ model IntegrationCredential {
   tenant_key          String   @default("default")
   provider            String
   credential_type     String
+  connection_key      String   @default("default")
   display_name        String
   encrypted_payload   Json
   secret_fingerprints Json
@@ -152,11 +196,95 @@ model IntegrationCredential {
 
   created_by User @relation(fields: [created_by_user_id], references: [id])
 
-  @@unique([tenant_key, provider, credential_type])
+  @@unique([tenant_key, provider, credential_type, connection_key])
   @@index([tenant_key])
   @@index([provider])
+  @@index([connection_key])
   @@index([is_active])
   @@map("integration_credentials")
+}
+
+enum SocialConnectionStatus {
+  connected
+  expired
+  revoked
+  failed
+}
+
+model OAuthConnectionState {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  platform           String
+  state_hash         String   @unique
+  redirect_uri       String
+  requested_scopes   String[]
+  requester_user_id  String   @db.Uuid
+  code_verifier      String?
+  expires_at         DateTime
+  used_at            DateTime?
+  created_at         DateTime @default(now())
+
+  requester User @relation(fields: [requester_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([platform])
+  @@index([expires_at])
+  @@map("oauth_connection_states")
+}
+
+model SocialAccountConnection {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  tenant_key              String
+  platform                String
+  account_id              String
+  account_name            String?
+  scopes                  String[]
+  encrypted_access_token  String                 @db.Text
+  encrypted_refresh_token String?                @db.Text
+  token_expires_at        DateTime?
+  status                  SocialConnectionStatus @default(connected)
+  connected_by_user_id    String                 @db.Uuid
+  metadata                Json?
+  connected_at            DateTime               @default(now())
+  updated_at              DateTime               @updatedAt
+
+  connected_by User @relation(fields: [connected_by_user_id], references: [id])
+
+  @@unique([tenant_key, platform, account_id])
+  @@index([tenant_key])
+  @@index([platform])
+  @@index([status])
+  @@map("social_account_connections")
+}
+
+enum LangGraphWorkflowStatus {
+  running
+  interrupted
+  completed
+  failed
+}
+
+model LangGraphWorkflow {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  thread_id           String                  @unique
+  tenant_key          String
+  workflow_type       String
+  status              LangGraphWorkflowStatus @default(running)
+  human_user_id       String                  @db.Uuid
+  checkpoint_strategy String                  @default("database_state_snapshot")
+  state_snapshot      Json
+  interrupt_payload   Json?
+  result_payload      Json?
+  created_at          DateTime                @default(now())
+  updated_at          DateTime                @updatedAt
+  completed_at        DateTime?
+
+  human_user User @relation(fields: [human_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([workflow_type])
+  @@index([status])
+  @@map("langgraph_workflows")
 }
 
 model AgentRep {

@@ -21,6 +21,7 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'postiz',
     credentialType: 'api_key',
+    connectionKey: 'default',
     label: 'Postiz Sandbox API Key',
     requiredFields: ['apiKey', 'baseUrl', 'integrationId'],
     purpose: 'Create Postiz-ready payloads and optionally execute sandbox scheduling when policy allows.',
@@ -28,6 +29,7 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'gohighlevel',
     credentialType: 'api_key',
+    connectionKey: 'default',
     label: 'GoHighLevel Sandbox API Key',
     requiredFields: ['apiKey', 'locationId'],
     purpose: 'Validate CRM readiness and execute sandbox/test contact upsert when policy allows.',
@@ -35,6 +37,7 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'whatsapp',
     credentialType: 'api_key',
+    connectionKey: 'default',
     label: 'WhatsApp Cloud API',
     requiredFields: ['accessToken', 'phoneNumberId'],
     purpose: 'Prepare and later send approved sandbox WhatsApp messages.',
@@ -42,6 +45,7 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'telegram',
     credentialType: 'bot_token',
+    connectionKey: 'default',
     label: 'Telegram Bot',
     requiredFields: ['botToken', 'chatId'],
     purpose: 'Prepare and later send approved sandbox Telegram messages.',
@@ -49,6 +53,7 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'voice_chat',
     credentialType: 'service_endpoint',
+    connectionKey: 'default',
     label: 'AI Voice/Chat Agent API',
     requiredFields: ['apiUrl', 'apiKey'],
     purpose: 'Prepare and later trigger approved test voice/chat handoff.',
@@ -56,13 +61,31 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'social_oauth',
     credentialType: 'oauth_client',
-    label: 'Social OAuth Client',
-    requiredFields: ['clientId', 'clientSecret', 'redirectUri'],
-    purpose: 'Connect official social accounts through OAuth in a future authorized flow.',
+    connectionKey: 'linkedin',
+    label: 'LinkedIn OAuth Client',
+    requiredFields: ['clientId', 'clientSecret', 'redirectUri', 'authorizationUrl', 'tokenUrl', 'accountInfoUrl', 'scope'],
+    purpose: 'Connect official LinkedIn accounts through OAuth authorization code flow.',
+  },
+  {
+    provider: 'social_oauth',
+    credentialType: 'oauth_client',
+    connectionKey: 'meta',
+    label: 'Meta OAuth Client',
+    requiredFields: ['clientId', 'clientSecret', 'redirectUri', 'authorizationUrl', 'tokenUrl', 'accountInfoUrl', 'scope'],
+    purpose: 'Connect official Facebook/Instagram assets through Meta OAuth authorization code flow.',
+  },
+  {
+    provider: 'social_oauth',
+    credentialType: 'oauth_client',
+    connectionKey: 'x',
+    label: 'X OAuth Client',
+    requiredFields: ['clientId', 'clientSecret', 'redirectUri', 'authorizationUrl', 'tokenUrl', 'accountInfoUrl', 'scope'],
+    purpose: 'Connect official X/Twitter accounts through OAuth authorization code flow.',
   },
   {
     provider: 'openclaw',
     credentialType: 'runtime_endpoint',
+    connectionKey: 'default',
     label: 'OpenClaw Runtime',
     requiredFields: ['baseUrl', 'apiKey'],
     purpose: 'Call OpenClaw as an adjacent orchestration/channel layer while STITCH remains authority.',
@@ -70,6 +93,7 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'agentgateway',
     credentialType: 'runtime_endpoint',
+    connectionKey: 'default',
     label: 'agentgateway Endpoint',
     requiredFields: ['baseUrl'],
     purpose: 'Route MCP traffic through an external gateway/proxy once deployed.',
@@ -77,6 +101,7 @@ const REQUIRED_CREDENTIALS = [
   {
     provider: 'agentscope',
     credentialType: 'runtime_endpoint',
+    connectionKey: 'default',
     label: 'AgentScope Runtime',
     requiredFields: ['baseUrl', 'apiKey'],
     purpose: 'Use external sandboxed agent runtime endpoints once deployed.',
@@ -115,7 +140,10 @@ integrationCredentialsRouter.get('/matrix', async (req: Request, res: Response, 
     const credentials = await listIntegrationCredentials(payload.role, tenantKey);
     const rows = REQUIRED_CREDENTIALS.map((requirement) => {
       const credential = credentials.find((item) =>
-        item.provider === requirement.provider && item.credentialType === requirement.credentialType && item.isActive,
+        item.provider === requirement.provider
+        && item.credentialType === requirement.credentialType
+        && item.connectionKey === requirement.connectionKey
+        && item.isActive,
       );
       return {
         ...requirement,

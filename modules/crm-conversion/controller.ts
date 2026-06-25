@@ -219,7 +219,7 @@ crmConversionRouter.post('/leads/:id/sandbox-execution', async (req: Request, re
     }), req.body);
     const lead = await service.getLeadCaptureRecord(session.role, req.params.id as string);
     const payload = buildSandboxHandoffPayload(input.target, lead as unknown as Record<string, unknown>, input.message);
-    const gate = await sandboxCommunicationGate(input.target);
+    const gate = await sandboxCommunicationGate(input.target, session.tenantKey);
     const policy = evaluateExternalExecution({
       system: input.target,
       action: input.target === 'voice_chat' ? 'trigger_call' : 'send_message',
@@ -249,7 +249,7 @@ crmConversionRouter.post('/leads/:id/sandbox-execution', async (req: Request, re
       return;
     }
 
-    const result = await executeSandboxCommunication(input.target, payload);
+    const result = await executeSandboxCommunication(input.target, payload, session.tenantKey);
     res.status(result.ok ? 200 : 502).json({
       status: result.ok ? 'sandbox_executed' : 'failed',
       target: input.target,
@@ -279,14 +279,14 @@ type CommunicationConfig = {
   apiKey?: string;
 };
 
-async function sandboxCommunicationGate(target: CommunicationTarget): Promise<{ allowed: boolean; reasons: string[] }> {
+async function sandboxCommunicationGate(target: CommunicationTarget, tenantKey: string): Promise<{ allowed: boolean; reasons: string[] }> {
   const reasons: string[] = [];
   if (process.env.DEMO_MODE === 'true') reasons.push('DEMO_MODE=true blocks sandbox communication execution');
   if (process.env.EXTERNAL_EXECUTION_ENABLED !== 'true') reasons.push('EXTERNAL_EXECUTION_ENABLED is not true');
   if (target === 'whatsapp' && process.env.WHATSAPP_LIVE_ENABLED !== 'true') reasons.push('WHATSAPP_LIVE_ENABLED is not true');
   if (target === 'telegram' && process.env.TELEGRAM_LIVE_ENABLED !== 'true') reasons.push('TELEGRAM_LIVE_ENABLED is not true');
   if (target === 'voice_chat' && process.env.VOICE_CHAT_LIVE_ENABLED !== 'true') reasons.push('VOICE_CHAT_LIVE_ENABLED is not true');
-  const credential = await getCommunicationConfig(target);
+  const credential = await getCommunicationConfig(target, tenantKey);
   if (!credential.configured) reasons.push(`${target} sandbox credentials are missing`);
   return { allowed: reasons.length === 0, reasons };
 }
@@ -307,9 +307,9 @@ function buildSandboxHandoffPayload(target: CommunicationTarget, lead: Record<st
   };
 }
 
-async function getCommunicationConfig(target: CommunicationTarget): Promise<CommunicationConfig> {
+async function getCommunicationConfig(target: CommunicationTarget, tenantKey = 'default'): Promise<CommunicationConfig> {
   if (target === 'whatsapp') {
-    const credential = await getActiveIntegrationCredential('whatsapp', 'api_key');
+    const credential = await getActiveIntegrationCredential('whatsapp', 'api_key', tenantKey);
     return {
       accessToken: credential?.secrets.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || '',
       phoneNumberId: credential?.secrets.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '',
@@ -317,14 +317,14 @@ async function getCommunicationConfig(target: CommunicationTarget): Promise<Comm
     };
   }
   if (target === 'telegram') {
-    const credential = await getActiveIntegrationCredential('telegram', 'bot_token');
+    const credential = await getActiveIntegrationCredential('telegram', 'bot_token', tenantKey);
     return {
       botToken: credential?.secrets.botToken || process.env.TELEGRAM_BOT_TOKEN || '',
       chatId: credential?.secrets.chatId || process.env.TELEGRAM_CHAT_ID || '',
       configured: Boolean((credential?.secrets.botToken || process.env.TELEGRAM_BOT_TOKEN) && (credential?.secrets.chatId || process.env.TELEGRAM_CHAT_ID)),
     };
   }
-  const credential = await getActiveIntegrationCredential('voice_chat', 'service_endpoint');
+  const credential = await getActiveIntegrationCredential('voice_chat', 'service_endpoint', tenantKey);
   return {
     apiUrl: credential?.secrets.apiUrl || process.env.VOICE_CHAT_API_URL || '',
     apiKey: credential?.secrets.apiKey || process.env.VOICE_CHAT_API_KEY || '',
@@ -332,8 +332,8 @@ async function getCommunicationConfig(target: CommunicationTarget): Promise<Comm
   };
 }
 
-async function executeSandboxCommunication(target: CommunicationTarget, payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: unknown }> {
-  const config = await getCommunicationConfig(target);
+async function executeSandboxCommunication(target: CommunicationTarget, payload: Record<string, unknown>, tenantKey: string): Promise<{ ok: boolean; status: number; body: unknown }> {
+  const config = await getCommunicationConfig(target, tenantKey);
   if (target === 'whatsapp') {
     const response = await fetch(`https://graph.facebook.com/v19.0/${config.phoneNumberId || ''}/messages`, {
       method: 'POST',

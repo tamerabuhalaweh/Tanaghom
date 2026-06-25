@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { createOnboardingToken, acceptOnboardingToken, login, getSession } from './service';
+import { createOnboardingToken, acceptOnboardingToken, login, getSession, getOnboardingEmailStatus } from './service';
 import { validateLoginInput } from './validators';
 import { verifyToken } from '@shared/auth';
 
@@ -43,16 +43,43 @@ authRouter.post('/onboarding-token', async (req: Request, res: Response, next: N
     const input = z.object({
       userId: z.string().uuid(),
       purpose: z.enum(['invite', 'password_reset']).default('invite'),
+      sendEmail: z.boolean().default(false),
     }).parse(req.body);
     const token = await createOnboardingToken({
       requesterRole: payload.role,
       requesterUserId: payload.sub,
+      requesterTenantKey: payload.tenantKey || 'default',
       userId: input.userId,
       purpose: input.purpose,
+      sendEmail: input.sendEmail,
     });
     res.status(201).json({
       ...token,
-      _label: 'One-time onboarding token created. Raw token is returned once and should be delivered through an approved channel.',
+      _label: input.sendEmail
+        ? 'One-time onboarding email sent. Raw token was not returned.'
+        : 'One-time onboarding token created. Raw token is returned once and should be delivered through an approved channel.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.get('/onboarding-email-status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Bearer token required' } });
+      return;
+    }
+    verifyToken(authHeader.substring(7));
+    const status = getOnboardingEmailStatus();
+    res.json({
+      configured: status.configured,
+      enabled: status.enabled,
+      fromStatus: status.from ? 'configured' : 'missing',
+      hostStatus: status.host ? 'configured' : 'missing',
+      appBaseUrlStatus: status.appBaseUrl ? 'configured' : 'missing',
+      rawSecretsReturned: false,
     });
   } catch (err) {
     next(err);

@@ -147,7 +147,7 @@ export default function McpEngine() {
     setMessage('');
     setHealthResult(null);
     try {
-      const result = await mcpRuntimeApi.mockHealthCheck(connectorId, token);
+      const result = await mcpRuntimeApi.healthCheck(connectorId, token);
       setHealthResult(result as RecordMap);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Health check failed');
@@ -320,7 +320,7 @@ export default function McpEngine() {
                   bool(connector.credentialRequired) ? 'Required' : 'Not required',
                   <div className="flex flex-wrap gap-2">
                     <SecondaryAction disabled={loading === `health-${connector.id}`} onClick={() => runHealthCheck(String(connector.id))}>
-                      {loading === `health-${connector.id}` ? 'Checking...' : 'Mock Health Check'}
+                      {loading === `health-${connector.id}` ? 'Checking...' : 'Health Check'}
                     </SecondaryAction>
                     <SecondaryAction disabled={loading === `tools-${connector.id}`} onClick={() => loadDiscoveredTools(String(connector.id))}>
                       {loading === `tools-${connector.id}` ? 'Loading...' : 'Tools'}

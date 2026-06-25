@@ -37,6 +37,7 @@ describe('integration credential vault', () => {
       tenant_key: create.tenant_key,
       provider: create.provider,
       credential_type: create.credential_type,
+      connection_key: create.connection_key,
       display_name: create.display_name,
       encrypted_payload: create.encrypted_payload,
       secret_fingerprints: create.secret_fingerprints,
@@ -52,6 +53,7 @@ describe('integration credential vault', () => {
       tenantKey: 'default',
       provider: 'postiz',
       credentialType: 'api_key',
+      connectionKey: 'sandbox',
       displayName: 'Postiz Sandbox',
       secrets: { apiKey: 'postiz-secret-value', baseUrl: 'https://postiz.example.test' },
       metadata: { sandboxOnly: true },
@@ -60,8 +62,17 @@ describe('integration credential vault', () => {
     const saved = prismaMocks.integrationCredential.upsert.mock.calls[0][0].create;
     expect(JSON.stringify(saved.encrypted_payload)).not.toContain('postiz-secret-value');
     expect(result.rawSecretsReturned).toBe(false);
+    expect(result.connectionKey).toBe('sandbox');
     expect(result.secretFields).toEqual(['apiKey', 'baseUrl']);
     expect(result.secretFingerprints.apiKey).toHaveLength(12);
+    expect(prismaMocks.integrationCredential.upsert.mock.calls[0][0].where).toEqual({
+      tenant_key_provider_credential_type_connection_key: {
+        tenant_key: 'default',
+        provider: 'postiz',
+        credential_type: 'api_key',
+        connection_key: 'sandbox',
+      },
+    });
   });
 
   it('decrypts credentials only through server-side resolver', async () => {
@@ -79,6 +90,7 @@ describe('integration credential vault', () => {
       tenant_key: 'default',
       provider: 'gohighlevel',
       credential_type: 'api_key',
+      connection_key: 'default',
       display_name: 'GHL Sandbox',
       encrypted_payload: saved.encrypted_payload,
       secret_fingerprints: saved.secret_fingerprints,
@@ -94,6 +106,16 @@ describe('integration credential vault', () => {
 
     expect(credential?.secrets.apiKey).toBe('ghl-secret');
     expect(credential?.secrets.locationId).toBe('location-1');
+    expect(prismaMocks.integrationCredential.findUnique).toHaveBeenCalledWith({
+      where: {
+        tenant_key_provider_credential_type_connection_key: {
+          tenant_key: 'default',
+          provider: 'gohighlevel',
+          credential_type: 'api_key',
+          connection_key: 'default',
+        },
+      },
+    });
   });
 
   it('requires admin or CCO access', async () => {

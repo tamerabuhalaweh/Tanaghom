@@ -87,6 +87,7 @@ export default function AdminUsers() {
   const { token } = useAuth();
   const [users, setUsers] = useState<RecordMap[]>([]);
   const [departments, setDepartments] = useState<RecordMap[]>([]);
+  const [emailStatus, setEmailStatus] = useState<RecordMap | null>(null);
   const [message, setMessage] = useState('');
   const [inviteToken, setInviteToken] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,7 +96,6 @@ export default function AdminUsers() {
     name: '',
     roleTemplateId: 'social_media_manager',
     departmentId: '',
-    password: 'TempPassword123!',
   });
 
   const selectedTemplate = useMemo(
@@ -105,13 +105,15 @@ export default function AdminUsers() {
 
   async function load() {
     if (!token) return;
-    const [userList, departmentList] = await Promise.all([
+    const [userList, departmentList, onboardingEmail] = await Promise.all([
       adminUsersApi.list(token),
       usersApi.departments(token),
+      authApi.onboardingEmailStatus(token),
     ]);
     const nextDepartments = departmentList as RecordMap[];
     setUsers(userList as RecordMap[]);
     setDepartments(nextDepartments);
+    setEmailStatus(onboardingEmail as RecordMap);
     setForm(current => {
       if (current.departmentId) return current;
       const defaultDepartment = nextDepartments.find(department => text(department.name) === selectedTemplate.defaultDepartment);
@@ -125,14 +127,16 @@ export default function AdminUsers() {
 
     async function run() {
       try {
-        const [userList, departmentList] = await Promise.all([
+        const [userList, departmentList, onboardingEmail] = await Promise.all([
           adminUsersApi.list(token as string),
           usersApi.departments(token as string),
+          authApi.onboardingEmailStatus(token as string),
         ]);
         if (cancelled) return;
         const nextDepartments = departmentList as RecordMap[];
         setUsers(userList as RecordMap[]);
         setDepartments(nextDepartments);
+        setEmailStatus(onboardingEmail as RecordMap);
         const defaultDepartment = nextDepartments.find(department => text(department.name) === selectedTemplate.defaultDepartment);
         if (defaultDepartment) setForm(current => ({ ...current, departmentId: current.departmentId || String(defaultDepartment.id) }));
       } catch (err) {
@@ -156,12 +160,11 @@ export default function AdminUsers() {
         name: form.name,
         role: selectedTemplate.internalRole,
         departmentId: form.departmentId || null,
-        password: form.password,
         businessRole: selectedTemplate.id,
         roleTemplate: selectedTemplate.label,
       }, token);
-      setMessage(`${selectedTemplate.label} created with AgentRep and safe internal role ${roleLabel(selectedTemplate.internalRole)}.`);
-      setForm({ email: '', name: '', roleTemplateId: 'social_media_manager', departmentId: '', password: 'TempPassword123!' });
+      setMessage(`${selectedTemplate.label} created inactive with AgentRep. Send an invite before the user can sign in.`);
+      setForm({ email: '', name: '', roleTemplateId: 'social_media_manager', departmentId: '' });
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to create user');
@@ -184,14 +187,15 @@ export default function AdminUsers() {
     }
   }
 
-  async function createInviteToken(userId: string, purpose: 'invite' | 'password_reset') {
+  async function createInviteToken(userId: string, purpose: 'invite' | 'password_reset', sendEmail = false) {
     if (!token) return;
     setLoading(true);
     setInviteToken(null);
     try {
-      const result = await authApi.createOnboardingToken({ userId, purpose }, token);
-      setInviteToken(result as RecordMap);
-      setMessage(`${roleLabel(purpose)} token created. Raw token is returned once.`);
+      const result = await authApi.createOnboardingToken({ userId, purpose, sendEmail }, token);
+      const record = result as RecordMap;
+      setInviteToken(typeof record.token === 'string' && record.token.trim() ? record : null);
+      setMessage(sendEmail ? `${roleLabel(purpose)} email sent. No raw token was returned to the browser.` : `${roleLabel(purpose)} token created. Raw token is returned once.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to create onboarding token');
     } finally {
@@ -201,6 +205,7 @@ export default function AdminUsers() {
 
   const activeUsers = users.filter(user => Boolean(user.isActive)).length;
   const agentRepCount = users.filter(user => Boolean(user.agentRep)).length;
+  const emailReady = Boolean(emailStatus?.configured) && Boolean(emailStatus?.enabled) && text(emailStatus?.appBaseUrlStatus, '').toLowerCase() === 'configured';
 
   return (
     <ProductPage
@@ -214,7 +219,7 @@ export default function AdminUsers() {
       <div className="grid gap-4 md:grid-cols-3">
         <MetricCard label="Users" value={users.length} detail={`${activeUsers} active accounts`} tone="info" />
         <MetricCard label="AgentReps" value={agentRepCount} detail="Session identity coverage" tone={agentRepCount === users.length ? 'good' : 'warn'} />
-        <MetricCard label="Role Templates" value={ROLE_TEMPLATES.length} detail="Business-facing onboarding choices" tone="good" />
+        <MetricCard label="Invite Email" value={emailReady ? 'Ready' : 'Needs SMTP'} detail="SMTP + APP_BASE_URL required" tone={emailReady ? 'good' : 'warn'} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -250,11 +255,13 @@ export default function AdminUsers() {
                 {departments.map((department) => <option key={String(department.id)} value={String(department.id)}>{text(department.name)}</option>)}
               </select>
             </Field>
-            <Field label="Temporary Password" helper="A secure invite/reset token can be generated from the user directory after creation.">
-              <input value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
-            </Field>
+            <Notice tone={emailReady ? 'good' : 'warn'}>
+              {emailReady
+                ? 'SMTP invite delivery is configured. The user will set their own password from a one-time link.'
+                : 'SMTP invite delivery is not fully configured. You can still generate a one-time manual onboarding link.'}
+            </Notice>
 
-            <PrimaryAction disabled={loading || !form.email || !form.name || form.password.length < 8} onClick={createUser}>
+            <PrimaryAction disabled={loading || !form.email || !form.name} onClick={createUser}>
               {loading ? 'Creating...' : 'Create User + AgentRep'}
             </PrimaryAction>
           </div>
@@ -281,8 +288,9 @@ export default function AdminUsers() {
                   </div>,
                   <ProductStatus tone={active ? 'good' : 'danger'}>{active ? 'Active' : 'Inactive'}</ProductStatus>,
                   <div className="flex flex-wrap gap-2">
-                    <SecondaryAction disabled={loading} onClick={() => createInviteToken(String(user.id), 'invite')}>Invite</SecondaryAction>
-                    <SecondaryAction disabled={loading} onClick={() => createInviteToken(String(user.id), 'password_reset')}>Reset</SecondaryAction>
+                    <SecondaryAction disabled={loading || !emailReady} onClick={() => createInviteToken(String(user.id), 'invite', true)}>Send Invite Email</SecondaryAction>
+                    <SecondaryAction disabled={loading} onClick={() => createInviteToken(String(user.id), 'invite', false)}>Manual Link</SecondaryAction>
+                    <SecondaryAction disabled={loading || !emailReady} onClick={() => createInviteToken(String(user.id), 'password_reset', true)}>Send Reset</SecondaryAction>
                     <SecondaryAction disabled={loading} onClick={() => setActive(String(user.id), !active)}>
                       {active ? 'Deactivate' : 'Activate'}
                     </SecondaryAction>

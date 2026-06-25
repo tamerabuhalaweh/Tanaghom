@@ -28,14 +28,15 @@ const PROVIDERS = [
   { type: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o', keyLabel: 'OpenAI API key' },
   { type: 'claude', name: 'Claude', defaultModel: 'claude-sonnet-4-20250514', keyLabel: 'Claude API key' },
 ] as const;
+const CONFIGURABLE_PROVIDERS = PROVIDERS.filter((provider) => provider.type !== 'mock');
 
 export default function AIProviderSettings() {
   const { token } = useAuth();
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const [credentials, setCredentials] = useState<CredentialStatus[]>([]);
   const [activeProvider, setActiveProvider] = useState<'mock' | 'openai' | 'claude'>('mock');
-  const [selectedProvider, setSelectedProvider] = useState<'mock' | 'openai' | 'claude'>('mock');
-  const [model, setModel] = useState('mock-v1');
+  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'claude'>('openai');
+  const [model, setModel] = useState('gpt-4o');
   const [apiKey, setApiKey] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState('');
@@ -52,9 +53,10 @@ export default function AIProviderSettings() {
     setCredentials(creds.credentials || []);
     setActiveProvider(creds.activeProvider || statusMap.activeProvider || 'mock');
     const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
-    const credential = (creds.credentials || []).find((item) => item.provider === nextProvider);
-    const nextMeta = PROVIDERS.find((provider) => provider.type === nextProvider) || PROVIDERS[0];
-    setSelectedProvider(nextProvider);
+    const configurableProvider = nextProvider === 'claude' ? 'claude' : 'openai';
+    const credential = (creds.credentials || []).find((item) => item.provider === configurableProvider);
+    const nextMeta = CONFIGURABLE_PROVIDERS.find((provider) => provider.type === configurableProvider) || CONFIGURABLE_PROVIDERS[0];
+    setSelectedProvider(configurableProvider);
     setModel(credential?.model || nextMeta.defaultModel);
     setApiKey('');
   }
@@ -74,13 +76,14 @@ export default function AIProviderSettings() {
         const statusMap = status as { providers: ProviderStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
         const creds = credentialData as { credentials: CredentialStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
         const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
-        const credential = (creds.credentials || []).find((item) => item.provider === nextProvider);
-        const nextMeta = PROVIDERS.find((provider) => provider.type === nextProvider) || PROVIDERS[0];
+        const configurableProvider = nextProvider === 'claude' ? 'claude' : 'openai';
+        const credential = (creds.credentials || []).find((item) => item.provider === configurableProvider);
+        const nextMeta = CONFIGURABLE_PROVIDERS.find((provider) => provider.type === configurableProvider) || CONFIGURABLE_PROVIDERS[0];
 
         setProviders(statusMap.providers || []);
         setCredentials(creds.credentials || []);
         setActiveProvider(nextProvider);
-        setSelectedProvider(nextProvider);
+        setSelectedProvider(configurableProvider);
         setModel(credential?.model || nextMeta.defaultModel);
         setApiKey('');
       } catch (err) {
@@ -100,7 +103,7 @@ export default function AIProviderSettings() {
   );
 
   async function saveCredential() {
-    if (!token || selectedProvider === 'mock') return;
+    if (!token) return;
     setLoading('save');
     setMessage('');
     try {
@@ -163,16 +166,16 @@ export default function AIProviderSettings() {
               <select
                 value={selectedProvider}
                 onChange={(event) => {
-                  const provider = event.target.value as 'mock' | 'openai' | 'claude';
+                  const provider = event.target.value as 'openai' | 'claude';
                   const credential = credentials.find((item) => item.provider === provider);
-                  const nextMeta = PROVIDERS.find((item) => item.type === provider) || PROVIDERS[0];
+                  const nextMeta = CONFIGURABLE_PROVIDERS.find((item) => item.type === provider) || CONFIGURABLE_PROVIDERS[0];
                   setSelectedProvider(provider);
                   setModel(credential?.model || nextMeta.defaultModel);
                   setApiKey('');
                 }}
                 className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
               >
-                {PROVIDERS.map((provider) => (
+                {CONFIGURABLE_PROVIDERS.map((provider) => (
                   <option key={provider.type} value={provider.type}>{provider.name}</option>
                 ))}
               </select>
@@ -183,23 +186,20 @@ export default function AIProviderSettings() {
               <input
                 value={model}
                 onChange={(event) => setModel(event.target.value)}
-                disabled={selectedProvider === 'mock'}
-                className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 disabled:bg-neutral-50 disabled:text-neutral-500"
+                className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
               />
             </label>
 
-            {selectedProvider !== 'mock' && (
-              <label className="block">
-                <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">{selectedMeta.keyLabel}</span>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  placeholder="Paste key once. It will be encrypted and never shown again."
-                  className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
-                />
-              </label>
-            )}
+            <label className="block">
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">{selectedMeta.keyLabel}</span>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="Paste key once. It will be encrypted and never shown again."
+                className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
+              />
+            </label>
 
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -211,7 +211,7 @@ export default function AIProviderSettings() {
               </button>
               <button
                 onClick={saveCredential}
-                disabled={selectedProvider === 'mock' || !apiKey || loading === 'save'}
+                disabled={!apiKey || loading === 'save'}
                 className="rounded-md border border-neutral-200 bg-white px-4 py-3 text-sm font-medium text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
               >
                 {loading === 'save' ? 'Saving...' : 'Save Key'}
@@ -232,15 +232,15 @@ export default function AIProviderSettings() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h3 className="text-lg font-semibold text-neutral-950">{provider.name}</h3>
-                        <p className="mt-1 text-xs text-neutral-500">{status?.scope === 'user' ? 'User credential' : provider.type === 'mock' ? 'Built-in fallback' : 'Environment or missing'}</p>
+                        <p className="mt-1 text-xs text-neutral-500">{status?.scope === 'user' ? 'User credential' : provider.type === 'mock' ? 'Development/test only' : 'Environment or missing'}</p>
                       </div>
                       <ProductStatus tone={active ? 'good' : status?.configured ? 'info' : 'warn'}>{active ? 'Active' : status?.configured ? 'Configured' : 'Missing'}</ProductStatus>
                     </div>
 
                     <div className="space-y-2 text-sm">
                       <Line label="Model" value={credential?.model || status?.model || provider.defaultModel} />
-                      <Line label="API key" value={provider.type === 'mock' ? 'Not required' : credential ? `configured (${credential.keyFingerprint})` : status?.apiKeyStatus || 'missing'} />
-                      <Line label="Scope" value={provider.type === 'mock' ? 'system' : credential ? 'user isolated' : status?.scope || 'none'} />
+                      <Line label="API key" value={provider.type === 'mock' ? 'Disabled for production' : credential ? `configured (${credential.keyFingerprint})` : status?.apiKeyStatus || 'missing'} />
+                      <Line label="Scope" value={provider.type === 'mock' ? 'not selectable' : credential ? 'user isolated' : status?.scope || 'none'} />
                     </div>
 
                     {provider.type !== 'mock' && (

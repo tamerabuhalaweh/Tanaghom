@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError, ForbiddenError } from '@shared/errors';
+import { AppError, UnauthorizedError, ForbiddenError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { decryptSecret, encryptSecret, secretFingerprint } from '@shared/crypto/secret-vault';
@@ -38,8 +38,9 @@ aiProviderRouter.get('/status', async (req: Request, res: Response, next: NextFu
     const userCredentials = await listSafeCredentials(payload.sub);
     const activeProvider = await getUserSelectedProvider(payload.sub);
     const envProviderType = process.env.LLM_PROVIDER || 'mock';
+    const mockAllowed = isMockLLMAllowed();
     const providers = [
-      { name: 'Mock LLM', type: 'mock', configured: true, model: 'mock-v1', apiKeyStatus: 'configured' as const, scope: 'system' },
+      { name: 'Mock LLM', type: 'mock', configured: mockAllowed, model: 'mock-v1', apiKeyStatus: mockAllowed ? 'configured' as const : 'missing' as const, scope: 'development_only' },
       { name: 'OpenAI', type: 'openai', configured: hasCredential(userCredentials, 'openai') || !!process.env.OPENAI_API_KEY, model: credentialModel(userCredentials, 'openai') || process.env.OPENAI_MODEL || 'gpt-4o', apiKeyStatus: hasCredential(userCredentials, 'openai') || process.env.OPENAI_API_KEY ? 'configured' as const : 'missing' as const, scope: hasCredential(userCredentials, 'openai') ? 'user' : 'environment' },
       { name: 'Claude', type: 'claude', configured: hasCredential(userCredentials, 'claude') || !!process.env.CLAUDE_API_KEY, model: credentialModel(userCredentials, 'claude') || process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514', apiKeyStatus: hasCredential(userCredentials, 'claude') || process.env.CLAUDE_API_KEY ? 'configured' as const : 'missing' as const, scope: hasCredential(userCredentials, 'claude') ? 'user' : 'environment' },
     ];
@@ -130,6 +131,11 @@ aiProviderRouter.post('/select', async (req: Request, res: Response, next: NextF
   try {
     const payload = getPayload(req);
     const provider = providerSchema.parse(req.body.provider);
+
+    if (provider === 'mock' && !isMockLLMAllowed()) {
+      res.status(400).json({ error: 'Mock LLM is disabled for production use. Configure OpenAI or Claude.' });
+      return;
+    }
 
     if (provider !== 'mock') {
       const credential = await prisma.llmProviderCredential.findUnique({
@@ -226,7 +232,10 @@ aiProviderRouter.get('/active', async (req: Request, res: Response, next: NextFu
 
 export async function resolveUserLLMProvider(userId: string): Promise<LLMProvider> {
   const selected = await getUserSelectedProvider(userId);
-  if (selected === 'mock') return createConfiguredLLMProvider({ provider: 'mock' });
+  if (selected === 'mock') {
+    if (isMockLLMAllowed()) return createConfiguredLLMProvider({ provider: 'mock' });
+    throw new AppError('No production LLM provider is configured for this user. Configure OpenAI or Claude in AI Provider settings.', 424, 'LLM_PROVIDER_REQUIRED');
+  }
   const credential = await prisma.llmProviderCredential.findUnique({
     where: {
       owner_user_id_provider: {
@@ -235,7 +244,9 @@ export async function resolveUserLLMProvider(userId: string): Promise<LLMProvide
       },
     },
   });
-  if (!credential?.is_active) return createConfiguredLLMProvider({ provider: 'mock' });
+  if (!credential?.is_active) {
+    throw new AppError(`Selected LLM provider ${selected} is missing credentials for this user.`, 424, 'LLM_PROVIDER_REQUIRED');
+  }
   return createConfiguredLLMProvider({
     provider: credential.provider,
     model: credential.model,
@@ -282,4 +293,8 @@ async function setUserSelectedProvider(userId: string, provider: 'mock' | 'opena
     where: { id: agentRep.id },
     data: { metadata: { ...metadata, llmProvider: provider } },
   });
+}
+
+function isMockLLMAllowed(): boolean {
+  return process.env.ALLOW_MOCK_LLM === 'true' || process.env.NODE_ENV === 'test';
 }

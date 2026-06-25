@@ -15,7 +15,7 @@ import {
   type CreateMcpMediationRequestInput,
 } from './types';
 import * as service from './service';
-import { discoverRemoteMcpTools, listDiscoveredTools } from './discovery';
+import { discoverRemoteMcpTools, listDiscoveredTools, probeRemoteMcpEndpoint } from './discovery';
 
 export const mcpMediationRouter = Router();
 
@@ -97,24 +97,46 @@ mcpMediationRouter.post('/connectors', async (req: Request, res: Response, next:
   }
 });
 
-mcpMediationRouter.post('/connectors/:id/mock-health-check', async (req: Request, res: Response, next: NextFunction) => {
+async function handleConnectorHealthCheck(req: Request, res: Response, next: NextFunction) {
   try {
     const session = getSession(req);
     const connector = await service.getMcpConnector(session.role, req.params.id as string);
+    const remoteEndpoint = parseRemoteMcpEndpoint(connector.ownerSubstrate);
+    if (remoteEndpoint) {
+      const probe = await probeRemoteMcpEndpoint(remoteEndpoint);
+      res.json({
+        connectorId: connector.id,
+        name: connector.name,
+        status: connector.status,
+        checkedAt: new Date().toISOString(),
+        result: probe.reachable ? 'reachable' : 'not_reachable',
+        toolCount: probe.toolCount,
+        error: probe.error,
+        executionPerformed: false,
+        sourceOfTruth: 'STITCH',
+        _label: probe.reachable
+          ? 'Remote MCP endpoint responded to tools/list. No tool execution was performed.'
+          : 'Remote MCP endpoint probe failed. No tool execution was performed.',
+      });
+      return;
+    }
     res.json({
       connectorId: connector.id,
       name: connector.name,
       status: connector.status,
       checkedAt: new Date().toISOString(),
-      result: connector.status === 'active' ? 'reachable' : 'not_active',
+      result: connector.status === 'active' ? 'registry_active' : 'not_active',
       executionPerformed: false,
       sourceOfTruth: 'STITCH',
-      _label: 'Mock health check only - no MCP tool invoked',
+      _label: 'Registry readiness check only. Add a remote MCP endpoint to run a live MCP tools/list probe.',
     });
   } catch (err) {
     next(err);
   }
-});
+}
+
+mcpMediationRouter.post('/connectors/:id/health-check', handleConnectorHealthCheck);
+mcpMediationRouter.post('/connectors/:id/mock-health-check', handleConnectorHealthCheck);
 
 mcpMediationRouter.post('/connectors/:id/tool-preview', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -276,3 +298,8 @@ mcpMediationRouter.post('/access-policies', async (req: Request, res: Response, 
     next(err);
   }
 });
+
+function parseRemoteMcpEndpoint(ownerSubstrate: string | null): string | null {
+  if (!ownerSubstrate?.startsWith('remote_mcp:')) return null;
+  return ownerSubstrate.slice('remote_mcp:'.length);
+}
