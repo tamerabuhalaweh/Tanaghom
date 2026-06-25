@@ -23,8 +23,9 @@ const REQUIRED_CREDENTIALS = [
     credentialType: 'api_key',
     connectionKey: 'default',
     label: 'Postiz Sandbox API Key',
-    requiredFields: ['apiKey', 'baseUrl', 'integrationId'],
-    purpose: 'Create Postiz-ready payloads and optionally execute sandbox scheduling when policy allows.',
+    requiredFields: ['apiKey', 'baseUrl'],
+    optionalFields: ['integrationId'],
+    purpose: 'Connect Tanaghum to the Postiz workspace. The social channel integration ID is added after Postiz OAuth completes.',
   },
   {
     provider: 'gohighlevel',

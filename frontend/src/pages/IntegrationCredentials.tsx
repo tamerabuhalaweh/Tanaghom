@@ -45,17 +45,22 @@ export default function IntegrationCredentials() {
   const [matrix, setMatrix] = useState<RecordMap[]>([]);
   const [credentials, setCredentials] = useState<RecordMap[]>([]);
   const [socialConnections, setSocialConnections] = useState<RecordMap[]>([]);
+  const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
+  const [postizChannelStatus, setPostizChannelStatus] = useState<RecordMap | null>(null);
   const [runtimeStatuses, setRuntimeStatuses] = useState<RecordMap[]>([]);
   const [selected, setSelected] = useState<RecordMap | null>(null);
   const [oauthPlatform, setOauthPlatform] = useState('linkedin');
+  const [postizPlatform, setPostizPlatform] = useState('instagram');
   const [displayName, setDisplayName] = useState('');
   const [secretValues, setSecretValues] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [connectingPostiz, setConnectingPostiz] = useState(false);
+  const [selectingPostizChannel, setSelectingPostizChannel] = useState('');
 
   async function load() {
     if (!token) return;
-    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, runtimeResult] = await Promise.all([
+    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, runtimeResult, postizChannelResult] = await Promise.all([
       integrationStatusApi.get(token),
       postizApi.status(token),
       ghlApi.status(token),
@@ -63,6 +68,7 @@ export default function IntegrationCredentials() {
       integrationCredentialsApi.list(token),
       socialOAuthApi.connections(token),
       runtimeBridgesApi.status(token),
+      postizApi.channels(token).catch((err) => ({ status: 'requires_credentials', channels: [], _label: err instanceof Error ? err.message : 'Postiz channel status unavailable' })),
     ]);
     setStatus(integration as RecordMap);
     setPostiz(postizStatus as RecordMap);
@@ -71,6 +77,8 @@ export default function IntegrationCredentials() {
     setCredentials(Array.isArray((credentialResult as RecordMap).credentials) ? (credentialResult as RecordMap).credentials as RecordMap[] : []);
     setSocialConnections(Array.isArray((socialResult as RecordMap).connections) ? (socialResult as RecordMap).connections as RecordMap[] : []);
     setRuntimeStatuses(Array.isArray((runtimeResult as RecordMap).statuses) ? (runtimeResult as RecordMap).statuses as RecordMap[] : []);
+    setPostizChannelStatus(postizChannelResult as RecordMap);
+    setPostizChannels(Array.isArray((postizChannelResult as RecordMap).channels) ? (postizChannelResult as RecordMap).channels as RecordMap[] : []);
   }
 
   useEffect(() => {
@@ -94,11 +102,13 @@ export default function IntegrationCredentials() {
   const aiProvider = status?.aiProvider as RecordMap | undefined;
   const configuredRows = matrix.filter(row => text(row.status).toLowerCase() === 'configured').length;
   const selectedFields = useMemo(() => parseRequiredFields(selected?.requiredFields), [selected]);
+  const optionalFields = useMemo(() => parseRequiredFields(selected?.optionalFields), [selected]);
+  const selectedPostizIntegrationId = typeof postizChannelStatus?.selectedIntegrationId === 'string' ? postizChannelStatus.selectedIntegrationId : '';
 
   function chooseRequirement(row: RecordMap) {
     setSelected(row);
     setDisplayName(text(row.label));
-    setSecretValues(Object.fromEntries(parseRequiredFields(row.requiredFields).map(field => [field, ''])));
+    setSecretValues(Object.fromEntries([...parseRequiredFields(row.requiredFields), ...parseRequiredFields(row.optionalFields)].map(field => [field, ''])));
     setMessage('');
   }
 
@@ -112,12 +122,13 @@ export default function IntegrationCredentials() {
         setMessage(`Missing required fields: ${missing.join(', ')}`);
         return;
       }
+      const secrets = Object.fromEntries(Object.entries(secretValues).filter(([, value]) => value.trim()));
       await integrationCredentialsApi.save({
         provider: selected.provider,
         credentialType: selected.credentialType,
         connectionKey: selected.connectionKey || 'default',
         displayName,
-        secrets: secretValues,
+        secrets,
         metadata: {
           purpose: selected.purpose,
           sandboxOnly: true,
@@ -131,6 +142,41 @@ export default function IntegrationCredentials() {
       setMessage(err instanceof Error ? err.message : 'Failed to save credential');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function connectPostizChannel() {
+    if (!token) return;
+    setConnectingPostiz(true);
+    setMessage('');
+    try {
+      const result = await postizApi.connectChannel({ platform: postizPlatform }, token) as RecordMap;
+      const authorizationUrl = text(result.authorizationUrl, '');
+      if (!authorizationUrl) {
+        setMessage(text(result._label, 'Postiz did not return an authorization URL. Check provider credentials in Postiz.'));
+        return;
+      }
+      window.open(authorizationUrl, '_blank', 'noopener,noreferrer');
+      setMessage(`Postiz ${display(postizPlatform)} authorization opened. Complete the provider login, then refresh channels.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to start Postiz channel connection');
+    } finally {
+      setConnectingPostiz(false);
+    }
+  }
+
+  async function selectPostizChannel(channelId: string) {
+    if (!token) return;
+    setSelectingPostizChannel(channelId);
+    setMessage('');
+    try {
+      await postizApi.selectChannel({ integrationId: channelId }, token);
+      setMessage('Postiz channel selected for scheduling packages. Raw credentials were not displayed or changed.');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to select Postiz channel');
+    } finally {
+      setSelectingPostizChannel('');
     }
   }
 
@@ -173,11 +219,82 @@ export default function IntegrationCredentials() {
         <MetricCard label="Tenant Vault" value={`${configuredRows}/${matrix.length}`} detail="Configured credential sets" tone={configuredRows > 0 ? 'good' : 'warn'} />
       </div>
 
+      <ProductCard
+        title="Postiz Social Channels"
+        subtitle="Tanaghum can start Postiz channel OAuth and list connected channels. Postiz still owns the provider login and channel tokens."
+      >
+        <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <DetailGrid items={[
+              { label: 'Postiz Server', value: text(postiz?.status) },
+              { label: 'API Key', value: text((postiz?.health as RecordMap | undefined)?.credentialStatus) },
+              { label: 'Saved Channel ID', value: text((postiz?.health as RecordMap | undefined)?.integrationIdStatus) },
+              { label: 'Connected Channels', value: String(postizChannels.length) },
+            ]} />
+            <Field label="Channel To Connect">
+              <select
+                value={postizPlatform}
+                onChange={(event) => setPostizPlatform(event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
+              >
+                <option value="instagram">Instagram / Facebook via Meta</option>
+                <option value="instagram-standalone">Instagram Standalone</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="x">X / Twitter</option>
+                <option value="facebook">Facebook</option>
+                <option value="threads">Threads</option>
+                <option value="tiktok">TikTok</option>
+                <option value="youtube">YouTube</option>
+              </select>
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <PrimaryAction onClick={connectPostizChannel} disabled={connectingPostiz}>
+                {connectingPostiz ? 'Opening...' : 'Connect Channel via Postiz'}
+              </PrimaryAction>
+              <SecondaryAction onClick={() => void load()}>Refresh Channels</SecondaryAction>
+            </div>
+            <Notice tone="info">
+              First save the Postiz API key and base URL below. For Instagram, Postiz must also have Meta/Instagram app credentials configured before OAuth can complete.
+            </Notice>
+          </div>
+          {postizChannels.length ? (
+            <ProductTable
+              columns={['Channel', 'Provider', 'Profile', 'Status', 'Action']}
+              rows={postizChannels.map(channel => {
+                const channelId = text(channel.id, '');
+                const disabled = Boolean(channel.disabled);
+                const refreshNeeded = Boolean(channel.refreshNeeded);
+                const selectedForScheduling = channelId === selectedPostizIntegrationId;
+                return [
+                  <div>
+                    <div className="font-medium text-neutral-950">{text(channel.name, text(channel.profile, 'Unnamed channel'))}</div>
+                    <div className="mt-1 text-xs text-neutral-500">{channelId}</div>
+                  </div>,
+                  display(text(channel.providerIdentifier || channel.type)),
+                  text(channel.profile),
+                  <ProductStatus tone={disabled || refreshNeeded ? 'warn' : 'good'}>
+                    {selectedForScheduling ? 'Selected' : disabled ? 'Disabled' : refreshNeeded ? 'Reconnect Needed' : 'Connected'}
+                  </ProductStatus>,
+                  <SecondaryAction onClick={() => void selectPostizChannel(channelId)} disabled={!channelId || disabled || selectedForScheduling || selectingPostizChannel === channelId}>
+                    {selectedForScheduling ? 'Selected' : selectingPostizChannel === channelId ? 'Saving...' : 'Use for Scheduling'}
+                  </SecondaryAction>,
+                ];
+              })}
+            />
+          ) : (
+            <EmptyProductState
+              title="No Postiz channels connected"
+              message={text(postizChannelStatus?._label, 'Save Postiz API credentials, then connect a channel through Postiz.')}
+            />
+          )}
+        </div>
+      </ProductCard>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]">
         <ProductCard title="Credential Requirements" subtitle="Choose an integration and save the required sandbox credentials.">
           {matrix.length ? (
             <ProductTable
-              columns={['Integration', 'Status', 'Required Fields', 'Action']}
+              columns={['Integration', 'Status', 'Fields', 'Action']}
               rows={matrix.map(row => [
                 <div>
                 <div className="font-medium text-neutral-950">{text(row.label)}</div>
@@ -185,8 +302,15 @@ export default function IntegrationCredentials() {
                   <div className="mt-1 text-[11px] uppercase tracking-[0.08em] text-neutral-400">{text(row.connectionKey, 'default')}</div>
                 </div>,
                 <ProductStatus tone={statusTone(text(row.status))}>{display(text(row.status))}</ProductStatus>,
-                <div className="flex flex-wrap gap-1">
-                  {parseRequiredFields(row.requiredFields).map(field => <ProductStatus key={field} tone="muted">{field}</ProductStatus>)}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1">
+                    {parseRequiredFields(row.requiredFields).map(field => <ProductStatus key={field} tone="muted">{field}</ProductStatus>)}
+                  </div>
+                  {parseRequiredFields(row.optionalFields).length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {parseRequiredFields(row.optionalFields).map(field => <ProductStatus key={field} tone="info">Optional: {field}</ProductStatus>)}
+                    </div>
+                  )}
                 </div>,
                 <SecondaryAction onClick={() => chooseRequirement(row)}>Configure</SecondaryAction>,
               ])}
@@ -219,6 +343,17 @@ export default function IntegrationCredentials() {
                     value={secretValues[field] || ''}
                     onChange={event => setSecretValues(current => ({ ...current, [field]: event.target.value }))}
                     placeholder={`Enter ${field}`}
+                    className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                  />
+                </Field>
+              ))}
+              {optionalFields.map(field => (
+                <Field key={field} label={`${display(field)} (Optional)`} helper="Add this later after the provider creates it.">
+                  <input
+                    type={field.toLowerCase().includes('url') || field.toLowerCase().includes('uri') ? 'url' : 'password'}
+                    value={secretValues[field] || ''}
+                    onChange={event => setSecretValues(current => ({ ...current, [field]: event.target.value }))}
+                    placeholder={`Enter ${field} when available`}
                     className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
                   />
                 </Field>

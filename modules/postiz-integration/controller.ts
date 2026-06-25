@@ -5,7 +5,7 @@ import { UnauthorizedError } from '@shared/errors';
 import { validateOrThrow } from '@shared/validation';
 import { evaluateExternalExecution } from '@shared/policy';
 import { auditLog } from '@shared/logging';
-import { getActiveIntegrationCredential } from '../integration-credentials/service';
+import { getActiveIntegrationCredential, upsertIntegrationCredential } from '../integration-credentials/service';
 import {
   createAccountReferenceSchema,
   createExecutionRequestSchema,
@@ -19,6 +19,7 @@ export const postizIntegrationRouter = Router();
 
 const POSTIZ_SANDBOX_URL = process.env.POSTIZ_SANDBOX_URL || process.env.POSTIZ_BASE_URL || '';
 const POSTIZ_PUBLIC_API_PATH = '/api/public/v1/posts';
+const POSTIZ_INTEGRATIONS_API_PATH = '/api/public/v1/integrations';
 
 interface PostizRuntimeConfig {
   baseUrl: string;
@@ -43,12 +44,14 @@ async function checkPostizHealth(tenantKey: string): Promise<{
   statusCode: number | null;
   checkedAt: string;
   credentialStatus: 'configured' | 'missing';
+  integrationIdStatus: 'configured' | 'missing';
 }> {
   const checkedAt = new Date().toISOString();
   const config = await resolvePostizRuntimeConfig(tenantKey);
   const credentialStatus = config.apiKey ? 'configured' : 'missing';
+  const integrationIdStatus = config.integrationId ? 'configured' : 'missing';
   if (!config.baseUrl) {
-    return { url: null, reachable: false, statusCode: null, checkedAt, credentialStatus };
+    return { url: null, reachable: false, statusCode: null, checkedAt, credentialStatus, integrationIdStatus };
   }
 
   const controller = new AbortController();
@@ -65,9 +68,10 @@ async function checkPostizHealth(tenantKey: string): Promise<{
       statusCode: response.status,
       checkedAt,
       credentialStatus,
+      integrationIdStatus,
     };
   } catch {
-    return { url: config.baseUrl, reachable: false, statusCode: null, checkedAt, credentialStatus };
+    return { url: config.baseUrl, reachable: false, statusCode: null, checkedAt, credentialStatus, integrationIdStatus };
   } finally {
     clearTimeout(timer);
   }
@@ -86,10 +90,213 @@ postizIntegrationRouter.get('/status', async (req: Request, res: Response, next:
       capabilities: {
         draftPreparation: true,
         schedulePayloadGeneration: true,
+        channelListing: health.credentialStatus === 'configured',
+        channelConnectUrl: health.credentialStatus === 'configured',
         liveScheduling: policy.allowed,
         livePublishing: false,
       },
       _label: 'Postiz sandbox status - publishing and scheduling remain gated',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function buildPostizApiUrl(config: PostizRuntimeConfig, path: string): string {
+  return `${config.baseUrl.replace(/\/$/, '')}${path}`;
+}
+
+function toSafePostizChannel(channel: Record<string, unknown>) {
+  const customer = (channel.customer || {}) as Record<string, unknown>;
+  return {
+    id: channel.id,
+    name: channel.name,
+    providerIdentifier: channel.providerIdentifier || channel.identifier,
+    type: channel.type,
+    profile: channel.profile,
+    picture: channel.picture,
+    disabled: Boolean(channel.disabled),
+    refreshNeeded: Boolean(channel.refreshNeeded),
+    customer: customer.id ? { id: customer.id, name: customer.name } : null,
+    rawTokensReturned: false,
+  };
+}
+
+postizIntegrationRouter.get('/channels', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
+    if (!config.baseUrl || !config.apiKey) {
+      res.status(424).json({
+        status: 'requires_credentials',
+        channels: [],
+        required: ['Postiz base URL', 'Postiz API key'],
+        rawTokensReturned: false,
+        _label: 'Postiz API key is required before Tanaghum can list connected channels',
+      });
+      return;
+    }
+
+    const response = await fetch(buildPostizApiUrl(config, POSTIZ_INTEGRATIONS_API_PATH), {
+      headers: { Authorization: config.apiKey },
+    });
+    const body = await response.json().catch(() => []);
+    if (!response.ok) {
+      res.status(502).json({
+        status: 'failed',
+        postizStatus: response.status,
+        channels: [],
+        rawTokensReturned: false,
+        _label: 'Postiz channel list failed',
+      });
+      return;
+    }
+
+    const channels = Array.isArray(body) ? body.map(item => toSafePostizChannel(item as Record<string, unknown>)) : [];
+    res.json({
+      status: 'ok',
+      channels,
+      count: channels.length,
+      credentialSource: config.source,
+      selectedIntegrationId: config.integrationId || null,
+      rawTokensReturned: false,
+      _label: channels.length ? 'Postiz channels loaded' : 'No connected Postiz channels yet',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const postizConnectChannelSchema = z.object({
+  platform: z.enum(['linkedin', 'instagram', 'instagram-standalone', 'facebook', 'x', 'threads', 'tiktok', 'youtube']),
+});
+
+const postizSelectChannelSchema = z.object({
+  integrationId: z.string().trim().min(1).max(200),
+});
+
+postizIntegrationRouter.post('/connect-channel', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const input = postizConnectChannelSchema.parse(req.body);
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
+    if (!config.baseUrl || !config.apiKey) {
+      res.status(424).json({
+        status: 'requires_credentials',
+        required: ['Postiz base URL', 'Postiz API key'],
+        rawTokensReturned: false,
+        _label: 'Postiz API key is required before Tanaghum can start channel connection',
+      });
+      return;
+    }
+
+    const response = await fetch(buildPostizApiUrl(config, `/api/public/v1/social/${encodeURIComponent(input.platform)}`), {
+      headers: { Authorization: config.apiKey },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      res.status(502).json({
+        status: 'failed',
+        postizStatus: response.status,
+        response: body,
+        rawTokensReturned: false,
+        _label: `Postiz could not start ${input.platform} connection`,
+      });
+      return;
+    }
+
+    const responseRecord = body as Record<string, unknown>;
+    const authorizationUrl = typeof responseRecord.url === 'string'
+      ? responseRecord.url
+      : typeof responseRecord.authorizationUrl === 'string'
+        ? responseRecord.authorizationUrl
+        : typeof responseRecord.redirectUrl === 'string'
+          ? responseRecord.redirectUrl
+          : null;
+
+    auditLog(
+      { actor: `user:${session.humanUserId}`, action: 'postiz_channel_connection_started', object_type: 'postiz_channel', object_id: input.platform, result: 'success' },
+      `Postiz channel connection URL requested for ${input.platform}`,
+    );
+
+    res.json({
+      status: authorizationUrl ? 'authorization_url_ready' : 'postiz_response_received',
+      platform: input.platform,
+      authorizationUrl,
+      response: authorizationUrl ? undefined : body,
+      rawTokensReturned: false,
+      _label: authorizationUrl ? 'Open this URL to connect the social channel through Postiz' : 'Postiz response did not include a recognized authorization URL',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+postizIntegrationRouter.post('/select-channel', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const input = postizSelectChannelSchema.parse(req.body);
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
+    const credential = await getActiveIntegrationCredential('postiz', 'api_key', session.tenantKey);
+    if (!credential || !config.baseUrl || !config.apiKey) {
+      res.status(424).json({
+        status: 'requires_credentials',
+        required: ['Postiz base URL', 'Postiz API key'],
+        rawTokensReturned: false,
+        _label: 'Save the Postiz API key and base URL before selecting a channel',
+      });
+      return;
+    }
+
+    const response = await fetch(buildPostizApiUrl(config, POSTIZ_INTEGRATIONS_API_PATH), {
+      headers: { Authorization: config.apiKey },
+    });
+    const body = await response.json().catch(() => []);
+    if (!response.ok) {
+      res.status(502).json({
+        status: 'failed',
+        postizStatus: response.status,
+        rawTokensReturned: false,
+        _label: 'Postiz channel validation failed',
+      });
+      return;
+    }
+
+    const channels = Array.isArray(body) ? body.map(item => toSafePostizChannel(item as Record<string, unknown>)) : [];
+    const selectedChannel = channels.find(channel => channel.id === input.integrationId);
+    if (!selectedChannel) {
+      res.status(404).json({
+        status: 'not_found',
+        rawTokensReturned: false,
+        _label: 'The selected Postiz channel was not returned by the tenant Postiz account',
+      });
+      return;
+    }
+
+    const saved = await upsertIntegrationCredential(session.role, session.humanUserId, {
+      tenantKey: session.tenantKey,
+      provider: 'postiz',
+      credentialType: 'api_key',
+      connectionKey: 'default',
+      displayName: credential.displayName,
+      secrets: {
+        ...credential.secrets,
+        integrationId: input.integrationId,
+      },
+      metadata: {
+        ...credential.metadata,
+        selectedChannel: selectedChannel,
+        selectedAt: new Date().toISOString(),
+        source: 'postiz_channel_picker',
+      },
+    });
+
+    res.json({
+      status: 'selected',
+      selectedChannel,
+      credential: saved,
+      rawSecretsReturned: false,
+      _label: 'Postiz channel selected for sandbox scheduling packages',
     });
   } catch (err) {
     next(err);

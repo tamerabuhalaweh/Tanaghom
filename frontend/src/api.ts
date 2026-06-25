@@ -183,6 +183,11 @@ export const publishingPackageApi = {
 
 export const postizApi = {
   status: (token: string) => apiFetch<unknown>('/postiz/status', { token }),
+  channels: (token: string) => apiFetch<unknown>('/postiz/channels', { token }),
+  connectChannel: (data: unknown, token: string) =>
+    apiFetch<unknown>('/postiz/connect-channel', { method: 'POST', body: data, token }),
+  selectChannel: (data: unknown, token: string) =>
+    apiFetch<unknown>('/postiz/select-channel', { method: 'POST', body: data, token }),
   schedulePayload: (data: unknown, token: string) =>
     apiFetch<unknown>('/postiz/schedule-payload', { method: 'POST', body: data, token }),
   sandboxSchedule: (data: unknown, token: string) =>
