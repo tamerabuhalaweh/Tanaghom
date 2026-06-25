@@ -37,9 +37,9 @@ export function secretFingerprint(secret: string): string {
 }
 
 function getEncryptionKey(): Buffer {
-  const raw = process.env.LLM_CREDENTIAL_ENCRYPTION_KEY;
+  const raw = process.env.SECRET_VAULT_ENCRYPTION_KEY || process.env.LLM_CREDENTIAL_ENCRYPTION_KEY;
   if (!raw || raw.length < 32) {
-    throw new Error('LLM_CREDENTIAL_ENCRYPTION_KEY must be configured and at least 32 characters');
+    throw new Error('SECRET_VAULT_ENCRYPTION_KEY or LLM_CREDENTIAL_ENCRYPTION_KEY must be configured and at least 32 characters');
   }
   return createHash('sha256').update(raw).digest();
 }

@@ -1,25 +1,24 @@
-import { useEffect, useState } from 'react';
-import { ghlApi, integrationStatusApi, postizApi } from '../api';
+import { useEffect, useMemo, useState } from 'react';
+import { ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
   EmptyProductState,
+  Field,
   MetricCard,
   Notice,
+  PrimaryAction,
   ProductCard,
   ProductPage,
   ProductStatus,
   ProductTable,
+  SecondaryAction,
 } from '../components/ProductUI';
 
 type RecordMap = Record<string, unknown>;
 
 function text(value: unknown, fallback = 'Not configured'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
-}
-
-function bool(value: unknown): boolean {
-  return value === true;
 }
 
 function display(value: string): string {
@@ -34,105 +33,219 @@ function statusTone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'defau
   return 'info';
 }
 
+function parseRequiredFields(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 export default function IntegrationCredentials() {
   const { token } = useAuth();
   const [status, setStatus] = useState<RecordMap | null>(null);
   const [postiz, setPostiz] = useState<RecordMap | null>(null);
   const [ghl, setGhl] = useState<RecordMap | null>(null);
+  const [matrix, setMatrix] = useState<RecordMap[]>([]);
+  const [credentials, setCredentials] = useState<RecordMap[]>([]);
+  const [selected, setSelected] = useState<RecordMap | null>(null);
+  const [displayName, setDisplayName] = useState('');
+  const [secretValues, setSecretValues] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    if (!token) return;
+    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult] = await Promise.all([
+      integrationStatusApi.get(token),
+      postizApi.status(token),
+      ghlApi.status(token),
+      integrationCredentialsApi.matrix(token),
+      integrationCredentialsApi.list(token),
+    ]);
+    setStatus(integration as RecordMap);
+    setPostiz(postizStatus as RecordMap);
+    setGhl(ghlStatus as RecordMap);
+    setMatrix(Array.isArray((matrixResult as RecordMap).rows) ? (matrixResult as RecordMap).rows as RecordMap[] : []);
+    setCredentials(Array.isArray((credentialResult as RecordMap).credentials) ? (credentialResult as RecordMap).credentials as RecordMap[] : []);
+  }
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    Promise.all([
-      integrationStatusApi.get(token),
-      postizApi.status(token),
-      ghlApi.status(token),
-    ])
-      .then(([integration, postizStatus, ghlStatus]) => {
-        if (cancelled) return;
-        setStatus(integration as RecordMap);
-        setPostiz(postizStatus as RecordMap);
-        setGhl(ghlStatus as RecordMap);
-      })
-      .catch((err) => {
+    async function run() {
+      try {
+        await load();
+      } catch (err) {
         if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load integration status');
-      });
+      }
+    }
+    void run();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const connectors = Array.isArray(status?.connectors) ? status.connectors as RecordMap[] : [];
   const aiProvider = status?.aiProvider as RecordMap | undefined;
-  const configuredConnectors = connectors.filter(connector => text(connector.credentialStatus).toLowerCase().includes('configured')).length;
+  const configuredRows = matrix.filter(row => text(row.status).toLowerCase() === 'configured').length;
+  const selectedFields = useMemo(() => parseRequiredFields(selected?.requiredFields), [selected]);
+
+  function chooseRequirement(row: RecordMap) {
+    setSelected(row);
+    setDisplayName(text(row.label));
+    setSecretValues(Object.fromEntries(parseRequiredFields(row.requiredFields).map(field => [field, ''])));
+    setMessage('');
+  }
+
+  async function saveCredential() {
+    if (!token || !selected) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const missing = selectedFields.filter(field => !secretValues[field]?.trim());
+      if (missing.length) {
+        setMessage(`Missing required fields: ${missing.join(', ')}`);
+        return;
+      }
+      await integrationCredentialsApi.save({
+        provider: selected.provider,
+        credentialType: selected.credentialType,
+        displayName,
+        secrets: secretValues,
+        metadata: {
+          purpose: selected.purpose,
+          sandboxOnly: true,
+          source: 'admin_ui',
+        },
+      }, token);
+      setMessage(`${text(selected.label)} saved. Raw secret values were encrypted and will not be shown again.`);
+      setSecretValues(Object.fromEntries(selectedFields.map(field => [field, ''])));
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to save credential');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function disableCredential(id: string) {
+    if (!token) return;
+    await integrationCredentialsApi.disable(id, token);
+    await load();
+  }
 
   return (
     <ProductPage
       eyebrow="Admin"
-      title="Credentials & Readiness"
-      subtitle="Review credential status without exposing secrets. LLM credentials are user-owned; most integration credentials are still deployment-level until the tenant integration vault is implemented."
-      action={<ProductStatus tone="good">Secrets Hidden</ProductStatus>}
+      title="Credentials & Integration Setup"
+      subtitle="Configure tenant integration credentials securely. Secrets are encrypted by the backend and never displayed after save."
+      action={<ProductStatus tone="good">Tenant Vault</ProductStatus>}
     >
-      {message && <Notice tone="danger">{message}</Notice>}
+      {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="AI Provider" value={text(aiProvider?.provider, 'mock')} detail={text(aiProvider?.label, 'Status loaded from backend')} tone={statusTone(text(aiProvider?.label))} />
-        <MetricCard label="Postiz" value={text(postiz?.status)} detail={text((postiz?.health as RecordMap | undefined)?.credentialStatus)} tone={statusTone(`${text(postiz?.status)} ${text((postiz?.health as RecordMap | undefined)?.credentialStatus)}`)} />
-        <MetricCard label="GoHighLevel" value={text(ghl?._label)} detail={text(ghl?.apiKeyStatus)} tone={statusTone(`${text(ghl?._label)} ${text(ghl?.apiKeyStatus)}`)} />
-        <MetricCard label="Connector Credentials" value={`${configuredConnectors}/${connectors.length}`} detail="Configured from backend status" tone={configuredConnectors === connectors.length && connectors.length > 0 ? 'good' : 'warn'} />
+        <MetricCard label="Postiz" value={text(postiz?.status)} detail={`${text((postiz?.health as RecordMap | undefined)?.credentialStatus)} credential`} tone={statusTone(`${text(postiz?.status)} ${text((postiz?.health as RecordMap | undefined)?.credentialStatus)}`)} />
+        <MetricCard label="GoHighLevel" value={text(ghl?._label)} detail={`${text(ghl?.apiKeyStatus)} API key`} tone={statusTone(`${text(ghl?._label)} ${text(ghl?.apiKeyStatus)}`)} />
+        <MetricCard label="Tenant Vault" value={`${configuredRows}/${matrix.length}`} detail="Configured credential sets" tone={configuredRows > 0 ? 'good' : 'warn'} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <ProductCard title="Connector Credential Status" subtitle="Status only. Raw tokens, API keys, and secrets are never displayed.">
-          {connectors.length ? (
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <ProductCard title="Credential Requirements" subtitle="Choose an integration and save the required sandbox credentials.">
+          {matrix.length ? (
             <ProductTable
-              columns={['Connector', 'Credential', 'Endpoint', 'Execution Policy']}
-              rows={connectors.map(connector => {
-                const policy = (connector.executionPolicy || {}) as RecordMap;
-                return [
-                  <div>
-                    <div className="font-medium text-neutral-950">{text(connector.name)}</div>
-                    <div className="mt-1 text-xs text-neutral-500">{text(connector.id)}</div>
-                  </div>,
-                  <ProductStatus tone={statusTone(text(connector.credentialStatus))}>{display(text(connector.credentialStatus))}</ProductStatus>,
-                  <ProductStatus tone={statusTone(text(connector.endpointStatus))}>{display(text(connector.endpointStatus))}</ProductStatus>,
-                  <div>
-                    <ProductStatus tone={bool(policy.allowed) ? 'warn' : 'danger'}>{text(policy.label, 'Blocked')}</ProductStatus>
-                    <div className="mt-1 text-xs text-neutral-500">{text(policy.reason, text(policy.reasons))}</div>
-                  </div>,
-                ];
-              })}
+              columns={['Integration', 'Status', 'Required Fields', 'Action']}
+              rows={matrix.map(row => [
+                <div>
+                  <div className="font-medium text-neutral-950">{text(row.label)}</div>
+                  <div className="mt-1 text-xs leading-5 text-neutral-500">{text(row.purpose)}</div>
+                </div>,
+                <ProductStatus tone={statusTone(text(row.status))}>{display(text(row.status))}</ProductStatus>,
+                <div className="flex flex-wrap gap-1">
+                  {parseRequiredFields(row.requiredFields).map(field => <ProductStatus key={field} tone="muted">{field}</ProductStatus>)}
+                </div>,
+                <SecondaryAction onClick={() => chooseRequirement(row)}>Configure</SecondaryAction>,
+              ])}
             />
           ) : (
-            <EmptyProductState message="No connector status returned by backend." />
+            <EmptyProductState message="Credential requirements were not returned by the backend." />
           )}
         </ProductCard>
 
-        <ProductCard title="Credential Model" subtitle="What is real now and what still needs production vault work.">
-          <div className="space-y-4">
-            <DetailGrid items={[
-              { label: 'LLM Keys', value: 'User-owned encrypted credentials are supported.' },
-              { label: 'Postiz', value: 'Deployment/sandbox env credentials are checked; tenant UI vault is not complete.' },
-              { label: 'GoHighLevel', value: 'Sandbox env credentials are checked; tenant UI vault is not complete.' },
-              { label: 'Messaging / Voice', value: 'Credential status is read-only until tenant vault is implemented.' },
-            ]} />
-            <Notice tone="warn">
-              Remaining production gap: implement tenant integration credential vault for Postiz, GHL, WhatsApp, Telegram, voice/chat, and social API OAuth. Do not mark this as fixed yet.
-            </Notice>
-          </div>
+        <ProductCard title="Secure Setup Wizard" subtitle="Values entered here are sent once and stored encrypted.">
+          {selected ? (
+            <div className="space-y-4">
+              <DetailGrid items={[
+                { label: 'Integration', value: text(selected.label) },
+                { label: 'Provider', value: text(selected.provider) },
+                { label: 'Credential Type', value: text(selected.credentialType) },
+              ]} />
+              <Field label="Display Name">
+                <input
+                  value={displayName}
+                  onChange={event => setDisplayName(event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                />
+              </Field>
+              {selectedFields.map(field => (
+                <Field key={field} label={display(field)} helper="Secret value is encrypted and never returned after save.">
+                  <input
+                    type={field.toLowerCase().includes('url') || field.toLowerCase().includes('uri') ? 'url' : 'password'}
+                    value={secretValues[field] || ''}
+                    onChange={event => setSecretValues(current => ({ ...current, [field]: event.target.value }))}
+                    placeholder={`Enter ${field}`}
+                    className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                  />
+                </Field>
+              ))}
+              <Notice tone="info">
+                Saving credentials does not enable live execution. Postiz, CRM, messaging, and voice actions still require sandbox flags, approval, MCP mediation, and policy gates.
+              </Notice>
+              <PrimaryAction onClick={saveCredential} disabled={saving}>{saving ? 'Saving...' : 'Save Encrypted Credential'}</PrimaryAction>
+            </div>
+          ) : (
+            <EmptyProductState title="Select an integration" message="Choose Configure next to Postiz, GoHighLevel, WhatsApp, Telegram, voice/chat, social OAuth, OpenClaw, agentgateway, or AgentScope." />
+          )}
         </ProductCard>
       </div>
 
-      <ProductCard title="Deployment Secret Names" subtitle="Current deployment-level configuration requirements.">
+      <ProductCard title="Saved Credentials" subtitle="Only status, field names, and fingerprints are shown. Raw values are never returned.">
+        {credentials.length ? (
+          <ProductTable
+            columns={['Credential', 'Fields', 'Fingerprints', 'Status', 'Action']}
+            rows={credentials.map(credential => [
+              <div>
+                <div className="font-medium text-neutral-950">{text(credential.displayName)}</div>
+                <div className="mt-1 text-xs text-neutral-500">{display(text(credential.provider))} / {display(text(credential.credentialType))}</div>
+              </div>,
+              <div className="flex flex-wrap gap-1">
+                {parseRequiredFields(credential.secretFields).map(field => <ProductStatus key={field} tone="muted">{field}</ProductStatus>)}
+              </div>,
+              <div className="max-w-sm text-xs leading-5 text-neutral-500">
+                {Object.entries((credential.secretFingerprints || {}) as Record<string, unknown>).map(([key, value]) => `${key}: ${String(value)}`).join(' | ') || 'Hidden'}
+              </div>,
+              <ProductStatus tone={credential.isActive ? 'good' : 'danger'}>{credential.isActive ? 'Configured' : 'Disabled'}</ProductStatus>,
+              credential.isActive ? <SecondaryAction onClick={() => disableCredential(text(credential.id))}>Disable</SecondaryAction> : <ProductStatus tone="muted">Disabled</ProductStatus>,
+            ])}
+          />
+        ) : (
+          <EmptyProductState message="No tenant integration credentials have been saved yet." />
+        )}
+      </ProductCard>
+
+      <ProductCard title="Runtime Status" subtitle="Backend readiness view after tenant vault and deployment configuration are evaluated.">
         <ProductTable
-          columns={['Area', 'Required Variables']}
-          rows={[
-            ['LLM Provider', 'OPENAI_API_KEY / OPENAI_MODEL / CLAUDE_API_KEY / CLAUDE_MODEL, or user-owned credentials from AI Provider page'],
-            ['Postiz Sandbox', 'POSTIZ_SANDBOX_URL / POSTIZ_API_KEY / POSTIZ_SANDBOX_INTEGRATION_ID / POSTIZ_SANDBOX_SCHEDULING_ENABLED=false by default'],
-            ['GoHighLevel Sandbox', 'GHL_API_KEY or GOHIGHLEVEL_API_KEY / GHL_LOCATION_ID / GHL_SANDBOX_WRITE_ENABLED=false by default'],
-            ['Execution Gates', 'DEMO_MODE / EXTERNAL_EXECUTION_ENABLED / M5_WRITE_EXECUTION_ENABLED / CRM_LIVE_ENABLED'],
-          ]}
+          columns={['Connector', 'Credential', 'Endpoint', 'Execution Policy']}
+          rows={connectors.map(connector => {
+            const policy = (connector.executionPolicy || {}) as RecordMap;
+            return [
+              <div className="font-medium text-neutral-950">{text(connector.name)}</div>,
+              <ProductStatus tone={statusTone(text(connector.credentialStatus))}>{display(text(connector.credentialStatus))}</ProductStatus>,
+              <ProductStatus tone={statusTone(text(connector.endpointStatus))}>{display(text(connector.endpointStatus))}</ProductStatus>,
+              <div>
+                <ProductStatus tone={text(policy.label).toLowerCase().includes('blocked') ? 'danger' : 'warn'}>{text(policy.label, 'Blocked')}</ProductStatus>
+                <div className="mt-1 text-xs text-neutral-500">{Array.isArray(policy.reasons) ? policy.reasons.join('; ') : text(policy.reason, 'Policy loaded')}</div>
+              </div>,
+            ];
+          })}
         />
       </ProductCard>
     </ProductPage>

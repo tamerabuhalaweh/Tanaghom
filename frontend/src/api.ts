@@ -39,6 +39,10 @@ export const authApi = {
     apiFetch<{ token: string; user: unknown; agentRep: unknown }>('/auth/login', { method: 'POST', body: { email, password } }),
   session: (token: string) =>
     apiFetch<{ user: unknown; agentRep: unknown }>('/auth/session', { token }),
+  createOnboardingToken: (data: unknown, token: string) =>
+    apiFetch<unknown>('/auth/onboarding-token', { method: 'POST', body: data, token }),
+  acceptOnboarding: (data: unknown) =>
+    apiFetch<unknown>('/auth/accept-onboarding', { method: 'POST', body: data }),
 };
 
 export const campaignsApi = {
@@ -129,6 +133,8 @@ export const usersApi = {
     apiFetch<unknown[]>(`/agent-reps/${agentRepId}/functional-agents`, { token }),
   createFunctionalAgent: (agentRepId: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/agent-reps/${agentRepId}/functional-agents`, { method: 'POST', body: data, token }),
+  importGithubSkill: (agentRepId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/agent-reps/${agentRepId}/import-github-skill`, { method: 'POST', body: data, token }),
   governanceAgents: (agentRepId: string, token: string) =>
     apiFetch<unknown[]>(`/agent-reps/${agentRepId}/governance-agents`, { token }),
   createGovernanceAgent: (agentRepId: string, data: unknown, token: string) =>
@@ -190,10 +196,24 @@ export const integrationStatusApi = {
   get: (token: string) => apiFetch<unknown>('/integration-status', { token }),
 };
 
+export const integrationCredentialsApi = {
+  list: (token: string) => apiFetch<unknown>('/integration-credentials', { token }),
+  requirements: (token: string) => apiFetch<unknown>('/integration-credentials/requirements', { token }),
+  matrix: (token: string) => apiFetch<unknown>('/integration-credentials/matrix', { token }),
+  save: (data: unknown, token: string) =>
+    apiFetch<unknown>('/integration-credentials', { method: 'POST', body: data, token }),
+  disable: (id: string, token: string) =>
+    apiFetch<unknown>(`/integration-credentials/${id}`, { method: 'DELETE', token }),
+};
+
 export const mcpRuntimeApi = {
   connectors: (token: string) => apiFetch<unknown[]>('/mcp-runtime/connectors', { token }),
   createConnector: (data: unknown, token: string) =>
     apiFetch<unknown>('/mcp-runtime/connectors', { method: 'POST', body: data, token }),
+  discover: (data: unknown, token: string) =>
+    apiFetch<unknown>('/mcp-runtime/discover', { method: 'POST', body: data, token }),
+  discoveredTools: (id: string, token: string) =>
+    apiFetch<unknown>(`/mcp-runtime/connectors/${id}/discovered-tools`, { token }),
   mockHealthCheck: (id: string, token: string) =>
     apiFetch<unknown>(`/mcp-runtime/connectors/${id}/mock-health-check`, { method: 'POST', token }),
   toolPreview: (id: string, data: unknown, token: string) =>
@@ -205,6 +225,8 @@ export const leadsApi = {
   create: (data: unknown, token: string) => apiFetch<unknown>('/leads', { method: 'POST', body: data, token }),
   qualify: (id: string, token: string) => apiFetch<unknown>(`/leads/${id}/qualify`, { method: 'POST', token }),
   stats: (token: string) => apiFetch<unknown>('/leads/stats', { token }),
+  sandboxExecution: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/crm-conversion/leads/${id}/sandbox-execution`, { method: 'POST', body: data, token }),
 };
 
 export const ghlApi = {

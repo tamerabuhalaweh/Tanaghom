@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@langchain/langgraph": "^1.4.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@prisma/client": "^6.9.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.25.6",

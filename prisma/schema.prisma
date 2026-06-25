@@ -58,6 +58,7 @@ model User {
   name          String
   password_hash String
   department_id String?  @db.Uuid
+  tenant_key    String   @default("default")
   role          Role     @default(reviewer)
   is_active     Boolean  @default(true)
   created_at    DateTime @default(now())
@@ -81,8 +82,33 @@ model User {
   assets_created          Asset[]
   asset_lineage_created   AssetLineage[]
   llm_provider_credentials LlmProviderCredential[]
+  integration_credentials_created IntegrationCredential[]
+  onboarding_tokens UserOnboardingToken[]
 
   @@map("users")
+  @@index([tenant_key])
+}
+
+enum OnboardingTokenPurpose {
+  invite
+  password_reset
+}
+
+model UserOnboardingToken {
+  id          String                 @id @default(uuid()) @db.Uuid
+  user_id     String                 @db.Uuid
+  purpose     OnboardingTokenPurpose
+  token_hash  String                 @unique
+  expires_at  DateTime
+  used_at     DateTime?
+  created_at  DateTime               @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([purpose])
+  @@index([expires_at])
+  @@map("user_onboarding_tokens")
 }
 
 enum LlmProviderType {
@@ -107,6 +133,30 @@ model LlmProviderCredential {
   @@unique([owner_user_id, provider])
   @@index([owner_user_id])
   @@map("llm_provider_credentials")
+}
+
+model IntegrationCredential {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenant_key          String   @default("default")
+  provider            String
+  credential_type     String
+  display_name        String
+  encrypted_payload   Json
+  secret_fingerprints Json
+  metadata            Json?
+  created_by_user_id  String   @db.Uuid
+  is_active           Boolean  @default(true)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+  last_validated_at   DateTime?
+
+  created_by User @relation(fields: [created_by_user_id], references: [id])
+
+  @@unique([tenant_key, provider, credential_type])
+  @@index([tenant_key])
+  @@index([provider])
+  @@index([is_active])
+  @@map("integration_credentials")
 }
 
 model AgentRep {
@@ -1050,10 +1100,29 @@ model McpConnector {
   capability_bindings McpCapabilityBinding[]
   mediation_requests  McpMediationRequest[]
   credential_bindings McpCredentialBinding[]
+  discovered_tools    McpDiscoveredTool[]
 
   @@index([status])
   @@index([connector_type])
   @@map("mcp_connectors")
+}
+
+model McpDiscoveredTool {
+  id               String   @id @default(uuid()) @db.Uuid
+  mcp_connector_id String   @db.Uuid
+  tool_name        String
+  description      String?  @db.Text
+  input_schema     Json?
+  output_schema    Json?
+  imported_as_skill Boolean @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  mcp_connector McpConnector @relation(fields: [mcp_connector_id], references: [id])
+
+  @@unique([mcp_connector_id, tool_name])
+  @@index([mcp_connector_id])
+  @@map("mcp_discovered_tools")
 }
 
 model McpCapabilityBinding {

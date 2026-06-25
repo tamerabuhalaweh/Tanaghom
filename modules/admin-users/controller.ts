@@ -25,7 +25,9 @@ adminUsersRouter.get('/', async (req: Request, res: Response, next: NextFunction
     const payload = getPayload(req);
     requireAdmin(payload.role);
 
+    const tenantKey = payload.tenantKey || 'default';
     const users = await prisma.user.findMany({
+      where: { tenant_key: tenantKey },
       include: { department: true, agent_reps: true },
       orderBy: { created_at: 'desc' },
     });
@@ -35,6 +37,7 @@ adminUsersRouter.get('/', async (req: Request, res: Response, next: NextFunction
       email: u.email,
       name: u.name,
       role: u.role,
+      tenantKey: u.tenant_key,
       department: (u.department as Record<string, unknown>)?.name || null,
       departmentId: u.department_id,
       agentRep: Array.isArray(u.agent_reps) && u.agent_reps.length > 0 ? {
@@ -60,6 +63,7 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
 
     const { email, name, role, departmentId, password, businessRole, roleTemplate } = req.body;
 
+    const tenantKey = payload.tenantKey || 'default';
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       throw new Error('User with this email already exists');
@@ -67,34 +71,40 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
 
     const passwordHash = await hashPassword(password || 'TempPassword123!');
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        name,
-        role: role || 'specialist',
-        department_id: departmentId || null,
-        password_hash: passwordHash,
-        is_active: true,
-      },
-    });
-    const agentRep = await prisma.agentRep.create({
-      data: {
-        user_id: user.id,
-        name: `${user.name} AgentRep`,
-        agent_type: 'functional',
-        status: 'active',
-        permissions_context: {
-          role: user.role,
-          departmentId: user.department_id,
-          businessRole: businessRole || null,
-          roleTemplate: roleTemplate || null,
-          source: 'admin_user_creation',
+    const { user, agentRep } = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email,
+          name,
+          tenant_key: tenantKey,
+          role: role || 'specialist',
+          department_id: departmentId || null,
+          password_hash: passwordHash,
+          is_active: true,
         },
-        metadata: {
-          businessRole: businessRole || null,
-          roleTemplate: roleTemplate || null,
+      });
+      const createdAgentRep = await tx.agentRep.create({
+        data: {
+          user_id: createdUser.id,
+          name: `${createdUser.name} AgentRep`,
+          agent_type: 'functional',
+          status: 'active',
+          permissions_context: {
+            tenantKey,
+            role: createdUser.role,
+            departmentId: createdUser.department_id,
+            businessRole: businessRole || null,
+            roleTemplate: roleTemplate || null,
+            source: 'admin_user_creation',
+          },
+          metadata: {
+            tenantKey,
+            businessRole: businessRole || null,
+            roleTemplate: roleTemplate || null,
+          },
         },
-      },
+      });
+      return { user: createdUser, agentRep: createdAgentRep };
     });
 
     auditLog(
@@ -107,6 +117,7 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
       email: user.email,
       name: user.name,
       role: user.role,
+      tenantKey: user.tenant_key,
       departmentId: user.department_id,
       agentRep: {
         id: agentRep.id,
@@ -116,7 +127,7 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
         metadata: agentRep.metadata,
       },
       isActive: user.is_active,
-      _label: 'User created — password must be changed on first login',
+      _label: 'User created - password must be changed on first login',
     });
   } catch (err) {
     next(err);
@@ -131,7 +142,7 @@ adminUsersRouter.put('/:id', async (req: Request, res: Response, next: NextFunct
     const id = req.params.id as string;
     const { name, role, departmentId, isActive } = req.body;
 
-    const user = await prisma.user.findUnique({ where: { id: id as string } });
+    const user = await prisma.user.findFirst({ where: { id: id as string, tenant_key: payload.tenantKey || 'default' } });
     if (!user) throw new NotFoundError('User', id as string);
 
     const data: Prisma.UserUncheckedUpdateInput = {
@@ -156,6 +167,7 @@ adminUsersRouter.put('/:id', async (req: Request, res: Response, next: NextFunct
       email: updated.email,
       name: updated.name,
       role: updated.role,
+      tenantKey: updated.tenant_key,
       departmentId: updated.department_id,
       isActive: updated.is_active,
     });
@@ -170,7 +182,7 @@ adminUsersRouter.post('/:id/deactivate', async (req: Request, res: Response, nex
     requireAdmin(payload.role);
 
     const id = req.params.id as string;
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findFirst({ where: { id, tenant_key: payload.tenantKey || 'default' } });
     if (!user) throw new NotFoundError('User', id);
 
     await prisma.user.update({ where: { id }, data: { is_active: false } });
@@ -192,7 +204,7 @@ adminUsersRouter.post('/:id/activate', async (req: Request, res: Response, next:
     requireAdmin(payload.role);
 
     const id = req.params.id as string;
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findFirst({ where: { id, tenant_key: payload.tenantKey || 'default' } });
     if (!user) throw new NotFoundError('User', id);
 
     await prisma.user.update({ where: { id }, data: { is_active: true } });

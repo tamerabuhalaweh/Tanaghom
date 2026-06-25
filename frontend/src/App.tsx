@@ -29,6 +29,7 @@ import PostIdeas from './pages/PostIdeas'
 import IntegrationCredentials from './pages/IntegrationCredentials'
 import AdminUsers from './pages/AdminUsers'
 import MyAgentRep from './pages/MyAgentRep'
+import AcceptOnboarding from './pages/AcceptOnboarding'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -52,6 +53,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/accept-onboarding" element={<AcceptOnboarding />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DemoCommandCenter />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />

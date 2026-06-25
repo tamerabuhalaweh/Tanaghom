@@ -57,6 +57,7 @@ export default function McpEngine() {
   const [loading, setLoading] = useState('');
   const [healthResult, setHealthResult] = useState<RecordMap | null>(null);
   const [toolPreview, setToolPreview] = useState<RecordMap | null>(null);
+  const [discoveredTools, setDiscoveredTools] = useState<RecordMap[]>([]);
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -70,6 +71,12 @@ export default function McpEngine() {
   const [toolForm, setToolForm] = useState({
     toolName: '',
     operation: 'read',
+  });
+  const [discoveryForm, setDiscoveryForm] = useState({
+    name: '',
+    endpointUrl: '',
+    targetSystem: '',
+    description: '',
   });
 
   const selectedConnector = useMemo(
@@ -171,6 +178,45 @@ export default function McpEngine() {
     }
   }
 
+  async function discoverRemoteMcp() {
+    if (!token) return;
+    setLoading('discover');
+    setMessage('');
+    setDiscoveredTools([]);
+    try {
+      const result = await mcpRuntimeApi.discover({
+        name: discoveryForm.name,
+        endpointUrl: discoveryForm.endpointUrl,
+        targetSystem: discoveryForm.targetSystem,
+        description: discoveryForm.description || undefined,
+      }, token);
+      const record = result as RecordMap;
+      setMessage(text(record._label, 'Remote MCP tools discovered and stored.'));
+      setDiscoveredTools(Array.isArray(record.tools) ? record.tools as RecordMap[] : []);
+      setDiscoveryForm({ name: '', endpointUrl: '', targetSystem: '', description: '' });
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Remote MCP discovery failed');
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function loadDiscoveredTools(connectorId: string) {
+    if (!token) return;
+    setLoading(`tools-${connectorId}`);
+    setDiscoveredTools([]);
+    try {
+      const result = await mcpRuntimeApi.discoveredTools(connectorId, token);
+      const record = result as RecordMap;
+      setDiscoveredTools(Array.isArray(record.tools) ? record.tools as RecordMap[] : []);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to load discovered tools');
+    } finally {
+      setLoading('');
+    }
+  }
+
   const writable = connectors.filter(connector => bool(connector.supportsWrite)).length;
   const credentialRequired = connectors.filter(connector => bool(connector.credentialRequired)).length;
 
@@ -191,7 +237,29 @@ export default function McpEngine() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <ProductCard title="Add Connector" subtitle="Register an MCP or integration surface. This creates configuration only; it does not execute tools or enable external writes.">
+        <div className="space-y-6">
+        <ProductCard title="Discover Remote MCP Server" subtitle="Connect to a Streamable HTTP MCP endpoint and import its tool list. No tools are invoked.">
+          <div className="space-y-4">
+            <Field label="Display Name">
+              <input value={discoveryForm.name} onChange={(event) => setDiscoveryForm({ ...discoveryForm, name: event.target.value })} placeholder="e.g. Content Intelligence MCP" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+            </Field>
+            <Field label="MCP Endpoint URL">
+              <input value={discoveryForm.endpointUrl} onChange={(event) => setDiscoveryForm({ ...discoveryForm, endpointUrl: event.target.value })} placeholder="https://mcp.example.com/mcp" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+            </Field>
+            <Field label="Target System">
+              <input value={discoveryForm.targetSystem} onChange={(event) => setDiscoveryForm({ ...discoveryForm, targetSystem: event.target.value })} placeholder="Content Intelligence / GoHighLevel / Social Analytics" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+            </Field>
+            <Field label="Description">
+              <textarea value={discoveryForm.description} onChange={(event) => setDiscoveryForm({ ...discoveryForm, description: event.target.value })} className="min-h-20 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+            </Field>
+            <Notice tone="info">Discovery performs a read-only tools/list call. Tool execution remains blocked behind STITCH, SAIF, MCP mediation, approval, and M5 policy.</Notice>
+            <PrimaryAction disabled={loading === 'discover' || !discoveryForm.name || !discoveryForm.endpointUrl || !discoveryForm.targetSystem} onClick={discoverRemoteMcp}>
+              {loading === 'discover' ? 'Discovering...' : 'Discover MCP Tools'}
+            </PrimaryAction>
+          </div>
+        </ProductCard>
+
+        <ProductCard title="Add Connector Manually" subtitle="Register an MCP or integration surface. This creates configuration only; it does not execute tools or enable external writes.">
           <div className="space-y-4">
             <Field label="Connector Name">
               <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Customer Postiz Sandbox" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
@@ -229,6 +297,7 @@ export default function McpEngine() {
             </PrimaryAction>
           </div>
         </ProductCard>
+        </div>
 
         <div className="space-y-6">
           <ProductCard title="Connector Registry" subtitle="These records are loaded from the backend MCP registry.">
@@ -249,13 +318,34 @@ export default function McpEngine() {
                     {bool(connector.supportsWrite) && <ProductStatus tone="warn">Write Blocked</ProductStatus>}
                   </div>,
                   bool(connector.credentialRequired) ? 'Required' : 'Not required',
-                  <SecondaryAction disabled={loading === `health-${connector.id}`} onClick={() => runHealthCheck(String(connector.id))}>
-                    {loading === `health-${connector.id}` ? 'Checking...' : 'Mock Health Check'}
-                  </SecondaryAction>,
+                  <div className="flex flex-wrap gap-2">
+                    <SecondaryAction disabled={loading === `health-${connector.id}`} onClick={() => runHealthCheck(String(connector.id))}>
+                      {loading === `health-${connector.id}` ? 'Checking...' : 'Mock Health Check'}
+                    </SecondaryAction>
+                    <SecondaryAction disabled={loading === `tools-${connector.id}`} onClick={() => loadDiscoveredTools(String(connector.id))}>
+                      {loading === `tools-${connector.id}` ? 'Loading...' : 'Tools'}
+                    </SecondaryAction>
+                  </div>,
                 ])}
               />
             ) : (
               <EmptyProductState message="No connectors are registered yet. Add the first connector from the form." />
+            )}
+          </ProductCard>
+
+          <ProductCard title="Discovered MCP Tools" subtitle="Persisted read-only tool metadata from remote MCP discovery or selected connector.">
+            {discoveredTools.length ? (
+              <ProductTable
+                columns={['Tool', 'Description', 'Imported', 'Execution']}
+                rows={discoveredTools.map(tool => [
+                  <div className="font-medium text-neutral-950">{text(tool.toolName)}</div>,
+                  <div className="text-sm leading-5 text-neutral-500">{text(tool.description, 'No description returned')}</div>,
+                  <ProductStatus tone={tool.importedAsSkill ? 'good' : 'info'}>{tool.importedAsSkill ? 'Skill Imported' : 'Tool Discovered'}</ProductStatus>,
+                  <ProductStatus tone="danger">Execution Blocked</ProductStatus>,
+                ])}
+              />
+            ) : (
+              <EmptyProductState message="No discovered tools loaded yet. Discover a remote MCP server or open Tools on a connector." />
             )}
           </ProductCard>
 

@@ -3,6 +3,7 @@ import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/aut
 import { UnauthorizedError } from '@shared/errors';
 import { evaluateExternalExecution } from '@shared/policy';
 import { getProviderStatus } from '@shared/providers/llm-provider';
+import { hasActiveIntegrationCredential } from '../integration-credentials/service';
 
 export const integrationStatusRouter = Router();
 
@@ -12,14 +13,24 @@ function getPayload(req: Request): JwtPayload {
   return verifyToken(authHeader.substring(7));
 }
 
-function credentialStatus(...names: string[]): 'configured' | 'missing' {
+function envCredentialStatus(...names: string[]): 'configured' | 'missing' {
   return names.some((name) => Boolean(process.env[name])) ? 'configured' : 'missing';
+}
+
+async function credentialStatus(provider: Parameters<typeof hasActiveIntegrationCredential>[0], credentialType: Parameters<typeof hasActiveIntegrationCredential>[1], envNames: string[]): Promise<'configured' | 'missing'> {
+  if (await hasActiveIntegrationCredential(provider, credentialType)) return 'configured';
+  return envCredentialStatus(...envNames);
 }
 
 integrationStatusRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     resolveSessionContext(getPayload(req));
     const llm = getProviderStatus();
+    const postizCredential = await credentialStatus('postiz', 'api_key', ['POSTIZ_API_KEY']);
+    const ghlCredential = await credentialStatus('gohighlevel', 'api_key', ['GHL_API_KEY', 'GOHIGHLEVEL_API_KEY']);
+    const whatsappCredential = await credentialStatus('whatsapp', 'api_key', ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID']);
+    const telegramCredential = await credentialStatus('telegram', 'bot_token', ['TELEGRAM_BOT_TOKEN']);
+    const voiceCredential = await credentialStatus('voice_chat', 'service_endpoint', ['VOICE_CHAT_API_URL', 'VOICE_CHAT_API_KEY']);
     res.json({
       generatedAt: new Date().toISOString(),
       aiProvider: {
@@ -32,36 +43,36 @@ integrationStatusRouter.get('/', async (req: Request, res: Response, next: NextF
         {
           id: 'postiz',
           name: 'Postiz Scheduling',
-          credentialStatus: credentialStatus('POSTIZ_API_KEY'),
+          credentialStatus: postizCredential,
           endpointStatus: process.env.POSTIZ_SANDBOX_URL || process.env.POSTIZ_BASE_URL ? 'Sandbox Ready' : 'Requires Credentials',
           executionPolicy: evaluateExternalExecution({ system: 'postiz', action: 'schedule', executionMode: 'sandbox' }),
         },
         {
           id: 'gohighlevel',
           name: 'GoHighLevel CRM',
-          credentialStatus: credentialStatus('GHL_API_KEY', 'GOHIGHLEVEL_API_KEY'),
-          endpointStatus: credentialStatus('GHL_API_KEY', 'GOHIGHLEVEL_API_KEY') === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
+          credentialStatus: ghlCredential,
+          endpointStatus: ghlCredential === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
           executionPolicy: evaluateExternalExecution({ system: 'gohighlevel', action: 'write', executionMode: 'sandbox' }),
         },
         {
           id: 'whatsapp',
           name: 'WhatsApp Business',
-          credentialStatus: credentialStatus('WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'),
-          endpointStatus: credentialStatus('WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID') === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
+          credentialStatus: whatsappCredential,
+          endpointStatus: whatsappCredential === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
           executionPolicy: evaluateExternalExecution({ system: 'whatsapp', action: 'send_message', executionMode: 'sandbox' }),
         },
         {
           id: 'telegram',
           name: 'Telegram',
-          credentialStatus: credentialStatus('TELEGRAM_BOT_TOKEN'),
-          endpointStatus: credentialStatus('TELEGRAM_BOT_TOKEN') === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
+          credentialStatus: telegramCredential,
+          endpointStatus: telegramCredential === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
           executionPolicy: evaluateExternalExecution({ system: 'telegram', action: 'send_message', executionMode: 'sandbox' }),
         },
         {
           id: 'voice_chat',
           name: 'AI Voice/Chat Agent API',
-          credentialStatus: credentialStatus('VOICE_CHAT_API_URL', 'VOICE_CHAT_API_KEY'),
-          endpointStatus: credentialStatus('VOICE_CHAT_API_URL') === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
+          credentialStatus: voiceCredential,
+          endpointStatus: voiceCredential === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
           executionPolicy: evaluateExternalExecution({ system: 'voice_chat', action: 'trigger_call', executionMode: 'sandbox' }),
         },
       ],

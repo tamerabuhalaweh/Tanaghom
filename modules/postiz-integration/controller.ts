@@ -5,6 +5,7 @@ import { UnauthorizedError } from '@shared/errors';
 import { validateOrThrow } from '@shared/validation';
 import { evaluateExternalExecution } from '@shared/policy';
 import { auditLog } from '@shared/logging';
+import { getActiveIntegrationCredential } from '../integration-credentials/service';
 import {
   createAccountReferenceSchema,
   createExecutionRequestSchema,
@@ -18,6 +19,13 @@ export const postizIntegrationRouter = Router();
 
 const POSTIZ_SANDBOX_URL = process.env.POSTIZ_SANDBOX_URL || process.env.POSTIZ_BASE_URL || '';
 const POSTIZ_PUBLIC_API_PATH = '/api/public/v1/posts';
+
+interface PostizRuntimeConfig {
+  baseUrl: string;
+  apiKey: string;
+  integrationId: string;
+  source: 'tenant_vault' | 'environment' | 'missing';
+}
 
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
@@ -37,28 +45,29 @@ async function checkPostizHealth(): Promise<{
   credentialStatus: 'configured' | 'missing';
 }> {
   const checkedAt = new Date().toISOString();
-  const credentialStatus = process.env.POSTIZ_API_KEY ? 'configured' : 'missing';
-  if (!POSTIZ_SANDBOX_URL) {
+  const config = await resolvePostizRuntimeConfig();
+  const credentialStatus = config.apiKey ? 'configured' : 'missing';
+  if (!config.baseUrl) {
     return { url: null, reachable: false, statusCode: null, checkedAt, credentialStatus };
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
   try {
-    const response = await fetch(`${POSTIZ_SANDBOX_URL.replace(/\/$/, '')}/auth/login`, {
+    const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/auth/login`, {
       method: 'GET',
       redirect: 'manual',
       signal: controller.signal,
     });
     return {
-      url: POSTIZ_SANDBOX_URL,
+      url: config.baseUrl,
       reachable: response.status < 500,
       statusCode: response.status,
       checkedAt,
       credentialStatus,
     };
   } catch {
-    return { url: POSTIZ_SANDBOX_URL, reachable: false, statusCode: null, checkedAt, credentialStatus };
+    return { url: config.baseUrl, reachable: false, statusCode: null, checkedAt, credentialStatus };
   } finally {
     clearTimeout(timer);
   }
@@ -257,7 +266,25 @@ const postizPayloadSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
-function buildPostizCreatePostPayload(input: z.infer<typeof postizPayloadSchema>) {
+async function resolvePostizRuntimeConfig(): Promise<PostizRuntimeConfig> {
+  const credential = await getActiveIntegrationCredential('postiz', 'api_key');
+  if (credential) {
+    return {
+      baseUrl: credential.secrets.baseUrl || POSTIZ_SANDBOX_URL,
+      apiKey: credential.secrets.apiKey || '',
+      integrationId: credential.secrets.integrationId || process.env.POSTIZ_SANDBOX_INTEGRATION_ID || '',
+      source: 'tenant_vault',
+    };
+  }
+  return {
+    baseUrl: POSTIZ_SANDBOX_URL,
+    apiKey: process.env.POSTIZ_API_KEY || '',
+    integrationId: process.env.POSTIZ_SANDBOX_INTEGRATION_ID || '',
+    source: process.env.POSTIZ_API_KEY ? 'environment' : 'missing',
+  };
+}
+
+function buildPostizCreatePostPayload(input: z.infer<typeof postizPayloadSchema>, config?: PostizRuntimeConfig) {
   return {
     type: 'schedule',
     date: input.scheduledAt,
@@ -266,7 +293,7 @@ function buildPostizCreatePostPayload(input: z.infer<typeof postizPayloadSchema>
     posts: [
       {
         integration: {
-          id: input.integrationId || process.env.POSTIZ_SANDBOX_INTEGRATION_ID || '<configured sandbox integration id>',
+          id: input.integrationId || config?.integrationId || process.env.POSTIZ_SANDBOX_INTEGRATION_ID || '<configured sandbox integration id>',
         },
         value: [
           {
@@ -282,15 +309,16 @@ function buildPostizCreatePostPayload(input: z.infer<typeof postizPayloadSchema>
   };
 }
 
-function sandboxSchedulingGate(): { allowed: boolean; reasons: string[] } {
+async function sandboxSchedulingGate(config?: PostizRuntimeConfig): Promise<{ allowed: boolean; reasons: string[] }> {
+  const runtimeConfig = config || await resolvePostizRuntimeConfig();
   const reasons: string[] = [];
   if (process.env.DEMO_MODE === 'true') reasons.push('DEMO_MODE=true blocks real sandbox scheduling');
   if (process.env.EXTERNAL_EXECUTION_ENABLED !== 'true') reasons.push('EXTERNAL_EXECUTION_ENABLED is not true');
   if (process.env.POSTIZ_SANDBOX_SCHEDULING_ENABLED !== 'true') reasons.push('POSTIZ_SANDBOX_SCHEDULING_ENABLED is not true');
   if (process.env.POSTIZ_LIVE_ENABLED !== 'true') reasons.push('POSTIZ_LIVE_ENABLED is not true');
-  if (!POSTIZ_SANDBOX_URL) reasons.push('POSTIZ_SANDBOX_URL or POSTIZ_BASE_URL is missing');
-  if (!process.env.POSTIZ_API_KEY) reasons.push('POSTIZ_API_KEY is missing');
-  if (!process.env.POSTIZ_SANDBOX_INTEGRATION_ID) reasons.push('POSTIZ_SANDBOX_INTEGRATION_ID is missing');
+  if (!runtimeConfig.baseUrl) reasons.push('Postiz base URL is missing');
+  if (!runtimeConfig.apiKey) reasons.push('Postiz API key is missing');
+  if (!runtimeConfig.integrationId) reasons.push('Postiz sandbox integration id is missing');
   return { allowed: reasons.length === 0, reasons };
 }
 
@@ -298,15 +326,17 @@ postizIntegrationRouter.post('/schedule-payload', async (req: Request, res: Resp
   try {
     getSession(req);
     const input = postizPayloadSchema.parse(req.body);
-    const payload = buildPostizCreatePostPayload(input);
+    const config = await resolvePostizRuntimeConfig();
+    const payload = buildPostizCreatePostPayload(input, config);
     res.json({
       status: 'prepared',
-      endpoint: POSTIZ_SANDBOX_URL ? `${POSTIZ_SANDBOX_URL.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}` : null,
+      endpoint: config.baseUrl ? `${config.baseUrl.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}` : null,
+      credentialSource: config.source,
       payload,
       safety: {
         executionPerformed: false,
         livePublishing: false,
-        schedulingGate: sandboxSchedulingGate(),
+        schedulingGate: await sandboxSchedulingGate(config),
       },
       _label: 'Postiz-ready scheduling payload prepared - no external call performed',
     });
@@ -319,8 +349,9 @@ postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Resp
   try {
     const session = getSession(req);
     const input = postizPayloadSchema.parse(req.body);
-    const payload = buildPostizCreatePostPayload(input);
-    const gate = sandboxSchedulingGate();
+    const config = await resolvePostizRuntimeConfig();
+    const payload = buildPostizCreatePostPayload(input, config);
+    const gate = await sandboxSchedulingGate(config);
 
     if (!gate.allowed) {
       auditLog(
@@ -340,10 +371,10 @@ postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Resp
       return;
     }
 
-    const response = await fetch(`${POSTIZ_SANDBOX_URL.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}`, {
+    const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}`, {
       method: 'POST',
       headers: {
-        Authorization: process.env.POSTIZ_API_KEY || '',
+        Authorization: config.apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),

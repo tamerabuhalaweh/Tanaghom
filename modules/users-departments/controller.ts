@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
 import {
@@ -194,6 +195,50 @@ usersDepartmentsRouter.post('/agent-reps/:id/functional-agents', async (req: Req
   } catch (err) { next(err); }
 });
 
+usersDepartmentsRouter.post('/agent-reps/:id/import-github-skill', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const input = z.object({
+      repositoryUrl: z.string().url(),
+      skillPath: z.string().min(1).max(300).default('SKILL.md'),
+      capability: z.string().min(1).max(200).default('imported_github_skill'),
+    }).parse(req.body);
+    const rawUrl = toRawGitHubUrl(input.repositoryUrl, input.skillPath);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(rawUrl, { signal: controller.signal });
+      if (!response.ok) {
+        res.status(400).json({ error: `GitHub skill file could not be fetched (${response.status})` });
+        return;
+      }
+      const content = await response.text();
+      const metadata = extractSkillMetadata(content);
+      const agent = await createFunctionalAgent(payload.role, {
+        agentRepId: req.params.id as string,
+        name: metadata.name,
+        description: metadata.description,
+        capability: input.capability,
+        config: {
+          source: 'github_skill_import',
+          repositoryUrl: input.repositoryUrl,
+          rawUrl,
+          skillPath: input.skillPath,
+          executionAllowed: false,
+          importedAt: new Date().toISOString(),
+        },
+      });
+      res.status(201).json({
+        ...agent,
+        rawCodeExecuted: false,
+        _label: 'GitHub skill metadata imported - repository code was not executed',
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) { next(err); }
+});
+
 usersDepartmentsRouter.get('/agent-reps/:id/governance-agents', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
@@ -217,3 +262,30 @@ usersDepartmentsRouter.post('/agent-reps/:id/governance-agents', async (req: Req
     });
   } catch (err) { next(err); }
 });
+
+function toRawGitHubUrl(repositoryUrl: string, skillPath: string): string {
+  const url = new URL(repositoryUrl);
+  const normalizedPath = skillPath.replace(/^\/+/, '');
+  if (url.hostname === 'raw.githubusercontent.com') {
+    return repositoryUrl;
+  }
+  if (url.hostname !== 'github.com') {
+    throw new Error('Only github.com or raw.githubusercontent.com skill imports are allowed');
+  }
+  const parts = url.pathname.split('/').filter(Boolean);
+  if (parts.length < 2) throw new Error('GitHub URL must include owner and repository');
+  const [owner, repo] = parts;
+  const branchIndex = parts.findIndex(part => part === 'tree' || part === 'blob');
+  const branch = branchIndex >= 0 && parts[branchIndex + 1] ? parts[branchIndex + 1] : 'main';
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${normalizedPath}`;
+}
+
+function extractSkillMetadata(content: string): { name: string; description: string } {
+  const lines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const heading = lines.find(line => line.startsWith('# '))?.replace(/^#\s+/, '').trim();
+  const description = lines.find(line => !line.startsWith('#') && line.length > 12)?.slice(0, 1000);
+  return {
+    name: heading || 'Imported GitHub Skill',
+    description: description || 'Imported from GitHub skill repository. Execution remains blocked until reviewed and governed.',
+  };
+}

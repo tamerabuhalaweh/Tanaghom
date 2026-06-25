@@ -5,9 +5,17 @@ import { UnauthorizedError, NotFoundError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { evaluateExternalExecution } from '@shared/policy';
+import { getActiveIntegrationCredential } from '../integration-credentials/service';
 
 export const ghlRouter = Router();
 const GHL_BASE_URL = process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com';
+
+interface GhlRuntimeConfig {
+  baseUrl: string;
+  apiKey: string;
+  locationId: string;
+  source: 'tenant_vault' | 'environment' | 'missing';
+}
 
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
@@ -28,14 +36,16 @@ ghlRouter.get('/status', async (req: Request, res: Response, next: NextFunction)
   try {
     getPayload(req);
 
-    const hasApiKey = Boolean(process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY);
-    const hasLocationId = Boolean(process.env.GHL_LOCATION_ID);
+    const config = await resolveGhlRuntimeConfig();
+    const hasApiKey = Boolean(config.apiKey);
+    const hasLocationId = Boolean(config.locationId);
     const sandboxEnabled = process.env.GHL_SANDBOX_ENABLED === 'true';
 
     res.json({
       configured: hasApiKey && hasLocationId,
       apiKeyStatus: hasApiKey ? 'configured' : 'missing',
       locationIdStatus: hasLocationId ? 'configured' : 'missing',
+      credentialSource: config.source,
       sandboxEnabled,
       liveEnabled: false,
       pushEnabled: false,
@@ -50,6 +60,7 @@ ghlRouter.get('/status', async (req: Request, res: Response, next: NextFunction)
 ghlRouter.get('/wizard-options', async (req: Request, res: Response, next: NextFunction) => {
   try {
     getPayload(req);
+    const config = await resolveGhlRuntimeConfig();
     res.json({
       connectionLevels: [
         { id: 'readiness', label: 'Readiness Only', executable: true, risk: 'low' },
@@ -59,8 +70,8 @@ ghlRouter.get('/wizard-options', async (req: Request, res: Response, next: NextF
         { id: 'production_write', label: 'Production CRM Write-back', executable: false, risk: 'high' },
       ],
       requiredCredentials: [
-        { name: 'GHL_API_KEY or GOHIGHLEVEL_API_KEY', status: process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY ? 'configured' : 'missing' },
-        { name: 'GHL_LOCATION_ID', status: process.env.GHL_LOCATION_ID ? 'configured' : 'missing' },
+        { name: 'Tenant vault apiKey or GHL_API_KEY/GOHIGHLEVEL_API_KEY', status: config.apiKey ? 'configured' : 'missing' },
+        { name: 'Tenant vault locationId or GHL_LOCATION_ID', status: config.locationId ? 'configured' : 'missing' },
         { name: 'GHL_SANDBOX_WRITE_ENABLED', status: process.env.GHL_SANDBOX_WRITE_ENABLED === 'true' ? 'enabled' : 'disabled' },
       ],
       safety: {
@@ -135,20 +146,39 @@ ghlRouter.post('/push', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
-function ghlSandboxWriteGate(): { allowed: boolean; reasons: string[] } {
+async function resolveGhlRuntimeConfig(): Promise<GhlRuntimeConfig> {
+  const credential = await getActiveIntegrationCredential('gohighlevel', 'api_key');
+  if (credential) {
+    return {
+      baseUrl: credential.secrets.baseUrl || GHL_BASE_URL,
+      apiKey: credential.secrets.apiKey || '',
+      locationId: credential.secrets.locationId || '',
+      source: 'tenant_vault',
+    };
+  }
+  return {
+    baseUrl: GHL_BASE_URL,
+    apiKey: process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY || '',
+    locationId: process.env.GHL_LOCATION_ID || '',
+    source: process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY ? 'environment' : 'missing',
+  };
+}
+
+async function ghlSandboxWriteGate(config?: GhlRuntimeConfig): Promise<{ allowed: boolean; reasons: string[] }> {
+  const runtimeConfig = config || await resolveGhlRuntimeConfig();
   const reasons: string[] = [];
   if (process.env.DEMO_MODE === 'true') reasons.push('DEMO_MODE=true blocks CRM sandbox writes');
   if (process.env.EXTERNAL_EXECUTION_ENABLED !== 'true') reasons.push('EXTERNAL_EXECUTION_ENABLED is not true');
   if (process.env.CRM_LIVE_ENABLED !== 'true') reasons.push('CRM_LIVE_ENABLED is not true');
   if (process.env.GHL_SANDBOX_WRITE_ENABLED !== 'true') reasons.push('GHL_SANDBOX_WRITE_ENABLED is not true');
-  if (!(process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY)) reasons.push('GHL_API_KEY or GOHIGHLEVEL_API_KEY is missing');
-  if (!process.env.GHL_LOCATION_ID) reasons.push('GHL_LOCATION_ID is missing');
+  if (!runtimeConfig.apiKey) reasons.push('GoHighLevel API key is missing');
+  if (!runtimeConfig.locationId) reasons.push('GoHighLevel location id is missing');
   return { allowed: reasons.length === 0, reasons };
 }
 
-function buildGhlContactPayload(lead: Record<string, unknown>) {
+function buildGhlContactPayload(lead: Record<string, unknown>, config?: GhlRuntimeConfig) {
   return {
-    locationId: process.env.GHL_LOCATION_ID || '<configured sandbox location id>',
+    locationId: config?.locationId || process.env.GHL_LOCATION_ID || '<configured sandbox location id>',
     firstName: String(lead.lead_name_placeholder || 'Sandbox Lead').split(' ')[0],
     name: lead.lead_name_placeholder || 'Sandbox Lead',
     email: lead.lead_email_placeholder || undefined,
@@ -174,8 +204,9 @@ ghlRouter.post('/sandbox-contact', async (req: Request, res: Response, next: Nex
     const lead = await prisma.leadCaptureRecord.findUnique({ where: { id: input.leadId } }) as Record<string, unknown> | null;
     if (!lead) throw new NotFoundError('Lead', input.leadId);
 
-    const contactPayload = buildGhlContactPayload(lead);
-    const gate = ghlSandboxWriteGate();
+    const config = await resolveGhlRuntimeConfig();
+    const contactPayload = buildGhlContactPayload(lead, config);
+    const gate = await ghlSandboxWriteGate(config);
 
     if (input.mode === 'preview' || !gate.allowed) {
       auditLog(
@@ -185,7 +216,8 @@ ghlRouter.post('/sandbox-contact', async (req: Request, res: Response, next: Nex
       res.status(input.mode === 'execute' ? 403 : 200).json({
         status: input.mode === 'execute' ? 'blocked' : 'prepared',
         reasons: input.mode === 'execute' ? gate.reasons : [],
-        endpoint: `${GHL_BASE_URL}/contacts/upsert`,
+        endpoint: `${config.baseUrl}/contacts/upsert`,
+        credentialSource: config.source,
         payload: contactPayload,
         safety: {
           executionPerformed: false,
@@ -198,10 +230,10 @@ ghlRouter.post('/sandbox-contact', async (req: Request, res: Response, next: Nex
       return;
     }
 
-    const response = await fetch(`${GHL_BASE_URL}/contacts/upsert`, {
+    const response = await fetch(`${config.baseUrl}/contacts/upsert`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY}`,
+        Authorization: `Bearer ${config.apiKey}`,
         Version: process.env.GHL_API_VERSION || '2021-07-28',
         'Content-Type': 'application/json',
       },

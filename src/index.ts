@@ -29,6 +29,7 @@ import { integrationsRouter } from '../modules/integrations/controller';
 import { leadsRouter } from '../modules/leads/controller';
 import { ghlRouter } from '../modules/ghl-connector/controller';
 import { ideasRouter } from '../modules/ideas/controller';
+import { integrationCredentialsRouter } from '../modules/integration-credentials/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -102,6 +103,7 @@ app.use('/publishing-package', publishingPackageRouter);
 app.use('/crm-conversion', crmConversionRouter);
 app.use('/postiz', postizIntegrationRouter);
 app.use('/integration-status', integrationStatusRouter);
+app.use('/integration-credentials', integrationCredentialsRouter);
 app.use('/admin/users', adminUsersRouter);
 app.use('/integrations', integrationsRouter);
 app.use('/leads', leadsRouter);

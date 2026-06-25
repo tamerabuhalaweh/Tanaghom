@@ -22,6 +22,7 @@ export async function findUserById(id: string): Promise<SessionUser | null> {
     email: user.email,
     name: user.name,
     role: user.role,
+    tenantKey: user.tenant_key,
     departmentId: user.department_id,
     isActive: user.is_active,
     agentRepId: agentRep?.id || null,

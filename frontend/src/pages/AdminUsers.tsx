@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { adminUsersApi, usersApi } from '../api';
+import { adminUsersApi, authApi, usersApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -88,6 +88,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<RecordMap[]>([]);
   const [departments, setDepartments] = useState<RecordMap[]>([]);
   const [message, setMessage] = useState('');
+  const [inviteToken, setInviteToken] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     email: '',
@@ -183,6 +184,21 @@ export default function AdminUsers() {
     }
   }
 
+  async function createInviteToken(userId: string, purpose: 'invite' | 'password_reset') {
+    if (!token) return;
+    setLoading(true);
+    setInviteToken(null);
+    try {
+      const result = await authApi.createOnboardingToken({ userId, purpose }, token);
+      setInviteToken(result as RecordMap);
+      setMessage(`${roleLabel(purpose)} token created. Raw token is returned once.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to create onboarding token');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const activeUsers = users.filter(user => Boolean(user.isActive)).length;
   const agentRepCount = users.filter(user => Boolean(user.agentRep)).length;
 
@@ -234,7 +250,7 @@ export default function AdminUsers() {
                 {departments.map((department) => <option key={String(department.id)} value={String(department.id)}>{text(department.name)}</option>)}
               </select>
             </Field>
-            <Field label="Temporary Password" helper="The platform currently uses admin-provisioned temporary passwords; password reset/onboarding is a remaining production gap.">
+            <Field label="Temporary Password" helper="A secure invite/reset token can be generated from the user directory after creation.">
               <input value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
             </Field>
 
@@ -264,9 +280,13 @@ export default function AdminUsers() {
                     <div className="mt-1 text-xs text-neutral-500">{text(agentRep?.status, 'missing')}</div>
                   </div>,
                   <ProductStatus tone={active ? 'good' : 'danger'}>{active ? 'Active' : 'Inactive'}</ProductStatus>,
-                  <SecondaryAction disabled={loading} onClick={() => setActive(String(user.id), !active)}>
-                    {active ? 'Deactivate' : 'Activate'}
-                  </SecondaryAction>,
+                  <div className="flex flex-wrap gap-2">
+                    <SecondaryAction disabled={loading} onClick={() => createInviteToken(String(user.id), 'invite')}>Invite</SecondaryAction>
+                    <SecondaryAction disabled={loading} onClick={() => createInviteToken(String(user.id), 'password_reset')}>Reset</SecondaryAction>
+                    <SecondaryAction disabled={loading} onClick={() => setActive(String(user.id), !active)}>
+                      {active ? 'Deactivate' : 'Activate'}
+                    </SecondaryAction>
+                  </div>,
                 ];
               })}
             />
@@ -275,6 +295,19 @@ export default function AdminUsers() {
           )}
         </ProductCard>
       </div>
+
+      {inviteToken && (
+        <ProductCard title="One-Time Onboarding Token" subtitle="Deliver this through an approved secure channel. The backend stores only a hash and will not show it again.">
+          <DetailGrid items={[
+            { label: 'Purpose', value: roleLabel(text(inviteToken.purpose)) },
+            { label: 'Expires', value: text(inviteToken.expiresAt) },
+            { label: 'Returned Once', value: String(inviteToken.rawTokenReturnedOnce) },
+          ]} />
+          <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 font-mono text-sm text-amber-900 break-all">
+            {text(inviteToken.token)}
+          </div>
+        </ProductCard>
+      )}
 
       <ProductCard title="Effective Role Mapping" subtitle="This keeps the product language business-friendly while the backend retains controlled authorization semantics.">
         <DetailGrid items={ROLE_TEMPLATES.map(template => ({

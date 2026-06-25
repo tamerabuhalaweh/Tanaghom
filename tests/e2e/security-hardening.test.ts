@@ -65,11 +65,13 @@ describe('Execution Kill Switches', () => {
     expect(EXECUTION_KILL_SWITCHES).toContain('CRM_LIVE_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('GHL_SANDBOX_WRITE_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('WHATSAPP_LIVE_ENABLED');
+    expect(EXECUTION_KILL_SWITCHES).toContain('TELEGRAM_LIVE_ENABLED');
+    expect(EXECUTION_KILL_SWITCHES).toContain('VOICE_CHAT_LIVE_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('RENDERING_LIVE_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('RESOURCESPACE_LIVE_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('PAPERCLIP_SYNC_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('ANALYTICS_LIVE_ENABLED');
-    expect(EXECUTION_KILL_SWITCHES).toHaveLength(11);
+    expect(EXECUTION_KILL_SWITCHES).toHaveLength(13);
   });
 
   it('all kill switches default to false', () => {

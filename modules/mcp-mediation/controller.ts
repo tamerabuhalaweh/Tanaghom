@@ -15,6 +15,7 @@ import {
   type CreateMcpMediationRequestInput,
 } from './types';
 import * as service from './service';
+import { discoverRemoteMcpTools, listDiscoveredTools } from './discovery';
 
 export const mcpMediationRouter = Router();
 
@@ -135,6 +136,52 @@ mcpMediationRouter.post('/connectors/:id/tool-preview', async (req: Request, res
       executable: false,
       sourceOfTruth: 'STITCH',
       _label: 'Tool preview registered for UI planning only - no MCP execution',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+mcpMediationRouter.post('/discover', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    requireAdmin(session.role);
+    const input = validateOrThrow(
+      z.object({
+        name: z.string().min(1).max(200),
+        endpointUrl: z.string().url(),
+        targetSystem: z.string().min(1).max(200),
+        description: z.string().max(5000).optional(),
+      }),
+      req.body,
+    );
+    const result = await discoverRemoteMcpTools({
+      requesterRole: session.role,
+      requesterUserId: session.humanUserId,
+      name: input.name,
+      endpointUrl: input.endpointUrl,
+      targetSystem: input.targetSystem,
+      description: input.description,
+    });
+    res.status(201).json({
+      ...result,
+      _label: 'Remote MCP tools discovered and stored - no tool execution performed',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+mcpMediationRouter.get('/connectors/:id/discovered-tools', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    await service.getMcpConnector(session.role, req.params.id as string);
+    const tools = await listDiscoveredTools(req.params.id as string);
+    res.json({
+      connectorId: req.params.id,
+      tools,
+      executionPerformed: false,
+      sourceOfTruth: 'STITCH',
     });
   } catch (err) {
     next(err);

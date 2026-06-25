@@ -61,6 +61,11 @@ export default function AgentSkills() {
     toolName: '',
     policyScope: 'content_quality,approval_routing,safety_review',
   });
+  const [githubForm, setGithubForm] = useState({
+    repositoryUrl: '',
+    skillPath: 'SKILL.md',
+    capability: 'imported.github_skill',
+  });
 
   const selectedAgentRep = useMemo(
     () => agentReps.find(agentRep => String(agentRep.id) === selectedAgentRepId) || agentReps[0] || null,
@@ -143,6 +148,22 @@ export default function AgentSkills() {
     }
   }
 
+  async function importGithubSkill() {
+    if (!token || !selectedAgentRep) return;
+    setLoading(true);
+    setMessage('');
+    try {
+      await usersApi.importGithubSkill(String(selectedAgentRep.id), githubForm, token);
+      setMessage('GitHub skill metadata imported. Repository code was not executed.');
+      setGithubForm({ repositoryUrl: '', skillPath: 'SKILL.md', capability: 'imported.github_skill' });
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to import GitHub skill');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const functionalAgents = list(selectedAgentRep?.functionalAgents);
   const governanceAgents = list(selectedAgentRep?.governanceAgents);
   const activeConnectors = connectors.filter(connector => text(connector.status) === 'active' || text(connector.status) === 'planned');
@@ -164,6 +185,7 @@ export default function AgentSkills() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="space-y-6">
         <ProductCard title="Create Skill" subtitle="Choose an AgentRep, skill type, and source. MCP-bound skills remain blocked from direct external execution.">
           <div className="space-y-4">
             <Field label="AgentRep">
@@ -233,6 +255,27 @@ export default function AgentSkills() {
           </div>
         </ProductCard>
 
+        <ProductCard title="Import GitHub Skill" subtitle="Import skill metadata from a GitHub repository into the selected AgentRep.">
+          <div className="space-y-4">
+            <Field label="GitHub Repository URL">
+              <input value={githubForm.repositoryUrl} onChange={(event) => setGithubForm({ ...githubForm, repositoryUrl: event.target.value })} placeholder="https://github.com/org/repo" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Skill Path">
+                <input value={githubForm.skillPath} onChange={(event) => setGithubForm({ ...githubForm, skillPath: event.target.value })} placeholder="SKILL.md" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+              </Field>
+              <Field label="Capability">
+                <input value={githubForm.capability} onChange={(event) => setGithubForm({ ...githubForm, capability: event.target.value })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+              </Field>
+            </div>
+            <Notice tone="info">Only public GitHub/raw GitHub metadata is imported. Repository code is not executed and external calls remain blocked.</Notice>
+            <PrimaryAction disabled={loading || !selectedAgentRep || !githubForm.repositoryUrl || !githubForm.skillPath} onClick={importGithubSkill}>
+              {loading ? 'Importing...' : 'Import Skill Metadata'}
+            </PrimaryAction>
+          </div>
+        </ProductCard>
+        </div>
+
         <div className="space-y-6">
           <ProductCard title="Selected AgentRep" subtitle="The skills below belong to the selected user's AI representative.">
             {selectedAgentRep ? (
@@ -286,7 +329,7 @@ export default function AgentSkills() {
           </ProductCard>
 
           <Notice tone="warn">
-            Remote MCP server tool discovery and GitHub repo skill import are not complete yet. This page now supports persisted native skills and manual MCP-bound skills only.
+            Remote MCP discovery and GitHub import now persist metadata only. Runtime execution is still blocked until human review, capability governance, approval, and MCP mediation are complete.
           </Notice>
         </div>
       </div>
