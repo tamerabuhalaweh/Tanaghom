@@ -38,7 +38,7 @@ export const authApi = {
   login: (email: string, password: string) =>
     apiFetch<{ token: string; user: unknown; agentRep: unknown }>('/auth/login', { method: 'POST', body: { email, password } }),
   session: (token: string) =>
-    apiFetch<{ user: unknown; agentRep: unknown }>('/auth/session', { token }),
+    apiFetch<unknown>('/auth/session', { token }),
   createOnboardingToken: (data: unknown, token: string) =>
     apiFetch<unknown>('/auth/onboarding-token', { method: 'POST', body: data, token }),
   onboardingEmailStatus: (token: string) =>
