@@ -33,12 +33,12 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
   if (generatedCampaign) {
     await page.getByRole('link', { name: /Open Campaigns/i }).click();
   } else {
-    await page.getByRole('link', { name: /^Campaigns$/i }).click();
+    await page.getByRole('link', { name: /Campaigns.*Briefs/i }).click();
   }
   await expect(page.getByRole('heading', { name: /Campaign workspace/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /Generate Platform Drafts/i })).toBeVisible();
 
-  await page.getByRole('link', { name: /AI Provider/i }).click();
+  await page.getByRole('link', { name: /AI Provider.*My model/i }).click();
   await expect(page.getByRole('heading', { name: /AI Provider Settings/i })).toBeVisible();
   await expect(page.getByText(/raw values are never returned/i)).toBeVisible();
 
