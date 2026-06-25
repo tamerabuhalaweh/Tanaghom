@@ -261,9 +261,12 @@ export default function DemoCommandCenter() {
         setPostizChannels(list((postizChannelData as RecordMap).channels));
         setAnalytics(buildAnalyticsSummary(list(sourceData), list(snapshotData), list(reportData)));
         try {
-          const active = await aiProviderApi.active(token as string) as RecordMap;
-          setProviderReady(active.apiKeyStatus === 'configured');
-          setProviderLabel(`${text(active.name, 'LLM provider')} / ${text(active.model, 'model configured')}`);
+          const status = await aiProviderApi.status(token as string) as RecordMap;
+          const providers = list(status.providers);
+          const activeProvider = text(status.activeProvider, 'mock');
+          const active = providers.find(provider => provider.type === activeProvider && provider.type !== 'mock');
+          setProviderReady(active?.apiKeyStatus === 'configured');
+          setProviderLabel(active ? `${text(active.name, 'LLM provider')} / ${text(active.model, 'model configured')}` : 'Connect OpenAI or Claude');
         } catch (providerError) {
           setProviderReady(false);
           setProviderLabel(providerError instanceof Error ? providerError.message : 'Configure OpenAI or Claude before draft generation');
