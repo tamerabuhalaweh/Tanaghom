@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS "tenants" (
 CREATE UNIQUE INDEX IF NOT EXISTS "tenants_tenant_key_key" ON "tenants"("tenant_key");
 
 INSERT INTO "tenants" ("tenant_key", "name", "status")
-SELECT DISTINCT COALESCE("tenant_key", 'default'), 'Tanaghum Default Tenant', 'active'::"TenantStatus"
+SELECT DISTINCT COALESCE("users"."tenant_key", 'default'), 'Tanaghum Default Tenant', 'active'::"TenantStatus"
 FROM "users"
 ON CONFLICT ("tenant_key") DO NOTHING;
 
@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS "tenant_memberships_tenant_key_idx" ON "tenant_member
 CREATE INDEX IF NOT EXISTS "tenant_memberships_user_id_idx" ON "tenant_memberships"("user_id");
 
 INSERT INTO "tenant_memberships" ("tenant_key", "user_id", "role", "is_active")
-SELECT COALESCE("tenant_key", 'default'), "id", "role", "is_active"
+SELECT COALESCE("users"."tenant_key", 'default'), "users"."id", "users"."role", "users"."is_active"
 FROM "users"
 ON CONFLICT ("tenant_key", "user_id") DO UPDATE
 SET "role" = EXCLUDED."role",
