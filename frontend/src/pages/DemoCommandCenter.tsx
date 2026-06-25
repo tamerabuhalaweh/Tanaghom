@@ -65,6 +65,22 @@ function titleCase(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 }
 
+function campaignName(campaign: RecordMap | null): string {
+  if (!campaign) return 'No campaign selected';
+  const source = `${text(campaign.objective, '')}\n${text(campaign.topic, '')}`;
+  const campaignMatch = source.match(/Campaign:\s*([^\n]+)/i);
+  if (campaignMatch?.[1]) return campaignMatch[1].trim();
+  return text(campaign.topic).split('\n')[0].trim();
+}
+
+function campaignObjective(campaign: RecordMap | null): string {
+  if (!campaign) return 'Select a campaign to see the objective.';
+  const source = `${text(campaign.objective, '')}\n${text(campaign.topic, '')}`;
+  const objectiveMatch = source.match(/Objective:\s*([^\n]+)/i);
+  if (objectiveMatch?.[1]) return objectiveMatch[1].trim();
+  return text(campaign.objective, text(campaign.topic)).split('\n')[0].trim();
+}
+
 function scoreComponent(score: RecordMap | null, component: string): RecordMap | undefined {
   return list(score?.components).find(item => item.component === component);
 }
@@ -472,7 +488,7 @@ export default function DemoCommandCenter() {
             <ExecutiveKpiCard
               label="Active campaigns"
               value={campaignQueue.length}
-              detail={selected ? `Now focused on: ${text(selected.topic)}` : 'Create or select a campaign'}
+              detail={selected ? `Now focused on: ${campaignName(selected)}` : 'Create or select a campaign'}
               tone={campaignQueue.length ? 'info' : 'warn'}
               series={[campaignQueue.length, drafts.length, pendingApprovals, publishingPackageCount, leads.length]}
               secondary="growth work in motion"
@@ -559,7 +575,7 @@ export default function DemoCommandCenter() {
             <div className="mt-3 text-3xl font-semibold tracking-tight">{nextAction}</div>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-white/65">
               {selected
-                ? `Move "${text(selected.topic)}" through draft, score, approval, package, analytics, and lead handoff.`
+                ? `Move "${campaignName(selected)}" through draft, score, approval, package, analytics, and lead handoff.`
                 : 'Create or select a campaign before draft generation, approval, publishing preparation, analytics, or lead handoff can produce useful output.'}
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
@@ -645,8 +661,11 @@ export default function DemoCommandCenter() {
                   selected?.id === campaign.id ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'
                 }`}
               >
-                <div className="line-clamp-2 font-semibold">{text(campaign.topic)}</div>
+                <div className="line-clamp-2 font-semibold">{campaignName(campaign)}</div>
                 <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/60' : 'text-neutral-500'}`}>
+                  {campaignObjective(campaign)}
+                </div>
+                <div className={`mt-2 text-xs ${selected?.id === campaign.id ? 'text-white/45' : 'text-neutral-400'}`}>
                   {titleCase(text(campaign.status, 'idea'))} / {titleCase(text(campaign.riskCategory, 'medium'))} risk
                 </div>
               </button>
@@ -665,8 +684,8 @@ export default function DemoCommandCenter() {
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                 <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-5">
                   <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Campaign objective</div>
-                  <p className="mt-3 text-lg font-semibold leading-7 text-neutral-950">{text(selected.objective)}</p>
-                  <p className="mt-4 text-sm leading-6 text-neutral-600">{text(selected.topic)}</p>
+                  <p className="mt-3 text-lg font-semibold leading-7 text-neutral-950">{campaignName(selected)}</p>
+                  <p className="mt-4 text-sm leading-6 text-neutral-600">{campaignObjective(selected)}</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-xl border border-neutral-200 bg-white p-4">
