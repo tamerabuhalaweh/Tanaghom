@@ -121,8 +121,18 @@ export const usersApi = {
   me: (token: string) => apiFetch<unknown>('/users/me', { token }),
   departments: (token: string) => apiFetch<unknown[]>('/departments', { token }),
   agentReps: (token: string) => apiFetch<unknown[]>('/agent-reps', { token }),
+  myAgentRep: (token: string) => apiFetch<unknown>('/agent-reps/me', { token }),
+  createMyAgentRep: (token: string) => apiFetch<unknown>('/agent-reps/me', { method: 'POST', token }),
   createAgentRep: (data: unknown, token: string) =>
     apiFetch<unknown>('/agent-reps', { method: 'POST', body: data, token }),
+  functionalAgents: (agentRepId: string, token: string) =>
+    apiFetch<unknown[]>(`/agent-reps/${agentRepId}/functional-agents`, { token }),
+  createFunctionalAgent: (agentRepId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/agent-reps/${agentRepId}/functional-agents`, { method: 'POST', body: data, token }),
+  governanceAgents: (agentRepId: string, token: string) =>
+    apiFetch<unknown[]>(`/agent-reps/${agentRepId}/governance-agents`, { token }),
+  createGovernanceAgent: (agentRepId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/agent-reps/${agentRepId}/governance-agents`, { method: 'POST', body: data, token }),
 };
 
 export const aiProviderApi = {

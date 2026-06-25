@@ -131,6 +131,33 @@ export async function createAgentRep(requesterRole: string, input: CreateAgentRe
   return agentRep;
 }
 
+export async function createOwnAgentRep(userId: string, requesterRole: string, departmentId: string | null): Promise<AgentRepSummary> {
+  const existing = await repo.getAgentRepByUserId(userId);
+  if (existing) return existing;
+
+  const user = await repo.getUserById(userId);
+  const agentRep = await repo.createAgentRep({
+    userId,
+    name: `${user.name} AgentRep`,
+    agentType: 'functional',
+    permissionsContext: {
+      role: requesterRole,
+      departmentId,
+      source: 'self_service_agentrep_creation',
+    },
+    metadata: {
+      createdBy: 'self_service',
+    },
+  });
+
+  auditLog(
+    { actor: `user:${userId}`, action: 'agent_rep_self_created', object_type: 'agent_rep', object_id: agentRep.id, result: 'success' },
+    `AgentRep self-created for user ${user.email}`,
+  );
+
+  return agentRep;
+}
+
 export async function updateAgentRep(requesterRole: string, id: string, input: UpdateAgentRepInput): Promise<AgentRepSummary> {
   checkPermission(requesterRole, 'agentreps:update');
   const agentRep = await repo.updateAgentRep(id, input);

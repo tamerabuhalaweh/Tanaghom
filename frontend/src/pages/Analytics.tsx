@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { analyticsApi, demoApi } from '../api';
-import { DetailGrid, EmptyProductState, MetricCard, Notice, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
+import { BarList, DetailGrid, EmptyProductState, FunnelChart, MetricCard, Notice, ProductCard, ProductPage, ProductStatus, ReadableQueue, ScoreRing, SecondaryAction } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
 
 type RecordMap = Record<string, unknown>;
@@ -59,6 +59,7 @@ export default function Analytics() {
 
   const reach = analytics?.reach ?? 0;
   const impressions = analytics?.impressions ?? 0;
+  const engagementNumber = Number.parseFloat(String(analytics?.engagementRate || '0').replace('%', '')) || 0;
   const leadCaptures = list(status?.leadCaptures);
   const selectedLead = leadCaptures[selectedLeadIndex] || leadCaptures[0] || null;
   const liveLeadCount = leadCaptures.length;
@@ -78,6 +79,29 @@ export default function Analytics() {
         <MetricCard label="Engagement" value={analytics?.engagementRate || '3.56%'} detail="Normalized rate" />
         <MetricCard label="Best Platform" value={analytics?.bestPlatform || 'LinkedIn'} detail="Recommended focus" />
         <MetricCard label="Qualified Leads" value={liveLeadCount} detail="Handoff candidates" />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)_380px]">
+        <ScoreRing
+          value={Math.min(100, Math.round(engagementNumber * 20))}
+          label="Engagement Quality"
+          detail="Calculated from the engagement rate returned by the analytics endpoint."
+        />
+        <ProductCard title="Performance Mix" subtitle="Reach, impressions, and captured leads from current backend data.">
+          <BarList items={[
+            { label: 'Reach', value: reach, detail: reach.toLocaleString(), tone: 'good' },
+            { label: 'Impressions', value: impressions, detail: impressions.toLocaleString(), tone: 'info' },
+            { label: 'Qualified Leads', value: liveLeadCount, detail: `${liveLeadCount} leads`, tone: liveLeadCount ? 'good' : 'default' },
+          ]} />
+        </ProductCard>
+        <ProductCard title="Lead Handoff Funnel" subtitle="Current path toward CRM and voice/chat follow-up.">
+          <FunnelChart stages={[
+            { label: 'Captured', value: leadCaptures.length, tone: leadCaptures.length ? 'info' : 'default' },
+            { label: 'Selected', value: selectedLead ? 1 : 0, tone: selectedLead ? 'good' : 'default' },
+            { label: 'CRM Package', value: selectedLead ? 1 : 0, tone: selectedLead ? 'good' : 'default' },
+            { label: 'External Writes', value: 0, tone: 'danger' },
+          ]} />
+        </ProductCard>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">

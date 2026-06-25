@@ -322,3 +322,145 @@ export function PlatformPill({ children, active = false }: { children: ReactNode
     </span>
   );
 }
+
+export function ScoreRing({
+  value,
+  label,
+  detail,
+}: {
+  value: number;
+  label: string;
+  detail?: string;
+}) {
+  const safeValue = Math.max(0, Math.min(100, Math.round(value)));
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (safeValue / 100) * circumference;
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-5">
+        <div className="relative h-28 w-28 shrink-0">
+          <svg viewBox="0 0 104 104" className="-rotate-90">
+            <circle cx="52" cy="52" r={radius} fill="none" stroke="rgb(245 245 245)" strokeWidth="10" />
+            <circle
+              cx="52"
+              cy="52"
+              r={radius}
+              fill="none"
+              stroke={safeValue >= 75 ? 'rgb(16 185 129)' : safeValue >= 50 ? 'rgb(245 158 11)' : 'rgb(239 68 68)'}
+              strokeLinecap="round"
+              strokeWidth="10"
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-2xl font-semibold tracking-tight text-neutral-950">{safeValue}</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-neutral-950">{label}</div>
+          {detail && <p className="mt-2 text-sm leading-6 text-neutral-500">{detail}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function BarList({
+  items,
+}: {
+  items: { label: string; value: number; detail?: string; tone?: Tone }[];
+}) {
+  const max = Math.max(1, ...items.map(item => item.value));
+  return (
+    <div className="space-y-4">
+      {items.map(item => {
+        const pct = Math.max(4, Math.round((item.value / max) * 100));
+        return (
+          <div key={item.label}>
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium text-neutral-800">{item.label}</span>
+              <span className="font-mono text-xs text-neutral-500">{item.detail || item.value.toLocaleString()}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
+              <div
+                className={cx(
+                  'h-full rounded-full',
+                  item.tone === 'good' ? 'bg-emerald-500' : item.tone === 'warn' ? 'bg-amber-500' : item.tone === 'danger' ? 'bg-red-500' : item.tone === 'info' ? 'bg-blue-500' : 'bg-neutral-950',
+                )}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function FunnelChart({
+  stages,
+}: {
+  stages: { label: string; value: number; tone?: Tone }[];
+}) {
+  const max = Math.max(1, ...stages.map(stage => stage.value));
+  return (
+    <div className="space-y-3">
+      {stages.map((stage, index) => {
+        const width = Math.max(18, Math.round((stage.value / max) * 100));
+        return (
+          <div key={stage.label} className="grid grid-cols-[120px_1fr_60px] items-center gap-3 text-sm">
+            <div className="truncate text-neutral-500">{stage.label}</div>
+            <div className="h-9 overflow-hidden rounded-md bg-neutral-100">
+              <div
+                className={cx(
+                  'flex h-full items-center justify-end rounded-md px-3 text-xs font-semibold text-white',
+                  stage.tone === 'good' ? 'bg-emerald-600' : stage.tone === 'warn' ? 'bg-amber-500' : stage.tone === 'danger' ? 'bg-red-500' : stage.tone === 'info' ? 'bg-blue-600' : 'bg-neutral-950',
+                )}
+                style={{ width: `${width}%`, marginLeft: `${Math.min(index * 2, 12)}%` }}
+              >
+                {stage.value}
+              </div>
+            </div>
+            <div className="text-right font-mono text-xs text-neutral-500">{stage.value}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function StepperPanel({
+  title,
+  steps,
+}: {
+  title: string;
+  steps: { label: string; detail: string; state: 'done' | 'active' | 'waiting' | 'blocked' }[];
+}) {
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+      <h2 className="text-base font-semibold tracking-tight text-neutral-950">{title}</h2>
+      <div className="mt-5 space-y-4">
+        {steps.map((step, index) => (
+          <div key={step.label} className="grid grid-cols-[32px_1fr] gap-3">
+            <div className={cx(
+              'flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold',
+              step.state === 'done' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+              step.state === 'active' && 'border-neutral-950 bg-neutral-950 text-white',
+              step.state === 'waiting' && 'border-neutral-200 bg-neutral-50 text-neutral-400',
+              step.state === 'blocked' && 'border-red-200 bg-red-50 text-red-700',
+            )}>
+              {index + 1}
+            </div>
+            <div className="min-w-0 pb-4">
+              <div className="font-medium text-neutral-950">{step.label}</div>
+              <div className="mt-1 text-sm leading-5 text-neutral-500">{step.detail}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

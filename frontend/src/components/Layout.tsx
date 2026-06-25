@@ -14,6 +14,7 @@ import {
   Network,
   ShieldCheck,
   Sparkles,
+  UserRound,
   Users,
   X,
 } from 'lucide-react';
@@ -88,12 +89,20 @@ const NAV_ITEMS: NavItem[] = [
     roles: PRODUCT_ROLES,
   },
   {
+    path: '/my-agent-rep',
+    label: 'My AI Rep',
+    description: 'Role, skills, permissions',
+    icon: UserRound,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
+  },
+  {
     path: '/ai-settings',
     label: 'AI Provider',
-    description: 'Model configuration',
+    description: 'My model credentials',
     icon: Brain,
-    group: 'Admin',
-    roles: ADMIN_ROLES,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
   },
   {
     path: '/admin-users',

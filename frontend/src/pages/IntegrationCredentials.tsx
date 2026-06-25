@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
-import { integrationStatusApi, postizApi, ghlApi } from '../api';
+import { ghlApi, integrationStatusApi, postizApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
-import { Alert, Card, StatusBadge } from '../components/UI';
+import {
+  DetailGrid,
+  EmptyProductState,
+  MetricCard,
+  Notice,
+  ProductCard,
+  ProductPage,
+  ProductStatus,
+  ProductTable,
+} from '../components/ProductUI';
 
 type RecordMap = Record<string, unknown>;
 
@@ -9,10 +18,18 @@ function text(value: unknown, fallback = 'Not configured'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
-function statusVariant(value: string): 'success' | 'warning' | 'danger' | 'info' | 'default' {
+function bool(value: unknown): boolean {
+  return value === true;
+}
+
+function display(value: string): string {
+  return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function statusTone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'default' {
   const lower = value.toLowerCase();
-  if (lower.includes('configured') || lower.includes('connected') || lower.includes('ready')) return 'success';
-  if (lower.includes('missing') || lower.includes('requires')) return 'warning';
+  if (lower.includes('configured') || lower.includes('ready')) return 'good';
+  if (lower.includes('missing') || lower.includes('requires')) return 'warn';
   if (lower.includes('blocked') || lower.includes('disabled')) return 'danger';
   return 'info';
 }
@@ -26,103 +43,98 @@ export default function IntegrationCredentials() {
 
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
     Promise.all([
       integrationStatusApi.get(token),
       postizApi.status(token),
       ghlApi.status(token),
     ])
       .then(([integration, postizStatus, ghlStatus]) => {
+        if (cancelled) return;
         setStatus(integration as RecordMap);
         setPostiz(postizStatus as RecordMap);
         setGhl(ghlStatus as RecordMap);
       })
-      .catch((err) => setMessage(err instanceof Error ? err.message : 'Failed to load integration status'));
+      .catch((err) => {
+        if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load integration status');
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const connectors = Array.isArray(status?.connectors) ? status.connectors as RecordMap[] : [];
   const aiProvider = status?.aiProvider as RecordMap | undefined;
-  const safety = status?.safety as RecordMap | undefined;
+  const configuredConnectors = connectors.filter(connector => text(connector.credentialStatus).toLowerCase().includes('configured')).length;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <header className="rounded-2xl border border-slate-800 bg-slate-950/80 p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge label="Secrets hidden" variant="success" />
-          <StatusBadge label="Env/deployment only" variant="info" />
-          <StatusBadge label="Live activation blocked from UI" variant="danger" />
-        </div>
-        <h1 className="mt-4 text-3xl font-semibold text-white">Integration Credential Control Plane</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-          View provider and connector readiness without exposing raw secrets. Credentials must be configured in deployment secrets or VPS environment files.
-        </p>
-      </header>
-
-      {message && <Alert type="warning">{message}</Alert>}
+    <ProductPage
+      eyebrow="Admin"
+      title="Credentials & Readiness"
+      subtitle="Review credential status without exposing secrets. LLM credentials are user-owned; most integration credentials are still deployment-level until the tenant integration vault is implemented."
+      action={<ProductStatus tone="good">Secrets Hidden</ProductStatus>}
+    >
+      {message && <Notice tone="danger">{message}</Notice>}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <StatusCard label="AI Provider" value={`${text(aiProvider?.provider)} / ${text(aiProvider?.model)}`} badge={text(aiProvider?.label, 'Unknown')} />
-        <StatusCard label="Postiz" value={text(postiz?.status)} badge={text((postiz?.health as RecordMap | undefined)?.credentialStatus)} />
-        <StatusCard label="GoHighLevel" value={text(ghl?._label)} badge={text(ghl?.apiKeyStatus)} />
-        <StatusCard label="Execution" value={safety?.externalExecutionEnabled ? 'Enabled' : 'Blocked'} badge={safety?.m5WriteExecutionEnabled ? 'M5 Enabled' : 'M5 Disabled'} danger />
+        <MetricCard label="AI Provider" value={text(aiProvider?.provider, 'mock')} detail={text(aiProvider?.label, 'Status loaded from backend')} tone={statusTone(text(aiProvider?.label))} />
+        <MetricCard label="Postiz" value={text(postiz?.status)} detail={text((postiz?.health as RecordMap | undefined)?.credentialStatus)} tone={statusTone(`${text(postiz?.status)} ${text((postiz?.health as RecordMap | undefined)?.credentialStatus)}`)} />
+        <MetricCard label="GoHighLevel" value={text(ghl?._label)} detail={text(ghl?.apiKeyStatus)} tone={statusTone(`${text(ghl?._label)} ${text(ghl?.apiKeyStatus)}`)} />
+        <MetricCard label="Connector Credentials" value={`${configuredConnectors}/${connectors.length}`} detail="Configured from backend status" tone={configuredConnectors === connectors.length && connectors.length > 0 ? 'good' : 'warn'} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <Card title="Connector Credential Status">
-          <div className="space-y-3">
-            {connectors.map((connector) => (
-              <div key={String(connector.id)} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                <div className="flex items-start justify-between gap-3">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <ProductCard title="Connector Credential Status" subtitle="Status only. Raw tokens, API keys, and secrets are never displayed.">
+          {connectors.length ? (
+            <ProductTable
+              columns={['Connector', 'Credential', 'Endpoint', 'Execution Policy']}
+              rows={connectors.map(connector => {
+                const policy = (connector.executionPolicy || {}) as RecordMap;
+                return [
                   <div>
-                    <div className="font-semibold text-white">{text(connector.name)}</div>
-                    <div className="mt-1 text-xs text-slate-500">Policy: {text((connector.executionPolicy as RecordMap | undefined)?.label, 'Blocked')}</div>
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <StatusBadge label={text(connector.credentialStatus)} variant={statusVariant(text(connector.credentialStatus))} />
-                    <StatusBadge label={text(connector.endpointStatus)} variant={statusVariant(text(connector.endpointStatus))} />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {connectors.length === 0 && <div className="text-sm text-slate-500">No connector status returned by backend.</div>}
-          </div>
-        </Card>
+                    <div className="font-medium text-neutral-950">{text(connector.name)}</div>
+                    <div className="mt-1 text-xs text-neutral-500">{text(connector.id)}</div>
+                  </div>,
+                  <ProductStatus tone={statusTone(text(connector.credentialStatus))}>{display(text(connector.credentialStatus))}</ProductStatus>,
+                  <ProductStatus tone={statusTone(text(connector.endpointStatus))}>{display(text(connector.endpointStatus))}</ProductStatus>,
+                  <div>
+                    <ProductStatus tone={bool(policy.allowed) ? 'warn' : 'danger'}>{text(policy.label, 'Blocked')}</ProductStatus>
+                    <div className="mt-1 text-xs text-neutral-500">{text(policy.reason, text(policy.reasons))}</div>
+                  </div>,
+                ];
+              })}
+            />
+          ) : (
+            <EmptyProductState message="No connector status returned by backend." />
+          )}
+        </ProductCard>
 
-        <Card title="Deployment Secrets Needed">
-          <div className="space-y-4 text-sm">
-            <SecretGroup title="LLM Provider" items={['LLM_PROVIDER=openai|claude|mock', 'OPENAI_API_KEY', 'OPENAI_MODEL', 'CLAUDE_API_KEY', 'CLAUDE_MODEL']} />
-            <SecretGroup title="Postiz Sandbox" items={['POSTIZ_SANDBOX_URL', 'POSTIZ_API_KEY', 'POSTIZ_SANDBOX_INTEGRATION_ID', 'POSTIZ_SANDBOX_SCHEDULING_ENABLED=false by default']} />
-            <SecretGroup title="GoHighLevel Sandbox" items={['GHL_API_KEY or GOHIGHLEVEL_API_KEY', 'GHL_LOCATION_ID', 'GHL_SANDBOX_WRITE_ENABLED=false by default']} />
-            <SecretGroup title="Execution Gates" items={['DEMO_MODE=true blocks real writes', 'EXTERNAL_EXECUTION_ENABLED=false by default', 'M5_WRITE_EXECUTION_ENABLED=false by default']} />
+        <ProductCard title="Credential Model" subtitle="What is real now and what still needs production vault work.">
+          <div className="space-y-4">
+            <DetailGrid items={[
+              { label: 'LLM Keys', value: 'User-owned encrypted credentials are supported.' },
+              { label: 'Postiz', value: 'Deployment/sandbox env credentials are checked; tenant UI vault is not complete.' },
+              { label: 'GoHighLevel', value: 'Sandbox env credentials are checked; tenant UI vault is not complete.' },
+              { label: 'Messaging / Voice', value: 'Credential status is read-only until tenant vault is implemented.' },
+            ]} />
+            <Notice tone="warn">
+              Remaining production gap: implement tenant integration credential vault for Postiz, GHL, WhatsApp, Telegram, voice/chat, and social API OAuth. Do not mark this as fixed yet.
+            </Notice>
           </div>
-        </Card>
+        </ProductCard>
       </div>
-    </div>
-  );
-}
 
-function StatusCard({ label, value, badge, danger }: { label: string; value: string; badge: string; danger?: boolean }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{label}</div>
-      <div className="mt-2 min-h-10 text-sm font-semibold text-white">{value}</div>
-      <div className="mt-3">
-        <StatusBadge label={badge} variant={danger ? 'danger' : statusVariant(`${value} ${badge}`)} />
-      </div>
-    </div>
-  );
-}
-
-function SecretGroup({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <div className="font-semibold text-white">{title}</div>
-      <div className="mt-2 space-y-1">
-        {items.map((item) => (
-          <div key={item} className="rounded-lg bg-slate-900 px-3 py-2 font-mono text-xs text-slate-400">
-            {item}
-          </div>
-        ))}
-      </div>
-    </div>
+      <ProductCard title="Deployment Secret Names" subtitle="Current deployment-level configuration requirements.">
+        <ProductTable
+          columns={['Area', 'Required Variables']}
+          rows={[
+            ['LLM Provider', 'OPENAI_API_KEY / OPENAI_MODEL / CLAUDE_API_KEY / CLAUDE_MODEL, or user-owned credentials from AI Provider page'],
+            ['Postiz Sandbox', 'POSTIZ_SANDBOX_URL / POSTIZ_API_KEY / POSTIZ_SANDBOX_INTEGRATION_ID / POSTIZ_SANDBOX_SCHEDULING_ENABLED=false by default'],
+            ['GoHighLevel Sandbox', 'GHL_API_KEY or GOHIGHLEVEL_API_KEY / GHL_LOCATION_ID / GHL_SANDBOX_WRITE_ENABLED=false by default'],
+            ['Execution Gates', 'DEMO_MODE / EXTERNAL_EXECUTION_ENABLED / M5_WRITE_EXECUTION_ENABLED / CRM_LIVE_ENABLED'],
+          ]}
+        />
+      </ProductCard>
+    </ProductPage>
   );
 }

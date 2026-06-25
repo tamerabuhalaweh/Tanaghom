@@ -13,6 +13,8 @@ import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
   EmptyProductState,
+  BarList,
+  FunnelChart,
   MetricCard,
   Notice,
   PlatformPill,
@@ -22,6 +24,7 @@ import {
   ProductPage,
   ProductStatus,
   ReadableQueue,
+  ScoreRing,
   SecondaryAction,
   WorkflowRail,
 } from '../components/ProductUI';
@@ -330,6 +333,30 @@ export default function DemoCommandCenter() {
           { label: 'Evidence', state: stateFor(!!approval || !!packageResult, false) },
         ]} />
       </ProductCard>
+
+      <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)_380px]">
+        <ScoreRing
+          value={score ? totalScore : 0}
+          label={score ? 'Selected draft readiness' : 'Workflow readiness'}
+          detail={score ? 'Score is calculated from the actual selected generated draft.' : 'Generate and score a draft to calculate readiness.'}
+        />
+        <ProductCard title="Performance Signals" subtitle="Visualized from the analytics endpoint and current workflow records.">
+          <BarList items={[
+            { label: 'Reach', value: numberValue(analytics?.reach), detail: numberValue(analytics?.reach).toLocaleString(), tone: 'good' },
+            { label: 'Impressions', value: numberValue(analytics?.impressions), detail: numberValue(analytics?.impressions).toLocaleString(), tone: 'info' },
+            { label: 'Qualified leads', value: leads.length, detail: `${leads.length} records`, tone: leads.length ? 'good' : 'default' },
+          ]} />
+        </ProductCard>
+        <ProductCard title="Lead Funnel" subtitle="Current journey from campaign package to qualified handoff.">
+          <FunnelChart stages={[
+            { label: 'Campaigns', value: campaigns.length || 1, tone: 'info' },
+            { label: 'Drafts', value: drafts.length || 0, tone: drafts.length ? 'good' : 'default' },
+            { label: 'Approvals', value: approval ? 1 : 0, tone: approval ? 'good' : 'default' },
+            { label: 'Packages', value: packageResult ? 1 : 0, tone: packageResult ? 'good' : 'default' },
+            { label: 'Leads', value: leads.length || 0, tone: leads.length ? 'good' : 'default' },
+          ]} />
+        </ProductCard>
+      </div>
 
       {notice && (
         <Notice tone={notice.includes('failed') ? 'danger' : 'good'}>{notice}</Notice>

@@ -14,6 +14,7 @@ import {
   getAgentRepById,
   getAgentRepByUserId,
   createAgentRep,
+  createOwnAgentRep,
   updateAgentRep,
   listFunctionalAgents,
   createFunctionalAgent,
@@ -111,6 +112,25 @@ usersDepartmentsRouter.put('/departments/:id', async (req: Request, res: Respons
 });
 
 // AgentRep
+usersDepartmentsRouter.get('/agent-reps/me', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const agentRep = await getAgentRepByUserId(payload.role, payload.sub);
+    res.json(agentRep);
+  } catch (err) { next(err); }
+});
+
+usersDepartmentsRouter.post('/agent-reps/me', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const agentRep = await createOwnAgentRep(payload.sub, payload.role, payload.departmentId ?? null);
+    res.status(201).json({
+      ...agentRep,
+      _label: 'Own AgentRep is ready for this user session',
+    });
+  } catch (err) { next(err); }
+});
+
 usersDepartmentsRouter.get('/agent-reps', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);

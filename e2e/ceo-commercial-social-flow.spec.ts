@@ -27,12 +27,23 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
 
   await page.getByRole('link', { name: /AI Provider/i }).click();
   await expect(page.getByRole('heading', { name: /AI Provider Settings/i })).toBeVisible();
-  await expect(page.getByText(/Raw keys never displayed/i)).toBeVisible();
+  await expect(page.getByText(/raw values are never returned/i)).toBeVisible();
+
+  await page.getByRole('link', { name: /My AI Rep/i }).click();
+  await expect(page.getByRole('heading', { name: /My AI Rep/i })).toBeVisible();
+  await expect(page.getByText(/AgentRep Identity|Initialize AgentRep/i)).toBeVisible();
 
   await page.getByRole('link', { name: /Users & Roles/i }).click();
   await expect(page.getByRole('heading', { name: /Users, Roles & AgentReps/i })).toBeVisible();
+  await expect(page.getByText(/Business Role Template/i)).toBeVisible();
+  await expect(page.getByText(/Social Media Manager/i)).toBeVisible();
+
+  await page.getByRole('link', { name: /Agent Skills/i }).click();
+  await expect(page.getByRole('heading', { name: /Agent Skills/i })).toBeVisible();
+  await expect(page.getByText(/Create Skill/i)).toBeVisible();
 
   await page.getByRole('link', { name: /Integrations/i }).click();
-  await expect(page.getByRole('heading', { name: /MCP Engine|Integration/i })).toBeVisible();
-  await expect(page.getByText('External Execution Blocked')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Integrations & MCP Connectors/i })).toBeVisible();
+  await expect(page.getByText(/Add Connector/i)).toBeVisible();
+  await expect(page.getByText(/Live Activation Blocked/i)).toBeVisible();
 });

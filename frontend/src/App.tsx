@@ -28,6 +28,7 @@ import DemoCommandCenter from './pages/DemoCommandCenter'
 import PostIdeas from './pages/PostIdeas'
 import IntegrationCredentials from './pages/IntegrationCredentials'
 import AdminUsers from './pages/AdminUsers'
+import MyAgentRep from './pages/MyAgentRep'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -68,6 +69,7 @@ function App() {
             <Route path="production" element={<ProductionRendering />} />
             <Route path="safety" element={<SafetyStatus />} />
             <Route path="ai-settings" element={<AIProviderSettings />} />
+            <Route path="my-agent-rep" element={<MyAgentRep />} />
             <Route path="integration-credentials" element={<IntegrationCredentials />} />
             <Route path="admin-users" element={<AdminUsers />} />
             <Route path="mcp-engine" element={<McpEngine />} />

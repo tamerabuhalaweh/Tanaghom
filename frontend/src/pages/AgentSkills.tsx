@@ -1,86 +1,295 @@
+import { useEffect, useMemo, useState } from 'react';
+import { mcpRuntimeApi, usersApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
-import { Card, StatusBadge, Alert, DemoLabel } from '../components/UI';
-import { MCP_SKILLS } from '../modules/mcp-engine/registry-data';
+import {
+  DetailGrid,
+  EmptyProductState,
+  Field,
+  MetricCard,
+  Notice,
+  PrimaryAction,
+  ProductCard,
+  ProductPage,
+  ProductStatus,
+  ProductTable,
+} from '../components/ProductUI';
+
+type RecordMap = Record<string, unknown>;
+type SkillKind = 'functional' | 'governance';
+type SkillSource = 'stitch_native' | 'mcp_bound';
+
+const CAPABILITY_PRESETS = [
+  'campaign.strategy',
+  'social.draft_generation',
+  'social.platform_adaptation',
+  'social.reach_scoring',
+  'approval.routing',
+  'publishing.preparation',
+  'analytics.summary',
+  'lead.qualification',
+  'crm.handoff_preparation',
+  'voice_chat.handoff_preparation',
+  'audit.spine_evidence',
+];
+
+function text(value: unknown, fallback = 'Not assigned'): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function list(value: unknown): RecordMap[] {
+  return Array.isArray(value) ? value as RecordMap[] : [];
+}
+
+function display(value: string): string {
+  return value.replaceAll('_', ' ').replaceAll('.', ' / ').replace(/\b\w/g, char => char.toUpperCase());
+}
 
 export default function AgentSkills() {
-  useAuth();
+  const { token } = useAuth();
+  const [agentReps, setAgentReps] = useState<RecordMap[]>([]);
+  const [connectors, setConnectors] = useState<RecordMap[]>([]);
+  const [selectedAgentRepId, setSelectedAgentRepId] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    kind: 'functional' as SkillKind,
+    source: 'stitch_native' as SkillSource,
+    name: 'Social Draft Generation',
+    description: 'Generate platform-ready campaign copy from an approved brief.',
+    capability: 'social.draft_generation',
+    connectorId: '',
+    toolName: '',
+    policyScope: 'content_quality,approval_routing,safety_review',
+  });
+
+  const selectedAgentRep = useMemo(
+    () => agentReps.find(agentRep => String(agentRep.id) === selectedAgentRepId) || agentReps[0] || null,
+    [agentReps, selectedAgentRepId],
+  );
+
+  async function load() {
+    if (!token) return;
+    const [agentRepData, connectorData] = await Promise.all([
+      usersApi.agentReps(token),
+      mcpRuntimeApi.connectors(token),
+    ]);
+    const nextAgentReps = agentRepData as RecordMap[];
+    setAgentReps(nextAgentReps);
+    setConnectors(connectorData as RecordMap[]);
+    setSelectedAgentRepId(current => current || String(nextAgentReps[0]?.id || ''));
+  }
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    async function run() {
+      try {
+        const [agentRepData, connectorData] = await Promise.all([
+          usersApi.agentReps(token as string),
+          mcpRuntimeApi.connectors(token as string),
+        ]);
+        if (cancelled) return;
+        const nextAgentReps = agentRepData as RecordMap[];
+        setAgentReps(nextAgentReps);
+        setConnectors(connectorData as RecordMap[]);
+        setSelectedAgentRepId(current => current || String(nextAgentReps[0]?.id || ''));
+      } catch (err) {
+        if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load AgentRep skills');
+      }
+    }
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  async function createSkill() {
+    if (!token || !selectedAgentRep) return;
+    setLoading(true);
+    setMessage('');
+    try {
+      if (form.kind === 'functional') {
+        await usersApi.createFunctionalAgent(String(selectedAgentRep.id), {
+          name: form.name,
+          description: form.description,
+          capability: form.capability,
+          config: {
+            source: form.source,
+            connectorId: form.source === 'mcp_bound' ? form.connectorId : null,
+            toolName: form.source === 'mcp_bound' ? form.toolName : null,
+            externalCallsBlocked: true,
+            executionMode: 'approval_gated',
+          },
+        }, token);
+      } else {
+        await usersApi.createGovernanceAgent(String(selectedAgentRep.id), {
+          name: form.name,
+          description: form.description,
+          policyScope: form.policyScope.split(',').map(scope => scope.trim()).filter(Boolean),
+          vetoAuthority: false,
+          config: {
+            source: form.source,
+            connectorId: form.source === 'mcp_bound' ? form.connectorId : null,
+            evaluatorOnly: true,
+          },
+        }, token);
+      }
+      setMessage(`${form.name} saved under ${text(selectedAgentRep.name)}.`);
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to save skill');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const functionalAgents = list(selectedAgentRep?.functionalAgents);
+  const governanceAgents = list(selectedAgentRep?.governanceAgents);
+  const activeConnectors = connectors.filter(connector => text(connector.status) === 'active' || text(connector.status) === 'planned');
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Agent Skills</h1>
-          <p className="text-slate-500 text-sm mt-1">Governed capabilities — not random tools</p>
-        </div>
-        <DemoLabel>STITCH Native / MCP Imported / Planned</DemoLabel>
+    <ProductPage
+      eyebrow="Admin"
+      title="Agent Skills"
+      subtitle="Create governed skills under user AgentReps. Skills are persisted as functional or governance agents and can be bound to registered MCP connectors."
+      action={<ProductStatus tone="info">Persisted AgentRep Skills</ProductStatus>}
+    >
+      {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('permission') ? 'danger' : 'good'}>{message}</Notice>}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <MetricCard label="AgentReps" value={agentReps.length} detail="Available identities" tone="info" />
+        <MetricCard label="Functional Skills" value={functionalAgents.length} detail="For selected AgentRep" tone={functionalAgents.length ? 'good' : 'warn'} />
+        <MetricCard label="Governance Skills" value={governanceAgents.length} detail="Evaluator roles" tone={governanceAgents.length ? 'info' : 'default'} />
+        <MetricCard label="MCP Connectors" value={connectors.length} detail="Available for binding" tone={connectors.length ? 'good' : 'warn'} />
       </div>
 
-      <Alert type="info">
-        <strong>Architecture:</strong> Agents use skills only through STITCH capability resolution and SAIF approval. 
-        Agents must not call MCP tools directly. OpenClaw must not call MCP tools directly.
-      </Alert>
+      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <ProductCard title="Create Skill" subtitle="Choose an AgentRep, skill type, and source. MCP-bound skills remain blocked from direct external execution.">
+          <div className="space-y-4">
+            <Field label="AgentRep">
+              <select value={selectedAgentRepId} onChange={(event) => setSelectedAgentRepId(event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950">
+                {agentReps.map(agentRep => (
+                  <option key={String(agentRep.id)} value={String(agentRep.id)}>
+                    {text(agentRep.name)} / {text(agentRep.userEmail)}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-      <div className="space-y-3">
-        {MCP_SKILLS.map(skill => (
-          <Card key={skill.id}>
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-semibold text-white">{skill.name}</h3>
-                  <StatusBadge label={skill.source.replace('_', ' ')} variant={skill.source === 'stitch_native' ? 'success' : skill.source === 'mcp_imported' ? 'info' : 'default'} />
-                  <StatusBadge label={skill.status} variant={skill.status === 'working' ? 'success' : skill.status === 'mock' ? 'mock' : 'default'} />
-                </div>
-
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-                  <div>
-                    <div className="text-slate-500 text-xs">Capability</div>
-                    <div>{skill.owningCapability}</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500 text-xs">Role</div>
-                    <div>{skill.allowedRole}</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500 text-xs">Input</div>
-                    <div className="truncate">{skill.inputData}</div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500 text-xs">Output</div>
-                    <div className="truncate">{skill.outputArtifact}</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 text-xs">
-                  {skill.boundConnector && <span className="text-slate-500">MCP: {skill.boundConnector}</span>}
-                  {skill.requiresApproval && <StatusBadge label="Approval Required" variant="warning" />}
-                  {skill.saifRequired && <StatusBadge label="SAIF Required" variant="info" />}
-                  {skill.auditEnabled && <StatusBadge label="Audited" variant="success" />}
-                  {skill.canCallExternal ? <StatusBadge label="Can Call External" variant="danger" /> : <StatusBadge label="External Blocked" variant="success" />}
-                </div>
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Skill Type">
+                <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as SkillKind })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950">
+                  <option value="functional">Functional Skill</option>
+                  <option value="governance">Governance Skill</option>
+                </select>
+              </Field>
+              <Field label="Source">
+                <select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value as SkillSource })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950">
+                  <option value="stitch_native">STITCH Native</option>
+                  <option value="mcp_bound">MCP-Bound</option>
+                </select>
+              </Field>
             </div>
-          </Card>
-        ))}
-      </div>
 
-      <Card title="Skill Governance Rules">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div className="space-y-2">
-            <div className="font-medium text-slate-300">Allowed</div>
-            <div className="text-slate-400">• Skills accessed through STITCH capability resolution</div>
-            <div className="text-slate-400">• SAIF approval for high-risk skills</div>
-            <div className="text-slate-400">• Full audit trail for all skill executions</div>
-            <div className="text-slate-400">• MCP mediation for external skills</div>
+            <Field label="Skill Name">
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+            </Field>
+            <Field label="Description">
+              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} className="min-h-24 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+            </Field>
+
+            {form.kind === 'functional' ? (
+              <Field label="Owning Capability">
+                <select value={form.capability} onChange={(event) => setForm({ ...form, capability: event.target.value })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950">
+                  {CAPABILITY_PRESETS.map(capability => <option key={capability} value={capability}>{display(capability)}</option>)}
+                </select>
+              </Field>
+            ) : (
+              <Field label="Policy Scope" helper="Comma-separated evaluator scopes. Governance skills are evaluator-only, not final human authority.">
+                <input value={form.policyScope} onChange={(event) => setForm({ ...form, policyScope: event.target.value })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+              </Field>
+            )}
+
+            {form.source === 'mcp_bound' && (
+              <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <Field label="Registered MCP Connector">
+                  <select value={form.connectorId} onChange={(event) => setForm({ ...form, connectorId: event.target.value })} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950">
+                    <option value="">Select connector</option>
+                    {activeConnectors.map(connector => <option key={String(connector.id)} value={String(connector.id)}>{text(connector.name)}</option>)}
+                  </select>
+                </Field>
+                <Field label="Tool Name" helper="Manual binding only. Remote MCP tool discovery is a remaining gap until a real discovery endpoint is added.">
+                  <input value={form.toolName} onChange={(event) => setForm({ ...form, toolName: event.target.value })} placeholder="e.g. search_social_posts" className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500" />
+                </Field>
+              </div>
+            )}
+
+            <PrimaryAction
+              disabled={loading || !selectedAgentRep || !form.name || (form.source === 'mcp_bound' && (!form.connectorId || !form.toolName))}
+              onClick={createSkill}
+            >
+              {loading ? 'Saving...' : 'Save Skill'}
+            </PrimaryAction>
           </div>
-          <div className="space-y-2">
-            <div className="font-medium text-slate-300">Blocked</div>
-            <div className="text-slate-400">• Direct MCP tool calls by agents</div>
-            <div className="text-slate-400">• Direct MCP tool calls by OpenClaw</div>
-            <div className="text-slate-400">• External system access without approval</div>
-            <div className="text-slate-400">• M5 execution without authorization</div>
-          </div>
+        </ProductCard>
+
+        <div className="space-y-6">
+          <ProductCard title="Selected AgentRep" subtitle="The skills below belong to the selected user's AI representative.">
+            {selectedAgentRep ? (
+              <DetailGrid items={[
+                { label: 'AgentRep', value: text(selectedAgentRep.name) },
+                { label: 'User', value: `${text(selectedAgentRep.userName)} / ${text(selectedAgentRep.userEmail)}` },
+                { label: 'Status', value: display(text(selectedAgentRep.status)) },
+                { label: 'Type', value: display(text(selectedAgentRep.agentType)) },
+              ]} />
+            ) : (
+              <EmptyProductState message="No AgentRep is available. Create users first from Users & Roles." />
+            )}
+          </ProductCard>
+
+          <ProductCard title="Existing Skills" subtitle="This is live AgentRep skill state from the backend.">
+            {functionalAgents.length || governanceAgents.length ? (
+              <ProductTable
+                columns={['Skill', 'Type', 'Capability / Scope', 'Source', 'Status']}
+                rows={[
+                  ...functionalAgents.map(skill => {
+                    const config = (skill.config || {}) as RecordMap;
+                    return [
+                      <div>
+                        <div className="font-medium text-neutral-950">{text(skill.name)}</div>
+                        <div className="mt-1 text-xs text-neutral-500">{text(skill.description, 'No description')}</div>
+                      </div>,
+                      'Functional',
+                      display(text(skill.capability)),
+                      display(text(config.source, 'stitch_native')),
+                      <ProductStatus tone={text(skill.status) === 'active' ? 'good' : 'warn'}>{display(text(skill.status))}</ProductStatus>,
+                    ];
+                  }),
+                  ...governanceAgents.map(skill => {
+                    const config = (skill.config || {}) as RecordMap;
+                    return [
+                      <div>
+                        <div className="font-medium text-neutral-950">{text(skill.name)}</div>
+                        <div className="mt-1 text-xs text-neutral-500">{text(skill.description, 'No description')}</div>
+                      </div>,
+                      'Governance',
+                      list(skill.policyScope).map(scope => text(scope)).join(', ') || 'Policy scope',
+                      display(text(config.source, 'stitch_native')),
+                      <ProductStatus tone={text(skill.status) === 'active' ? 'good' : 'warn'}>{display(text(skill.status))}</ProductStatus>,
+                    ];
+                  }),
+                ]}
+              />
+            ) : (
+              <EmptyProductState message="No persisted skills are assigned to this AgentRep yet." />
+            )}
+          </ProductCard>
+
+          <Notice tone="warn">
+            Remote MCP server tool discovery and GitHub repo skill import are not complete yet. This page now supports persisted native skills and manual MCP-bound skills only.
+          </Notice>
         </div>
-      </Card>
-    </div>
+      </div>
+    </ProductPage>
   );
 }

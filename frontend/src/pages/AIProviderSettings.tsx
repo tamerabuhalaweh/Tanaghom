@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/useAuth';
 import { aiProviderApi } from '../api';
-import { Card, StatusBadge, Alert, DemoLabel } from '../components/UI';
+import { Notice, ProductCard, ProductPage, ProductStatus } from '../components/ProductUI';
 
 interface ProviderStatus {
   name: string;
@@ -146,24 +146,17 @@ export default function AIProviderSettings() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <header className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          <DemoLabel>User-Owned Credentials</DemoLabel>
-          <StatusBadge label="Encrypted at rest" variant="success" />
-          <StatusBadge label="Raw keys never displayed" variant="success" />
-          <StatusBadge label="Backend-only model calls" variant="info" />
-        </div>
-        <h1 className="mt-4 text-3xl font-semibold text-neutral-950">AI Provider Settings</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
-          Choose your LLM provider, store your own API key securely, and keep model execution isolated to your account. Model calls use the backend provider adapter only.
-        </p>
-      </header>
+    <ProductPage
+      eyebrow="My workspace"
+      title="AI Provider Settings"
+      subtitle="Choose your LLM provider, store your own API key securely, and keep model execution isolated to your account. Model calls use the backend provider adapter only."
+      action={<ProductStatus tone="good">Backend-only model calls</ProductStatus>}
+    >
 
-      {message && <Alert type={message.includes('Failed') || message.includes('missing') ? 'warning' : 'success'}>{message}</Alert>}
+      {message && <Notice tone={message.includes('Failed') || message.includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
 
       <div className="grid gap-6 lg:grid-cols-[390px_1fr]">
-        <Card title="Provider Setup">
+        <ProductCard title="Provider Setup" subtitle="Keys are user-owned and raw values are never returned by the backend.">
           <div className="space-y-4">
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Provider</span>
@@ -225,7 +218,7 @@ export default function AIProviderSettings() {
               </button>
             </div>
           </div>
-        </Card>
+        </ProductCard>
 
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
@@ -234,14 +227,14 @@ export default function AIProviderSettings() {
               const credential = credentials.find((item) => item.provider === provider.type);
               const active = activeProvider === provider.type;
               return (
-                <Card key={provider.type} className={active ? 'border-blue-300 ring-1 ring-blue-200' : ''}>
+                <ProductCard key={provider.type} className={active ? 'border-blue-300 ring-1 ring-blue-200' : ''}>
                   <div className="space-y-4">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h3 className="text-lg font-semibold text-neutral-950">{provider.name}</h3>
                         <p className="mt-1 text-xs text-neutral-500">{status?.scope === 'user' ? 'User credential' : provider.type === 'mock' ? 'Built-in fallback' : 'Environment or missing'}</p>
                       </div>
-                      <StatusBadge label={active ? 'Active' : status?.configured ? 'Configured' : 'Missing'} variant={active ? 'success' : status?.configured ? 'info' : 'warning'} />
+                      <ProductStatus tone={active ? 'good' : status?.configured ? 'info' : 'warn'}>{active ? 'Active' : status?.configured ? 'Configured' : 'Missing'}</ProductStatus>
                     </div>
 
                     <div className="space-y-2 text-sm">
@@ -260,17 +253,17 @@ export default function AIProviderSettings() {
                       </button>
                     )}
                   </div>
-                </Card>
+                </ProductCard>
               );
             })}
           </div>
 
-          <Alert type="info">
+          <Notice tone="info">
             Keys are encrypted with the deployment master key and scoped to the authenticated user. The frontend receives only status and fingerprint.
-          </Alert>
+          </Notice>
         </div>
       </div>
-    </div>
+    </ProductPage>
   );
 }
 

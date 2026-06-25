@@ -42,6 +42,8 @@ adminUsersRouter.get('/', async (req: Request, res: Response, next: NextFunction
         name: (u.agent_reps[0] as Record<string, unknown>).name,
         status: (u.agent_reps[0] as Record<string, unknown>).status,
         agentType: (u.agent_reps[0] as Record<string, unknown>).agent_type,
+        permissionsContext: (u.agent_reps[0] as Record<string, unknown>).permissions_context,
+        metadata: (u.agent_reps[0] as Record<string, unknown>).metadata,
       } : null,
       isActive: u.is_active,
       createdAt: u.created_at,
@@ -56,7 +58,7 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
     const payload = getPayload(req);
     requireAdmin(payload.role);
 
-    const { email, name, role, departmentId, password } = req.body;
+    const { email, name, role, departmentId, password, businessRole, roleTemplate } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -84,7 +86,13 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
         permissions_context: {
           role: user.role,
           departmentId: user.department_id,
+          businessRole: businessRole || null,
+          roleTemplate: roleTemplate || null,
           source: 'admin_user_creation',
+        },
+        metadata: {
+          businessRole: businessRole || null,
+          roleTemplate: roleTemplate || null,
         },
       },
     });
@@ -104,6 +112,8 @@ adminUsersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
         id: agentRep.id,
         name: agentRep.name,
         status: agentRep.status,
+        permissionsContext: agentRep.permissions_context,
+        metadata: agentRep.metadata,
       },
       isActive: user.is_active,
       _label: 'User created — password must be changed on first login',
