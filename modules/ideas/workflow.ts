@@ -212,5 +212,5 @@ function toJsonObject(value: unknown) {
 }
 
 function isDurableWorkflowStoreAvailable(): boolean {
-  return Boolean(process.env.DATABASE_URL);
+  return process.env.NODE_ENV !== 'test' && Boolean(process.env.DATABASE_URL);
 }
