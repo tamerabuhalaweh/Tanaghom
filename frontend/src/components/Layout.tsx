@@ -250,16 +250,13 @@ export default function Layout() {
                       to={item.path}
                       onClick={() => setSidebarOpen(false)}
                       aria-current={active ? 'page' : undefined}
-                      className={`flex items-start gap-3 rounded-md px-3 py-2.5 text-sm transition ${
-                        active
-                          ? 'bg-neutral-950 text-white shadow-sm'
-                          : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950'
-                      }`}
+                      data-active={active ? 'true' : 'false'}
+                      className="nav-link flex items-start gap-3 rounded-md px-3 py-2.5 text-sm transition"
                     >
-                      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-white' : 'text-neutral-500'}`} aria-hidden="true" />
+                      <Icon className="nav-link-icon mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                       <span className="min-w-0">
                         <span className="block font-medium">{item.label}</span>
-                        <span className={`block truncate text-xs ${active ? 'text-white/60' : 'text-neutral-500'}`}>{item.description}</span>
+                        <span className="nav-link-description block truncate text-xs">{item.description}</span>
                       </span>
                     </Link>
                   );

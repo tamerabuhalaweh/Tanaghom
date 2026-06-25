@@ -139,6 +139,41 @@ body {
   top: 0;
 }
 
+.nav-link {
+  background: transparent !important;
+  color: #404040 !important;
+}
+
+.nav-link .nav-link-icon,
+.nav-link .nav-link-description {
+  color: #737373 !important;
+}
+
+.nav-link:hover {
+  background: #f5f5f5 !important;
+  color: #0a0a0a !important;
+}
+
+.nav-link:hover .nav-link-icon,
+.nav-link:hover .nav-link-description {
+  color: #525252 !important;
+}
+
+.nav-link[data-active="true"],
+.nav-link[data-active="true"]:hover {
+  background: #0a0a0a !important;
+  color: #ffffff !important;
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-link[data-active="true"] .nav-link-icon {
+  color: #ffffff !important;
+}
+
+.nav-link[data-active="true"] .nav-link-description {
+  color: rgba(255, 255, 255, 0.64) !important;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
