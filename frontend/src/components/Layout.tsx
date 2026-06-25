@@ -251,7 +251,7 @@ export default function Layout() {
                       onClick={() => setSidebarOpen(false)}
                       aria-current={active ? 'page' : undefined}
                       data-active={active ? 'true' : 'false'}
-                      className="nav-link flex items-start gap-3 rounded-md px-3 py-2.5 text-sm transition"
+                      className="nav-link flex items-start gap-3 rounded-md px-3 py-2.5 text-sm"
                     >
                       <Icon className="nav-link-icon mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                       <span className="min-w-0">
