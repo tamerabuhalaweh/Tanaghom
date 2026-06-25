@@ -4,6 +4,7 @@ import { UnauthorizedError } from '@shared/errors';
 import {
   submitForApproval,
   getApproval,
+  getApprovalDecisionPacket,
   listApprovals,
   approve,
   reject,
@@ -46,6 +47,16 @@ approvalsRouter.get('/:id', async (req: Request, res: Response, next: NextFuncti
     const payload = getPayload(req);
     const approval = await getApproval(payload.role, getId(req));
     res.json(approval);
+  } catch (err) {
+    next(err);
+  }
+});
+
+approvalsRouter.get('/:id/decision-packet', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const packet = await getApprovalDecisionPacket(payload.role, getId(req));
+    res.json(packet);
   } catch (err) {
     next(err);
   }

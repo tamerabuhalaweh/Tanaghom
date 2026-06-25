@@ -2,7 +2,7 @@ import { prisma } from '@shared/database';
 import { NotFoundError, ForbiddenError } from '@shared/errors';
 import type {
   CreateApprovalInput, ApprovalDecisionInput, EscalationInput, CancellationInput,
-  ApprovalSummary, ApprovalStatus,
+  ApprovalDecisionPacket, ApprovalSummary, ApprovalStatus,
 } from './types';
 import { getRoutingRule, validateApprovalTransition } from './types';
 
@@ -53,6 +53,99 @@ export async function listApprovals(filters?: {
     orderBy: { created_at: 'desc' },
   });
   return approvals.map(mapApproval);
+}
+
+export async function getApprovalDecisionPacket(id: string): Promise<ApprovalDecisionPacket> {
+  const approval = await prisma.approval.findUnique({ where: { id } });
+  if (!approval) throw new NotFoundError('Approval', id);
+
+  const summary = mapApproval(approval);
+  let contentItem: Record<string, unknown> | null = null;
+  let campaign: Record<string, unknown> | null = null;
+  let latestDraftVersion: Record<string, unknown> | null = null;
+
+  if (summary.targetType === 'content_item') {
+    contentItem = await prisma.contentItem.findUnique({
+      where: { id: summary.targetId },
+      include: {
+        request: true,
+        draft_versions: { orderBy: { version_no: 'desc' }, take: 1 },
+      },
+    }) as Record<string, unknown> | null;
+    if (contentItem) {
+      campaign = contentItem.request as Record<string, unknown>;
+      const versions = contentItem.draft_versions as Record<string, unknown>[] | undefined;
+      latestDraftVersion = versions?.[0] ?? null;
+    }
+  } else if (summary.targetType === 'campaign') {
+    campaign = await prisma.contentRequest.findUnique({ where: { id: summary.targetId } }) as Record<string, unknown> | null;
+  } else if (summary.targetType === 'draft_version') {
+    latestDraftVersion = await prisma.draftVersion.findUnique({
+      where: { id: summary.targetId },
+      include: { content_item: { include: { request: true } } },
+    }) as Record<string, unknown> | null;
+    const item = latestDraftVersion?.content_item as Record<string, unknown> | undefined;
+    contentItem = item ?? null;
+    campaign = item?.request as Record<string, unknown> | undefined ?? null;
+  }
+
+  const campaignId = campaign?.id as string | undefined;
+  const contentItemId = contentItem?.id as string | undefined;
+  const packages = await prisma.publishingPackage.findMany({
+    where: {
+      OR: [
+        { approval_id: summary.id },
+        ...(campaignId ? [{ campaign_id: campaignId }] : []),
+        ...(contentItemId ? [{ content_item_id: contentItemId }] : []),
+      ],
+    },
+    orderBy: { created_at: 'desc' },
+    take: 5,
+  });
+
+  return {
+    approval: summary,
+    campaign: campaign ? {
+      id: campaign.id as string,
+      topic: campaign.raw_message as string,
+      objective: campaign.objective as string,
+      audience: campaign.audience as string | null,
+      platforms: campaign.target_platforms as string[],
+      cta: campaign.cta as string | null,
+      riskCategory: campaign.risk_category as string,
+      status: campaign.status as string,
+    } : null,
+    contentItem: contentItem ? {
+      id: contentItem.id as string,
+      platform: contentItem.platform as string,
+      contentType: contentItem.content_type as string,
+      draftText: contentItem.draft_text as string,
+      riskScore: contentItem.risk_score as number,
+      riskReason: contentItem.risk_reason as string | null,
+      reachScore: contentItem.reach_score as number,
+      reachBreakdown: contentItem.reach_breakdown,
+      status: contentItem.status as string,
+    } : null,
+    latestDraftVersion: latestDraftVersion ? {
+      id: latestDraftVersion.id as string,
+      versionNo: latestDraftVersion.version_no as number,
+      text: latestDraftVersion.text as string,
+      modelUsed: latestDraftVersion.model_used as string | null,
+      createdAt: latestDraftVersion.created_at as Date,
+    } : null,
+    publishingPackages: packages.map((pkg: Record<string, unknown>) => ({
+      id: pkg.id as string,
+      status: pkg.package_status as string,
+      readinessScore: pkg.readiness_score as number | null,
+      readinessSummary: pkg.readiness_summary as string | null,
+      createdAt: pkg.created_at as Date,
+    })),
+    safety: {
+      humanApprovalRequired: true,
+      externalExecutionBlocked: true,
+      m5Disabled: true,
+    },
+  };
 }
 
 export async function approve(id: string, input: ApprovalDecisionInput): Promise<ApprovalSummary> {

@@ -316,6 +316,7 @@ export default function DemoCommandCenter() {
       const result = await publishingPackageApi.create({
         campaignId: selected.id,
         draftId: selectedDraft?.contentItemId,
+        approvalId: approval?.id,
         platforms: PLATFORMS,
         scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       }, token);
@@ -361,6 +362,52 @@ export default function DemoCommandCenter() {
         <MetricCard tone={packages.length || packageResult ? 'good' : 'muted'} label="Publishing" value={packageResult ? 'Package Ready' : packages.length} detail={postiz.reachable ? 'Postiz sandbox reachable' : 'Scheduling disabled'} />
         <MetricCard tone={numberValue(leadStats?.qualified) ? 'good' : 'info'} label="Leads" value={numberValue(leadStats?.total)} detail={`${numberValue(leadStats?.qualified)} qualified`} />
       </div>
+
+      <ProductCard title="Executive Operating Snapshot" subtitle="One-screen view of business progress, current blocker, and external execution safety.">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px_320px]">
+          <div className="rounded-lg bg-neutral-950 p-6 text-white">
+            <div className="text-sm text-white/55">Current decision</div>
+            <div className="mt-3 text-3xl font-semibold tracking-tight">{nextAction}</div>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-white/65">
+              {selected
+                ? `Campaign: ${text(selected.topic)}. The operator should move the same campaign through draft, score, approval, package, analytics, and lead handoff.`
+                : 'Select or create a campaign before AI generation, approval, publishing preparation, analytics, or lead handoff can produce useful output.'}
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md bg-white/10 p-3">
+                <div className="text-xs text-white/50">AI Provider</div>
+                <div className="mt-1 text-sm font-semibold">{providerReady ? providerLabel : 'Requires credentials'}</div>
+              </div>
+              <div className="rounded-md bg-white/10 p-3">
+                <div className="text-xs text-white/50">Postiz</div>
+                <div className="mt-1 text-sm font-semibold">{postiz.reachable ? 'Sandbox reachable' : 'Not reachable or not configured'}</div>
+              </div>
+              <div className="rounded-md bg-white/10 p-3">
+                <div className="text-xs text-white/50">Execution</div>
+                <div className="mt-1 text-sm font-semibold">External writes blocked</div>
+              </div>
+            </div>
+          </div>
+          <ReadableQueue items={[
+            { title: 'Preparation', meta: selected ? 'Campaign brief is selected.' : 'Campaign brief is required.', status: selected ? 'Ready' : 'Required', tone: selected ? 'good' : 'warn' },
+            { title: 'AI Work', meta: drafts.length ? `${drafts.length} platform drafts generated.` : providerReady ? 'Ready to generate drafts.' : 'Provider credentials required.', status: drafts.length ? 'Drafted' : providerReady ? 'Ready' : 'Blocked', tone: drafts.length ? 'good' : providerReady ? 'info' : 'warn' },
+            { title: 'Human Control', meta: approval ? `Approval status is ${titleCase(text(approval.approvalStatus, 'pending'))}.` : 'No approval package for current draft yet.', status: approval ? 'Recorded' : 'Waiting', tone: approval ? 'good' : 'default' },
+            { title: 'Revenue Handoff', meta: leads.length ? `${leads.length} captured lead record(s).` : 'No lead records captured yet.', status: leads.length ? 'Ready' : 'Waiting', tone: leads.length ? 'good' : 'default' },
+          ]} />
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5">
+            <div className="text-sm font-semibold text-neutral-950">Safety Gates</div>
+            <div className="mt-4 space-y-2">
+              <ProductStatus tone="danger">External Writes Off</ProductStatus>
+              <ProductStatus tone="warn">Human Approval Required</ProductStatus>
+              <ProductStatus tone="danger">M5 Disabled</ProductStatus>
+              <ProductStatus tone={postiz.reachable ? 'info' : 'warn'}>{postiz.reachable ? 'Postiz Sandbox Reachable' : 'Postiz Needs Credentials'}</ProductStatus>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-neutral-500">
+              The workspace can prepare packages and handoff payloads. It cannot publish, schedule, write CRM records, message contacts, or trigger calls without explicit gated authorization.
+            </p>
+          </div>
+        </div>
+      </ProductCard>
 
       <ProductCard title="Workflow" subtitle="The same campaign moves through preparation, approval, publishing package, intelligence, and handoff.">
         <WorkflowRail steps={[

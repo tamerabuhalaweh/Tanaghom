@@ -75,6 +75,7 @@ export const approvalsApi = {
     return apiFetch<unknown[]>(`/approvals${params}`, { token });
   },
   get: (id: string, token: string) => apiFetch<unknown>(`/approvals/${id}`, { token }),
+  decisionPacket: (id: string, token: string) => apiFetch<unknown>(`/approvals/${id}/decision-packet`, { token }),
   submit: (data: unknown, token: string) => apiFetch<unknown>('/approvals', { method: 'POST', body: data, token }),
   approve: (id: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/approvals/${id}/approve`, { method: 'POST', body: data, token }),

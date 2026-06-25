@@ -1,8 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError, NotFoundError } from '@shared/errors';
+import { UnauthorizedError, NotFoundError, ForbiddenError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
+import { validatePublishingApprovalGate } from './policy';
 
 export const publishingPackageRouter = Router();
 
@@ -36,15 +37,40 @@ async function checkPostizSandbox(): Promise<{ reachable: boolean; statusCode: n
 publishingPackageRouter.post('/create', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const { campaignId, platforms, scheduledTime } = req.body;
+    const { campaignId, draftId, approvalId, platforms, scheduledTime } = req.body;
 
     const campaign = await prisma.contentRequest.findUnique({ where: { id: campaignId } });
     if (!campaign) throw new NotFoundError('Campaign', campaignId);
 
+    if (!approvalId) throw new ForbiddenError('Approved approvalId is required before publishing package creation');
+    const approval = await prisma.approval.findUnique({ where: { id: approvalId } });
+    if (!approval) throw new NotFoundError('Approval', approvalId);
+    const gate = validatePublishingApprovalGate({
+      approvalId,
+      approvalStatus: approval.approval_status,
+      approvalTargetType: approval.target_type,
+      approvalTargetId: approval.target_id,
+      campaignId,
+      draftId,
+    });
+    if (!gate.allowed) throw new ForbiddenError(gate.reason || 'Publishing approval gate blocked package creation');
+
+    const contentItem = draftId
+      ? await prisma.contentItem.findUnique({
+        where: { id: draftId },
+        include: { draft_versions: { orderBy: { version_no: 'desc' }, take: 1 } },
+      })
+      : null;
+    if (draftId && !contentItem) throw new NotFoundError('Content item', draftId);
+    if (contentItem && contentItem.request_id !== campaignId) {
+      throw new ForbiddenError('Selected draft does not belong to selected campaign');
+    }
+    const latestDraft = contentItem?.draft_versions[0] ?? null;
+    const approvedText = contentItem?.draft_text || (campaign as Record<string, unknown>).raw_message as string;
     const preparedAt = scheduledTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const platformPayloads = (platforms || ['linkedin', 'instagram']).map((platform: string) => ({
       platform,
-      content: (campaign as Record<string, unknown>).raw_message,
+      content: approvedText,
       scheduledTime: preparedAt,
       status: 'prepared',
       postizPayload: {
@@ -59,9 +85,83 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
     const pkg = await prisma.publishingPackage.create({
       data: {
         campaign_id: campaignId,
+        content_item_id: contentItem?.id ?? null,
+        draft_version_id: latestDraft?.id ?? null,
+        approval_id: approval.id,
         package_status: 'ready_for_future_execution',
+        package_type: platformPayloads.length > 1 ? 'multi_platform_campaign' : 'single_post',
         created_by_user_id: payload.sub,
         created_by_agent_rep_id: payload.agentRepId || '',
+        readiness_score: contentItem?.reach_score || null,
+        readiness_summary: 'Approved content package prepared for Postiz sandbox review. External scheduling remains policy-gated.',
+        items: {
+          create: [
+            {
+              item_type: 'platform_caption',
+              item_status: 'validated',
+              source_object_type: contentItem ? 'content_item' : 'campaign',
+              source_object_id: contentItem?.id ?? campaignId,
+              platform: contentItem?.platform ?? null,
+              content_summary: approvedText.slice(0, 1000),
+              metadata: { source: 'approved_draft' },
+            },
+            {
+              item_type: 'approval_evidence',
+              item_status: 'validated',
+              source_object_type: 'approval',
+              source_object_id: approval.id,
+              content_summary: `Approval ${approval.approval_status}: ${approval.comment || 'No reviewer comment'}`,
+              metadata: { decision: approval.decision, decidedAt: approval.decided_at },
+            },
+          ],
+        },
+        targets: {
+          create: platformPayloads.map((platformPayload: Record<string, unknown>) => ({
+            platform: platformPayload.platform as string,
+            target_status: 'ready',
+            proposed_publish_at: new Date(preparedAt),
+            timezone: 'Asia/Amman',
+            platform_format: 'social_post',
+            requires_mcp: true,
+            future_connector_reference: 'postiz',
+            platform_constraints: { execution: 'sandbox_or_blocked', publishing: 'blocked_by_default' },
+          })),
+        },
+        readiness_checks: {
+          create: [
+            {
+              check_type: 'human_approval',
+              check_status: 'passed',
+              severity: 'info',
+              message: 'Human approval exists and is approved.',
+              source_object_type: 'approval',
+              source_object_id: approval.id,
+            },
+            {
+              check_type: 'external_execution',
+              check_status: 'blocked',
+              severity: 'warning',
+              message: 'External scheduling remains blocked unless sandbox flags and credentials are explicitly configured.',
+              source_object_type: 'policy',
+              source_object_id: 'external-execution',
+            },
+          ],
+        },
+        manifest: {
+          create: {
+            manifest_version: 1,
+            manifest_status: 'generated',
+            manifest_summary: 'Postiz-ready package generated from approved content. No external scheduling performed.',
+            generated_by_user_id: payload.sub,
+            generated_by_agent_rep_id: payload.agentRepId || '',
+          },
+        },
+      },
+      include: {
+        items: true,
+        targets: true,
+        readiness_checks: true,
+        manifest: true,
       },
     });
 
@@ -75,8 +175,15 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
     res.json({
       id: pkg.id,
       campaignId,
+      approvalId: approval.id,
+      contentItemId: contentItem?.id ?? null,
+      draftVersionId: latestDraft?.id ?? null,
       status: 'ready',
       platforms: platformPayloads,
+      items: pkg.items,
+      targets: pkg.targets,
+      readinessChecksList: pkg.readiness_checks,
+      manifest: pkg.manifest,
       readinessChecks: {
         contentApproved: true,
         brandValidated: true,

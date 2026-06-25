@@ -59,4 +59,19 @@ test('CEO commercial/social walkthrough path is operable', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Integrations & MCP Connectors/i })).toBeVisible();
   await expect(page.getByText(/Add Connector/i)).toBeVisible();
   await expect(page.getByText(/Live Activation Blocked/i)).toBeVisible();
+
+  await page.getByRole('link', { name: /Approvals.*Publishing/i }).click();
+  await expect(page.getByRole('heading', { name: /Approvals & Publishing/i })).toBeVisible();
+  await expect(page.getByText(/human decision desk/i)).toBeVisible();
+  const emptyApprovalState = page.getByText(/No approval package is pending/i);
+  if (await emptyApprovalState.isVisible().catch(() => false)) {
+    await expect(emptyApprovalState).toBeVisible();
+  } else {
+    await expect(page.getByPlaceholder(/Reviewer comment/i).first()).toBeVisible();
+  }
+
+  await page.getByRole('link', { name: /Campaigns.*Briefs/i }).click();
+  await expect(page.getByRole('heading', { name: /Campaign workspace/i })).toBeVisible();
+  await expect(page.getByText(/Create campaign brief/i)).toBeVisible();
+  await expect(page.getByText(/Generate and edit drafts/i)).toBeVisible();
 });

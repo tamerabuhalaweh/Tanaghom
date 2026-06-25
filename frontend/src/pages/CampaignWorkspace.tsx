@@ -44,6 +44,7 @@ export default function CampaignWorkspace() {
   const [approval, setApproval] = useState<RecordMap | null>(null);
   const [publishingPackage, setPublishingPackage] = useState<RecordMap | null>(null);
   const [postizPayload, setPostizPayload] = useState<RecordMap | null>(null);
+  const [postizScheduleResult, setPostizScheduleResult] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
   const [providerReady, setProviderReady] = useState(false);
@@ -111,6 +112,7 @@ export default function CampaignWorkspace() {
     setApproval(null);
     setPublishingPackage(null);
     setPostizPayload(null);
+    setPostizScheduleResult(null);
     setMessage('Campaign selected.');
   }
 
@@ -148,6 +150,7 @@ export default function CampaignWorkspace() {
       setApproval(null);
       setPublishingPackage(null);
       setPostizPayload(null);
+      setPostizScheduleResult(null);
       setMessage('Platform drafts are ready.');
     } catch (error) {
       setMessage(`Draft generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -234,9 +237,11 @@ export default function CampaignWorkspace() {
       const result = await publishingPackageApi.create({
         campaignId: selected.id,
         draftId: selectedDraft?.contentItemId,
+        approvalId: approval?.id,
         platforms: ['linkedin', 'instagram', 'x'],
       }, token);
       setPublishingPackage(result as RecordMap);
+      setPostizScheduleResult(null);
       setMessage('Publishing package prepared.');
     } catch (error) {
       setMessage(`Publishing preparation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -258,6 +263,7 @@ export default function CampaignWorkspace() {
         tags: ['commercial-social'],
       }, token);
       setPostizPayload(result as RecordMap);
+      setPostizScheduleResult(null);
       setMessage('Postiz payload preview is ready.');
     } catch (error) {
       setMessage(`Postiz payload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -266,9 +272,36 @@ export default function CampaignWorkspace() {
     }
   }
 
+  async function attemptPostizSandboxSchedule() {
+    if (!selectedDraft || !token) return;
+    setLoading('postiz-sandbox');
+    setMessage('');
+    try {
+      const result = await postizApi.sandboxSchedule({
+        platform: text(selectedDraft.platform, 'linkedin'),
+        content: draftTextById[String(selectedDraft.contentItemId)] || text(selectedDraft.draftText),
+        scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        timezone: 'Asia/Amman',
+        tags: ['commercial-social'],
+      }, token);
+      setPostizScheduleResult(result as RecordMap);
+      setMessage('Postiz sandbox scheduling request completed.');
+    } catch (error) {
+      setPostizScheduleResult({
+        status: 'blocked',
+        reasons: [error instanceof Error ? error.message : 'Postiz sandbox scheduling is blocked'],
+      });
+      setMessage(`Postiz sandbox scheduling blocked: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
   const scoreValue = typeof score?.totalScore === 'number' ? score.totalScore : 0;
   const packagePlatforms = list(publishingPackage?.platforms);
   const currentUserId = text((user as RecordMap | null)?.id, '');
+  const currentRole = text((user as RecordMap | null)?.role, 'viewer');
+  const canCreateCampaign = ['admin', 'cco', 'department_head', 'specialist'].includes(currentRole);
   const createdByCurrentUser = selected ? text(selected.requesterId, '') === currentUserId : false;
   const pendingWork = [
     !selected ? 'Create or select a campaign brief.' : '',
@@ -335,8 +368,13 @@ export default function CampaignWorkspace() {
         <ProductCard
           title="Campaign Queue"
           subtitle="Campaigns created by your team. Create a campaign here or choose one to operate."
-          action={<PrimaryAction onClick={() => setShowCreate(current => !current)}>{showCreate ? 'Close Builder' : 'New Campaign'}</PrimaryAction>}
+          action={<PrimaryAction onClick={() => setShowCreate(current => !current)} disabled={!canCreateCampaign}>{showCreate ? 'Close Builder' : 'New Campaign'}</PrimaryAction>}
         >
+          {!canCreateCampaign && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              Your current role is {titleCase(currentRole)}. You can review campaign work, but campaign creation is limited to Admin, CCO, Department Head, and Specialist roles.
+            </div>
+          )}
           {showCreate && (
             <div className="mb-5 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
               <Field label="Campaign Topic">
@@ -528,6 +566,9 @@ export default function CampaignWorkspace() {
                   <SecondaryAction onClick={preparePostizPayload} disabled={!publishingPackage || loading === 'postiz'}>
                     {loading === 'postiz' ? 'Preparing...' : 'Preview Postiz Payload'}
                   </SecondaryAction>
+                  <SecondaryAction onClick={attemptPostizSandboxSchedule} disabled={!postizPayload || loading === 'postiz-sandbox'}>
+                    {loading === 'postiz-sandbox' ? 'Checking Gate...' : 'Attempt Sandbox Schedule'}
+                  </SecondaryAction>
                 </div>
                 {postizPayload && (
                   <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
@@ -536,6 +577,16 @@ export default function CampaignWorkspace() {
                       Type: {text((postizPayload.payload as RecordMap | undefined)?.type, 'schedule')} / Posts: {Array.isArray((postizPayload.payload as RecordMap | undefined)?.posts) ? ((postizPayload.payload as RecordMap).posts as unknown[]).length : 1}
                     </div>
                     <div className="mt-3"><ProductStatus tone="warn">Sandbox Scheduling Disabled</ProductStatus></div>
+                  </div>
+                )}
+                {postizScheduleResult && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+                    <div className="font-semibold">Sandbox scheduling result: {text(postizScheduleResult.status, 'blocked')}</div>
+                    <div className="mt-2">
+                      {Array.isArray(postizScheduleResult.reasons)
+                        ? (postizScheduleResult.reasons as unknown[]).map(String).join('; ')
+                        : text((postizScheduleResult.safety as RecordMap | undefined)?.executionPerformed, 'No external execution performed')}
+                    </div>
                   </div>
                 )}
               </div>
