@@ -115,9 +115,13 @@ app.use('/ghl', ghlRouter);
 app.use('/ideas', ideasRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  logger.error({ err, path: req.path }, 'Unhandled error');
-
   if (err instanceof AppError) {
+    const logPayload = { code: err.code, statusCode: err.statusCode, path: req.path };
+    if (err.statusCode >= 500) {
+      logger.error({ err, path: req.path }, 'Operational server error');
+    } else {
+      logger.warn(logPayload, 'Request blocked by application policy');
+    }
     res.status(err.statusCode).json({
       error: err.message,
       code: err.code,
