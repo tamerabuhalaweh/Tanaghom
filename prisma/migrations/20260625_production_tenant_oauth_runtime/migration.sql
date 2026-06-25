@@ -31,6 +31,11 @@ CREATE TABLE IF NOT EXISTS "tenants" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "tenants_tenant_key_key" ON "tenants"("tenant_key");
 
+ALTER TABLE "users"
+ADD COLUMN IF NOT EXISTS "tenant_key" TEXT NOT NULL DEFAULT 'default';
+
+CREATE INDEX IF NOT EXISTS "users_tenant_key_idx" ON "users"("tenant_key");
+
 INSERT INTO "tenants" ("tenant_key", "name", "status")
 SELECT DISTINCT COALESCE("users"."tenant_key", 'default'), 'Tanaghum Default Tenant', 'active'::"TenantStatus"
 FROM "users"
