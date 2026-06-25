@@ -86,9 +86,9 @@ async function getIntegrationStatus(): Promise<Record<string, unknown>> {
       name: 'Official Social Analytics APIs',
       status: 'Requires Credentials',
       reachable: false,
-      mode: 'demo_data_only',
+      mode: 'no_data_until_connector',
       reads: 'Requires Authorization',
-      message: 'Current analytics are deterministic demo intelligence. Official read-only APIs require separate scope and credentials.',
+      message: 'No official social analytics connector is configured. STITCH will not invent reach, impression, or engagement metrics.',
     },
     voiceChat: {
       name: 'AI Voice/Chat Agent Handoff',
@@ -108,8 +108,11 @@ function buildHandoffPackage(input: Record<string, unknown>, payload: JwtPayload
   const campaignTopic = String(input.campaignTopic || 'Commercial/Social campaign');
   const platform = String(input.platform || 'linkedin');
   const publishingPackageId = String(input.publishingPackageId || '');
-  const qualificationScore = Number(input.qualificationScore || 82);
+  const qualificationScore = Number(input.qualificationScore || 0);
   const consentStatus = String(input.consentStatus || 'pending');
+  const leadReference = String(input.leadReference || 'Lead identity not supplied');
+  const firstName = String(input.firstName || '');
+  const lastName = String(input.lastName || '');
 
   return {
     id: `handoff-${Date.now()}`,
@@ -126,9 +129,9 @@ function buildHandoffPackage(input: Record<string, unknown>, payload: JwtPayload
       source: `${platform}:commercial-social-poc`,
     },
     leadQualification: {
-      leadReference: 'sandbox-lead-reference',
+      leadReference,
       qualificationScore,
-      intent: qualificationScore >= 80 ? 'High intent product interest' : 'Nurture and qualify',
+      intent: qualificationScore >= 80 ? 'High intent product interest' : qualificationScore > 0 ? 'Nurture and qualify' : 'Qualification pending',
       consentStatus,
       recommendedNextStep: 'Human review before CRM or voice/chat execution',
     },
@@ -136,8 +139,8 @@ function buildHandoffPackage(input: Record<string, unknown>, payload: JwtPayload
       status: process.env.GHL_API_KEY ? 'Sandbox Ready' : 'Requires Credentials',
       executionState: GHL_SANDBOX_ENABLED ? 'Requires Authorization' : 'Blocked',
       contactPayload: {
-        firstName: 'Sandbox',
-        lastName: 'Lead',
+        firstName: firstName || 'Not supplied',
+        lastName: lastName || 'Not supplied',
         source: platform,
         tags: ['tanaghum-poc', 'commercial-social', platform],
         customFields: {
