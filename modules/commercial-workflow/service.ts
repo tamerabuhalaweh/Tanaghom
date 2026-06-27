@@ -125,7 +125,7 @@ export async function getCommercialWorkflowState(
 async function resolveProviderFact(userId: string): Promise<CommercialWorkflowFacts['provider']> {
   const agentRep = await prisma.agentRep.findUnique({ where: { user_id: userId } });
   const metadata = normalizeObject(agentRep?.metadata);
-  const selected = metadata.llmProvider === 'openai' || metadata.llmProvider === 'claude'
+  const selected = metadata.llmProvider === 'openai' || metadata.llmProvider === 'claude' || metadata.llmProvider === 'deepseek'
     ? metadata.llmProvider
     : 'mock';
   if (selected === 'mock') {

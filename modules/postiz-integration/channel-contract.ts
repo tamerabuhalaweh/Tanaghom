@@ -59,6 +59,7 @@ export function buildPostizChannelGuidance(input: {
       title: 'No social channel returned by Postiz',
       message: 'The Postiz API key is valid enough to query channels, but this Postiz organization has no connected social channel visible to that key yet.',
       nextActions: [
+        'Verify Postiz has the required provider app credentials, such as Meta/Facebook app ID and secret for Instagram.',
         'Click Connect Channel via Postiz from Tanaghum.',
         'Complete the provider OAuth/login inside Postiz.',
         'Return to Tanaghum and click Refresh Channels.',

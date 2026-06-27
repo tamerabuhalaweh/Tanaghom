@@ -5,7 +5,7 @@ import { Notice, ProductCard, ProductPage, ProductStatus } from '../components/P
 
 interface ProviderStatus {
   name: string;
-  type: 'mock' | 'openai' | 'claude';
+  type: 'mock' | 'openai' | 'claude' | 'deepseek';
   configured: boolean;
   model: string;
   apiKeyStatus: 'configured' | 'missing';
@@ -14,7 +14,7 @@ interface ProviderStatus {
 
 interface CredentialStatus {
   id: string;
-  provider: 'openai' | 'claude';
+  provider: 'openai' | 'claude' | 'deepseek';
   model: string;
   apiKeyStatus: string;
   keyFingerprint: string;
@@ -27,15 +27,18 @@ const PROVIDERS = [
   { type: 'mock', name: 'Mock LLM', defaultModel: 'mock-v1', keyLabel: 'No key required' },
   { type: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o', keyLabel: 'OpenAI API key' },
   { type: 'claude', name: 'Claude', defaultModel: 'claude-sonnet-4-20250514', keyLabel: 'Claude API key' },
+  { type: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-v4-flash', keyLabel: 'DeepSeek API key' },
 ] as const;
 const CONFIGURABLE_PROVIDERS = PROVIDERS.filter((provider) => provider.type !== 'mock');
+type ConfigurableProviderType = (typeof CONFIGURABLE_PROVIDERS)[number]['type'];
+type SelectableProviderType = ProviderStatus['type'];
 
 export default function AIProviderSettings() {
   const { token } = useAuth();
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const [credentials, setCredentials] = useState<CredentialStatus[]>([]);
-  const [activeProvider, setActiveProvider] = useState<'mock' | 'openai' | 'claude'>('mock');
-  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'claude'>('openai');
+  const [activeProvider, setActiveProvider] = useState<SelectableProviderType>('mock');
+  const [selectedProvider, setSelectedProvider] = useState<ConfigurableProviderType>('deepseek');
   const [model, setModel] = useState('gpt-4o');
   const [apiKey, setApiKey] = useState('');
   const [message, setMessage] = useState('');
@@ -47,13 +50,13 @@ export default function AIProviderSettings() {
       aiProviderApi.status(token),
       aiProviderApi.credentials(token),
     ]);
-    const statusMap = status as { providers: ProviderStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
-    const creds = credentialData as { credentials: CredentialStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
+    const statusMap = status as { providers: ProviderStatus[]; activeProvider: SelectableProviderType };
+    const creds = credentialData as { credentials: CredentialStatus[]; activeProvider: SelectableProviderType };
     setProviders(statusMap.providers || []);
     setCredentials(creds.credentials || []);
     setActiveProvider(creds.activeProvider || statusMap.activeProvider || 'mock');
     const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
-    const configurableProvider = nextProvider === 'claude' ? 'claude' : 'openai';
+    const configurableProvider = nextProvider === 'openai' || nextProvider === 'claude' || nextProvider === 'deepseek' ? nextProvider : 'deepseek';
     const credential = (creds.credentials || []).find((item) => item.provider === configurableProvider);
     const nextMeta = CONFIGURABLE_PROVIDERS.find((provider) => provider.type === configurableProvider) || CONFIGURABLE_PROVIDERS[0];
     setSelectedProvider(configurableProvider);
@@ -73,10 +76,10 @@ export default function AIProviderSettings() {
         ]);
         if (cancelled) return;
 
-        const statusMap = status as { providers: ProviderStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
-        const creds = credentialData as { credentials: CredentialStatus[]; activeProvider: 'mock' | 'openai' | 'claude' };
+        const statusMap = status as { providers: ProviderStatus[]; activeProvider: SelectableProviderType };
+        const creds = credentialData as { credentials: CredentialStatus[]; activeProvider: SelectableProviderType };
         const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
-        const configurableProvider = nextProvider === 'claude' ? 'claude' : 'openai';
+        const configurableProvider = nextProvider === 'openai' || nextProvider === 'claude' || nextProvider === 'deepseek' ? nextProvider : 'deepseek';
         const credential = (creds.credentials || []).find((item) => item.provider === configurableProvider);
         const nextMeta = CONFIGURABLE_PROVIDERS.find((provider) => provider.type === configurableProvider) || CONFIGURABLE_PROVIDERS[0];
 
@@ -151,7 +154,7 @@ export default function AIProviderSettings() {
     }
   }
 
-  async function testProvider(provider: 'openai' | 'claude') {
+  async function testProvider(provider: ConfigurableProviderType) {
     if (!token) return;
     setLoading(`test-${provider}`);
     setMessage('');
@@ -184,7 +187,7 @@ export default function AIProviderSettings() {
               <select
                 value={selectedProvider}
                 onChange={(event) => {
-                  const provider = event.target.value as 'openai' | 'claude';
+                  const provider = event.target.value as ConfigurableProviderType;
                   const credential = credentials.find((item) => item.provider === provider);
                   const nextMeta = CONFIGURABLE_PROVIDERS.find((item) => item.type === provider) || CONFIGURABLE_PROVIDERS[0];
                   setSelectedProvider(provider);

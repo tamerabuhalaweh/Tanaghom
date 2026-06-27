@@ -61,7 +61,7 @@ services:
       DATABASE_URL: postgresql://user:pass@postgres:5432/tanaghum
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
-      LLM_PROVIDER: mock  # or openai, claude
+      LLM_PROVIDER: mock  # or openai, claude, deepseek
       CORS_ORIGIN: https://tanaghum.vercel.app
     depends_on:
       - postgres
@@ -131,6 +131,8 @@ curl https://api.tanaghum.com/health
 | Mock | `LLM_PROVIDER=mock` | ✅ Default |
 | OpenAI | `LLM_PROVIDER=openai` + `OPENAI_API_KEY` | ❌ |
 | Claude | `LLM_PROVIDER=claude` + `CLAUDE_API_KEY` | ❌ |
+
+| DeepSeek | `LLM_PROVIDER=deepseek` + `DEEPSEEK_API_KEY`, or user-owned credential vault entry | Not default |
 
 ## Security Rules
 
