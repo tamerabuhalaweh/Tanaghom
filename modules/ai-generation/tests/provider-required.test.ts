@@ -8,7 +8,7 @@ const prismaMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
-vi.mock('@shared/logging', () => ({ auditLog: vi.fn() }));
+vi.mock('@shared/logging', () => ({ auditLog: vi.fn(), logger: { warn: vi.fn() } }));
 vi.mock('@shared/events', () => ({ eventBus: { emit: vi.fn() } }));
 vi.mock('@modules/ai-provider/controller', () => ({
   resolveUserLLMProvider: vi.fn(async () => {

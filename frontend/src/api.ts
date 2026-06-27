@@ -221,6 +221,10 @@ export const commercialWorkflowApi = {
     const params = campaignId ? `?${new URLSearchParams({ campaignId }).toString()}` : '';
     return apiFetch<unknown>(`/commercial-workflow/state${params}`, { token });
   },
+  evidence: (token: string, campaignId?: string) => {
+    const params = campaignId ? `?${new URLSearchParams({ campaignId }).toString()}` : '';
+    return apiFetch<unknown>(`/commercial-workflow/evidence${params}`, { token });
+  },
 };
 
 export const integrationCredentialsApi = {

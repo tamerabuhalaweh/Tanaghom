@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
 import { getCommercialWorkflowState } from './service';
+import { getCommercialWorkflowEvidence } from './evidence';
 
 export const commercialWorkflowRouter = Router();
 
@@ -21,6 +22,17 @@ commercialWorkflowRouter.get('/state', async (req: Request, res: Response, next:
       ...state,
       _label: 'Commercial/Social workflow state derived from STITCH backend records',
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+commercialWorkflowRouter.get('/evidence', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = resolveSessionContext(getPayload(req));
+    const campaignId = z.string().uuid().optional().parse(req.query.campaignId);
+    const evidence = await getCommercialWorkflowEvidence(session, campaignId);
+    res.json(evidence);
   } catch (err) {
     next(err);
   }

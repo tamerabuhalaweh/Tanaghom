@@ -4,6 +4,7 @@ import { UnauthorizedError, NotFoundError, ForbiddenError } from '@shared/errors
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { validatePublishingApprovalGate } from './policy';
+import { recordCommercialWorkflowAudit } from '../commercial-workflow/evidence';
 
 export const publishingPackageRouter = Router();
 
@@ -53,7 +54,26 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
       campaignId,
       draftId,
     });
-    if (!gate.allowed) throw new ForbiddenError(gate.reason || 'Publishing approval gate blocked package creation');
+    if (!gate.allowed) {
+      await recordCommercialWorkflowAudit({
+        action: 'publishing_package_blocked',
+        result: 'blocked',
+        humanUserId: payload.sub,
+        agentRepId: payload.agentRepId || null,
+        targetObjectType: draftId ? 'content_item' : 'content_request',
+        targetObjectId: draftId || campaignId,
+        sourceModule: 'publishing-package',
+        reason: gate.reason || 'Publishing approval gate blocked package creation',
+        policyMatched: 'approval_required_before_package',
+        approvalId,
+        afterState: {
+          campaignId,
+          draftId: draftId || null,
+          externalExecution: 'blocked',
+        },
+      });
+      throw new ForbiddenError(gate.reason || 'Publishing approval gate blocked package creation');
+    }
 
     const contentItem = draftId
       ? await prisma.contentItem.findUnique({
@@ -169,6 +189,24 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
       { actor: `user:${payload.sub}`, action: 'publishing_package_created', object_type: 'publishing_package', object_id: pkg.id, result: 'success' },
       `Publishing package created for campaign ${campaignId}`,
     );
+    await recordCommercialWorkflowAudit({
+      action: 'publishing_package_created',
+      result: 'success',
+      humanUserId: payload.sub,
+      agentRepId: payload.agentRepId || null,
+      targetObjectType: 'publishing_package',
+      targetObjectId: pkg.id,
+      sourceModule: 'publishing-package',
+      reason: 'Approved content package prepared for Postiz sandbox review.',
+      policyMatched: 'approval_required_before_package',
+      approvalId: approval.id,
+      afterState: {
+        campaignId,
+        contentItemId: contentItem?.id ?? null,
+        packageStatus: pkg.package_status,
+        externalExecution: 'blocked',
+      },
+    });
 
     const postizSandbox = await checkPostizSandbox();
 
