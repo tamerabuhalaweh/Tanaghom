@@ -30,6 +30,11 @@ test.describe('Sprint 39 Commercial/Social live acceptance', () => {
     await expect(page.getByRole('heading', { name: /Commercial Command Center/i })).toBeVisible();
     await expect(page.getByText(/Marketing growth dashboard/i)).toBeVisible();
 
+    await expect.poll(async () => page.locator('body').innerText(), {
+      timeout: 20000,
+      message: 'Command Center should load nonzero live records',
+    }).toMatch(/Active campaigns\s+[1-9]/i);
+
     const body = await page.locator('body').innerText();
     expect(body).toMatch(/Active campaigns\s+[1-9]/i);
     expect(body).toMatch(/Pending approvals\s+[1-9]/i);
