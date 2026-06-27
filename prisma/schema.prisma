@@ -122,6 +122,7 @@ model User {
   llm_provider_credentials LlmProviderCredential[]
   integration_credentials_created IntegrationCredential[]
   onboarding_tokens UserOnboardingToken[]
+  mfa_factors UserMfaFactor[]
   tenant_memberships TenantMembership[]
   social_account_connections SocialAccountConnection[]
   oauth_connection_states OAuthConnectionState[]
@@ -152,6 +153,31 @@ model UserOnboardingToken {
   @@index([purpose])
   @@index([expires_at])
   @@map("user_onboarding_tokens")
+}
+
+enum MfaFactorType {
+  totp
+}
+
+model UserMfaFactor {
+  id               String        @id @default(uuid()) @db.Uuid
+  user_id          String        @db.Uuid
+  factor_type      MfaFactorType @default(totp)
+  encrypted_secret String        @db.Text
+  secret_fingerprint String
+  label            String?
+  is_verified      Boolean       @default(false)
+  enabled_at       DateTime?
+  disabled_at      DateTime?
+  last_used_at     DateTime?
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([is_verified])
+  @@map("user_mfa_factors")
 }
 
 enum LlmProviderType {

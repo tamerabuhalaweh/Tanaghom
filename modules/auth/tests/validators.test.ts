@@ -9,12 +9,21 @@ describe('auth/validators', () => {
     expect(result.password).toBe('secret');
   });
 
+  it('accepts optional MFA code', () => {
+    const result = validateLoginInput({ email: 'user@example.com', password: 'secret', mfaCode: '123456' });
+    expect(result.mfaCode).toBe('123456');
+  });
+
   it('rejects invalid email', () => {
     expect(() => validateLoginInput({ email: 'bad', password: 'secret' })).toThrow(ValidationError);
   });
 
   it('rejects empty password', () => {
     expect(() => validateLoginInput({ email: 'user@example.com', password: '' })).toThrow(ValidationError);
+  });
+
+  it('rejects malformed MFA code', () => {
+    expect(() => validateLoginInput({ email: 'user@example.com', password: 'secret', mfaCode: 'abc' })).toThrow(ValidationError);
   });
 
   it('rejects missing fields', () => {

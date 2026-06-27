@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { createOnboardingToken, acceptOnboardingToken, login, getSession, getOnboardingEmailStatus } from './service';
 import { validateLoginInput } from './validators';
 import { verifyToken } from '@shared/auth';
+import { UnauthorizedError } from '@shared/errors';
 import { revokeToken } from '@shared/auth/token-revocation';
+import { disableTotpMfa, getMfaStatus, startTotpSetup, verifyTotpSetup } from './mfa-service';
 
 export const authRouter = Router();
 
@@ -121,3 +123,84 @@ authRouter.post('/accept-onboarding', async (req: Request, res: Response, next: 
     next(err);
   }
 });
+
+authRouter.get('/mfa/status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getAuthenticatedPayload(req);
+    const status = await getMfaStatus(payload.sub);
+    res.json({
+      ...status,
+      rawSecretsReturned: false,
+      _label: status.enabled ? 'MFA is enabled for this user.' : 'MFA is not enabled for this user.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/mfa/setup', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getAuthenticatedPayload(req);
+    const setup = await startTotpSetup({
+      requesterUserId: payload.sub,
+      userId: payload.sub,
+      email: payload.email,
+    });
+    res.status(201).json({
+      ...setup,
+      _label: 'Scan this authenticator secret now. It is returned once and will not be shown again.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/mfa/verify', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getAuthenticatedPayload(req);
+    const input = z.object({
+      factorId: z.string().uuid(),
+      code: z.string().regex(/^\d{6}$/),
+    }).parse(req.body);
+    const result = await verifyTotpSetup({
+      requesterUserId: payload.sub,
+      factorId: input.factorId,
+      code: input.code,
+    });
+    res.json({
+      ...result,
+      rawSecretsReturned: false,
+      _label: 'MFA enabled. Future sign-ins require an authenticator code.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/mfa/disable', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getAuthenticatedPayload(req);
+    const input = z.object({
+      code: z.string().regex(/^\d{6}$/),
+    }).parse(req.body);
+    const result = await disableTotpMfa({
+      requesterUserId: payload.sub,
+      code: input.code,
+    });
+    res.json({
+      ...result,
+      rawSecretsReturned: false,
+      _label: 'MFA disabled for this user.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function getAuthenticatedPayload(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    throw new UnauthorizedError('Bearer token required');
+  }
+  return verifyToken(authHeader.substring(7));
+}

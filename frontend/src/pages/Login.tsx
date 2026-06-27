@@ -8,8 +8,10 @@ export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [mfaCode, setMfaCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [emailError, setEmailError] = useState('')
+  const mfaPromptVisible = Boolean(error?.toLowerCase().includes('authenticator code'))
 
   useEffect(() => {
     if (token) navigate('/command-center', { replace: true })
@@ -32,7 +34,8 @@ export default function Login() {
     e.preventDefault()
     const isEmailValid = validateEmail(email)
     if (!isEmailValid || !password) return
-    await login(email, password)
+    if (mfaPromptVisible && mfaCode.length !== 6) return
+    await login(email, password, mfaPromptVisible ? mfaCode : undefined)
   }
 
   return (
@@ -52,13 +55,13 @@ export default function Login() {
 
           <div className="max-w-3xl py-16">
             <div className="mb-5 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-300">
-              Sandbox Product Environment. External writes disabled by default.
+              Production workspace. External writes controlled by policy.
             </div>
             <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
               AI prepares. Human approves. The system records.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/60">
-              A working Commercial/Social sandbox product for campaign preparation, platform adaptation,
+              A Commercial/Social production module for campaign preparation, platform adaptation,
               reach scoring, approval routing, publishing readiness, and audit evidence.
             </p>
           </div>
@@ -148,6 +151,25 @@ export default function Login() {
                 </div>
               </div>
 
+              {mfaPromptVisible && (
+                <div>
+                  <label htmlFor="mfaCode" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                    Authenticator code
+                  </label>
+                  <input
+                    id="mfaCode"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit code"
+                    className="w-full rounded-md border border-black/15 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10"
+                    required
+                  />
+                </div>
+              )}
+
               {error && (
                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
                   {error}
@@ -164,7 +186,7 @@ export default function Login() {
             </form>
 
             <div className="mt-6 text-center text-xs text-[var(--color-text-muted)]">
-              Sandbox workspace. External publishing, CRM writes, WhatsApp, and voice triggers remain off by default.
+              Production workspace. External publishing, CRM writes, WhatsApp, and voice triggers require explicit authorization.
             </div>
           </div>
         </section>

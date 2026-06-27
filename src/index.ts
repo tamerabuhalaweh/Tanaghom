@@ -36,6 +36,8 @@ import { integrationCredentialsRouter } from '../modules/integration-credentials
 import { socialOAuthRouter } from '../modules/social-oauth/controller';
 import { runtimeBridgesRouter } from '../modules/runtime-bridges/controller';
 import { commercialWorkflowRouter } from '../modules/commercial-workflow/controller';
+import { tenantAdminRouter } from '../modules/tenant-admin/controller';
+import { operationsRouter } from '../modules/operations/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -233,6 +235,8 @@ app.use('/social-oauth', socialOAuthRouter);
 app.use('/runtime-bridges', runtimeBridgesRouter);
 app.use('/commercial-workflow', commercialWorkflowRouter);
 app.use('/admin/users', adminUsersRouter);
+app.use('/admin/tenant', tenantAdminRouter);
+app.use('/ops', operationsRouter);
 app.use('/integrations', integrationsRouter);
 app.use('/leads', leadsRouter);
 app.use('/ghl', ghlRouter);

@@ -56,7 +56,7 @@ export function validateEnvironment(): EnvValidationResult {
 
   const secretVaultKey = process.env.SECRET_VAULT_ENCRYPTION_KEY || process.env.LLM_CREDENTIAL_ENCRYPTION_KEY;
   if (process.env.NODE_ENV === 'production' && !secretVaultKey) {
-    warnings.push('SECRET_VAULT_ENCRYPTION_KEY is not configured. User-owned LLM and tenant integration credentials cannot be saved.');
+    errors.push('SECRET_VAULT_ENCRYPTION_KEY is required in production for user-owned LLM and tenant integration credentials.');
   }
   if (process.env.LLM_CREDENTIAL_ENCRYPTION_KEY && process.env.LLM_CREDENTIAL_ENCRYPTION_KEY.length < 32) {
     errors.push('LLM_CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters when configured.');

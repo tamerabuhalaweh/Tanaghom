@@ -8,6 +8,7 @@ import {
   upsertIntegrationCredential,
   upsertIntegrationCredentialSchema,
 } from './service';
+import { resolveCredentialTenantKey } from './tenant-scope';
 
 export const integrationCredentialsRouter = Router();
 
@@ -112,7 +113,7 @@ const REQUIRED_CREDENTIALS = [
 integrationCredentialsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const tenantKey = typeof req.query.tenantKey === 'string' ? req.query.tenantKey : 'default';
+    const tenantKey = resolveCredentialTenantKey(payload);
     const credentials = await listIntegrationCredentials(payload.role, tenantKey);
     res.json({ credentials, rawSecretsReturned: false });
   } catch (err) {
@@ -122,9 +123,9 @@ integrationCredentialsRouter.get('/', async (req: Request, res: Response, next: 
 
 integrationCredentialsRouter.get('/requirements', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
     res.json({
-      tenantKey: 'default',
+      tenantKey: resolveCredentialTenantKey(payload),
       requirements: REQUIRED_CREDENTIALS,
       rawSecretsReturned: false,
       _label: 'Tenant credential requirements for integration setup',
@@ -137,7 +138,7 @@ integrationCredentialsRouter.get('/requirements', async (req: Request, res: Resp
 integrationCredentialsRouter.get('/matrix', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const tenantKey = typeof req.query.tenantKey === 'string' ? req.query.tenantKey : 'default';
+    const tenantKey = resolveCredentialTenantKey(payload);
     const credentials = await listIntegrationCredentials(payload.role, tenantKey);
     const rows = REQUIRED_CREDENTIALS.map((requirement) => {
       const credential = credentials.find((item) =>
@@ -166,7 +167,7 @@ integrationCredentialsRouter.post('/', async (req: Request, res: Response, next:
     const payload = getPayload(req);
     const input = upsertIntegrationCredentialSchema.parse({
       ...req.body,
-      tenantKey: req.body.tenantKey ?? 'default',
+      tenantKey: resolveCredentialTenantKey(payload),
     });
     const credential = await upsertIntegrationCredential(payload.role, payload.sub, input);
     res.status(201).json({

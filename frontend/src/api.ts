@@ -15,6 +15,18 @@ interface ApiOptions {
   token?: string;
 }
 
+export class ApiError extends Error {
+  code?: string;
+  status: number;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { method = 'GET', body, token } = options;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -38,23 +50,29 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
             : Array.isArray(err.reasons)
               ? err.reasons.join('; ')
               : `API error: ${res.status}`;
-    throw new Error(detail);
+    throw new ApiError(detail, res.status, typeof err.code === 'string' ? err.code : undefined);
   }
 
   return res.json();
 }
 
 export const authApi = {
-  login: (email: string, password: string) =>
-    apiFetch<{ token: string; user: unknown; agentRep: unknown }>('/auth/login', { method: 'POST', body: { email, password } }),
+  login: (email: string, password: string, mfaCode?: string) =>
+    apiFetch<{ token: string; user: unknown; agentRep: unknown }>('/auth/login', { method: 'POST', body: { email, password, ...(mfaCode ? { mfaCode } : {}) } }),
   session: (token: string) =>
     apiFetch<unknown>('/auth/session', { token }),
+  logout: (token: string) =>
+    apiFetch<unknown>('/auth/logout', { method: 'POST', token }),
   createOnboardingToken: (data: unknown, token: string) =>
     apiFetch<unknown>('/auth/onboarding-token', { method: 'POST', body: data, token }),
   onboardingEmailStatus: (token: string) =>
     apiFetch<unknown>('/auth/onboarding-email-status', { token }),
   acceptOnboarding: (data: unknown) =>
     apiFetch<unknown>('/auth/accept-onboarding', { method: 'POST', body: data }),
+  mfaStatus: (token: string) => apiFetch<unknown>('/auth/mfa/status', { token }),
+  mfaSetup: (token: string) => apiFetch<unknown>('/auth/mfa/setup', { method: 'POST', token }),
+  mfaVerify: (data: unknown, token: string) => apiFetch<unknown>('/auth/mfa/verify', { method: 'POST', body: data, token }),
+  mfaDisable: (data: unknown, token: string) => apiFetch<unknown>('/auth/mfa/disable', { method: 'POST', body: data, token }),
 };
 
 export const campaignsApi = {
@@ -214,6 +232,17 @@ export const adminUsersApi = {
     apiFetch<unknown>(`/admin/users/${id}`, { method: 'PUT', body: data, token }),
   deactivate: (id: string, token: string) => apiFetch<unknown>(`/admin/users/${id}/deactivate`, { method: 'POST', token }),
   activate: (id: string, token: string) => apiFetch<unknown>(`/admin/users/${id}/activate`, { method: 'POST', token }),
+};
+
+export const tenantAdminApi = {
+  summary: (token: string) => apiFetch<unknown>('/admin/tenant', { token }),
+  update: (data: unknown, token: string) => apiFetch<unknown>('/admin/tenant', { method: 'PUT', body: data, token }),
+  isolationReport: (token: string) => apiFetch<unknown>('/admin/tenant/isolation-report', { token }),
+};
+
+export const operationsApi = {
+  readiness: (token: string) => apiFetch<unknown>('/ops/readiness', { token }),
+  metrics: (token: string) => apiFetch<unknown>('/ops/metrics', { token }),
 };
 
 export const integrationsApi = {

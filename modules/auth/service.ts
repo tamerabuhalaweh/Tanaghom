@@ -7,6 +7,7 @@ import { prisma } from '@shared/database';
 import { getEmailDeliveryStatus, sendOnboardingEmail } from '@shared/notifications/email';
 import { AUTH_EVENTS, type UserAuthenticatedEvent, type UserLoginFailedEvent } from './events';
 import { findUserByEmail, findUserById, findAgentRepByUserId } from './repository';
+import { assertMfaSatisfied } from './mfa-service';
 import type { LoginInput, LoginResult, SessionUser } from './types';
 
 export async function login(input: LoginInput): Promise<LoginResult> {
@@ -31,13 +32,16 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     throw new UnauthorizedError('Invalid email or password');
   }
 
+  const membership = await ensureActiveTenantMembership(user.id, user.tenant_key, user.role);
+  await assertMfaSatisfied(user.id, input.mfaCode);
+
   // Resolve AgentRep for session context
   const agentRep = await findAgentRepByUserId(user.id);
 
   const payload: JwtPayload = {
     sub: user.id,
     email: user.email,
-    role: user.role,
+    role: membership.role,
     tenantKey: user.tenant_key,
     departmentId: user.department_id || undefined,
     agentRepId: agentRep?.id,
@@ -59,7 +63,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      role: membership.role,
       tenantKey: user.tenant_key,
       departmentId: user.department_id,
       agentRepId: agentRep?.id || null,
@@ -179,4 +183,35 @@ function hashToken(token: string): string {
 
 export function getOnboardingEmailStatus() {
   return getEmailDeliveryStatus();
+}
+
+async function ensureActiveTenantMembership(userId: string, tenantKey: string, role: LoginResult['user']['role']) {
+  await prisma.tenant.upsert({
+    where: { tenant_key: tenantKey },
+    create: {
+      tenant_key: tenantKey,
+      name: tenantKey === 'default' ? 'Tanaghum Default Tenant' : tenantKey,
+      status: 'active',
+    },
+    update: {},
+  });
+  const membership = await prisma.tenantMembership.upsert({
+    where: {
+      tenant_key_user_id: {
+        tenant_key: tenantKey,
+        user_id: userId,
+      },
+    },
+    create: {
+      tenant_key: tenantKey,
+      user_id: userId,
+      role: role as 'admin' | 'cco' | 'department_head' | 'specialist' | 'reviewer' | 'viewer',
+      is_active: true,
+    },
+    update: {},
+  });
+  if (!membership.is_active) {
+    throw new UnauthorizedError('Tenant membership is disabled');
+  }
+  return membership;
 }
