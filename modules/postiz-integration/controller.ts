@@ -673,17 +673,28 @@ async function buildPackagePostizPayload(
     throw new ForbiddenError(`Publishing package is ${pkg.package_status}, not ready for scheduling preparation`);
   }
 
+  const [contentItem, campaign] = await Promise.all([
+    pkg.content_item_id ? prisma.contentItem.findUnique({ where: { id: pkg.content_item_id } }) : Promise.resolve(null),
+    pkg.campaign_id ? prisma.contentRequest.findUnique({ where: { id: pkg.campaign_id } }) : Promise.resolve(null),
+  ]);
   const target = input.platform
     ? pkg.targets.find(item => item.platform === input.platform)
     : pkg.targets[0];
-  const platform = input.platform || target?.platform;
+  const platform = input.platform
+    || target?.platform
+    || contentItem?.platform
+    || campaign?.target_platforms[0];
   if (!platform) throw new ForbiddenError('Publishing package has no scheduling target platform');
 
   const caption =
     pkg.items.find(item => item.item_type === 'platform_caption' && item.platform === platform)
     || pkg.items.find(item => item.item_type === 'platform_caption')
     || pkg.items[0];
-  const content = caption?.content_summary || '';
+  const content =
+    caption?.content_summary
+    || contentItem?.draft_text
+    || campaign?.raw_message
+    || '';
   if (!content.trim()) throw new ForbiddenError('Publishing package has no approved content summary to schedule');
 
   const scheduledAt = input.scheduledAt
