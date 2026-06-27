@@ -6,7 +6,7 @@ const baseFacts: CommercialWorkflowFacts = {
   campaign: null,
   provider: {
     ready: false,
-    label: 'Connect OpenAI or Claude',
+    label: 'Connect DeepSeek, OpenAI, or Claude',
     provider: 'mock',
     credentialStatus: 'missing',
   },

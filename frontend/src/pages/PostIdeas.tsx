@@ -126,7 +126,7 @@ export default function PostIdeas() {
       } catch (error) {
         if (cancelled) return;
         setProviderReady(false);
-        setProviderLabel(error instanceof Error ? error.message : 'Configure OpenAI or Claude before generation');
+        setProviderLabel(error instanceof Error ? error.message : 'Configure DeepSeek, OpenAI, or Claude before generation');
       }
     }
 
@@ -235,7 +235,7 @@ export default function PostIdeas() {
 
       {!providerReady && (
         <Notice tone="warn">
-          Real AI generation is blocked until this user configures OpenAI or Claude. {providerLabel}{' '}
+          Real AI generation is blocked until this user configures DeepSeek, OpenAI, or Claude. {providerLabel}{' '}
           <Link to="/ai-settings" className="font-semibold underline">Open AI Provider Settings</Link>
         </Notice>
       )}

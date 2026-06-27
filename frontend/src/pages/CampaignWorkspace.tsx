@@ -90,7 +90,7 @@ export default function CampaignWorkspace() {
           setProviderLabel(`${text(active.name, 'LLM provider')} / ${text(active.model, 'model configured')}`);
         } catch (providerError) {
           setProviderReady(false);
-          setProviderLabel(providerError instanceof Error ? providerError.message : 'Configure OpenAI or Claude before draft generation');
+          setProviderLabel(providerError instanceof Error ? providerError.message : 'Configure DeepSeek, OpenAI, or Claude before draft generation');
         }
       } catch (error) {
         if (!cancelled) setMessage(`Campaigns failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -305,7 +305,7 @@ export default function CampaignWorkspace() {
   const createdByCurrentUser = selected ? text(selected.requesterId, '') === currentUserId : false;
   const pendingWork = [
     !selected ? 'Create or select a campaign brief.' : '',
-    selected && !providerReady ? 'Configure OpenAI or Claude before AI generation.' : '',
+    selected && !providerReady ? 'Configure DeepSeek, OpenAI, or Claude before AI generation.' : '',
     selected && providerReady && !drafts.length ? 'Generate LinkedIn, Instagram, and X drafts.' : '',
     drafts.length && !score ? 'Score the selected saved draft.' : '',
     score && !approval ? 'Send the selected draft for approval.' : '',
@@ -359,7 +359,7 @@ export default function CampaignWorkspace() {
 
       {!providerReady && (
         <Notice tone="warn">
-          Real draft generation is blocked until this user configures OpenAI or Claude. {providerLabel}{' '}
+          Real draft generation is blocked until this user configures DeepSeek, OpenAI, or Claude. {providerLabel}{' '}
           <a href="/ai-settings" className="font-semibold underline">Open AI Provider Settings</a>
         </Notice>
       )}

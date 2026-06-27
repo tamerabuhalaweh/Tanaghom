@@ -130,7 +130,7 @@ aiProviderRouter.post('/select', async (req: Request, res: Response, next: NextF
     const provider = providerSchema.parse(req.body.provider);
 
     if (provider === 'mock' && !isMockLLMAllowed()) {
-      res.status(400).json({ error: 'Mock LLM is disabled for production use. Configure OpenAI or Claude.' });
+      res.status(400).json({ error: 'Mock LLM is disabled for production use. Configure DeepSeek, OpenAI, or Claude.' });
       return;
     }
 

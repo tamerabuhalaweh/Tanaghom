@@ -132,7 +132,7 @@ async function resolveProviderFact(userId: string): Promise<CommercialWorkflowFa
     const mockReady = process.env.ALLOW_MOCK_LLM === 'true' || process.env.NODE_ENV === 'test';
     return {
       ready: mockReady,
-      label: mockReady ? 'Mock provider allowed by deployment flag' : 'Connect OpenAI or Claude',
+      label: mockReady ? 'Mock provider allowed by deployment flag' : 'Connect DeepSeek, OpenAI, or Claude',
       provider: 'mock',
       credentialStatus: mockReady ? 'configured' : 'missing',
     };
