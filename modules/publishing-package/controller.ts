@@ -4,6 +4,7 @@ import { UnauthorizedError, NotFoundError, ForbiddenError } from '@shared/errors
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { validatePublishingApprovalGate } from './policy';
+import { createPublishingPackageGovernance } from './governance';
 import { recordCommercialWorkflowAudit } from '../commercial-workflow/evidence';
 
 export const publishingPackageRouter = Router();
@@ -39,6 +40,7 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
   try {
     const payload = getPayload(req);
     const { campaignId, draftId, approvalId, platforms, scheduledTime } = req.body;
+    if (!payload.agentRepId) throw new ForbiddenError('AgentRep session context is required before publishing package creation');
 
     const campaign = await prisma.contentRequest.findUnique({ where: { id: campaignId } });
     if (!campaign) throw new NotFoundError('Campaign', campaignId);
@@ -59,7 +61,7 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
         action: 'publishing_package_blocked',
         result: 'blocked',
         humanUserId: payload.sub,
-        agentRepId: payload.agentRepId || null,
+        agentRepId: payload.agentRepId,
         targetObjectType: draftId ? 'content_item' : 'content_request',
         targetObjectId: draftId || campaignId,
         sourceModule: 'publishing-package',
@@ -101,17 +103,28 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
         _label: 'Postiz sandbox payload preview - no real scheduling',
       },
     }));
+    const governance = await createPublishingPackageGovernance({
+      humanUserId: payload.sub,
+      agentRepId: payload.agentRepId,
+      campaignId,
+      contentItemId: contentItem?.id ?? null,
+      approvalId: approval.id,
+      packageTitle: String((campaign as Record<string, unknown>).raw_message || campaignId).slice(0, 120),
+    });
 
     const pkg = await prisma.publishingPackage.create({
       data: {
         campaign_id: campaignId,
         content_item_id: contentItem?.id ?? null,
         draft_version_id: latestDraft?.id ?? null,
+        saif_decision_record_id: governance.saifDecisionRecordId,
         approval_id: approval.id,
+        capability_resolution_id: governance.capabilityResolutionId,
+        mcp_mediation_request_id: governance.mcpMediationRequestId,
         package_status: 'ready_for_future_execution',
         package_type: platformPayloads.length > 1 ? 'multi_platform_campaign' : 'single_post',
         created_by_user_id: payload.sub,
-        created_by_agent_rep_id: payload.agentRepId || '',
+        created_by_agent_rep_id: payload.agentRepId,
         readiness_score: contentItem?.reach_score || null,
         readiness_summary: 'Approved content package prepared for Postiz sandbox review. External scheduling remains policy-gated.',
         items: {
@@ -132,6 +145,18 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
               source_object_id: approval.id,
               content_summary: `Approval ${approval.approval_status}: ${approval.comment || 'No reviewer comment'}`,
               metadata: { decision: approval.decision, decidedAt: approval.decided_at },
+            },
+            {
+              item_type: 'saif_evidence',
+              item_status: 'validated',
+              source_object_type: 'capability_resolution',
+              source_object_id: governance.capabilityResolutionId,
+              content_summary: 'Publishing package capability resolved and linked to MCP mediation evidence.',
+              metadata: {
+                saifDecisionRecordId: governance.saifDecisionRecordId,
+                mcpMediationRequestId: governance.mcpMediationRequestId,
+                mcpMediationDecisionId: governance.mcpMediationDecisionId,
+              },
             },
           ],
         },
@@ -165,6 +190,14 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
               source_object_type: 'policy',
               source_object_id: 'external-execution',
             },
+            {
+              check_type: 'governance_linkage',
+              check_status: 'passed',
+              severity: 'info',
+              message: 'SAIF decision, capability resolution, and MCP mediation evidence are linked to this package.',
+              source_object_type: 'mcp_mediation_request',
+              source_object_id: governance.mcpMediationRequestId,
+            },
           ],
         },
         manifest: {
@@ -173,7 +206,7 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
             manifest_status: 'generated',
             manifest_summary: 'Postiz-ready package generated from approved content. No external scheduling performed.',
             generated_by_user_id: payload.sub,
-            generated_by_agent_rep_id: payload.agentRepId || '',
+            generated_by_agent_rep_id: payload.agentRepId,
           },
         },
       },
@@ -193,7 +226,7 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
       action: 'publishing_package_created',
       result: 'success',
       humanUserId: payload.sub,
-      agentRepId: payload.agentRepId || null,
+      agentRepId: payload.agentRepId,
       targetObjectType: 'publishing_package',
       targetObjectId: pkg.id,
       sourceModule: 'publishing-package',
@@ -214,6 +247,7 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
       id: pkg.id,
       campaignId,
       approvalId: approval.id,
+      governance,
       contentItemId: contentItem?.id ?? null,
       draftVersionId: latestDraft?.id ?? null,
       status: 'ready',

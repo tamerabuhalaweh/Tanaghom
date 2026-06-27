@@ -1,9 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { randomUUID } from 'node:crypto';
 import { logger } from '@shared/logging';
 import { connectDatabase, disconnectDatabase } from '@shared/database';
-import { closeQueue } from '@shared/queue';
+import { closeQueue, getRedisConnection } from '@shared/queue';
+import { verifyToken } from '@shared/auth';
+import { assertTokenNotRevoked } from '@shared/auth/token-revocation';
 import { validateEnvironment, isDemoMode, assertDemoSafe } from './env-validation';
 import { healthCheck } from './routes/health';
 import { AppError } from '../shared/errors';
@@ -47,37 +50,156 @@ assertDemoSafe();
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
+const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || '1mb';
+const RATE_LIMIT_WINDOW_SECONDS = parseInt(process.env.RATE_LIMIT_WINDOW_SECONDS || '60', 10);
+const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10);
+const allowedCorsOrigins = CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
 
 const app = express();
 
-app.use(helmet());
-app.use(cors({
-  origin: CORS_ORIGIN,
-  credentials: true,
-}));
-app.use(express.json({ limit: '10mb' }));
+/* eslint-disable @typescript-eslint/no-namespace */
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+    }
+  }
+}
+/* eslint-enable @typescript-eslint/no-namespace */
 
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction): void {
-  const ip = req.ip || 'unknown';
-  const now = Date.now();
-  const limit = rateLimitMap.get(ip);
+function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const incoming = req.header('x-request-id');
+  const requestId = incoming && /^[a-zA-Z0-9._:-]{8,120}$/.test(incoming) ? incoming : randomUUID();
+  req.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  next();
+}
 
-  if (!limit || now > limit.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + 60000 });
+function requestLogger(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    logger.info({
+      requestId: req.requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+    }, 'HTTP request completed');
+  });
+  next();
+}
+
+function enforceOrigin(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     next();
     return;
   }
-
-  if (limit.count >= 100) {
-    res.status(429).json({ error: 'Rate limit exceeded' });
+  const origin = req.header('origin');
+  if (origin && !allowedCorsOrigins.includes(origin)) {
+    res.status(403).json({
+      error: 'Request origin is not allowed',
+      code: 'ORIGIN_NOT_ALLOWED',
+      requestId: req.requestId,
+    });
     return;
   }
-
-  limit.count++;
   next();
 }
+
+const memoryRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function memoryRateLimit(key: string, now: number): { allowed: boolean; retryAfterSeconds: number } {
+  const limit = memoryRateLimitMap.get(key);
+  if (!limit || now > limit.resetAt) {
+    memoryRateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_SECONDS * 1000 });
+    return { allowed: true, retryAfterSeconds: RATE_LIMIT_WINDOW_SECONDS };
+  }
+  if (limit.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, retryAfterSeconds: Math.ceil((limit.resetAt - now) / 1000) };
+  }
+  limit.count++;
+  return { allowed: true, retryAfterSeconds: Math.ceil((limit.resetAt - now) / 1000) };
+}
+
+async function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> {
+  const key = `rate-limit:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+  const now = Date.now();
+  try {
+    if (process.env.NODE_ENV === 'test' || process.env.REDIS_RATE_LIMIT_DISABLED === 'true') {
+      const decision = memoryRateLimit(key, now);
+      if (!decision.allowed) {
+        res.setHeader('Retry-After', String(decision.retryAfterSeconds));
+        res.status(429).json({ error: 'Rate limit exceeded', code: 'RATE_LIMITED', requestId: req.requestId });
+        return;
+      }
+      next();
+      return;
+    }
+
+    const redis = getRedisConnection();
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, RATE_LIMIT_WINDOW_SECONDS);
+    if (count > RATE_LIMIT_MAX_REQUESTS) {
+      const ttl = await redis.ttl(key);
+      res.setHeader('Retry-After', String(Math.max(ttl, 1)));
+      res.status(429).json({ error: 'Rate limit exceeded', code: 'RATE_LIMITED', requestId: req.requestId });
+      return;
+    }
+    next();
+  } catch (err) {
+    logger.error({ err, requestId: req.requestId }, 'Rate limiter unavailable');
+    if (process.env.NODE_ENV === 'production') {
+      res.status(503).json({ error: 'Rate limiter unavailable', code: 'RATE_LIMIT_UNAVAILABLE', requestId: req.requestId });
+      return;
+    }
+    const decision = memoryRateLimit(key, now);
+    if (!decision.allowed) {
+      res.setHeader('Retry-After', String(decision.retryAfterSeconds));
+      res.status(429).json({ error: 'Rate limit exceeded', code: 'RATE_LIMITED', requestId: req.requestId });
+      return;
+    }
+    next();
+  }
+}
+
+async function enforceTokenRevocation(req: express.Request, _res: express.Response, next: express.NextFunction): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const payload = verifyToken(authHeader.substring(7));
+      await assertTokenNotRevoked(payload);
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+app.use(requestIdMiddleware);
+app.use(requestLogger);
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'none'"],
+      baseUri: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      connectSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:'],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+    },
+  },
+  referrerPolicy: { policy: 'no-referrer' },
+}));
+app.use(cors({
+  origin: allowedCorsOrigins.length > 1 ? allowedCorsOrigins : CORS_ORIGIN,
+  credentials: true,
+}));
+app.use(enforceOrigin);
+app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
 app.use(rateLimit);
+app.use(enforceTokenRevocation);
 
 if (isDemoMode()) {
   app.use((req, res, next) => {
@@ -118,21 +240,24 @@ app.use('/ideas', ideasRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
-    const logPayload = { code: err.code, statusCode: err.statusCode, path: req.path };
+    const logPayload = { code: err.code, statusCode: err.statusCode, path: req.path, requestId: req.requestId };
     if (err.statusCode >= 500) {
-      logger.error({ err, path: req.path }, 'Operational server error');
+      logger.error({ err, path: req.path, requestId: req.requestId }, 'Operational server error');
     } else {
       logger.warn(logPayload, 'Request blocked by application policy');
     }
     res.status(err.statusCode).json({
       error: err.message,
       code: err.code,
+      requestId: req.requestId,
     });
     return;
   }
 
+  logger.error({ err, path: req.path, requestId: req.requestId }, 'Unhandled server error');
   res.status(500).json({
     error: 'Internal server error',
+    requestId: req.requestId,
   });
 });
 

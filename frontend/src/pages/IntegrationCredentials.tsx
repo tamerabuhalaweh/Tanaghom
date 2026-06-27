@@ -150,7 +150,8 @@ export default function IntegrationCredentials() {
         secrets,
         metadata: {
           purpose: selected.purpose,
-          sandboxOnly: true,
+          credentialOwner: 'tenant',
+          executionPolicy: 'approval_and_runtime_flags_required',
           source: 'admin_ui',
         },
       }, token);
@@ -394,7 +395,7 @@ export default function IntegrationCredentials() {
       </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]">
-        <ProductCard title="Credential Requirements" subtitle="Choose an integration and save the required sandbox credentials.">
+        <ProductCard title="Credential Requirements" subtitle="Choose an integration and save this tenant's required credentials.">
           {matrix.length ? (
             <ProductTable
               columns={['Integration', 'Status', 'Fields', 'Action']}
@@ -462,7 +463,7 @@ export default function IntegrationCredentials() {
                 </Field>
               ))}
               <Notice tone="info">
-                Saving credentials does not enable live execution. Postiz, CRM, messaging, and voice actions still require sandbox flags, approval, MCP mediation, and policy gates.
+                Saving credentials does not enable external execution. Postiz, CRM, messaging, and voice actions still require explicit runtime flags, approval, MCP mediation, and policy gates.
               </Notice>
               <PrimaryAction onClick={saveCredential} disabled={saving}>{saving ? 'Saving...' : 'Save Encrypted Credential'}</PrimaryAction>
             </div>

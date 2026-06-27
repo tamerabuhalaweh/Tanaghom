@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 import { UnauthorizedError, ForbiddenError } from '../errors';
 
 const JWT_SECRET: string = process.env.JWT_SECRET || '';
@@ -12,6 +13,9 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  jti?: string;
+  iat?: number;
+  exp?: number;
   tenantKey?: string;
   departmentId?: string;
   agentRepId?: string;
@@ -34,7 +38,7 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload as object, JWT_SECRET, { expiresIn: 86400 });
+  return jwt.sign({ ...payload, jti: payload.jti || randomUUID() } as object, JWT_SECRET, { expiresIn: 86400 });
 }
 
 export function verifyToken(token: string): JwtPayload {

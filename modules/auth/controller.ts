@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createOnboardingToken, acceptOnboardingToken, login, getSession, getOnboardingEmailStatus } from './service';
 import { validateLoginInput } from './validators';
 import { verifyToken } from '@shared/auth';
+import { revokeToken } from '@shared/auth/token-revocation';
 
 export const authRouter = Router();
 
@@ -27,6 +28,25 @@ authRouter.get('/session', async (req: Request, res: Response, next: NextFunctio
     const token = authHeader.substring(7);
     const user = await getSession(token);
     res.json(user);
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/logout', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Bearer token required' } });
+      return;
+    }
+    const payload = verifyToken(authHeader.substring(7));
+    const revoked = await revokeToken(payload);
+    res.json({
+      status: 'logged_out',
+      tokenRevoked: revoked,
+      _label: 'Session token revoked. User must sign in again to continue.',
+    });
   } catch (err) {
     next(err);
   }

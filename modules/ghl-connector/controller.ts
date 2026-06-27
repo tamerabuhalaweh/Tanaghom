@@ -15,6 +15,7 @@ interface GhlRuntimeConfig {
   apiKey: string;
   locationId: string;
   source: 'tenant_vault' | 'environment' | 'missing';
+  globalFallbackAllowed: boolean;
 }
 
 function getPayload(req: Request): JwtPayload {
@@ -46,6 +47,8 @@ ghlRouter.get('/status', async (req: Request, res: Response, next: NextFunction)
       apiKeyStatus: hasApiKey ? 'configured' : 'missing',
       locationIdStatus: hasLocationId ? 'configured' : 'missing',
       credentialSource: config.source,
+      credentialScope: config.source === 'tenant_vault' ? 'tenant' : 'not_configured',
+      globalEnvironmentFallback: config.globalFallbackAllowed ? 'enabled' : 'disabled',
       sandboxEnabled,
       liveEnabled: false,
       pushEnabled: false,
@@ -70,13 +73,14 @@ ghlRouter.get('/wizard-options', async (req: Request, res: Response, next: NextF
         { id: 'production_write', label: 'Production CRM Write-back', executable: false, risk: 'high' },
       ],
       requiredCredentials: [
-        { name: 'Tenant vault apiKey or GHL_API_KEY/GOHIGHLEVEL_API_KEY', status: config.apiKey ? 'configured' : 'missing' },
-        { name: 'Tenant vault locationId or GHL_LOCATION_ID', status: config.locationId ? 'configured' : 'missing' },
+        { name: 'Tenant vault apiKey', status: config.apiKey ? 'configured' : 'missing' },
+        { name: 'Tenant vault locationId', status: config.locationId ? 'configured' : 'missing' },
         { name: 'GHL_SANDBOX_WRITE_ENABLED', status: process.env.GHL_SANDBOX_WRITE_ENABLED === 'true' ? 'enabled' : 'disabled' },
       ],
       safety: {
         productionWrites: 'Blocked',
         sourceOfTruth: 'STITCH',
+        credentialOwnership: 'Customer tenant vault. Global shared GHL credentials are disabled unless ALLOW_GLOBAL_GHL_CREDENTIALS=true.',
         endpoint: `${GHL_BASE_URL}/contacts/upsert`,
       },
     });
@@ -146,7 +150,7 @@ ghlRouter.post('/push', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
-async function resolveGhlRuntimeConfig(tenantKey = 'default'): Promise<GhlRuntimeConfig> {
+export async function resolveGhlRuntimeConfig(tenantKey = 'default'): Promise<GhlRuntimeConfig> {
   const credential = await getActiveIntegrationCredential('gohighlevel', 'api_key', tenantKey);
   if (credential) {
     return {
@@ -154,6 +158,17 @@ async function resolveGhlRuntimeConfig(tenantKey = 'default'): Promise<GhlRuntim
       apiKey: credential.secrets.apiKey || '',
       locationId: credential.secrets.locationId || '',
       source: 'tenant_vault',
+      globalFallbackAllowed: false,
+    };
+  }
+  const globalFallbackAllowed = process.env.ALLOW_GLOBAL_GHL_CREDENTIALS === 'true';
+  if (!globalFallbackAllowed) {
+    return {
+      baseUrl: GHL_BASE_URL,
+      apiKey: '',
+      locationId: '',
+      source: 'missing',
+      globalFallbackAllowed,
     };
   }
   return {
@@ -161,31 +176,33 @@ async function resolveGhlRuntimeConfig(tenantKey = 'default'): Promise<GhlRuntim
     apiKey: process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY || '',
     locationId: process.env.GHL_LOCATION_ID || '',
     source: process.env.GHL_API_KEY || process.env.GOHIGHLEVEL_API_KEY ? 'environment' : 'missing',
+    globalFallbackAllowed,
   };
 }
 
-async function ghlSandboxWriteGate(config?: GhlRuntimeConfig): Promise<{ allowed: boolean; reasons: string[] }> {
+export async function ghlSandboxWriteGate(config?: GhlRuntimeConfig): Promise<{ allowed: boolean; reasons: string[] }> {
   const runtimeConfig = config || await resolveGhlRuntimeConfig();
   const reasons: string[] = [];
   if (process.env.DEMO_MODE === 'true') reasons.push('DEMO_MODE=true blocks CRM sandbox writes');
   if (process.env.EXTERNAL_EXECUTION_ENABLED !== 'true') reasons.push('EXTERNAL_EXECUTION_ENABLED is not true');
   if (process.env.CRM_LIVE_ENABLED !== 'true') reasons.push('CRM_LIVE_ENABLED is not true');
   if (process.env.GHL_SANDBOX_WRITE_ENABLED !== 'true') reasons.push('GHL_SANDBOX_WRITE_ENABLED is not true');
+  if (runtimeConfig.source !== 'tenant_vault') reasons.push('GoHighLevel credentials must be configured in the customer tenant vault');
   if (!runtimeConfig.apiKey) reasons.push('GoHighLevel API key is missing');
   if (!runtimeConfig.locationId) reasons.push('GoHighLevel location id is missing');
   return { allowed: reasons.length === 0, reasons };
 }
 
-function buildGhlContactPayload(lead: Record<string, unknown>, config?: GhlRuntimeConfig) {
+export function buildGhlContactPayload(lead: Record<string, unknown>, config?: GhlRuntimeConfig) {
   const leadName = String(lead.lead_name_placeholder || '').trim();
   return {
-    locationId: config?.locationId || process.env.GHL_LOCATION_ID || '<configured sandbox location id>',
+    locationId: config?.locationId || '<tenant configured location id>',
     firstName: leadName ? leadName.split(' ')[0] : undefined,
     name: leadName || undefined,
     email: lead.lead_email_placeholder || undefined,
     phone: lead.lead_phone_placeholder || undefined,
     source: lead.lead_source || 'Tanaghum Commercial/Social',
-    tags: ['tanaghum', 'commercial-social', 'sandbox'],
+    tags: ['tanaghum', 'commercial-social', 'controlled-production'],
     customFields: [
       { key: 'tanaghum_lead_score', field_value: String(deriveQualificationScore(lead)) },
       { key: 'tanaghum_campaign_id', field_value: String(lead.campaign_id || '') },
