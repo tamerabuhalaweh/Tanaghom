@@ -1,4 +1,4 @@
-import { ForbiddenError, NotFoundError, ExternalServiceError } from '@shared/errors';
+import { AppError, ForbiddenError, NotFoundError, ExternalServiceError } from '@shared/errors';
 import { auditLog } from '@shared/logging';
 import { eventBus } from '@shared/events';
 import { prisma } from '@shared/database';
@@ -94,6 +94,7 @@ export async function generateDrafts(
   const platforms = input.platforms || (campaign.target_platforms as Platform[]);
   const tone = input.tone || 'professional';
   const results: DraftResult[] = [];
+  const failures: string[] = [];
 
   for (const platform of platforms) {
     try {
@@ -126,6 +127,7 @@ export async function generateDrafts(
       await eventBus.emit(DRAFT_EVENTS.DRAFT_GENERATED, event);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      failures.push(`${platform}: ${errorMsg}`);
 
       auditLog(
         {
@@ -146,6 +148,18 @@ export async function generateDrafts(
       };
       await eventBus.emit(DRAFT_EVENTS.DRAFT_GENERATION_FAILED, event);
     }
+  }
+
+  if (results.length === 0 && failures.length > 0) {
+    const providerRequired = failures.find(message => message.includes('LLM_PROVIDER_REQUIRED') || message.includes('No production LLM provider') || message.includes('missing credentials for this user'));
+    if (providerRequired) {
+      throw new AppError(
+        'No production LLM provider is configured for this user. Configure OpenAI or Claude in AI Provider settings.',
+        424,
+        'LLM_PROVIDER_REQUIRED',
+      );
+    }
+    throw new ExternalServiceError('LLM', `All requested platform drafts failed: ${failures.join('; ')}`);
   }
 
   return results;
@@ -179,6 +193,7 @@ export async function reviseDraft(
   try {
     revisedText = (await llm.generate(prompt)).text;
   } catch (err) {
+    if (err instanceof AppError) throw err;
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
   }
 
@@ -313,6 +328,7 @@ async function generateSingleDraft(
   try {
     draftText = (await llm.generate(prompt)).text;
   } catch (err) {
+    if (err instanceof AppError) throw err;
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
   }
 
