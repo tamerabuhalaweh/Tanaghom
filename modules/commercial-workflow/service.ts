@@ -125,14 +125,14 @@ export async function getCommercialWorkflowState(
 async function resolveProviderFact(userId: string): Promise<CommercialWorkflowFacts['provider']> {
   const agentRep = await prisma.agentRep.findUnique({ where: { user_id: userId } });
   const metadata = normalizeObject(agentRep?.metadata);
-  const selected = metadata.llmProvider === 'openai' || metadata.llmProvider === 'claude'
+  const selected = metadata.llmProvider === 'openai' || metadata.llmProvider === 'claude' || metadata.llmProvider === 'deepseek'
     ? metadata.llmProvider
     : 'mock';
   if (selected === 'mock') {
     const mockReady = process.env.ALLOW_MOCK_LLM === 'true' || process.env.NODE_ENV === 'test';
     return {
       ready: mockReady,
-      label: mockReady ? 'Mock provider allowed by deployment flag' : 'Connect OpenAI or Claude',
+      label: mockReady ? 'Mock provider allowed by deployment flag' : 'Connect DeepSeek, OpenAI, or Claude',
       provider: 'mock',
       credentialStatus: mockReady ? 'configured' : 'missing',
     };

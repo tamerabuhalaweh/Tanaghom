@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaudeLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
+import { ClaudeLLMProvider, DeepSeekLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -72,6 +72,31 @@ describe('LLM provider adapter', () => {
     expect(response.text).toBe('Claude live generated draft');
     expect(response.provider).toBe('claude');
     expect(response.usage).toEqual({ promptTokens: 9, completionTokens: 6 });
+  });
+
+  it('calls DeepSeek Chat Completions API when configured', async () => {
+    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'DeepSeek live generated draft' } }],
+        usage: { prompt_tokens: 14, completion_tokens: 9 },
+      }),
+    } as Response);
+
+    const provider = new DeepSeekLLMProvider();
+    const response = await provider.generate('Campaign brief', { model: 'deepseek-v4-flash', timeoutMs: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.deepseek.com/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-deepseek-key' }),
+      }),
+    );
+    expect(response.text).toBe('DeepSeek live generated draft');
+    expect(response.provider).toBe('deepseek');
+    expect(response.usage).toEqual({ promptTokens: 14, completionTokens: 9 });
   });
 
   it('does not call external providers when credentials are missing', async () => {

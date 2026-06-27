@@ -73,4 +73,23 @@ describe('production LLM provider resolution', () => {
       apiKeyStatus: 'configured',
     });
   });
+
+  it('resolves DeepSeek from encrypted user credentials', async () => {
+    prismaMocks.agentRep.findUnique.mockResolvedValue({ metadata: { llmProvider: 'deepseek' } });
+    prismaMocks.llmProviderCredential.findUnique.mockResolvedValue({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      encrypted_api_key: encryptSecret('sk-test-user-owned-deepseek-key'),
+      is_active: true,
+    });
+
+    const provider = await resolveUserLLMProvider('user-1');
+
+    expect(provider.getStatus()).toMatchObject({
+      type: 'deepseek',
+      configured: true,
+      model: 'deepseek-v4-flash',
+      apiKeyStatus: 'configured',
+    });
+  });
 });

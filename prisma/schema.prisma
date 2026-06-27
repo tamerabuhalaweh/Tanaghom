@@ -157,6 +157,7 @@ model UserOnboardingToken {
 enum LlmProviderType {
   openai
   claude
+  deepseek
 }
 
 model LlmProviderCredential {

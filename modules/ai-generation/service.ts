@@ -154,7 +154,7 @@ export async function generateDrafts(
     const providerRequired = failures.find(message => message.includes('LLM_PROVIDER_REQUIRED') || message.includes('No production LLM provider') || message.includes('missing credentials for this user'));
     if (providerRequired) {
       throw new AppError(
-        'No production LLM provider is configured for this user. Configure OpenAI or Claude in AI Provider settings.',
+        'No production LLM provider is configured for this user. Configure DeepSeek, OpenAI, or Claude in AI Provider settings.',
         424,
         'LLM_PROVIDER_REQUIRED',
       );
@@ -385,7 +385,7 @@ Generate a platform-native draft that:
 4. Is optimized for the platform's algorithm
 5. Avoids restricted claims and sensitive topics
 
-Output the draft text only.`;
+Output only the final social post copy. Do not include explanations, headings, labels, markdown separators, or notes.`;
 }
 
 function buildRevisionPrompt(

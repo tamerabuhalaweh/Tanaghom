@@ -9,8 +9,11 @@ import { createConfiguredLLMProvider, type LLMProvider } from '@shared/providers
 
 export const aiProviderRouter = Router();
 
-const providerSchema = z.enum(['mock', 'openai', 'claude']);
-const credentialProviderSchema = z.enum(['openai', 'claude']);
+type LLMProviderType = 'openai' | 'claude' | 'deepseek';
+type SelectableProviderType = 'mock' | LLMProviderType;
+
+const providerSchema = z.enum(['mock', 'openai', 'claude', 'deepseek']);
+const credentialProviderSchema = z.enum(['openai', 'claude', 'deepseek']);
 
 const upsertCredentialSchema = z.object({
   provider: credentialProviderSchema,
@@ -34,8 +37,9 @@ aiProviderRouter.get('/status', async (req: Request, res: Response, next: NextFu
     const mockAllowed = isMockLLMAllowed();
     const providers = [
       { name: 'Mock LLM', type: 'mock', configured: mockAllowed, model: 'mock-v1', apiKeyStatus: mockAllowed ? 'configured' as const : 'missing' as const, scope: 'development_only' },
-      { name: 'OpenAI', type: 'openai', configured: hasCredential(userCredentials, 'openai') || !!process.env.OPENAI_API_KEY, model: credentialModel(userCredentials, 'openai') || process.env.OPENAI_MODEL || 'gpt-4o', apiKeyStatus: hasCredential(userCredentials, 'openai') || process.env.OPENAI_API_KEY ? 'configured' as const : 'missing' as const, scope: hasCredential(userCredentials, 'openai') ? 'user' : 'environment' },
-      { name: 'Claude', type: 'claude', configured: hasCredential(userCredentials, 'claude') || !!process.env.CLAUDE_API_KEY, model: credentialModel(userCredentials, 'claude') || process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514', apiKeyStatus: hasCredential(userCredentials, 'claude') || process.env.CLAUDE_API_KEY ? 'configured' as const : 'missing' as const, scope: hasCredential(userCredentials, 'claude') ? 'user' : 'environment' },
+      providerStatus('OpenAI', 'openai', userCredentials, process.env.OPENAI_API_KEY, process.env.OPENAI_MODEL || 'gpt-4o'),
+      providerStatus('Claude', 'claude', userCredentials, process.env.CLAUDE_API_KEY, process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514'),
+      providerStatus('DeepSeek', 'deepseek', userCredentials, process.env.DEEPSEEK_API_KEY, process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'),
     ];
 
     res.json({
@@ -126,7 +130,7 @@ aiProviderRouter.post('/select', async (req: Request, res: Response, next: NextF
     const provider = providerSchema.parse(req.body.provider);
 
     if (provider === 'mock' && !isMockLLMAllowed()) {
-      res.status(400).json({ error: 'Mock LLM is disabled for production use. Configure OpenAI or Claude.' });
+      res.status(400).json({ error: 'Mock LLM is disabled for production use. Configure DeepSeek, OpenAI, or Claude.' });
       return;
     }
 
@@ -245,7 +249,7 @@ export async function resolveUserLLMProvider(userId: string): Promise<LLMProvide
   const selected = await getUserSelectedProvider(userId);
   if (selected === 'mock') {
     if (isMockLLMAllowed()) return createConfiguredLLMProvider({ provider: 'mock' });
-    throw new AppError('No production LLM provider is configured for this user. Configure OpenAI or Claude in AI Provider settings.', 424, 'LLM_PROVIDER_REQUIRED');
+    throw new AppError('No production LLM provider is configured for this user. Configure DeepSeek, OpenAI, or Claude in AI Provider settings.', 424, 'LLM_PROVIDER_REQUIRED');
   }
   const credential = await prisma.llmProviderCredential.findUnique({
     where: {
@@ -282,21 +286,21 @@ async function listSafeCredentials(userId: string) {
   }));
 }
 
-function hasCredential(credentials: Awaited<ReturnType<typeof listSafeCredentials>>, provider: 'openai' | 'claude'): boolean {
+function hasCredential(credentials: Awaited<ReturnType<typeof listSafeCredentials>>, provider: LLMProviderType): boolean {
   return credentials.some((credential) => credential.provider === provider && credential.isActive);
 }
 
-function credentialModel(credentials: Awaited<ReturnType<typeof listSafeCredentials>>, provider: 'openai' | 'claude'): string | null {
+function credentialModel(credentials: Awaited<ReturnType<typeof listSafeCredentials>>, provider: LLMProviderType): string | null {
   return credentials.find((credential) => credential.provider === provider && credential.isActive)?.model || null;
 }
 
-async function getUserSelectedProvider(userId: string): Promise<'mock' | 'openai' | 'claude'> {
+async function getUserSelectedProvider(userId: string): Promise<SelectableProviderType> {
   const agentRep = await prisma.agentRep.findUnique({ where: { user_id: userId } });
   const selected = (agentRep?.metadata as { llmProvider?: string } | null)?.llmProvider;
-  return selected === 'openai' || selected === 'claude' ? selected : 'mock';
+  return selected === 'openai' || selected === 'claude' || selected === 'deepseek' ? selected : 'mock';
 }
 
-async function setUserSelectedProvider(userId: string, provider: 'mock' | 'openai' | 'claude'): Promise<void> {
+async function setUserSelectedProvider(userId: string, provider: SelectableProviderType): Promise<void> {
   const agentRep = await prisma.agentRep.findUnique({ where: { user_id: userId } });
   if (!agentRep) return;
   const metadata = (agentRep.metadata as Record<string, unknown> | null) || {};
@@ -312,4 +316,22 @@ function isMockLLMAllowed(): boolean {
 
 function isCredentialVaultConfigured(): boolean {
   return Boolean(process.env.SECRET_VAULT_ENCRYPTION_KEY || process.env.LLM_CREDENTIAL_ENCRYPTION_KEY);
+}
+
+function providerStatus(
+  name: string,
+  provider: LLMProviderType,
+  credentials: Awaited<ReturnType<typeof listSafeCredentials>>,
+  envApiKey: string | undefined,
+  defaultModel: string,
+) {
+  const userConfigured = hasCredential(credentials, provider);
+  return {
+    name,
+    type: provider,
+    configured: userConfigured || Boolean(envApiKey),
+    model: credentialModel(credentials, provider) || defaultModel,
+    apiKeyStatus: userConfigured || envApiKey ? 'configured' as const : 'missing' as const,
+    scope: userConfigured ? 'user' : 'environment',
+  };
 }
