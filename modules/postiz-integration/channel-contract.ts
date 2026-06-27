@@ -18,6 +18,29 @@ export interface PostizChannelGuidance {
   nextActions: string[];
 }
 
+export interface PostizDiagnosticCheck {
+  id: string;
+  label: string;
+  status: 'passed' | 'warning' | 'blocked' | 'not_checked';
+  detail: string;
+  action?: string;
+}
+
+export interface PostizDiagnostics {
+  status:
+    | 'ready'
+    | 'requires_credentials'
+    | 'api_key_failed'
+    | 'oauth_ready'
+    | 'requires_provider_setup'
+    | 'requires_channel'
+    | 'requires_channel_selection';
+  title: string;
+  summary: string;
+  checks: PostizDiagnosticCheck[];
+  nextActions: string[];
+}
+
 export function toSafePostizChannel(channel: Record<string, unknown>): SafePostizChannel {
   const customer = (channel.customer || {}) as Record<string, unknown>;
   return {
@@ -31,6 +54,164 @@ export function toSafePostizChannel(channel: Record<string, unknown>): SafePosti
     refreshNeeded: Boolean(channel.refreshNeeded),
     customer: customer.id ? { id: customer.id, name: customer.name } : null,
     rawTokensReturned: false,
+  };
+}
+
+export function buildPostizDiagnostics(input: {
+  hasBaseUrl: boolean;
+  hasApiKey: boolean;
+  apiConnected: boolean | null;
+  channelCount: number;
+  selectedIntegrationId?: string | null;
+  oauthUrlReady?: boolean;
+  oauthChecked?: boolean;
+  oauthFailureReason?: string | null;
+  platform?: string | null;
+  sandboxSchedulingAllowed?: boolean;
+}): PostizDiagnostics {
+  const platform = input.platform || 'selected platform';
+  const checks: PostizDiagnosticCheck[] = [
+    {
+      id: 'postiz_base_url',
+      label: 'Postiz server URL',
+      status: input.hasBaseUrl ? 'passed' : 'blocked',
+      detail: input.hasBaseUrl ? 'Postiz base URL is configured.' : 'Postiz base URL is missing.',
+      action: input.hasBaseUrl ? undefined : 'Save the Postiz base URL in Credentials.',
+    },
+    {
+      id: 'postiz_api_key',
+      label: 'Postiz API key',
+      status: input.hasApiKey ? input.apiConnected === false ? 'blocked' : 'passed' : 'blocked',
+      detail: input.hasApiKey
+        ? input.apiConnected === false
+          ? 'The API key did not pass Postiz connection validation.'
+          : input.apiConnected === true
+            ? 'The API key is accepted by Postiz.'
+            : 'The API key is present; validation was not completed.'
+        : 'Postiz API key is missing.',
+      action: input.hasApiKey ? undefined : 'Save the tenant Postiz API key.',
+    },
+    {
+      id: 'postiz_oauth_url',
+      label: 'Channel OAuth handoff',
+      status: input.oauthChecked
+        ? input.oauthUrlReady ? 'passed' : 'blocked'
+        : input.hasApiKey ? 'not_checked' : 'blocked',
+      detail: input.oauthChecked
+        ? input.oauthUrlReady
+          ? `Postiz can create an OAuth URL for ${platform}.`
+          : input.oauthFailureReason || `Postiz did not return an OAuth URL for ${platform}.`
+        : input.hasApiKey
+          ? 'Run diagnostics or click Connect Channel to request a Postiz OAuth URL.'
+          : 'Postiz API credentials are required before OAuth can start.',
+      action: input.oauthChecked && !input.oauthUrlReady
+        ? 'Verify provider app credentials in the Postiz deployment.'
+        : undefined,
+    },
+    {
+      id: 'postiz_channel_count',
+      label: 'Connected social channels',
+      status: input.channelCount > 0 ? 'passed' : 'blocked',
+      detail: input.channelCount > 0
+        ? `${input.channelCount} connected social channel(s) are visible through the Postiz API.`
+        : 'Postiz returned zero connected social channels for this API key.',
+      action: input.channelCount > 0 ? undefined : 'Complete provider OAuth in Postiz, then refresh channels in Tanaghum.',
+    },
+    {
+      id: 'postiz_selected_channel',
+      label: 'Scheduling channel selected',
+      status: input.selectedIntegrationId ? 'passed' : input.channelCount > 0 ? 'warning' : 'blocked',
+      detail: input.selectedIntegrationId
+        ? 'A Postiz channel is selected for scheduling payloads.'
+        : input.channelCount > 0
+          ? 'A channel is visible but has not been selected for Tanaghum scheduling packages.'
+          : 'No channel can be selected until Postiz returns at least one channel.',
+      action: input.channelCount > 0 && !input.selectedIntegrationId ? 'Choose Use for Scheduling on the correct channel.' : undefined,
+    },
+    {
+      id: 'postiz_sandbox_execution',
+      label: 'Sandbox scheduling gate',
+      status: input.sandboxSchedulingAllowed ? 'warning' : 'blocked',
+      detail: input.sandboxSchedulingAllowed
+        ? 'Sandbox scheduling is deployment-enabled, but still requires human approval and a selected test channel.'
+        : 'External scheduling remains blocked by deployment policy.',
+      action: input.sandboxSchedulingAllowed ? undefined : 'Enable sandbox scheduling flags only when a test channel and approval path are ready.',
+    },
+  ];
+
+  if (!input.hasBaseUrl || !input.hasApiKey) {
+    return {
+      status: 'requires_credentials',
+      title: 'Postiz credentials required',
+      summary: 'Tanaghum needs the tenant Postiz base URL and API key before it can inspect channels or start OAuth.',
+      checks,
+      nextActions: [
+        'Open Credentials and configure Postiz Sandbox API Key.',
+        'Save baseUrl and apiKey in the tenant vault.',
+        'Run Postiz diagnostics again.',
+      ],
+    };
+  }
+
+  if (input.apiConnected === false) {
+    return {
+      status: 'api_key_failed',
+      title: 'Postiz API key failed validation',
+      summary: 'Postiz rejected the configured API key or the key cannot access this organization.',
+      checks,
+      nextActions: [
+        'Create or copy the API key from the same Postiz organization that owns the social channels.',
+        'Update the tenant Postiz credential in Tanaghum.',
+        'Run diagnostics again before attempting OAuth.',
+      ],
+    };
+  }
+
+  if (input.channelCount === 0) {
+    if (input.oauthChecked && !input.oauthUrlReady) {
+      return {
+        status: 'requires_provider_setup',
+        title: 'Postiz provider setup needs attention',
+        summary: `Postiz accepted the API key but could not provide an OAuth URL for ${platform}.`,
+        checks,
+        nextActions: [
+          'Verify provider app credentials in Postiz deployment settings.',
+          'Restart Postiz after provider env changes.',
+          'Run diagnostics again and confirm OAuth URL is available.',
+        ],
+      };
+    }
+
+    return {
+      status: 'oauth_ready',
+      title: 'Postiz OAuth handoff ready',
+      summary: `Postiz can start ${platform} OAuth, but no connected channel is visible yet.`,
+      checks,
+      nextActions: [
+        'Click Connect Channel via Postiz from Tanaghum.',
+        'Complete the provider login and permission approval inside Postiz.',
+        'Return to Tanaghum and click Refresh Channels.',
+        'Select the connected test channel for scheduling packages.',
+      ],
+    };
+  }
+
+  if (!input.selectedIntegrationId) {
+    return {
+      status: 'requires_channel_selection',
+      title: 'Select a Postiz channel',
+      summary: 'Postiz returned connected channels. Tanaghum needs one selected channel before scheduling payloads can target it.',
+      checks,
+      nextActions: ['Choose Use for Scheduling on the correct sandbox/test channel.'],
+    };
+  }
+
+  return {
+    status: 'ready',
+    title: 'Postiz channel path ready',
+    summary: 'Tanaghum can see a connected Postiz channel and has a selected scheduling target. Real scheduling remains policy-gated.',
+    checks,
+    nextActions: ['Prepare an approved package, inspect the payload, then request sandbox scheduling only when authorized.'],
   };
 }
 

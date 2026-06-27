@@ -14,14 +14,16 @@ import {
   type CreateExecutionRequestInput,
 } from './types';
 import * as service from './service';
-import { buildPostizChannelGuidance, toSafePostizChannel } from './channel-contract';
+import { buildPostizChannelGuidance, buildPostizDiagnostics, toSafePostizChannel } from './channel-contract';
 import { recordCommercialWorkflowAudit } from '../commercial-workflow/evidence';
 
 export const postizIntegrationRouter = Router();
 
 const POSTIZ_SANDBOX_URL = process.env.POSTIZ_SANDBOX_URL || process.env.POSTIZ_BASE_URL || '';
+const POSTIZ_API_ROOT = '/api/public/v1';
 const POSTIZ_PUBLIC_API_PATH = '/api/public/v1/posts';
 const POSTIZ_INTEGRATIONS_API_PATH = '/api/public/v1/integrations';
+const POSTIZ_CONNECTION_API_PATH = '/api/public/v1/is-connected';
 
 interface PostizRuntimeConfig {
   baseUrl: string;
@@ -108,6 +110,53 @@ function buildPostizApiUrl(config: PostizRuntimeConfig, path: string): string {
   return `${config.baseUrl.replace(/\/$/, '')}${path}`;
 }
 
+async function fetchPostizJson(config: PostizRuntimeConfig, path: string): Promise<{
+  ok: boolean;
+  status: number;
+  body: unknown;
+}> {
+  const response = await fetch(buildPostizApiUrl(config, path), {
+    headers: { Authorization: config.apiKey },
+  });
+  const body = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, body };
+}
+
+async function fetchPostizChannels(config: PostizRuntimeConfig): Promise<{
+  ok: boolean;
+  status: number;
+  body: unknown;
+  channels: ReturnType<typeof toSafePostizChannel>[];
+}> {
+  const result = await fetchPostizJson(config, POSTIZ_INTEGRATIONS_API_PATH);
+  const channels = result.ok && Array.isArray(result.body)
+    ? result.body.map(item => toSafePostizChannel(item as Record<string, unknown>))
+    : [];
+  return { ...result, channels };
+}
+
+function postizConnectPath(platform: string, refresh?: string): string {
+  const params = new URLSearchParams();
+  if (refresh) params.set('refresh', refresh);
+  const query = params.toString();
+  return `${POSTIZ_API_ROOT}/social/${encodeURIComponent(platform)}${query ? `?${query}` : ''}`;
+}
+
+function safePostizError(body: unknown): { message: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { message: 'Postiz returned an unreadable error response.' };
+  }
+  const record = body as Record<string, unknown>;
+  const message = typeof record.message === 'string'
+    ? record.message
+    : typeof record.error === 'string'
+      ? record.error
+      : typeof record.statusText === 'string'
+        ? record.statusText
+        : 'Postiz did not return a specific error message.';
+  return { message: message.slice(0, 240) };
+}
+
 postizIntegrationRouter.get('/channels', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const session = getSession(req);
@@ -130,32 +179,29 @@ postizIntegrationRouter.get('/channels', async (req: Request, res: Response, nex
       return;
     }
 
-    const response = await fetch(buildPostizApiUrl(config, POSTIZ_INTEGRATIONS_API_PATH), {
-      headers: { Authorization: config.apiKey },
-    });
-    const body = await response.json().catch(() => []);
-    if (!response.ok) {
+    const result = await fetchPostizChannels(config);
+    if (!result.ok) {
       res.status(502).json({
         status: 'failed',
-        postizStatus: response.status,
+        postizStatus: result.status,
         channels: [],
+        response: safePostizError(result.body),
         rawTokensReturned: false,
         _label: 'Postiz channel list failed',
       });
       return;
     }
 
-    const channels = Array.isArray(body) ? body.map(item => toSafePostizChannel(item as Record<string, unknown>)) : [];
     const guidance = buildPostizChannelGuidance({
       hasBaseUrl: true,
       hasApiKey: true,
-      channelCount: channels.length,
+      channelCount: result.channels.length,
       selectedIntegrationId: config.integrationId || null,
     });
     res.json({
       status: 'ok',
-      channels,
-      count: channels.length,
+      channels: result.channels,
+      count: result.channels.length,
       credentialSource: config.source,
       selectedIntegrationId: config.integrationId || null,
       guidance,
@@ -167,8 +213,118 @@ postizIntegrationRouter.get('/channels', async (req: Request, res: Response, nex
   }
 });
 
+postizIntegrationRouter.get('/diagnostics', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const platform = typeof req.query.platform === 'string' && req.query.platform.trim()
+      ? req.query.platform.trim()
+      : 'instagram';
+    const refresh = typeof req.query.refresh === 'string' && req.query.refresh.trim()
+      ? req.query.refresh.trim()
+      : undefined;
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
+    const gate = await sandboxSchedulingGate(config);
+
+    if (!config.baseUrl || !config.apiKey) {
+      const diagnostics = buildPostizDiagnostics({
+        hasBaseUrl: Boolean(config.baseUrl),
+        hasApiKey: Boolean(config.apiKey),
+        apiConnected: null,
+        channelCount: 0,
+        selectedIntegrationId: config.integrationId || null,
+        oauthChecked: false,
+        platform,
+        sandboxSchedulingAllowed: gate.allowed,
+      });
+      res.status(424).json({
+        status: diagnostics.status,
+        diagnostics,
+        channels: [],
+        credentialSource: config.source,
+        rawTokensReturned: false,
+        _label: diagnostics.summary,
+      });
+      return;
+    }
+
+    const [connectionResult, channelResult, oauthResult] = await Promise.all([
+      fetchPostizJson(config, POSTIZ_CONNECTION_API_PATH).catch((error: unknown) => ({
+        ok: false,
+        status: 0,
+        body: { message: error instanceof Error ? error.message : 'Postiz connection check failed' },
+      })),
+      fetchPostizChannels(config).catch((error: unknown) => ({
+        ok: false,
+        status: 0,
+        body: { message: error instanceof Error ? error.message : 'Postiz channel list failed' },
+        channels: [],
+      })),
+      fetchPostizJson(config, postizConnectPath(platform, refresh)).catch((error: unknown) => ({
+        ok: false,
+        status: 0,
+        body: { message: error instanceof Error ? error.message : 'Postiz OAuth URL check failed' },
+      })),
+    ]);
+
+    const connectionBody = connectionResult.body as Record<string, unknown>;
+    const oauthBody = oauthResult.body as Record<string, unknown>;
+    const authorizationUrl = oauthResult.ok && typeof oauthBody.url === 'string' ? oauthBody.url : null;
+    const apiConnected = connectionResult.ok
+      ? connectionBody.connected === true
+      : false;
+    const diagnostics = buildPostizDiagnostics({
+      hasBaseUrl: true,
+      hasApiKey: true,
+      apiConnected,
+      channelCount: channelResult.channels.length,
+      selectedIntegrationId: config.integrationId || null,
+      oauthChecked: true,
+      oauthUrlReady: Boolean(authorizationUrl),
+      oauthFailureReason: oauthResult.ok ? null : safePostizError(oauthResult.body).message,
+      platform,
+      sandboxSchedulingAllowed: gate.allowed,
+    });
+
+    res.status(connectionResult.ok || channelResult.ok || oauthResult.ok ? 200 : 502).json({
+      status: diagnostics.status,
+      diagnostics,
+      channelCount: channelResult.channels.length,
+      selectedIntegrationId: config.integrationId || null,
+      channels: channelResult.channels,
+      authorization: {
+        platform,
+        refresh: Boolean(refresh),
+        urlReady: Boolean(authorizationUrl),
+        authorizationUrl,
+        postizStatus: oauthResult.status || null,
+        error: oauthResult.ok ? null : safePostizError(oauthResult.body),
+      },
+      connection: {
+        connected: apiConnected,
+        postizStatus: connectionResult.status || null,
+      },
+      channelList: {
+        postizStatus: channelResult.status || null,
+        ok: channelResult.ok,
+        error: channelResult.ok ? null : safePostizError(channelResult.body),
+      },
+      safety: {
+        schedulingGate: gate,
+        externalSchedulingAllowed: gate.allowed,
+        livePublishing: false,
+      },
+      credentialSource: config.source,
+      rawTokensReturned: false,
+      _label: diagnostics.summary,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const postizConnectChannelSchema = z.object({
   platform: z.enum(['linkedin', 'instagram', 'instagram-standalone', 'facebook', 'x', 'threads', 'tiktok', 'youtube']),
+  refresh: z.string().trim().min(1).max(200).optional(),
 });
 
 const postizSelectChannelSchema = z.object({
@@ -190,7 +346,7 @@ postizIntegrationRouter.post('/connect-channel', async (req: Request, res: Respo
       return;
     }
 
-    const response = await fetch(buildPostizApiUrl(config, `/api/public/v1/social/${encodeURIComponent(input.platform)}`), {
+    const response = await fetch(buildPostizApiUrl(config, postizConnectPath(input.platform, input.refresh)), {
       headers: { Authorization: config.apiKey },
     });
     const body = await response.json().catch(() => ({}));
@@ -198,7 +354,7 @@ postizIntegrationRouter.post('/connect-channel', async (req: Request, res: Respo
       res.status(502).json({
         status: 'failed',
         postizStatus: response.status,
-        response: body,
+        response: safePostizError(body),
         rawTokensReturned: false,
         _label: `Postiz could not start ${input.platform} connection`,
       });
@@ -248,22 +404,19 @@ postizIntegrationRouter.post('/select-channel', async (req: Request, res: Respon
       return;
     }
 
-    const response = await fetch(buildPostizApiUrl(config, POSTIZ_INTEGRATIONS_API_PATH), {
-      headers: { Authorization: config.apiKey },
-    });
-    const body = await response.json().catch(() => []);
-    if (!response.ok) {
+    const result = await fetchPostizChannels(config);
+    if (!result.ok) {
       res.status(502).json({
         status: 'failed',
-        postizStatus: response.status,
+        postizStatus: result.status,
+        response: safePostizError(result.body),
         rawTokensReturned: false,
         _label: 'Postiz channel validation failed',
       });
       return;
     }
 
-    const channels = Array.isArray(body) ? body.map(item => toSafePostizChannel(item as Record<string, unknown>)) : [];
-    const selectedChannel = channels.find(channel => channel.id === input.integrationId);
+    const selectedChannel = result.channels.find(channel => channel.id === input.integrationId);
     if (!selectedChannel) {
       res.status(404).json({
         status: 'not_found',

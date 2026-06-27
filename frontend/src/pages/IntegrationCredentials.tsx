@@ -27,8 +27,8 @@ function display(value: string): string {
 
 function statusTone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'default' {
   const lower = value.toLowerCase();
-  if (lower.includes('configured') || lower.includes('ready') || lower.includes('connected')) return 'good';
-  if (lower.includes('missing') || lower.includes('requires')) return 'warn';
+  if (lower.includes('configured') || lower.includes('ready') || lower.includes('connected') || lower.includes('passed')) return 'good';
+  if (lower.includes('missing') || lower.includes('requires') || lower.includes('warning') || lower.includes('not_checked')) return 'warn';
   if (lower.includes('blocked') || lower.includes('disabled')) return 'danger';
   return 'info';
 }
@@ -47,6 +47,7 @@ export default function IntegrationCredentials() {
   const [socialConnections, setSocialConnections] = useState<RecordMap[]>([]);
   const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
   const [postizChannelStatus, setPostizChannelStatus] = useState<RecordMap | null>(null);
+  const [postizDiagnostics, setPostizDiagnostics] = useState<RecordMap | null>(null);
   const [runtimeStatuses, setRuntimeStatuses] = useState<RecordMap[]>([]);
   const [selected, setSelected] = useState<RecordMap | null>(null);
   const [oauthPlatform, setOauthPlatform] = useState('linkedin');
@@ -56,11 +57,12 @@ export default function IntegrationCredentials() {
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [connectingPostiz, setConnectingPostiz] = useState(false);
+  const [diagnosingPostiz, setDiagnosingPostiz] = useState(false);
   const [selectingPostizChannel, setSelectingPostizChannel] = useState('');
 
   async function load() {
     if (!token) return;
-    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, runtimeResult, postizChannelResult] = await Promise.all([
+    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, runtimeResult, postizChannelResult, postizDiagnosticsResult] = await Promise.all([
       integrationStatusApi.get(token),
       postizApi.status(token),
       ghlApi.status(token),
@@ -69,6 +71,7 @@ export default function IntegrationCredentials() {
       socialOAuthApi.connections(token),
       runtimeBridgesApi.status(token),
       postizApi.channels(token).catch((err) => ({ status: 'requires_credentials', channels: [], _label: err instanceof Error ? err.message : 'Postiz channel status unavailable' })),
+      postizApi.diagnostics({ platform: postizPlatform }, token).catch((err) => ({ status: 'not_available', diagnostics: null, _label: err instanceof Error ? err.message : 'Postiz diagnostics unavailable' })),
     ]);
     setStatus(integration as RecordMap);
     setPostiz(postizStatus as RecordMap);
@@ -79,6 +82,7 @@ export default function IntegrationCredentials() {
     setRuntimeStatuses(Array.isArray((runtimeResult as RecordMap).statuses) ? (runtimeResult as RecordMap).statuses as RecordMap[] : []);
     setPostizChannelStatus(postizChannelResult as RecordMap);
     setPostizChannels(Array.isArray((postizChannelResult as RecordMap).channels) ? (postizChannelResult as RecordMap).channels as RecordMap[] : []);
+    setPostizDiagnostics(postizDiagnosticsResult as RecordMap);
   }
 
   useEffect(() => {
@@ -108,6 +112,15 @@ export default function IntegrationCredentials() {
   const postizNextActions = Array.isArray(postizGuidance.nextActions)
     ? postizGuidance.nextActions.filter((item): item is string => typeof item === 'string')
     : [];
+  const diagnosticPayload = (postizDiagnostics?.diagnostics || {}) as RecordMap;
+  const postizDiagnosticChecks = Array.isArray(diagnosticPayload.checks)
+    ? diagnosticPayload.checks.filter((item): item is RecordMap => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    : [];
+  const postizDiagnosticActions = Array.isArray(diagnosticPayload.nextActions)
+    ? diagnosticPayload.nextActions.filter((item): item is string => typeof item === 'string')
+    : [];
+  const postizAuthorization = (postizDiagnostics?.authorization || {}) as RecordMap;
+  const postizAuthorizationUrl = text(postizAuthorization.authorizationUrl, '');
 
   function chooseRequirement(row: RecordMap) {
     setSelected(row);
@@ -166,6 +179,22 @@ export default function IntegrationCredentials() {
       setMessage(err instanceof Error ? err.message : 'Failed to start Postiz channel connection');
     } finally {
       setConnectingPostiz(false);
+    }
+  }
+
+  async function runPostizDiagnostics() {
+    if (!token) return;
+    setDiagnosingPostiz(true);
+    setMessage('');
+    try {
+      const result = await postizApi.diagnostics({ platform: postizPlatform }, token) as RecordMap;
+      setPostizDiagnostics(result);
+      setPostizChannels(Array.isArray(result.channels) ? result.channels as RecordMap[] : postizChannels);
+      setMessage(text(result._label, 'Postiz diagnostics completed.'));
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Postiz diagnostics failed');
+    } finally {
+      setDiagnosingPostiz(false);
     }
   }
 
@@ -255,11 +284,52 @@ export default function IntegrationCredentials() {
               <PrimaryAction onClick={connectPostizChannel} disabled={connectingPostiz}>
                 {connectingPostiz ? 'Opening...' : 'Connect Channel via Postiz'}
               </PrimaryAction>
+              <SecondaryAction onClick={runPostizDiagnostics} disabled={diagnosingPostiz}>
+                {diagnosingPostiz ? 'Checking...' : 'Run Diagnostics'}
+              </SecondaryAction>
+              {postizAuthorizationUrl && (
+                <SecondaryAction onClick={() => window.open(postizAuthorizationUrl, '_blank', 'noopener,noreferrer')}>
+                  Open OAuth URL
+                </SecondaryAction>
+              )}
               <SecondaryAction onClick={() => void load()}>Refresh Channels</SecondaryAction>
             </div>
             <Notice tone="info">
-              First save the Postiz API key and base URL below. For Instagram, Postiz must also have Meta/Instagram app credentials configured before OAuth can complete.
+              Tanaghum requests the OAuth URL through the Postiz API, then Postiz owns the provider login, consent screen, and channel token storage.
             </Notice>
+            {postizDiagnosticChecks.length > 0 && (
+              <div className="rounded-xl border border-neutral-200 bg-white p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-neutral-950">{text(diagnosticPayload.title, 'Postiz channel diagnostics')}</div>
+                    <p className="mt-1 text-xs leading-5 text-neutral-500">{text(diagnosticPayload.summary, 'Run diagnostics to inspect the channel connection path.')}</p>
+                  </div>
+                  <ProductStatus tone={statusTone(text(diagnosticPayload.status))}>{display(text(diagnosticPayload.status, 'not checked'))}</ProductStatus>
+                </div>
+                <div className="space-y-2">
+                  {postizDiagnosticChecks.map(check => (
+                    <div key={text(check.id)} className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-neutral-950">{text(check.label)}</div>
+                        <ProductStatus tone={statusTone(text(check.status))}>{display(text(check.status))}</ProductStatus>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-neutral-500">{text(check.detail)}</div>
+                      {text(check.action, '') && <div className="mt-2 text-xs font-medium text-neutral-700">Next: {text(check.action)}</div>}
+                    </div>
+                  ))}
+                </div>
+                {postizDiagnosticActions.length > 0 && (
+                  <ol className="mt-4 space-y-2 text-sm leading-6 text-neutral-700">
+                    {postizDiagnosticActions.map((action, index) => (
+                      <li key={action} className="flex gap-3">
+                        <span className="font-semibold text-neutral-950">{index + 1}.</span>
+                        <span>{action}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
           </div>
           {postizChannels.length ? (
             <ProductTable
