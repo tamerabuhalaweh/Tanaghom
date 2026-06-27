@@ -199,8 +199,12 @@ export const postizApi = {
     apiFetch<unknown>('/postiz/select-channel', { method: 'POST', body: data, token }),
   schedulePayload: (data: unknown, token: string) =>
     apiFetch<unknown>('/postiz/schedule-payload', { method: 'POST', body: data, token }),
+  packagePayload: (data: unknown, token: string) =>
+    apiFetch<unknown>('/postiz/package-payload', { method: 'POST', body: data, token }),
   sandboxSchedule: (data: unknown, token: string) =>
     apiFetch<unknown>('/postiz/sandbox-schedule', { method: 'POST', body: data, token }),
+  packageSandboxSchedule: (data: unknown, token: string) =>
+    apiFetch<unknown>('/postiz/package-sandbox-schedule', { method: 'POST', body: data, token }),
 };
 
 export const adminUsersApi = {

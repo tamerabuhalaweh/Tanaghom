@@ -51,8 +51,8 @@ const ADMIN_ROLES = ['admin', 'cco', 'department_head'];
 const NAV_ITEMS: NavItem[] = [
   {
     path: '/command-center',
-    label: 'Command Center',
-    description: 'Operational overview',
+    label: 'Dashboard',
+    description: 'Your content overview',
     icon: LayoutDashboard,
     group: 'Product',
     roles: PRODUCT_ROLES,
@@ -60,14 +60,14 @@ const NAV_ITEMS: NavItem[] = [
   {
     path: '/campaigns',
     label: 'Campaigns',
-    description: 'Briefs, drafts, package',
+    description: 'Create and manage campaigns',
     icon: Megaphone,
     group: 'Product',
     roles: PRODUCT_ROLES.filter(role => role !== 'viewer'),
   },
   {
     path: '/ideas',
-    label: 'AI Draft Studio',
+    label: 'Content Creator',
     description: 'Ideas and campaign creation',
     icon: Sparkles,
     group: 'Product',
@@ -75,40 +75,40 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     path: '/approvals',
-    label: 'Approvals & Publishing',
-    description: 'Human review and package status',
+    label: 'Review & Approve',
+    description: 'Review and approve content',
     icon: ClipboardCheck,
     group: 'Product',
     roles: ['admin', 'cco', 'department_head', 'social_media_manager', 'marketing_manager', 'reviewer'],
   },
   {
     path: '/publishing',
-    label: 'Publishing Readiness',
-    description: 'Packages and Postiz status',
+    label: 'Scheduling',
+    description: 'Content packages and scheduling',
     icon: Send,
     group: 'Product',
     roles: ['admin', 'cco', 'department_head', 'social_media_manager', 'marketing_manager', 'reviewer'],
   },
   {
     path: '/analytics',
-    label: 'Analytics & Leads',
-    description: 'Performance and handoff',
+    label: 'Performance',
+    description: 'Results and customer interest',
     icon: BarChart3,
     group: 'Product',
     roles: PRODUCT_ROLES,
   },
   {
     path: '/my-agent-rep',
-    label: 'My AI Rep',
-    description: 'Role, skills, permissions',
+    label: 'My Profile',
+    description: 'Your role and permissions',
     icon: UserRound,
     group: 'Product',
     roles: PRODUCT_ROLES,
   },
   {
     path: '/ai-settings',
-    label: 'AI Provider',
-    description: 'My model credentials',
+    label: 'AI Settings',
+    description: 'Connect your AI model',
     icon: Brain,
     group: 'Product',
     roles: PRODUCT_ROLES,
@@ -147,16 +147,16 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     path: '/safety',
-    label: 'Safety Gates',
-    description: 'Blocked external actions',
+    label: 'Security',
+    description: 'Publishing controls',
     icon: ShieldCheck,
     group: 'Admin',
     roles: ADMIN_ROLES,
   },
   {
     path: '/observability',
-    label: 'Evidence',
-    description: 'Audit and learning trail',
+    label: 'Activity Log',
+    description: 'Your activity records',
     icon: FileClock,
     group: 'Admin',
     roles: ADMIN_ROLES,
@@ -229,7 +229,7 @@ export default function Layout() {
       <div className="flex h-16 items-center justify-between border-b border-neutral-200 px-4">
         <Link to="/command-center" onClick={() => setSidebarOpen(false)} className="min-w-0">
           <div className="text-sm font-semibold tracking-tight text-neutral-950">Tanaghum</div>
-          <div className="text-xs text-neutral-500">Commercial/Social MVP</div>
+          <div className="text-xs text-neutral-500">Content Studio</div>
         </Link>
         <button
           onClick={() => setSidebarOpen(false)}
@@ -247,7 +247,7 @@ export default function Layout() {
           return (
             <div key={group} className="mb-6">
               <div className="px-2 pb-2 text-xs font-medium text-neutral-500">
-                {group === 'Product' ? 'Commercial/Social' : 'Admin & Evidence'}
+                {group === 'Product' ? 'Content Studio' : 'Admin & Settings'}
               </div>
               <div className="space-y-1">
                 {groupItems.map(item => {
@@ -338,13 +338,13 @@ export default function Layout() {
               <Menu className="h-4 w-4" />
             </button>
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-neutral-950">{currentItem?.label || 'Commercial/Social'}</div>
+              <div className="truncate text-sm font-medium text-neutral-950">{currentItem?.label || 'Content Studio'}</div>
               <div className="truncate text-xs text-neutral-500">{currentItem?.description || 'Product workspace'}</div>
             </div>
           </div>
           <div className="hidden items-center gap-2 sm:flex">
-            <ProductStatus tone="warn">External Writes Off</ProductStatus>
-            <ProductStatus tone="info">Human Approval Required</ProductStatus>
+            <ProductStatus tone="warn">Publishing Controlled</ProductStatus>
+            <ProductStatus tone="info">Review Required</ProductStatus>
           </div>
         </header>
 

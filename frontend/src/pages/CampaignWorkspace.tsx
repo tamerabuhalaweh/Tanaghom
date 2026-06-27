@@ -316,18 +316,18 @@ export default function CampaignWorkspace() {
 
   return (
     <ProductPage
-      eyebrow="Campaign operations"
-      title="Campaign workspace"
-      subtitle="Select a campaign, prepare platform drafts, score the selected post, capture human approval, and prepare a Postiz-ready publishing package."
+      eyebrow="Content Studio"
+      title="Campaigns"
+      subtitle="Create and manage your social media campaigns. For a guided workflow, visit the Dashboard."
       action={<ProductStatus tone={selected ? 'good' : 'warn'}>{selected ? 'Campaign Active' : 'Select Campaign'}</ProductStatus>}
     >
-      <ProductCard title="What this workspace does" subtitle="Operational path for one Commercial/Social campaign.">
+      <ProductCard title="What this workspace does" subtitle="Your campaign workflow from start to finish.">
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           <ReadableQueue items={[
-            { title: 'Create campaign brief', meta: 'Marketing or social manager defines audience, objective, platforms, CTA, and risk.', status: selected ? 'Available' : 'Required', tone: selected ? 'good' : 'warn' },
-            { title: 'Generate and edit drafts', meta: 'LLM creates platform-specific copy. Human edits are saved as real draft versions.', status: providerReady ? 'Ready' : 'Needs Provider', tone: providerReady ? 'good' : 'warn' },
-            { title: 'Score and approve', meta: 'Readiness score and human approval decide whether publishing preparation is allowed.', status: score ? 'Scored' : 'Waiting', tone: score ? 'good' : 'default' },
-            { title: 'Prepare Postiz payload', meta: 'Approved content becomes a Postiz-ready payload. Scheduling remains blocked unless authorized.', status: publishingPackage ? 'Package Ready' : 'Waiting', tone: publishingPackage ? 'good' : 'default' },
+            { title: 'Create campaign brief', meta: 'Define your audience, objective, platforms, call to action, and priority.', status: selected ? 'Available' : 'Required', tone: selected ? 'good' : 'warn' },
+            { title: 'Generate and edit drafts', meta: 'AI creates platform-specific copy. Your edits are saved as draft versions.', status: providerReady ? 'Ready' : 'Needs AI Model', tone: providerReady ? 'good' : 'warn' },
+            { title: 'Review and approve', meta: 'Content quality review and human approval before scheduling.', status: score ? 'Reviewed' : 'Waiting', tone: score ? 'good' : 'default' },
+            { title: 'Prepare content package', meta: 'Approved content becomes scheduling-ready. Scheduling remains controlled.', status: publishingPackage ? 'Package Ready' : 'Waiting', tone: publishingPackage ? 'good' : 'default' },
           ]} />
           <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
             <div className="text-sm font-semibold text-neutral-950">Next required action</div>
@@ -348,7 +348,7 @@ export default function CampaignWorkspace() {
         { label: 'Optimize', state: score ? 'done' : drafts.length ? 'active' : 'waiting' },
         { label: 'Approval', state: approval ? 'done' : score ? 'active' : 'waiting' },
         { label: 'Publishing', state: publishingPackage ? 'done' : approval ? 'active' : 'waiting' },
-        { label: 'Postiz Payload', state: postizPayload ? 'done' : publishingPackage ? 'active' : 'waiting' },
+            { label: 'Scheduling', state: postizPayload ? 'done' : publishingPackage ? 'active' : 'waiting' },
         { label: 'Leads', state: 'waiting' },
         { label: 'Evidence', state: approval || publishingPackage ? 'done' : 'waiting' },
       ]} />
@@ -467,9 +467,9 @@ export default function CampaignWorkspace() {
           </ProductCard>
 
           <ProductCard
-            title="Platform Drafts"
-            subtitle="Drafts are platform-specific post copy. Select one, edit it, save the human version, then score it."
-            action={<PrimaryAction onClick={generateDrafts} disabled={!providerReady || !selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Platform Drafts'}</PrimaryAction>}
+          title="Platform Drafts"
+          subtitle="Platform-specific content. Select one, edit it, then review the quality."
+          action={<PrimaryAction onClick={generateDrafts} disabled={!providerReady || !selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Drafts'}</PrimaryAction>}
           >
             {drafts.length ? (
               <div className="grid gap-4 lg:grid-cols-3">
@@ -507,7 +507,7 @@ export default function CampaignWorkspace() {
           </ProductCard>
 
           <div className="grid gap-6 xl:grid-cols-2">
-            <ProductCard title="Optimize Selected Draft" subtitle="Score the selected draft before approval." action={<PrimaryAction onClick={scoreDraft} disabled={!selectedDraft || loading === 'score'}>{loading === 'score' ? 'Scoring...' : 'Score Draft'}</PrimaryAction>}>
+            <ProductCard title="Review Quality" subtitle="Check content quality before approval." action={<PrimaryAction onClick={scoreDraft} disabled={!selectedDraft || loading === 'score'}>{loading === 'score' ? 'Analyzing...' : 'Review Quality'}</PrimaryAction>}>
               {score ? (
                 <div className="space-y-4">
                   <div className="rounded-lg border border-neutral-200 bg-neutral-950 p-5 text-white">
@@ -533,7 +533,7 @@ export default function CampaignWorkspace() {
               )}
             </ProductCard>
 
-            <ProductCard title="Approval & Publishing Preparation" subtitle="Approval unlocks publishing preparation." action={!approval ? <PrimaryAction onClick={submitForApproval} disabled={!selectedDraft || loading === 'approval'}>{loading === 'approval' ? 'Submitting...' : 'Send for Approval'}</PrimaryAction> : null}>
+            <ProductCard title="Review & Publishing" subtitle="Review decisions unlock content preparation." action={!approval ? <PrimaryAction onClick={submitForApproval} disabled={!selectedDraft || loading === 'approval'}>{loading === 'approval' ? 'Submitting...' : 'Send for Review'}</PrimaryAction> : null}>
               <div className="space-y-4">
                 <ReadableQueue items={[
                   { title: 'Approval package', meta: approval ? 'Reviewer decision available in approval queue.' : 'Waiting for selected draft submission.', status: approval ? titleCase(text(approval.approvalStatus, 'pending')) : 'Approval Required', tone: approval?.approvalStatus === 'approved' ? 'good' : 'warn' },

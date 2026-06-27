@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
   EmptyProductState,
+  Field,
   Notice,
   PrimaryAction,
   ProductCard,
@@ -54,6 +55,17 @@ function titleCase(value: string): string {
     .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
+function defaultScheduleInput(): string {
+  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function localScheduleToIso(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : date.toISOString();
+}
+
 async function fetchPublishingReadiness(token: string) {
   const [packageData, statusData, channelData, evidenceData] = await Promise.all([
     publishingPackageApi.list(token),
@@ -81,6 +93,11 @@ export default function PublishingPrep() {
   const [postizStatus, setPostizStatus] = useState<RecordMap | null>(null);
   const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
   const [evidence, setEvidence] = useState<RecordMap | null>(null);
+  const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput);
+  const [postizPayload, setPostizPayload] = useState<RecordMap | null>(null);
+  const [scheduleResult, setScheduleResult] = useState<RecordMap | null>(null);
+  const [schedulingMessage, setSchedulingMessage] = useState('');
+  const [schedulingLoading, setSchedulingLoading] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -135,6 +152,50 @@ export default function PublishingPrep() {
   const evidenceActions = asList(evidence?.actions).slice(0, 6);
   const evidenceStages = asList(evidence?.stages);
   const missingActions = stringList(asRecord(evidence?.coverage).missingActions);
+  const payloadSummary = asRecord(postizPayload?.payloadSummary);
+  const payloadTarget = asRecord(postizPayload?.target);
+  const payloadSafety = asRecord(postizPayload?.safety);
+  const schedulingGate = asRecord(payloadSafety.schedulingGate);
+  const schedulingAllowed = schedulingGate.allowed === true;
+  const schedulingReasons = stringList(schedulingGate.reasons);
+  const scheduleStatus = text(scheduleResult?.status, '');
+
+  async function preparePackagePayload() {
+    if (!token || !selectedPackage) return;
+    setSchedulingLoading('payload');
+    setSchedulingMessage('');
+    setScheduleResult(null);
+    try {
+      const result = await postizApi.packagePayload({
+        publishingPackageId: selectedPackage.id,
+        scheduledAt: localScheduleToIso(scheduledAt),
+      }, token) as RecordMap;
+      setPostizPayload(result);
+      setSchedulingMessage(text(result._label, 'Postiz package payload prepared.'));
+    } catch (err) {
+      setSchedulingMessage(err instanceof Error ? err.message : 'Failed to prepare Postiz package payload');
+    } finally {
+      setSchedulingLoading('');
+    }
+  }
+
+  async function requestSandboxSchedule() {
+    if (!token || !selectedPackage || !schedulingAllowed) return;
+    setSchedulingLoading('schedule');
+    setSchedulingMessage('');
+    try {
+      const result = await postizApi.packageSandboxSchedule({
+        publishingPackageId: selectedPackage.id,
+        scheduledAt: localScheduleToIso(scheduledAt),
+      }, token) as RecordMap;
+      setScheduleResult(result);
+      setSchedulingMessage(text(result._label, 'Postiz sandbox scheduling request completed.'));
+    } catch (err) {
+      setSchedulingMessage(err instanceof Error ? err.message : 'Postiz sandbox scheduling failed');
+    } finally {
+      setSchedulingLoading('');
+    }
+  }
 
   const railSteps = useMemo(() => {
     if (!evidenceStages.length) {
@@ -159,9 +220,9 @@ export default function PublishingPrep() {
 
   return (
     <ProductPage
-      eyebrow="Commercial/Social"
-      title="Publishing Readiness"
-      subtitle="Review approved publishing packages, Postiz channel readiness, scheduling blockers, and the durable evidence trail before any external action is authorized."
+      eyebrow="Content Studio"
+      title="Scheduling & Review"
+      subtitle="Check your approved content and scheduling setup before publishing. All actions are tracked and can be reviewed anytime."
       action={<SecondaryAction onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</SecondaryAction>}
     >
       {error && <Notice tone="danger">{error}</Notice>}
@@ -175,27 +236,27 @@ export default function PublishingPrep() {
           <p className="mt-2 text-sm text-neutral-500">Prepared from approved content.</p>
         </ProductCard>
         <ProductCard>
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Postiz</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Scheduling Service</div>
           <div className="mt-3 text-xl font-semibold text-neutral-950">{postizReady}</div>
-          <p className="mt-2 text-sm text-neutral-500">Scheduling surface status.</p>
+          <p className="mt-2 text-sm text-neutral-500">Connection status.</p>
         </ProductCard>
         <ProductCard>
           <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Channels</div>
           <div className="mt-3 text-3xl font-semibold text-neutral-950">{channelCount}</div>
-          <p className="mt-2 text-sm text-neutral-500">Visible through Postiz API.</p>
+          <p className="mt-2 text-sm text-neutral-500">Connected social accounts.</p>
         </ProductCard>
         <ProductCard>
           <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Evidence</div>
           <div className="mt-3 text-3xl font-semibold text-neutral-950">{evidenceCoverage}%</div>
-          <p className="mt-2 text-sm text-neutral-500">Persistent workflow coverage.</p>
+          <p className="mt-2 text-sm text-neutral-500">Activity records available.</p>
         </ProductCard>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <ProductCard
-          title="Prepared Publishing Packages"
-          subtitle="Only approved content can become a scheduling-ready package."
-          action={<PrimaryAction onClick={() => navigate('/campaigns')}>Prepare Package</PrimaryAction>}
+          title="Your Approved Content"
+          subtitle="Content that has been reviewed and is ready for the next step."
+          action={<PrimaryAction onClick={() => navigate('/campaigns')}>Prepare Content</PrimaryAction>}
         >
           {packages.length ? (
             <ProductTable
@@ -216,7 +277,7 @@ export default function PublishingPrep() {
           )}
         </ProductCard>
 
-        <ProductCard title="Scheduling Blockers" subtitle="What must be true before a package can be reviewed for sandbox scheduling.">
+        <ProductCard title="What's Needed Before Scheduling" subtitle="These items must be in place before content can be scheduled.">
           <ReadableQueue
             items={[
               {
@@ -226,8 +287,8 @@ export default function PublishingPrep() {
                 tone: selectedPackage ? 'good' : 'muted',
               },
               {
-                title: 'Postiz server',
-                meta: text(health.url, 'Postiz URL is not configured.'),
+                title: 'Scheduling service',
+                meta: text(health.url, 'Scheduling service URL is not configured.'),
                 status: text(postizStatus?.status, 'Requires Credentials'),
                 tone: toneForState(text(postizStatus?.status, 'Requires Credentials')),
               },
@@ -251,7 +312,7 @@ export default function PublishingPrep() {
               },
               {
                 title: 'External execution',
-                meta: 'Scheduling stays blocked until explicit sandbox authorization is enabled for this tenant.',
+                meta: 'Publishing controls are active. An admin must enable scheduling for this workspace.',
                 status: 'Blocked',
                 tone: 'warn',
               },
@@ -263,14 +324,14 @@ export default function PublishingPrep() {
         </ProductCard>
       </div>
 
-      <ProductCard title="Selected Package Review" subtitle="Plain-language status for the most recent publishing package.">
+      <ProductCard title="Content Package Details" subtitle="Plain-language status for your most recent prepared content.">
         {selectedPackage ? (
           <DetailGrid
             items={[
               { label: 'Package Status', value: titleCase(text(selectedPackage.status, 'ready')) },
               { label: 'Campaign', value: text(selectedPackage.campaignId, 'Campaign linked') },
-              { label: 'Execution State', value: 'External scheduling blocked until sandbox authorization and channel selection are complete.' },
-              { label: 'Next Action', value: channelCount ? 'Select the channel and request sandbox scheduling authorization.' : 'Connect a social channel through Postiz.' },
+              { label: 'Scheduling Status', value: 'Scheduling is controlled. Channel selection and admin authorization are needed.' },
+              { label: 'Next Action', value: channelCount ? 'Select a channel and request scheduling authorization.' : 'Connect a social channel through your scheduling service.' },
             ]}
           />
         ) : (
@@ -278,7 +339,105 @@ export default function PublishingPrep() {
         )}
       </ProductCard>
 
-      <ProductCard title="Evidence Trail" subtitle="Durable workflow records stored by Tanaghum, not screenshots or hidden logs.">
+      <ProductCard
+        title="Scheduling Payload"
+        subtitle="Prepare the exact package Tanaghum would send to the scheduling service. No external scheduling happens during payload preview."
+        action={<ProductStatus tone={schedulingAllowed ? 'good' : 'warn'}>{schedulingAllowed ? 'Sandbox Scheduling Enabled' : 'Scheduling Blocked'}</ProductStatus>}
+      >
+        {selectedPackage ? (
+          <div className="space-y-5">
+            {schedulingMessage && (
+              <Notice tone={schedulingMessage.toLowerCase().includes('failed') || schedulingMessage.toLowerCase().includes('blocked') ? 'warn' : 'good'}>
+                {schedulingMessage}
+              </Notice>
+            )}
+            <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="space-y-4">
+                <Field label="Target Time" helper="This becomes the proposed Postiz schedule time. Change it before preparing the payload.">
+                  <input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(event) => {
+                      setScheduledAt(event.target.value);
+                      setPostizPayload(null);
+                      setScheduleResult(null);
+                    }}
+                    className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-2">
+                  <PrimaryAction onClick={preparePackagePayload} disabled={schedulingLoading === 'payload'}>
+                    {schedulingLoading === 'payload' ? 'Preparing...' : 'Prepare Payload'}
+                  </PrimaryAction>
+                  <SecondaryAction onClick={requestSandboxSchedule} disabled={!postizPayload || !schedulingAllowed || schedulingLoading === 'schedule'}>
+                    {schedulingLoading === 'schedule' ? 'Requesting...' : 'Request Sandbox Schedule'}
+                  </SecondaryAction>
+                </div>
+                {!schedulingAllowed && postizPayload && (
+                  <Notice tone="warn">
+                    Scheduling is blocked until the required channel and deployment controls are configured. The payload preview is still valid.
+                  </Notice>
+                )}
+              </div>
+
+              {postizPayload ? (
+                <div className="space-y-4">
+                  <DetailGrid
+                    items={[
+                      { label: 'Platform', value: titleCase(text(payloadSummary.platform, text(payloadTarget.platform))) },
+                      { label: 'Post Type', value: titleCase(text(payloadSummary.postType, 'schedule')) },
+                      { label: 'Scheduled For', value: text(payloadTarget.proposedPublishAt) },
+                      { label: 'Channel Selected', value: payloadSummary.hasIntegrationId ? 'Yes' : 'No' },
+                      { label: 'Content Length', value: `${numberValue(payloadSummary.contentCharacters)} characters` },
+                      { label: 'Endpoint', value: text(postizPayload.endpoint, 'Scheduling endpoint not configured') },
+                    ]}
+                  />
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Approved Content Preview</div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-800">{text(postizPayload.contentPreview, 'No content preview available')}</p>
+                  </div>
+                  <ReadableQueue
+                    items={[
+                      {
+                        title: 'Payload generated',
+                        meta: 'Derived from the approved publishing package stored in Tanaghum.',
+                        status: 'Ready',
+                        tone: 'good',
+                      },
+                      {
+                        title: 'Postiz channel',
+                        meta: payloadSummary.hasIntegrationId ? 'A selected scheduling channel is available.' : 'Select a connected Postiz channel before scheduling.',
+                        status: payloadSummary.hasIntegrationId ? 'Selected' : 'Missing',
+                        tone: payloadSummary.hasIntegrationId ? 'good' : 'warn',
+                      },
+                      {
+                        title: 'Sandbox execution gate',
+                        meta: schedulingReasons.join('; ') || 'Sandbox scheduling flags are enabled for this workspace.',
+                        status: schedulingAllowed ? 'Allowed' : 'Blocked',
+                        tone: schedulingAllowed ? 'good' : 'warn',
+                      },
+                    ]}
+                  />
+                  {scheduleStatus && (
+                    <Notice tone={scheduleStatus === 'sandbox_scheduled' ? 'good' : 'warn'}>
+                      Scheduling service response: {titleCase(scheduleStatus)}.
+                    </Notice>
+                  )}
+                </div>
+              ) : (
+                <EmptyProductState
+                  title="Prepare the scheduling payload"
+                  message="Choose the target time, then generate the package that would be sent to Postiz after all controls are satisfied."
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          <EmptyProductState message="Create an approved publishing package before preparing a scheduling payload." />
+        )}
+      </ProductCard>
+
+        <ProductCard title="Activity History" subtitle="Your workflow records are stored permanently. No screenshots or hidden logs needed.">
         <div className="mb-5">
           <ReadableQueue
             items={[
@@ -289,8 +448,8 @@ export default function PublishingPrep() {
                 tone: evidenceCoverage >= 80 ? 'good' : evidenceCoverage > 0 ? 'warn' : 'muted',
               },
               {
-                title: 'Missing records',
-                meta: missingActions.join(', ') || 'No missing required records for the current stage.',
+                  title: 'Missing activities',
+                  meta: missingActions.join(', ') || 'All expected activities are recorded.',
                 status: missingActions.length ? 'Review' : 'Clear',
                 tone: missingActions.length ? 'warn' : 'good',
               },
@@ -313,7 +472,7 @@ export default function PublishingPrep() {
       </ProductCard>
 
       <Notice tone="warn">
-        Tanaghum can prepare and verify scheduling packages here. Actual external scheduling remains blocked until a tenant explicitly enables sandbox execution, selects a test channel, and passes the configured approval gates.
+        Scheduling is controlled. An admin must enable scheduling for this workspace and configure the required channels before content can be published.
       </Notice>
     </ProductPage>
   );

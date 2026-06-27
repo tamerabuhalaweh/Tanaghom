@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { approvalsApi, publishingPackageApi } from '../api';
 import { DetailGrid, EmptyProductState, MetricCard, Notice, PrimaryAction, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
@@ -51,7 +52,7 @@ export default function ApprovalQueue() {
         if (cancelled) return;
         await load();
       } catch (error) {
-        if (!cancelled) setMessage(`Approval queue failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        if (!cancelled) setMessage(`Could not load reviews: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
@@ -67,11 +68,11 @@ export default function ApprovalQueue() {
     setMessage('');
     try {
       const comment = decisionComments[id]?.trim()
-        || (action === 'approve' ? 'Approved for publishing preparation.' : action === 'reject' ? 'Rejected by human reviewer.' : 'Please revise before publishing preparation.');
+        || (action === 'approve' ? 'Approved - ready for scheduling.' : action === 'reject' ? 'Rejected.' : 'Please revise and resubmit.');
       if (action === 'approve') await approvalsApi.approve(id, { comment }, token);
       else if (action === 'reject') await approvalsApi.reject(id, { comment }, token);
       else await approvalsApi.requestChanges(id, { comment }, token);
-      setMessage(action === 'approve' ? 'Approved. Publishing preparation is now available.' : action === 'reject' ? 'Rejected.' : 'Changes requested.');
+      setMessage(action === 'approve' ? 'Approved. Content moves to scheduling next.' : action === 'reject' ? 'Rejected.' : 'Changes requested.');
       await load();
     } catch (error) {
       setMessage(`Decision failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -85,31 +86,42 @@ export default function ApprovalQueue() {
 
   return (
     <ProductPage
-      eyebrow="Governed workflow"
-      title="Approvals & Publishing"
-      subtitle="Review content decisions, approve or request changes, and inspect publishing packages prepared for scheduling review."
-      action={<ProductStatus tone={pendingApprovals.length ? 'warn' : 'good'}>{pendingApprovals.length ? `${pendingApprovals.length} Pending` : 'Queue Clear'}</ProductStatus>}
+      eyebrow="Content Studio"
+      title="Review & Approve"
+      subtitle="Review submitted content, approve or request changes, and track what's ready for scheduling."
+      action={<ProductStatus tone={pendingApprovals.length ? 'warn' : 'good'}>{pendingApprovals.length ? `${pendingApprovals.length} to Review` : 'All Clear'}</ProductStatus>}
     >
       {message && (
-        <Notice tone={message.includes('failed') || message.includes('Decision failed') ? 'danger' : 'good'}>{message}</Notice>
+        <Notice tone={message.includes('failed') || message.includes('Decision failed') || message.includes('Could not') ? 'danger' : 'good'}>{message}</Notice>
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="Pending Decisions" value={pendingApprovals.length} detail="Need approve, reject, or changes" tone={pendingApprovals.length ? 'warn' : 'good'} />
-        <MetricCard label="Prepared Packages" value={packages.length} detail="Created after approval" tone={packages.length ? 'good' : 'muted'} />
-        <MetricCard label="External Publishing" value="0" detail="Scheduling/publishing remains blocked" tone="danger" />
+        <MetricCard label="To Review" value={pendingApprovals.length} detail="Content waiting for your decision" tone={pendingApprovals.length ? 'warn' : 'good'} />
+        <MetricCard label="Prepared Packages" value={packages.length} detail="Ready after approval" tone={packages.length ? 'good' : 'default'} />
+        <MetricCard label="Publishing" value="Controlled" detail="Scheduling requires admin setup" tone="info" />
       </div>
 
-      <ProductCard title="Who uses this page" subtitle="This is the human decision desk, not a reporting page.">
-        <ReadableQueue items={[
-          { title: 'Reviewer / Marketing Manager', meta: 'Approves, rejects, or requests changes on submitted social drafts.', status: 'Decision Owner', tone: 'warn' },
-          { title: 'Social Media Manager', meta: 'Sees whether submitted work is approved before preparing publishing payloads.', status: 'Requester', tone: 'info' },
-          { title: 'System Boundary', meta: 'Approval can unlock publishing preparation, but cannot publish or schedule externally by itself.', status: 'External Writes Blocked', tone: 'danger' },
-        ]} />
+      {/* ---- Quick guide for first-time users ---- */}
+      <ProductCard title="How reviews work" subtitle="Here's what happens when content is submitted for review.">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[
+            { step: '1', title: 'Content is submitted', desc: 'When a draft is ready, it comes here for your review. You see the full text, campaign context, and quality score.' },
+            { step: '2', title: 'You decide', desc: 'Approve to move it forward, request changes to improve it, or reject if it is not right for this campaign.' },
+            { step: '3', title: 'Approved content moves on', desc: 'Once approved, the content becomes a scheduling package. Publishing remains controlled until admin setup.' },
+          ].map((item) => (
+            <div key={item.step} className="rounded-lg border border-neutral-200 bg-neutral-50 p-5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
+                {item.step}
+              </div>
+              <div className="mt-3 text-sm font-semibold text-neutral-950">{item.title}</div>
+              <p className="mt-1 text-sm leading-6 text-neutral-600">{item.desc}</p>
+            </div>
+          ))}
+        </div>
       </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-        <ProductCard title="Approval Queue" subtitle="Human decisions required before publishing preparation.">
+        <ProductCard title="Review Queue" subtitle="Content waiting for your approval decision.">
           {approvals.length ? (
             <div className="space-y-4">
               {approvals.map(approval => {
@@ -121,38 +133,39 @@ export default function ApprovalQueue() {
                 const contentItem = (packet.contentItem || {}) as RecordMap;
                 const latestDraft = (packet.latestDraftVersion || {}) as RecordMap;
                 const packetPackages = Array.isArray(packet.publishingPackages) ? packet.publishingPackages as RecordMap[] : [];
-                const draftText = text(latestDraft.text, text(contentItem.draftText, 'No draft text available for this approval target.'));
+                const draftText = text(latestDraft.text, text(contentItem.draftText, 'No draft text available.'));
                 return (
                   <article key={id} className="rounded-lg border border-neutral-200 bg-white p-5">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="text-lg font-semibold text-black">{text(campaign.topic, titleCase(text(approval.targetType, 'Content')))}</h2>
-                          <ProductStatus tone={status === 'approved' ? 'good' : status === 'rejected' ? 'danger' : 'warn'}>{titleCase(status)}</ProductStatus>
+                          <ProductStatus tone={status === 'approved' ? 'good' : status === 'rejected' ? 'warn' : 'info'}>
+                            {titleCase(status)}
+                          </ProductStatus>
                         </div>
                         <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
-                          {text(campaign.objective, 'Review the selected social draft, readiness score, and campaign intent before publishing preparation.')}
+                          {text(campaign.objective, 'Review the content below, quality score, and campaign details before deciding.')}
                         </p>
                         <div className="mt-4 grid gap-3 md:grid-cols-3">
                           <Mini label="Department" value={text(approval.requiredDepartment, 'Commercial')} />
-                          <Mini label="Reviewer" value={text(approval.requiredRole, 'Human reviewer')} />
-                          <Mini label="Risk" value={titleCase(text(approval.riskCategory, 'medium'))} />
+                          <Mini label="Reviewer Role" value={text(approval.requiredRole, 'Reviewer')} />
+                          <Mini label="Priority" value={titleCase(text(approval.riskCategory, 'medium'))} />
                         </div>
                         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                           <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                             <div className="mb-2 flex flex-wrap items-center gap-2">
                               <ProductStatus tone="info">{titleCase(text(contentItem.platform, 'selected platform'))}</ProductStatus>
                               <ProductStatus tone="muted">Version {text(latestDraft.versionNo, 'current')}</ProductStatus>
-                              <ProductStatus tone="muted">{text(latestDraft.modelUsed, 'source recorded')}</ProductStatus>
                             </div>
                             <div className="whitespace-pre-wrap text-sm leading-6 text-neutral-800">{draftText}</div>
                           </div>
                           <DetailGrid items={[
                             { label: 'Audience', value: text(campaign.audience, 'Not specified') },
-                            { label: 'CTA', value: text(campaign.cta, 'Not specified') },
-                            { label: 'Reach Score', value: String(contentItem.reachScore ?? 0) },
-                            { label: 'Risk Reason', value: text(contentItem.riskReason, 'No risk reason recorded') },
-                            { label: 'Packages', value: packetPackages.length ? `${packetPackages.length} package record(s)` : 'None yet' },
+                            { label: 'Call to Action', value: text(campaign.cta, 'Not specified') },
+                            { label: 'Quality Score', value: String(contentItem.reachScore ?? 0) },
+                            { label: 'Risk Notes', value: text(contentItem.riskReason, 'None recorded') },
+                            { label: 'Packages', value: packetPackages.length ? `${packetPackages.length} package(s)` : 'None yet' },
                           ]} />
                         </div>
                       </div>
@@ -162,7 +175,7 @@ export default function ApprovalQueue() {
                             value={decisionComments[id] || ''}
                             onChange={event => setDecisionComments(current => ({ ...current, [id]: event.target.value }))}
                             className="min-h-24 rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
-                            placeholder="Reviewer comment"
+                            placeholder="Add a comment (optional)"
                           />
                           <PrimaryAction onClick={() => handleAction(id, 'approve')} disabled={!!loading}>{loading === `approve-${id}` ? 'Approving...' : 'Approve'}</PrimaryAction>
                           <SecondaryAction onClick={() => handleAction(id, 'request-changes')} disabled={!!loading}>Request Changes</SecondaryAction>
@@ -175,21 +188,25 @@ export default function ApprovalQueue() {
               })}
             </div>
           ) : (
-            <EmptyProductState message="No approval package is pending. Send a selected draft for review from Campaigns." />
+            <EmptyProductState
+              title="Nothing to review"
+              message="When a draft is submitted for review from the Campaigns page, it will appear here."
+              action={<Link to="/campaigns" className="inline-flex min-h-10 items-center justify-center rounded-md bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800">Go to Campaigns</Link>}
+            />
           )}
         </ProductCard>
 
-        <ProductCard title="Publishing Preparation" subtitle="Approved packages prepared for scheduling review.">
+        <ProductCard title="Ready for Scheduling" subtitle="Approved content prepared as scheduling packages.">
           <ReadableQueue items={readyPackages.length ? readyPackages.map(pkg => ({
-            title: 'Publishing package',
+            title: 'Content package',
             meta: `Status: ${titleCase(text(pkg.status || pkg.packageStatus, 'prepared'))}`,
-            status: 'Package Ready',
+            status: 'Ready',
             tone: 'good' as const,
           })) : [
-            { title: 'No package ready yet', meta: 'Approve content to unlock publishing preparation.', status: 'Waiting', tone: 'default' as const },
+            { title: 'No packages yet', meta: 'Approve content to create scheduling packages.', status: 'Waiting', tone: 'default' as const },
           ]} />
-          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-            Scheduling is visible as a payload and sandbox surface. Real scheduling remains disabled until credentials and authorization are approved.
+          <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
+            Scheduling is set up in the Scheduling page. An admin configures the scheduling service and channels before content can be published.
           </div>
         </ProductCard>
       </div>

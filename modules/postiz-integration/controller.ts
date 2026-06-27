@@ -1,10 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError } from '@shared/errors';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '@shared/errors';
 import { validateOrThrow } from '@shared/validation';
 import { evaluateExternalExecution } from '@shared/policy';
 import { auditLog } from '@shared/logging';
+import { prisma } from '@shared/database';
 import { getActiveIntegrationCredential, upsertIntegrationCredential } from '../integration-credentials/service';
 import {
   createAccountReferenceSchema,
@@ -15,6 +16,7 @@ import {
 } from './types';
 import * as service from './service';
 import { buildPostizChannelGuidance, buildPostizDiagnostics, toSafePostizChannel } from './channel-contract';
+import { buildPostizCreatePostPayload, summarizePostizPayload } from './payload';
 import { recordCommercialWorkflowAudit } from '../commercial-workflow/evidence';
 
 export const postizIntegrationRouter = Router();
@@ -626,6 +628,15 @@ const postizPayloadSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
+const postizPackagePayloadSchema = z.object({
+  publishingPackageId: z.string().uuid(),
+  platform: z.string().min(1).optional(),
+  scheduledAt: z.string().datetime().optional(),
+  timezone: z.string().min(1).default('UTC'),
+  integrationId: z.string().min(1).optional(),
+  tags: z.array(z.string()).default([]),
+});
+
 async function resolvePostizRuntimeConfig(tenantKey = 'default'): Promise<PostizRuntimeConfig> {
   const credential = await getActiveIntegrationCredential('postiz', 'api_key', tenantKey);
   if (credential) {
@@ -644,28 +655,79 @@ async function resolvePostizRuntimeConfig(tenantKey = 'default'): Promise<Postiz
   };
 }
 
-function buildPostizCreatePostPayload(input: z.infer<typeof postizPayloadSchema>, config?: PostizRuntimeConfig) {
+async function buildPackagePostizPayload(
+  input: z.infer<typeof postizPackagePayloadSchema>,
+  config: PostizRuntimeConfig,
+) {
+  const pkg = await prisma.publishingPackage.findUnique({
+    where: { id: input.publishingPackageId },
+    include: {
+      items: true,
+      targets: true,
+      readiness_checks: true,
+      manifest: true,
+    },
+  });
+  if (!pkg) throw new NotFoundError('PublishingPackage', input.publishingPackageId);
+  if (pkg.package_status !== 'ready_for_future_execution') {
+    throw new ForbiddenError(`Publishing package is ${pkg.package_status}, not ready for scheduling preparation`);
+  }
+
+  const target = input.platform
+    ? pkg.targets.find(item => item.platform === input.platform)
+    : pkg.targets[0];
+  const platform = input.platform || target?.platform;
+  if (!platform) throw new ForbiddenError('Publishing package has no scheduling target platform');
+
+  const caption =
+    pkg.items.find(item => item.item_type === 'platform_caption' && item.platform === platform)
+    || pkg.items.find(item => item.item_type === 'platform_caption')
+    || pkg.items[0];
+  const content = caption?.content_summary || '';
+  if (!content.trim()) throw new ForbiddenError('Publishing package has no approved content summary to schedule');
+
+  const scheduledAt = input.scheduledAt
+    || target?.proposed_publish_at?.toISOString()
+    || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const integrationId = input.integrationId || config.integrationId || undefined;
+  const payloadInput = {
+    platform,
+    content,
+    scheduledAt,
+    integrationId,
+    tags: input.tags,
+    type: 'schedule' as const,
+  };
+
   return {
-    type: 'schedule',
-    date: input.scheduledAt,
-    shortLink: false,
-    tags: input.tags.map((tag) => ({ value: tag })),
-    posts: [
-      {
-        integration: {
-          id: input.integrationId || config?.integrationId || process.env.POSTIZ_SANDBOX_INTEGRATION_ID || '<configured sandbox integration id>',
-        },
-        value: [
-          {
-            content: input.content,
-            image: [],
-          },
-        ],
-        settings: {
-          __type: input.platform,
-        },
-      },
-    ],
+    package: {
+      id: pkg.id,
+      status: pkg.package_status,
+      campaignId: pkg.campaign_id,
+      contentItemId: pkg.content_item_id,
+      readinessScore: pkg.readiness_score,
+      readinessSummary: pkg.readiness_summary,
+    },
+    target: {
+      platform,
+      proposedPublishAt: scheduledAt,
+      timezone: input.timezone || target?.timezone || 'UTC',
+      selectedIntegrationId: integrationId || null,
+    },
+    contentPreview: content.slice(0, 240),
+    payload: buildPostizCreatePostPayload(payloadInput),
+    payloadSummary: summarizePostizPayload(payloadInput),
+    readinessChecks: pkg.readiness_checks.map(check => ({
+      type: check.check_type,
+      status: check.check_status,
+      severity: check.severity,
+      message: check.message,
+    })),
+    manifest: pkg.manifest ? {
+      status: pkg.manifest.manifest_status,
+      summary: pkg.manifest.manifest_summary,
+      generatedAt: pkg.manifest.generated_at,
+    } : null,
   };
 }
 
@@ -687,12 +749,19 @@ postizIntegrationRouter.post('/schedule-payload', async (req: Request, res: Resp
     const input = postizPayloadSchema.parse(req.body);
     const session = getSession(req);
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
-    const payload = buildPostizCreatePostPayload(input, config);
+    const payload = buildPostizCreatePostPayload({
+      ...input,
+      integrationId: input.integrationId || config.integrationId || undefined,
+    });
     res.json({
       status: 'prepared',
       endpoint: config.baseUrl ? `${config.baseUrl.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}` : null,
       credentialSource: config.source,
       payload,
+      payloadSummary: summarizePostizPayload({
+        ...input,
+        integrationId: input.integrationId || config.integrationId || undefined,
+      }),
       safety: {
         executionPerformed: false,
         livePublishing: false,
@@ -705,12 +774,40 @@ postizIntegrationRouter.post('/schedule-payload', async (req: Request, res: Resp
   }
 });
 
+postizIntegrationRouter.post('/package-payload', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = postizPackagePayloadSchema.parse(req.body);
+    const session = getSession(req);
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
+    const packagePayload = await buildPackagePostizPayload(input, config);
+    const gate = await sandboxSchedulingGate(config);
+    res.json({
+      status: 'prepared',
+      endpoint: config.baseUrl ? `${config.baseUrl.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}` : null,
+      credentialSource: config.source,
+      ...packagePayload,
+      safety: {
+        executionPerformed: false,
+        livePublishing: false,
+        schedulingGate: gate,
+      },
+      rawSecretsReturned: false,
+      _label: 'Postiz-ready package payload prepared from approved content - no external call performed',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const session = getSession(req);
     const input = postizPayloadSchema.parse(req.body);
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
-    const payload = buildPostizCreatePostPayload(input, config);
+    const payload = buildPostizCreatePostPayload({
+      ...input,
+      integrationId: input.integrationId || config.integrationId || undefined,
+    });
     const gate = await sandboxSchedulingGate(config);
 
     if (!gate.allowed) {
@@ -789,6 +886,99 @@ postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Resp
         livePublishing: false,
         sandboxOnly: true,
       },
+      _label: response.ok ? 'Sandbox schedule created in Postiz test account' : 'Postiz sandbox API call failed',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+postizIntegrationRouter.post('/package-sandbox-schedule', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const input = postizPackagePayloadSchema.parse(req.body);
+    const config = await resolvePostizRuntimeConfig(session.tenantKey);
+    const packagePayload = await buildPackagePostizPayload(input, config);
+    const gate = await sandboxSchedulingGate(config);
+
+    if (!gate.allowed) {
+      auditLog(
+        { actor: `user:${session.humanUserId}`, action: 'postiz_package_sandbox_schedule_blocked', object_type: 'publishing_package', object_id: input.publishingPackageId, result: 'blocked' },
+        `Postiz package sandbox schedule blocked: ${gate.reasons.join('; ')}`,
+      );
+      await recordCommercialWorkflowAudit({
+        action: 'postiz_package_sandbox_schedule_blocked',
+        result: 'blocked',
+        humanUserId: session.humanUserId,
+        agentRepId: session.agentRepId,
+        targetObjectType: 'publishing_package',
+        targetObjectId: input.publishingPackageId,
+        sourceModule: 'postiz-integration',
+        reason: gate.reasons.join('; '),
+        policyMatched: 'external_execution_gate',
+        afterState: {
+          platform: packagePayload.target.platform,
+          scheduledAt: packagePayload.target.proposedPublishAt,
+          executionPerformed: false,
+        },
+      });
+      res.status(403).json({
+        status: 'blocked',
+        reasons: gate.reasons,
+        ...packagePayload,
+        safety: {
+          executionPerformed: false,
+          livePublishing: false,
+        },
+        rawSecretsReturned: false,
+        _label: 'Blocked - package sandbox scheduling requires explicit deployment flags and a selected Postiz channel',
+      });
+      return;
+    }
+
+    const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}`, {
+      method: 'POST',
+      headers: {
+        Authorization: config.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(packagePayload.payload),
+    });
+    const body = await response.json().catch(() => ({ statusText: response.statusText }));
+
+    auditLog(
+      { actor: `user:${session.humanUserId}`, action: 'postiz_package_sandbox_schedule_executed', object_type: 'publishing_package', object_id: input.publishingPackageId, result: response.ok ? 'success' : 'failed' },
+      `Postiz package sandbox schedule API returned ${response.status}`,
+    );
+    await recordCommercialWorkflowAudit({
+      action: 'postiz_package_sandbox_schedule_executed',
+      result: response.ok ? 'success' : 'failure',
+      humanUserId: session.humanUserId,
+      agentRepId: session.agentRepId,
+      targetObjectType: 'publishing_package',
+      targetObjectId: input.publishingPackageId,
+      sourceModule: 'postiz-integration',
+      reason: `Postiz sandbox API returned ${response.status}`,
+      policyMatched: 'external_execution_gate',
+      afterState: {
+        platform: packagePayload.target.platform,
+        scheduledAt: packagePayload.target.proposedPublishAt,
+        executionPerformed: true,
+        livePublishing: false,
+      },
+    });
+
+    res.status(response.ok ? 200 : 502).json({
+      status: response.ok ? 'sandbox_scheduled' : 'failed',
+      postizStatus: response.status,
+      response: body,
+      ...packagePayload,
+      safety: {
+        executionPerformed: true,
+        livePublishing: false,
+        sandboxOnly: true,
+      },
+      rawSecretsReturned: false,
       _label: response.ok ? 'Sandbox schedule created in Postiz test account' : 'Postiz sandbox API call failed',
     });
   } catch (err) {
