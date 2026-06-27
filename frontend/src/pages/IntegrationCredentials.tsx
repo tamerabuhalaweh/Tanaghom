@@ -121,6 +121,8 @@ export default function IntegrationCredentials() {
     : [];
   const postizAuthorization = (postizDiagnostics?.authorization || {}) as RecordMap;
   const postizAuthorizationUrl = text(postizAuthorization.authorizationUrl, '');
+  const postizProviderReady = postizAuthorization.providerConfigurationReady === true;
+  const postizClientIdStatus = text(postizAuthorization.clientIdStatus, 'not checked');
 
   function chooseRequirement(row: RecordMap) {
     setSelected(row);
@@ -169,6 +171,12 @@ export default function IntegrationCredentials() {
     try {
       const result = await postizApi.connectChannel({ platform: postizPlatform }, token) as RecordMap;
       const authorizationUrl = text(result.authorizationUrl, '');
+      const authorization = (result.authorization || {}) as RecordMap;
+      if (authorization.providerConfigurationReady === false) {
+        setMessage(text(authorization.failureReason, text(result._label, 'Postiz provider app credentials must be configured before this channel can connect.')));
+        await runPostizDiagnostics();
+        return;
+      }
       if (!authorizationUrl) {
         setMessage(text(result._label, 'Postiz did not return an authorization URL. Check provider credentials in Postiz.'));
         return;
@@ -288,12 +296,18 @@ export default function IntegrationCredentials() {
                 {diagnosingPostiz ? 'Checking...' : 'Run Diagnostics'}
               </SecondaryAction>
               {postizAuthorizationUrl && (
-                <SecondaryAction onClick={() => window.open(postizAuthorizationUrl, '_blank', 'noopener,noreferrer')}>
-                  Open OAuth URL
+                <SecondaryAction onClick={() => window.open(postizAuthorizationUrl, '_blank', 'noopener,noreferrer')} disabled={!postizProviderReady}>
+                  {postizProviderReady ? 'Open OAuth URL' : 'Provider Setup Required'}
                 </SecondaryAction>
               )}
               <SecondaryAction onClick={() => void load()}>Refresh Channels</SecondaryAction>
             </div>
+            {postizAuthorizationUrl && !postizProviderReady && (
+              <Notice tone="warn">
+                Postiz returned an OAuth handoff, but the provider client ID is {display(postizClientIdStatus)}.
+                Configure the provider app credentials in Postiz, restart Postiz, then run diagnostics again.
+              </Notice>
+            )}
             <Notice tone="info">
               Tanaghum requests the OAuth URL through the Postiz API, then Postiz owns the provider login, consent screen, and channel token storage.
             </Notice>

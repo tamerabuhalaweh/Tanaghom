@@ -41,6 +41,46 @@ export interface PostizDiagnostics {
   nextActions: string[];
 }
 
+export function inspectPostizAuthorizationUrl(value: unknown): {
+  authorizationUrl: string | null;
+  host: string | null;
+  hasClientId: boolean;
+  providerConfigurationReady: boolean;
+  failureReason: string | null;
+} {
+  if (typeof value !== 'string' || !value.trim()) {
+    return {
+      authorizationUrl: null,
+      host: null,
+      hasClientId: false,
+      providerConfigurationReady: false,
+      failureReason: 'Postiz response did not include an authorization URL.',
+    };
+  }
+
+  try {
+    const url = new URL(value);
+    const hasClientId = Boolean(url.searchParams.get('client_id'));
+    return {
+      authorizationUrl: value,
+      host: url.host,
+      hasClientId,
+      providerConfigurationReady: hasClientId,
+      failureReason: hasClientId
+        ? null
+        : 'Postiz returned an OAuth URL without a provider client_id. Configure the provider app credentials in Postiz.',
+    };
+  } catch {
+    return {
+      authorizationUrl: null,
+      host: null,
+      hasClientId: false,
+      providerConfigurationReady: false,
+      failureReason: 'Postiz returned an invalid authorization URL.',
+    };
+  }
+}
+
 export function toSafePostizChannel(channel: Record<string, unknown>): SafePostizChannel {
   const customer = (channel.customer || {}) as Record<string, unknown>;
   return {
@@ -64,12 +104,15 @@ export function buildPostizDiagnostics(input: {
   channelCount: number;
   selectedIntegrationId?: string | null;
   oauthUrlReady?: boolean;
+  oauthUrlHasClientId?: boolean;
+  oauthProviderHost?: string | null;
   oauthChecked?: boolean;
   oauthFailureReason?: string | null;
   platform?: string | null;
   sandboxSchedulingAllowed?: boolean;
 }): PostizDiagnostics {
   const platform = input.platform || 'selected platform';
+  const oauthProviderConfigured = input.oauthUrlReady && input.oauthUrlHasClientId !== false;
   const checks: PostizDiagnosticCheck[] = [
     {
       id: 'postiz_base_url',
@@ -95,16 +138,19 @@ export function buildPostizDiagnostics(input: {
       id: 'postiz_oauth_url',
       label: 'Channel OAuth handoff',
       status: input.oauthChecked
-        ? input.oauthUrlReady ? 'passed' : 'blocked'
+        ? oauthProviderConfigured ? 'passed' : 'blocked'
         : input.hasApiKey ? 'not_checked' : 'blocked',
       detail: input.oauthChecked
-        ? input.oauthUrlReady
-          ? `Postiz can create an OAuth URL for ${platform}.`
-          : input.oauthFailureReason || `Postiz did not return an OAuth URL for ${platform}.`
+        ? oauthProviderConfigured
+          ? `Postiz can create an OAuth URL for ${platform}${input.oauthProviderHost ? ` through ${input.oauthProviderHost}` : ''}.`
+          : input.oauthFailureReason
+            || (input.oauthUrlReady && input.oauthUrlHasClientId === false
+              ? `Postiz returned an OAuth URL for ${platform}, but the provider client ID is missing.`
+              : `Postiz did not return a usable OAuth URL for ${platform}.`)
         : input.hasApiKey
           ? 'Run diagnostics or click Connect Channel to request a Postiz OAuth URL.'
           : 'Postiz API credentials are required before OAuth can start.',
-      action: input.oauthChecked && !input.oauthUrlReady
+      action: input.oauthChecked && !oauthProviderConfigured
         ? 'Verify provider app credentials in the Postiz deployment.'
         : undefined,
     },
@@ -168,14 +214,17 @@ export function buildPostizDiagnostics(input: {
   }
 
   if (input.channelCount === 0) {
-    if (input.oauthChecked && !input.oauthUrlReady) {
+    if (input.oauthChecked && !oauthProviderConfigured) {
       return {
         status: 'requires_provider_setup',
         title: 'Postiz provider setup needs attention',
-        summary: `Postiz accepted the API key but could not provide an OAuth URL for ${platform}.`,
+        summary: input.oauthUrlReady && input.oauthUrlHasClientId === false
+          ? `Postiz accepted the API key but the ${platform} OAuth URL is missing the provider client ID.`
+          : `Postiz accepted the API key but could not provide an OAuth URL for ${platform}.`,
         checks,
         nextActions: [
-          'Verify provider app credentials in Postiz deployment settings.',
+          'Configure the required provider app credentials in Postiz deployment settings.',
+          'For Instagram/Facebook, set the Meta/Facebook app ID and app secret in the Postiz environment.',
           'Restart Postiz after provider env changes.',
           'Run diagnostics again and confirm OAuth URL is available.',
         ],
