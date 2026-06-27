@@ -5,7 +5,7 @@ import { validateLoginInput } from './validators';
 import { verifyToken } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
 import { revokeToken } from '@shared/auth/token-revocation';
-import { disableTotpMfa, getMfaStatus, startTotpSetup, verifyTotpSetup } from './mfa-service';
+import { disableTotpMfa, getMfaStatus, regenerateRecoveryCodes, startTotpSetup, verifyTotpSetup } from './mfa-service';
 
 export const authRouter = Router();
 
@@ -191,6 +191,25 @@ authRouter.post('/mfa/disable', async (req: Request, res: Response, next: NextFu
       ...result,
       rawSecretsReturned: false,
       _label: 'MFA disabled for this user.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/mfa/recovery-codes/regenerate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getAuthenticatedPayload(req);
+    const input = z.object({
+      code: z.string().regex(/^\d{6}$/),
+    }).parse(req.body);
+    const result = await regenerateRecoveryCodes({
+      requesterUserId: payload.sub,
+      code: input.code,
+    });
+    res.json({
+      ...result,
+      _label: 'New MFA recovery codes generated. Raw codes are returned once and are not stored.',
     });
   } catch (err) {
     next(err);

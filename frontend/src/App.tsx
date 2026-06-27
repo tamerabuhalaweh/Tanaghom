@@ -30,6 +30,9 @@ import IntegrationCredentials from './pages/IntegrationCredentials'
 import AdminUsers from './pages/AdminUsers'
 import MyAgentRep from './pages/MyAgentRep'
 import AcceptOnboarding from './pages/AcceptOnboarding'
+import AccountSecurity from './pages/AccountSecurity'
+import TenantAdmin from './pages/TenantAdmin'
+import OperationsReadiness from './pages/OperationsReadiness'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -72,8 +75,11 @@ function App() {
             <Route path="safety" element={<SafetyStatus />} />
             <Route path="ai-settings" element={<AIProviderSettings />} />
             <Route path="my-agent-rep" element={<MyAgentRep />} />
+            <Route path="account-security" element={<AccountSecurity />} />
             <Route path="integration-credentials" element={<IntegrationCredentials />} />
             <Route path="admin-users" element={<AdminUsers />} />
+            <Route path="tenant-admin" element={<TenantAdmin />} />
+            <Route path="operations" element={<OperationsReadiness />} />
             <Route path="mcp-engine" element={<McpEngine />} />
             <Route path="agent-skills" element={<AgentSkills />} />
             <Route path="ghl-readiness" element={<GhlReadiness />} />

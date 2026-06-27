@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 *.log
+monitoring/secrets/
 coverage/
 test-results/
 playwright-report/

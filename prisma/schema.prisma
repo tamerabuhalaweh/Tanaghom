@@ -123,6 +123,7 @@ model User {
   integration_credentials_created IntegrationCredential[]
   onboarding_tokens UserOnboardingToken[]
   mfa_factors UserMfaFactor[]
+  mfa_recovery_codes UserMfaRecoveryCode[]
   tenant_memberships TenantMembership[]
   social_account_connections SocialAccountConnection[]
   oauth_connection_states OAuthConnectionState[]
@@ -178,6 +179,20 @@ model UserMfaFactor {
   @@index([user_id])
   @@index([is_verified])
   @@map("user_mfa_factors")
+}
+
+model UserMfaRecoveryCode {
+  id          String    @id @default(uuid()) @db.Uuid
+  user_id     String    @db.Uuid
+  code_hash   String    @unique
+  used_at     DateTime?
+  created_at  DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([used_at])
+  @@map("user_mfa_recovery_codes")
 }
 
 enum LlmProviderType {

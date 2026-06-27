@@ -14,6 +14,11 @@ describe('auth/validators', () => {
     expect(result.mfaCode).toBe('123456');
   });
 
+  it('accepts optional MFA recovery code', () => {
+    const result = validateLoginInput({ email: 'user@example.com', password: 'secret', mfaCode: 'AB12-CD34-EF56' });
+    expect(result.mfaCode).toBe('AB12-CD34-EF56');
+  });
+
   it('rejects invalid email', () => {
     expect(() => validateLoginInput({ email: 'bad', password: 'secret' })).toThrow(ValidationError);
   });

@@ -34,7 +34,7 @@ export default function Login() {
     e.preventDefault()
     const isEmailValid = validateEmail(email)
     if (!isEmailValid || !password) return
-    if (mfaPromptVisible && mfaCode.length !== 6) return
+    if (mfaPromptVisible && !/^(\d{6}|[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/i.test(mfaCode.trim())) return
     await login(email, password, mfaPromptVisible ? mfaCode : undefined)
   }
 
@@ -154,16 +154,15 @@ export default function Login() {
               {mfaPromptVisible && (
                 <div>
                   <label htmlFor="mfaCode" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                    Authenticator code
+                    Authenticator or recovery code
                   </label>
                   <input
                     id="mfaCode"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
+                    inputMode="text"
+                    maxLength={14}
                     value={mfaCode}
-                    onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="Enter 6-digit code"
+                    onChange={e => setMfaCode(e.target.value.toUpperCase().slice(0, 14))}
+                    placeholder="123456 or AB12-CD34-EF56"
                     className="w-full rounded-md border border-black/15 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10"
                     required
                   />

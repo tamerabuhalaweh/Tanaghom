@@ -165,6 +165,10 @@ async function rateLimit(req: express.Request, res: express.Response, next: expr
 
 async function enforceTokenRevocation(req: express.Request, _res: express.Response, next: express.NextFunction): Promise<void> {
   try {
+    if (req.path === '/ops/prometheus') {
+      next();
+      return;
+    }
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       const payload = verifyToken(authHeader.substring(7));

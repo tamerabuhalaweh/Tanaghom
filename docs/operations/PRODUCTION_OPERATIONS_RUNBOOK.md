@@ -17,6 +17,13 @@ Admin-only endpoints:
 
 - `GET /ops/readiness`
 - `GET /ops/metrics`
+- `GET /ops/backup/status`
+- `GET /ops/monitoring/status`
+
+Machine metrics endpoint:
+
+- `GET /ops/prometheus`
+- Requires `OPERATIONS_METRICS_TOKEN` as a bearer token.
 
 The readiness endpoint checks:
 
@@ -27,7 +34,10 @@ The readiness endpoint checks:
 - explicit CORS origin
 - email delivery configuration when enabled
 - backup target configuration
+- latest local backup manifest
 - alert destination configuration
+- admin MFA coverage
+- Prometheus metrics token configuration
 
 ## Required Production Environment
 
@@ -38,6 +48,7 @@ Required:
 - `JWT_SECRET`
 - `SECRET_VAULT_ENCRYPTION_KEY`
 - `CORS_ORIGIN`
+- `OPERATIONS_METRICS_TOKEN`
 
 Recommended:
 
@@ -45,11 +56,15 @@ Recommended:
 - `RATE_LIMIT_WINDOW_SECONDS=60`
 - `RATE_LIMIT_MAX_REQUESTS=100`
 - `DATABASE_BACKUP_DIR=/var/backups/tanaghum/postgres`
+- `DATABASE_BACKUP_CRON=<documented backup schedule>`
 - `BACKUP_STORAGE_TARGET=<off-server backup destination>`
 - `ALERT_WEBHOOK_URL=<ops alert webhook>`
 - `OPERATIONS_ALERT_EMAIL=<ops email>`
+- `PUBLIC_HEALTH_URL=<public /health URL for uptime monitor>`
+- `LATEST_RESTORE_DRILL_AT=<ISO timestamp after a successful restore drill>`
 - `EMAIL_DELIVERY_ENABLED=true`
 - SMTP settings when email delivery is enabled
+- `MFA_RECOVERY_CODE_PEPPER=<stable secret pepper for recovery-code hashes>`
 
 ## Customer-Owned Integration Credentials
 
@@ -78,6 +93,7 @@ Backup output:
 
 - PostgreSQL custom dump
 - SHA-256 checksum
+- `latest.json` manifest for `/ops/backup/status`
 
 Minimum production policy:
 
@@ -104,6 +120,27 @@ Then verify:
 - `/ops/readiness` is healthy enough for production
 - a campaign workflow can be read
 - customer secrets are still encrypted and never returned by APIs
+
+The backup can be checked without restoring into production:
+
+```bash
+chmod +x scripts/verify-postgres-backup.sh
+scripts/verify-postgres-backup.sh /path/to/tanaghum-postgres.dump
+```
+
+Record the successful restore drill timestamp in `LATEST_RESTORE_DRILL_AT`.
+
+## Monitoring Deployment
+
+1. Set `OPERATIONS_METRICS_TOKEN` on the backend.
+2. Create `monitoring/secrets/ops_metrics_token` on the server only.
+3. Start Prometheus and Grafana:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d prometheus grafana
+```
+
+Prometheus scrapes `/ops/prometheus`. Grafana runs on port `3001` by default.
 
 ## Alerting
 
@@ -133,8 +170,8 @@ Minimum alerts:
 
 ## Current Known Production Gaps
 
-- MFA backend foundation exists after Sprint 48 hardening, but customer rollout and recovery policy must be finalized.
+- MFA setup, login challenge, and recovery codes exist. Remaining work: formal customer rollout policy, admin recovery SOP, and final security review.
 - Full tenant billing/subscription model is not implemented.
-- Full production monitoring stack is not deployed.
+- Monitoring deployment artifacts exist, but the stack must be deployed and verified on the production host.
 - Restore drill evidence must be collected.
 - Penetration/security review must still be performed.

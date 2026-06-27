@@ -3,7 +3,9 @@ import { z } from 'zod';
 export const loginSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(1, 'Password is required'),
-  mfaCode: z.string().regex(/^\d{6}$/, 'Authenticator code must be 6 digits').optional(),
+  mfaCode: z.string()
+    .regex(/^(\d{6}|[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/i, 'Enter a 6-digit authenticator code or a recovery code')
+    .optional(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

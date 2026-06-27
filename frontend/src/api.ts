@@ -73,6 +73,8 @@ export const authApi = {
   mfaSetup: (token: string) => apiFetch<unknown>('/auth/mfa/setup', { method: 'POST', token }),
   mfaVerify: (data: unknown, token: string) => apiFetch<unknown>('/auth/mfa/verify', { method: 'POST', body: data, token }),
   mfaDisable: (data: unknown, token: string) => apiFetch<unknown>('/auth/mfa/disable', { method: 'POST', body: data, token }),
+  mfaRegenerateRecoveryCodes: (data: unknown, token: string) =>
+    apiFetch<unknown>('/auth/mfa/recovery-codes/regenerate', { method: 'POST', body: data, token }),
 };
 
 export const campaignsApi = {
@@ -243,6 +245,8 @@ export const tenantAdminApi = {
 export const operationsApi = {
   readiness: (token: string) => apiFetch<unknown>('/ops/readiness', { token }),
   metrics: (token: string) => apiFetch<unknown>('/ops/metrics', { token }),
+  backupStatus: (token: string) => apiFetch<unknown>('/ops/backup/status', { token }),
+  monitoringStatus: (token: string) => apiFetch<unknown>('/ops/monitoring/status', { token }),
 };
 
 export const integrationsApi = {

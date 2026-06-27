@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (err) {
       const message = err instanceof ApiError && err.code === 'MFA_REQUIRED'
-        ? 'Authenticator code required'
+        ? 'Authenticator or recovery code required'
         : err instanceof Error ? err.message : 'Login failed';
       setState(s => ({ ...s, loading: false, error: message }));
       return false;
