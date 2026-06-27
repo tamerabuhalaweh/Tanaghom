@@ -33,9 +33,11 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
         ? err.error
         : typeof err.message === 'string'
           ? err.message
-          : Array.isArray(err.reasons)
-            ? err.reasons.join('; ')
-            : `API error: ${res.status}`;
+          : typeof err._label === 'string'
+            ? err._label
+            : Array.isArray(err.reasons)
+              ? err.reasons.join('; ')
+              : `API error: ${res.status}`;
     throw new Error(detail);
   }
 

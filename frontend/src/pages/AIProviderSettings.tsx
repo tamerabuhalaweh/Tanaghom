@@ -117,6 +117,24 @@ export default function AIProviderSettings() {
     }
   }
 
+  async function saveTestAndUseProvider() {
+    if (!token) return;
+    setLoading('activate');
+    setMessage('');
+    try {
+      await aiProviderApi.saveCredential({ provider: selectedProvider, model, apiKey }, token);
+      const result = await aiProviderApi.test(selectedProvider, token) as { _label?: string; status?: string };
+      await aiProviderApi.select(selectedProvider, token);
+      setMessage(`${selectedMeta.name} saved, tested, and activated. ${result._label || 'Backend connection succeeded.'}`);
+      setApiKey('');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Provider activation failed');
+    } finally {
+      setLoading('');
+    }
+  }
+
   async function selectProvider() {
     if (!token) return;
     setLoading('select');
@@ -156,7 +174,7 @@ export default function AIProviderSettings() {
       action={<ProductStatus tone="good">Backend-only model calls</ProductStatus>}
     >
 
-      {message && <Notice tone={message.includes('Failed') || message.includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
+      {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
 
       <div className="grid gap-6 lg:grid-cols-[390px_1fr]">
         <ProductCard title="Provider Setup" subtitle="Keys are user-owned and raw values are never returned by the backend.">
@@ -200,6 +218,16 @@ export default function AIProviderSettings() {
                 className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
               />
             </label>
+
+            <div className="grid gap-3">
+              <button
+                onClick={saveTestAndUseProvider}
+                disabled={!apiKey || loading === 'activate'}
+                className="rounded-md bg-neutral-950 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+              >
+                {loading === 'activate' ? 'Saving and testing...' : `Save, Test & Use ${selectedMeta.name}`}
+              </button>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -261,6 +289,15 @@ export default function AIProviderSettings() {
           <Notice tone="info">
             Keys are encrypted with the deployment master key and scoped to the authenticated user. The frontend receives only status and fingerprint.
           </Notice>
+
+          <ProductCard title="Activation Checklist" subtitle="A provider is accepted only after the backend can call it successfully.">
+            <ol className="space-y-3 text-sm leading-6 text-neutral-700">
+              <li><strong>1. Save key:</strong> the raw key is sent once to the backend and encrypted at rest.</li>
+              <li><strong>2. Test backend connection:</strong> Tanaghum calls the provider adapter from the backend, never from the browser.</li>
+              <li><strong>3. Use provider:</strong> the selected provider is stored on your AgentRep metadata for your user only.</li>
+              <li><strong>4. Generate drafts:</strong> return to Command Center and run the campaign draft path.</li>
+            </ol>
+          </ProductCard>
         </div>
       </div>
     </ProductPage>

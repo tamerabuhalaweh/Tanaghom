@@ -104,6 +104,10 @@ export default function IntegrationCredentials() {
   const selectedFields = useMemo(() => parseRequiredFields(selected?.requiredFields), [selected]);
   const optionalFields = useMemo(() => parseRequiredFields(selected?.optionalFields), [selected]);
   const selectedPostizIntegrationId = typeof postizChannelStatus?.selectedIntegrationId === 'string' ? postizChannelStatus.selectedIntegrationId : '';
+  const postizGuidance = (postizChannelStatus?.guidance || {}) as RecordMap;
+  const postizNextActions = Array.isArray(postizGuidance.nextActions)
+    ? postizGuidance.nextActions.filter((item): item is string => typeof item === 'string')
+    : [];
 
   function chooseRequirement(row: RecordMap) {
     setSelected(row);
@@ -282,10 +286,25 @@ export default function IntegrationCredentials() {
               })}
             />
           ) : (
-            <EmptyProductState
-              title="No Postiz channels connected"
-              message={text(postizChannelStatus?._label, 'Save Postiz API credentials, then connect a channel through Postiz.')}
-            />
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+              <EmptyProductState
+                title={text(postizGuidance.title, 'No Postiz channels connected')}
+                message={text(postizChannelStatus?._label, 'Save Postiz API credentials, then connect a channel through Postiz.')}
+              />
+              {postizNextActions.length > 0 && (
+                <div className="mt-5 rounded-lg border border-amber-200 bg-white p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Next actions</div>
+                  <ol className="mt-3 space-y-2 text-sm leading-6 text-amber-950">
+                    {postizNextActions.map((action, index) => (
+                      <li key={action} className="flex gap-3">
+                        <span className="font-semibold">{index + 1}.</span>
+                        <span>{action}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </ProductCard>

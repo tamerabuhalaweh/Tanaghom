@@ -14,6 +14,7 @@ import {
   type CreateExecutionRequestInput,
 } from './types';
 import * as service from './service';
+import { buildPostizChannelGuidance, toSafePostizChannel } from './channel-contract';
 
 export const postizIntegrationRouter = Router();
 
@@ -106,33 +107,24 @@ function buildPostizApiUrl(config: PostizRuntimeConfig, path: string): string {
   return `${config.baseUrl.replace(/\/$/, '')}${path}`;
 }
 
-function toSafePostizChannel(channel: Record<string, unknown>) {
-  const customer = (channel.customer || {}) as Record<string, unknown>;
-  return {
-    id: channel.id,
-    name: channel.name,
-    providerIdentifier: channel.providerIdentifier || channel.identifier,
-    type: channel.type,
-    profile: channel.profile,
-    picture: channel.picture,
-    disabled: Boolean(channel.disabled),
-    refreshNeeded: Boolean(channel.refreshNeeded),
-    customer: customer.id ? { id: customer.id, name: customer.name } : null,
-    rawTokensReturned: false,
-  };
-}
-
 postizIntegrationRouter.get('/channels', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const session = getSession(req);
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
+    const missingGuidance = buildPostizChannelGuidance({
+      hasBaseUrl: Boolean(config.baseUrl),
+      hasApiKey: Boolean(config.apiKey),
+      channelCount: 0,
+      selectedIntegrationId: config.integrationId || null,
+    });
     if (!config.baseUrl || !config.apiKey) {
       res.status(424).json({
         status: 'requires_credentials',
         channels: [],
         required: ['Postiz base URL', 'Postiz API key'],
+        guidance: missingGuidance,
         rawTokensReturned: false,
-        _label: 'Postiz API key is required before Tanaghum can list connected channels',
+        _label: missingGuidance.message,
       });
       return;
     }
@@ -153,14 +145,21 @@ postizIntegrationRouter.get('/channels', async (req: Request, res: Response, nex
     }
 
     const channels = Array.isArray(body) ? body.map(item => toSafePostizChannel(item as Record<string, unknown>)) : [];
+    const guidance = buildPostizChannelGuidance({
+      hasBaseUrl: true,
+      hasApiKey: true,
+      channelCount: channels.length,
+      selectedIntegrationId: config.integrationId || null,
+    });
     res.json({
       status: 'ok',
       channels,
       count: channels.length,
       credentialSource: config.source,
       selectedIntegrationId: config.integrationId || null,
+      guidance,
       rawTokensReturned: false,
-      _label: channels.length ? 'Postiz channels loaded' : 'No connected Postiz channels yet',
+      _label: guidance.message,
     });
   } catch (err) {
     next(err);

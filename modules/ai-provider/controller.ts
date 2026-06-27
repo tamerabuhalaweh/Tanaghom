@@ -175,7 +175,25 @@ aiProviderRouter.post('/test', async (req: Request, res: Response, next: NextFun
       model: credential.model,
       apiKey: decryptSecret(credential.encrypted_api_key),
     });
-    const result = await llm.generate('Return the single word OK.', { maxTokens: 16, temperature: 0, timeoutMs: 15000 });
+    let result;
+    try {
+      result = await llm.generate('Return the single word OK.', { maxTokens: 16, temperature: 0, timeoutMs: 15000 });
+    } catch (providerError) {
+      auditLog(
+        { actor: `user:${payload.sub}`, action: 'llm_provider_test_failed', object_type: 'llm_provider_credential', object_id: credential.id, result: 'failure' },
+        `LLM provider test failed for ${provider}`,
+      );
+      res.status(502).json({
+        status: 'failed',
+        provider,
+        model: credential.model,
+        apiKeyStatus: 'configured',
+        rawKeyReturned: false,
+        code: 'LLM_PROVIDER_TEST_FAILED',
+        _label: providerError instanceof Error ? providerError.message : 'Provider test failed',
+      });
+      return;
+    }
     await prisma.llmProviderCredential.update({
       where: { id: credential.id },
       data: { last_used_at: new Date() },
