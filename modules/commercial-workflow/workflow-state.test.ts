@@ -161,6 +161,38 @@ describe('commercial workflow state builder', () => {
     expect(state.postiz.label).toBe('Requires Channel');
   });
 
+  it('uses existing product routes for next workflow actions', () => {
+    const state = buildCommercialWorkflowState({
+      ...baseFacts,
+      campaign: {
+        id: 'campaign-1',
+        title: 'CEO launch campaign',
+        objective: 'Generate qualified leads',
+        status: 'approved',
+        riskCategory: 'low',
+        platforms: ['linkedin'],
+      },
+      provider: {
+        ready: true,
+        label: 'DeepSeek / deepseek-v4-flash',
+        provider: 'deepseek',
+        credentialStatus: 'configured',
+      },
+      current: {
+        ...baseFacts.current,
+        draftCount: 1,
+        scoredDraftCount: 1,
+        latestApprovalStatus: 'approved',
+        packageReady: false,
+      },
+    });
+
+    expect(state.nextAction).toMatchObject({
+      label: 'Publishing package',
+      href: '/publishing',
+    });
+  });
+
   it('never marks external execution or M5 as enabled unless flags are true', () => {
     const state = buildCommercialWorkflowState(baseFacts);
 

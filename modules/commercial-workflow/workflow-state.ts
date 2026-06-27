@@ -236,12 +236,12 @@ function nextAction(stages: CommercialWorkflowStage[], facts: CommercialWorkflow
     brief: '/ideas',
     draft: '/command-center',
     optimize: '/command-center',
-    approval: '/approvals-publishing',
-    package: '/approvals-publishing',
+    approval: '/approvals',
+    package: '/publishing',
     postiz: '/integration-credentials',
-    analytics: '/analytics-leads',
-    leads: '/analytics-leads',
-    evidence: '/evidence',
+    analytics: '/analytics',
+    leads: '/analytics',
+    evidence: '/observability',
   };
 
   return {

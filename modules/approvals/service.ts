@@ -1,5 +1,6 @@
 import { ForbiddenError } from '@shared/errors';
 import { auditLog, createIdentityLineage } from '@shared/logging';
+import { recordCommercialWorkflowAudit } from '@modules/commercial-workflow/evidence';
 import * as repo from './repository';
 import { validateCriticalDimensions } from '../saif-decisions/repository';
 import type {
@@ -52,6 +53,22 @@ export async function submitForApproval(requesterRole: string, input: CreateAppr
     { actor: `role:${requesterRole}`, action: 'approval_submitted', object_type: 'approval', object_id: approval.id, result: 'success' },
     `Approval submitted: ${approval.targetType}/${approval.targetId}`,
   );
+  await recordCommercialWorkflowAudit({
+    action: 'approval_submitted',
+    result: 'success',
+    humanUserId: input.requesterUserId,
+    agentRepId: input.requesterAgentRepId,
+    targetObjectType: 'approval',
+    targetObjectId: approval.id,
+    sourceModule: 'approvals',
+    reason: `Approval submitted for ${approval.targetType}/${approval.targetId}`,
+    riskCategory: approval.riskCategory,
+    afterState: {
+      targetType: approval.targetType,
+      targetId: approval.targetId,
+      approvalStatus: approval.approvalStatus,
+    },
+  });
 
   createIdentityLineage(
     input.requesterUserId,
@@ -119,6 +136,19 @@ export async function approve(
     { actor: `user:${sessionUserId}`, action: 'approval_decided', object_type: 'approval', object_id: approvalId, result: 'success', policy_decision: 'approved' },
     `Approval approved: ${approvalId}`,
   );
+  await recordCommercialWorkflowAudit({
+    action: 'approval_decided',
+    result: 'success',
+    humanUserId: sessionUserId,
+    agentRepId: sessionAgentRepId,
+    targetObjectType: 'approval',
+    targetObjectId: approvalId,
+    sourceModule: 'approvals',
+    reason: input.comment || 'Approved by human reviewer',
+    policyMatched: 'human_approval_required',
+    approvalId,
+    afterState: { decision: 'approved' },
+  });
 
   createIdentityLineage(
     sessionUserId,
@@ -153,6 +183,19 @@ export async function reject(
     { actor: `user:${sessionUserId}`, action: 'approval_decided', object_type: 'approval', object_id: approvalId, result: 'success', policy_decision: 'rejected' },
     `Approval rejected: ${approvalId}`,
   );
+  await recordCommercialWorkflowAudit({
+    action: 'approval_decided',
+    result: 'success',
+    humanUserId: sessionUserId,
+    agentRepId: sessionAgentRepId,
+    targetObjectType: 'approval',
+    targetObjectId: approvalId,
+    sourceModule: 'approvals',
+    reason: input.comment || 'Rejected by human reviewer',
+    policyMatched: 'human_approval_required',
+    approvalId,
+    afterState: { decision: 'rejected' },
+  });
 
   createIdentityLineage(
     sessionUserId,
@@ -187,6 +230,19 @@ export async function requestChanges(
     { actor: `user:${sessionUserId}`, action: 'approval_decided', object_type: 'approval', object_id: approvalId, result: 'success', policy_decision: 'changes_requested' },
     `Approval changes requested: ${approvalId}`,
   );
+  await recordCommercialWorkflowAudit({
+    action: 'approval_decided',
+    result: 'success',
+    humanUserId: sessionUserId,
+    agentRepId: sessionAgentRepId,
+    targetObjectType: 'approval',
+    targetObjectId: approvalId,
+    sourceModule: 'approvals',
+    reason: input.comment || 'Changes requested by human reviewer',
+    policyMatched: 'human_approval_required',
+    approvalId,
+    afterState: { decision: 'changes_requested' },
+  });
 
   createIdentityLineage(
     sessionUserId,

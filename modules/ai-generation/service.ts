@@ -4,6 +4,7 @@ import { eventBus } from '@shared/events';
 import { prisma } from '@shared/database';
 import type { LLMProvider } from '@shared/providers/llm-provider';
 import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
+import { recordCommercialWorkflowAudit } from '@modules/commercial-workflow/evidence';
 import {
   DRAFT_EVENTS,
   type DraftGeneratedEvent,
@@ -116,6 +117,20 @@ export async function generateDrafts(
         },
         `Draft generated for ${platform}`,
       );
+      await recordCommercialWorkflowAudit({
+        action: 'draft_generated',
+        result: 'success',
+        humanUserId: requesterId,
+        targetObjectType: 'content_item',
+        targetObjectId: result.contentItemId,
+        sourceModule: 'ai-generation',
+        reason: `Generated ${platform} draft through configured provider adapter.`,
+        afterState: {
+          campaignRequestId: input.campaignRequestId,
+          platform,
+          versionNo: result.versionNo,
+        },
+      });
 
       const event: DraftGeneratedEvent = {
         contentItemId: result.contentItemId,
@@ -139,6 +154,16 @@ export async function generateDrafts(
         },
         `Draft generation failed for ${platform}: ${errorMsg}`,
       );
+      await recordCommercialWorkflowAudit({
+        action: 'draft_generation_failed',
+        result: 'failure',
+        humanUserId: requesterId,
+        targetObjectType: 'content_request',
+        targetObjectId: input.campaignRequestId,
+        sourceModule: 'ai-generation',
+        reason: errorMsg,
+        afterState: { platform },
+      });
 
       const event: DraftGenerationFailedEvent = {
         campaignRequestId: input.campaignRequestId,
@@ -216,6 +241,16 @@ export async function reviseDraft(
     },
     `Draft revised to version ${newVersionNo}`,
   );
+  await recordCommercialWorkflowAudit({
+    action: 'draft_revised',
+    result: 'success',
+    humanUserId: requesterId,
+    targetObjectType: 'content_item',
+    targetObjectId: input.contentItemId,
+    sourceModule: 'ai-generation',
+    reason: input.feedback,
+    afterState: { versionNo: newVersionNo },
+  });
 
   const event: DraftRevisedEvent = {
     contentItemId: input.contentItemId,
@@ -277,6 +312,16 @@ export async function saveEditedDraft(
     },
     `Human edited draft saved to version ${newVersionNo}`,
   );
+  await recordCommercialWorkflowAudit({
+    action: 'draft_human_edit_saved',
+    result: 'success',
+    humanUserId: requesterId,
+    targetObjectType: 'content_item',
+    targetObjectId: input.contentItemId,
+    sourceModule: 'ai-generation',
+    reason: input.editNote || 'Human edit saved',
+    afterState: { versionNo: newVersionNo },
+  });
 
   return {
     contentItemId: input.contentItemId,

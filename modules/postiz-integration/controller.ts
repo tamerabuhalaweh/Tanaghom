@@ -15,6 +15,7 @@ import {
 } from './types';
 import * as service from './service';
 import { buildPostizChannelGuidance, toSafePostizChannel } from './channel-contract';
+import { recordCommercialWorkflowAudit } from '../commercial-workflow/evidence';
 
 export const postizIntegrationRouter = Router();
 
@@ -564,6 +565,22 @@ postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Resp
         { actor: `user:${session.humanUserId}`, action: 'postiz_sandbox_schedule_blocked', object_type: 'system', object_id: undefined, result: 'blocked' },
         `Postiz sandbox schedule blocked: ${gate.reasons.join('; ')}`,
       );
+      await recordCommercialWorkflowAudit({
+        action: 'postiz_sandbox_schedule_blocked',
+        result: 'blocked',
+        humanUserId: session.humanUserId,
+        agentRepId: session.agentRepId,
+        targetObjectType: 'system',
+        targetObjectId: undefined,
+        sourceModule: 'postiz-integration',
+        reason: gate.reasons.join('; '),
+        policyMatched: 'external_execution_gate',
+        afterState: {
+          platform: input.platform,
+          scheduledAt: input.scheduledAt,
+          executionPerformed: false,
+        },
+      });
       res.status(403).json({
         status: 'blocked',
         reasons: gate.reasons,
@@ -591,6 +608,23 @@ postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Resp
       { actor: `user:${session.humanUserId}`, action: 'postiz_sandbox_schedule_executed', object_type: 'system', object_id: undefined, result: response.ok ? 'success' : 'failed' },
       `Postiz sandbox schedule API returned ${response.status}`,
     );
+    await recordCommercialWorkflowAudit({
+      action: 'postiz_sandbox_schedule_executed',
+      result: response.ok ? 'success' : 'failure',
+      humanUserId: session.humanUserId,
+      agentRepId: session.agentRepId,
+      targetObjectType: 'system',
+      targetObjectId: undefined,
+      sourceModule: 'postiz-integration',
+      reason: `Postiz sandbox API returned ${response.status}`,
+      policyMatched: 'external_execution_gate',
+      afterState: {
+        platform: input.platform,
+        scheduledAt: input.scheduledAt,
+        executionPerformed: true,
+        livePublishing: false,
+      },
+    });
 
     res.status(response.ok ? 200 : 502).json({
       status: response.ok ? 'sandbox_scheduled' : 'failed',
