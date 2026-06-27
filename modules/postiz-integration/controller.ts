@@ -15,7 +15,7 @@ import {
   type CreateExecutionRequestInput,
 } from './types';
 import * as service from './service';
-import { buildPostizChannelGuidance, buildPostizDiagnostics, toSafePostizChannel } from './channel-contract';
+import { buildPostizChannelGuidance, buildPostizDiagnostics, inspectPostizAuthorizationUrl, toSafePostizChannel } from './channel-contract';
 import { buildPostizCreatePostPayload, summarizePostizPayload } from './payload';
 import { recordCommercialWorkflowAudit } from '../commercial-workflow/evidence';
 
@@ -225,7 +225,7 @@ postizIntegrationRouter.get('/diagnostics', async (req: Request, res: Response, 
       ? req.query.refresh.trim()
       : undefined;
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
-    const gate = await sandboxSchedulingGate(config);
+    const gate = await sandboxSchedulingGate(session, {}, config);
 
     if (!config.baseUrl || !config.apiKey) {
       const diagnostics = buildPostizDiagnostics({
@@ -270,7 +270,7 @@ postizIntegrationRouter.get('/diagnostics', async (req: Request, res: Response, 
 
     const connectionBody = connectionResult.body as Record<string, unknown>;
     const oauthBody = oauthResult.body as Record<string, unknown>;
-    const authorizationUrl = oauthResult.ok && typeof oauthBody.url === 'string' ? oauthBody.url : null;
+    const authorization = inspectPostizAuthorizationUrl(oauthResult.ok ? oauthBody.url : null);
     const apiConnected = connectionResult.ok
       ? connectionBody.connected === true
       : false;
@@ -281,8 +281,12 @@ postizIntegrationRouter.get('/diagnostics', async (req: Request, res: Response, 
       channelCount: channelResult.channels.length,
       selectedIntegrationId: config.integrationId || null,
       oauthChecked: true,
-      oauthUrlReady: Boolean(authorizationUrl),
-      oauthFailureReason: oauthResult.ok ? null : safePostizError(oauthResult.body).message,
+      oauthUrlReady: Boolean(authorization.authorizationUrl),
+      oauthUrlHasClientId: authorization.hasClientId,
+      oauthProviderHost: authorization.host,
+      oauthFailureReason: oauthResult.ok
+        ? authorization.failureReason
+        : safePostizError(oauthResult.body).message,
       platform,
       sandboxSchedulingAllowed: gate.allowed,
     });
@@ -296,10 +300,15 @@ postizIntegrationRouter.get('/diagnostics', async (req: Request, res: Response, 
       authorization: {
         platform,
         refresh: Boolean(refresh),
-        urlReady: Boolean(authorizationUrl),
-        authorizationUrl,
+        urlReady: Boolean(authorization.authorizationUrl),
+        providerConfigurationReady: authorization.providerConfigurationReady,
+        clientIdStatus: authorization.hasClientId ? 'configured' : 'missing',
+        providerHost: authorization.host,
+        authorizationUrl: authorization.authorizationUrl,
         postizStatus: oauthResult.status || null,
-        error: oauthResult.ok ? null : safePostizError(oauthResult.body),
+        error: oauthResult.ok
+          ? authorization.failureReason ? { message: authorization.failureReason } : null
+          : safePostizError(oauthResult.body),
       },
       connection: {
         connected: apiConnected,
@@ -364,26 +373,41 @@ postizIntegrationRouter.post('/connect-channel', async (req: Request, res: Respo
     }
 
     const responseRecord = body as Record<string, unknown>;
-    const authorizationUrl = typeof responseRecord.url === 'string'
+    const rawAuthorizationUrl = typeof responseRecord.url === 'string'
       ? responseRecord.url
       : typeof responseRecord.authorizationUrl === 'string'
         ? responseRecord.authorizationUrl
         : typeof responseRecord.redirectUrl === 'string'
           ? responseRecord.redirectUrl
           : null;
+    const authorization = inspectPostizAuthorizationUrl(rawAuthorizationUrl);
 
     auditLog(
-      { actor: `user:${session.humanUserId}`, action: 'postiz_channel_connection_started', object_type: 'postiz_channel', object_id: input.platform, result: 'success' },
-      `Postiz channel connection URL requested for ${input.platform}`,
+      { actor: `user:${session.humanUserId}`, action: 'postiz_channel_connection_started', object_type: 'postiz_channel', object_id: input.platform, result: authorization.providerConfigurationReady ? 'success' : 'blocked' },
+      authorization.providerConfigurationReady
+        ? `Postiz channel connection URL requested for ${input.platform}`
+        : `Postiz channel connection blocked for ${input.platform}: ${authorization.failureReason}`,
     );
 
     res.json({
-      status: authorizationUrl ? 'authorization_url_ready' : 'postiz_response_received',
+      status: authorization.providerConfigurationReady
+        ? 'authorization_url_ready'
+        : authorization.authorizationUrl
+          ? 'requires_provider_setup'
+          : 'postiz_response_received',
       platform: input.platform,
-      authorizationUrl,
-      response: authorizationUrl ? undefined : body,
+      authorizationUrl: authorization.providerConfigurationReady ? authorization.authorizationUrl : null,
+      authorization: {
+        providerConfigurationReady: authorization.providerConfigurationReady,
+        clientIdStatus: authorization.hasClientId ? 'configured' : 'missing',
+        providerHost: authorization.host,
+        failureReason: authorization.failureReason,
+      },
+      response: authorization.providerConfigurationReady ? undefined : body,
       rawTokensReturned: false,
-      _label: authorizationUrl ? 'Open this URL to connect the social channel through Postiz' : 'Postiz response did not include a recognized authorization URL',
+      _label: authorization.providerConfigurationReady
+        ? 'Open this URL to connect the social channel through Postiz'
+        : authorization.failureReason || 'Postiz response did not include a recognized authorization URL',
     });
   } catch (err) {
     next(err);
@@ -626,6 +650,10 @@ const postizPayloadSchema = z.object({
   timezone: z.string().min(1).default('UTC'),
   integrationId: z.string().min(1).optional(),
   tags: z.array(z.string()).default([]),
+  approvalId: z.string().uuid().optional(),
+  capabilityResolutionId: z.string().uuid().optional(),
+  mcpMediationRequestId: z.string().uuid().optional(),
+  humanApproved: z.boolean().optional(),
 });
 
 const postizPackagePayloadSchema = z.object({
@@ -635,7 +663,18 @@ const postizPackagePayloadSchema = z.object({
   timezone: z.string().min(1).default('UTC'),
   integrationId: z.string().min(1).optional(),
   tags: z.array(z.string()).default([]),
+  approvalId: z.string().uuid().optional(),
+  capabilityResolutionId: z.string().uuid().optional(),
+  mcpMediationRequestId: z.string().uuid().optional(),
+  humanApproved: z.boolean().optional(),
 });
+
+type PostizSchedulingGovernanceInput = {
+  approvalId?: string;
+  capabilityResolutionId?: string;
+  mcpMediationRequestId?: string;
+  humanApproved?: boolean;
+};
 
 async function resolvePostizRuntimeConfig(tenantKey = 'default'): Promise<PostizRuntimeConfig> {
   const credential = await getActiveIntegrationCredential('postiz', 'api_key', tenantKey);
@@ -716,6 +755,10 @@ async function buildPackagePostizPayload(
       status: pkg.package_status,
       campaignId: pkg.campaign_id,
       contentItemId: pkg.content_item_id,
+      approvalId: pkg.approval_id,
+      capabilityResolutionId: pkg.capability_resolution_id,
+      mcpMediationRequestId: pkg.mcp_mediation_request_id,
+      saifDecisionRecordId: pkg.saif_decision_record_id,
       readinessScore: pkg.readiness_score,
       readinessSummary: pkg.readiness_summary,
     },
@@ -742,17 +785,135 @@ async function buildPackagePostizPayload(
   };
 }
 
-async function sandboxSchedulingGate(config?: PostizRuntimeConfig): Promise<{ allowed: boolean; reasons: string[] }> {
-  const runtimeConfig = config || await resolvePostizRuntimeConfig();
+function governanceFromPackage(
+  input: PostizSchedulingGovernanceInput,
+  packageContext: {
+    approvalId?: string | null;
+    capabilityResolutionId?: string | null;
+    mcpMediationRequestId?: string | null;
+  },
+): PostizSchedulingGovernanceInput {
+  const approvalId = input.approvalId || packageContext.approvalId || undefined;
+  return {
+    approvalId,
+    capabilityResolutionId: input.capabilityResolutionId || packageContext.capabilityResolutionId || undefined,
+    mcpMediationRequestId: input.mcpMediationRequestId || packageContext.mcpMediationRequestId || undefined,
+    humanApproved: input.humanApproved ?? Boolean(approvalId),
+  };
+}
+
+async function validatePostizSchedulingEvidence(input: {
+  session: ReturnType<typeof getSession>;
+  governance: PostizSchedulingGovernanceInput;
+  packageContext?: {
+    id: string;
+    campaignId: string | null;
+    contentItemId: string | null;
+  };
+}): Promise<string[]> {
   const reasons: string[] = [];
-  if (process.env.DEMO_MODE === 'true') reasons.push('DEMO_MODE=true blocks real sandbox scheduling');
-  if (process.env.EXTERNAL_EXECUTION_ENABLED !== 'true') reasons.push('EXTERNAL_EXECUTION_ENABLED is not true');
-  if (process.env.POSTIZ_SANDBOX_SCHEDULING_ENABLED !== 'true') reasons.push('POSTIZ_SANDBOX_SCHEDULING_ENABLED is not true');
-  if (process.env.POSTIZ_LIVE_ENABLED !== 'true') reasons.push('POSTIZ_LIVE_ENABLED is not true');
-  if (!runtimeConfig.baseUrl) reasons.push('Postiz base URL is missing');
-  if (!runtimeConfig.apiKey) reasons.push('Postiz API key is missing');
-  if (!runtimeConfig.integrationId) reasons.push('Postiz sandbox integration id is missing');
-  return { allowed: reasons.length === 0, reasons };
+  const { session, governance, packageContext } = input;
+
+  if (!governance.approvalId) {
+    reasons.push('Approval ID is required for Postiz sandbox scheduling');
+  } else {
+    const approval = await prisma.approval.findUnique({ where: { id: governance.approvalId } });
+    if (!approval) {
+      reasons.push('Approval record was not found');
+    } else {
+      if (approval.approval_status !== 'approved') reasons.push('Approval record is not approved');
+      if (approval.approver_user_id && approval.approver_user_id !== session.humanUserId && session.role !== 'admin' && session.role !== 'cco') {
+        reasons.push('Approval record belongs to another approver');
+      }
+      if (packageContext) {
+        const targetMatchesPackage =
+          approval.target_id === packageContext.id
+          || approval.target_id === packageContext.campaignId
+          || approval.target_id === packageContext.contentItemId;
+        if (!targetMatchesPackage) {
+          reasons.push('Approval record does not match this publishing package');
+        }
+      }
+    }
+  }
+
+  if (!governance.capabilityResolutionId) {
+    reasons.push('Capability resolution is required for Postiz sandbox scheduling');
+  } else {
+    const resolution = await prisma.capabilityResolution.findUnique({ where: { id: governance.capabilityResolutionId } });
+    if (!resolution) {
+      reasons.push('Capability resolution record was not found');
+    } else {
+      if (resolution.resolution_status !== 'resolved') reasons.push('Capability resolution is not resolved');
+      if (resolution.human_user_id !== session.humanUserId && session.role !== 'admin' && session.role !== 'cco') {
+        reasons.push('Capability resolution belongs to another user');
+      }
+    }
+  }
+
+  if (!governance.mcpMediationRequestId) {
+    reasons.push('MCP mediation request is required for Postiz sandbox scheduling');
+  } else {
+    const mediation = await prisma.mcpMediationRequest.findUnique({
+      where: { id: governance.mcpMediationRequestId },
+      include: { decisions: { orderBy: { decided_at: 'desc' }, take: 1 } },
+    });
+    if (!mediation) {
+      reasons.push('MCP mediation request was not found');
+    } else {
+      if (mediation.request_status !== 'approved') reasons.push('MCP mediation request is not approved');
+      if (mediation.requested_operation !== 'schedule' && mediation.requested_operation !== 'write' && mediation.requested_operation !== 'prepare_schedule') {
+        reasons.push('MCP mediation request is not for scheduling');
+      }
+      if (governance.approvalId && mediation.approval_id && mediation.approval_id !== governance.approvalId) {
+        reasons.push('MCP mediation request is not linked to the supplied approval');
+      }
+      if (governance.capabilityResolutionId && mediation.capability_resolution_id && mediation.capability_resolution_id !== governance.capabilityResolutionId) {
+        reasons.push('MCP mediation request is not linked to the supplied capability resolution');
+      }
+      const latestDecision = mediation.decisions[0];
+      if (!latestDecision || latestDecision.decision !== 'allow') {
+        reasons.push('MCP mediation does not have an allow decision');
+      }
+    }
+  }
+
+  return reasons;
+}
+
+async function sandboxSchedulingGate(
+  session: ReturnType<typeof getSession>,
+  governance: PostizSchedulingGovernanceInput,
+  config?: PostizRuntimeConfig,
+  packageContext?: { id: string; campaignId: string | null; contentItemId: string | null },
+): Promise<{ allowed: boolean; reasons: string[]; policy: ReturnType<typeof evaluateExternalExecution> }> {
+  const runtimeConfig = config || await resolvePostizRuntimeConfig();
+  const reasons = new Set<string>();
+  const policy = evaluateExternalExecution({
+    system: 'postiz',
+    action: 'schedule',
+    executionMode: 'sandbox',
+    approvalId: governance.approvalId,
+    capabilityResolutionId: governance.capabilityResolutionId,
+    mcpMediationRequestId: governance.mcpMediationRequestId,
+    humanApproved: governance.humanApproved === true,
+  });
+
+  for (const reason of policy.reasons) reasons.add(reason);
+  if (process.env.DEMO_MODE === 'true') reasons.add('DEMO_MODE=true blocks real sandbox scheduling');
+  if (process.env.POSTIZ_SANDBOX_SCHEDULING_ENABLED !== 'true') reasons.add('POSTIZ_SANDBOX_SCHEDULING_ENABLED is not true');
+  if (!runtimeConfig.baseUrl) reasons.add('Postiz base URL is missing');
+  if (!runtimeConfig.apiKey) reasons.add('Postiz API key is missing');
+  if (!runtimeConfig.integrationId) reasons.add('Postiz sandbox integration id is missing');
+
+  const evidenceReasons = await validatePostizSchedulingEvidence({
+    session,
+    governance,
+    packageContext,
+  });
+  for (const reason of evidenceReasons) reasons.add(reason);
+
+  return { allowed: reasons.size === 0, reasons: Array.from(reasons), policy };
 }
 
 postizIntegrationRouter.post('/schedule-payload', async (req: Request, res: Response, next: NextFunction) => {
@@ -776,7 +937,7 @@ postizIntegrationRouter.post('/schedule-payload', async (req: Request, res: Resp
       safety: {
         executionPerformed: false,
         livePublishing: false,
-        schedulingGate: await sandboxSchedulingGate(config),
+        schedulingGate: await sandboxSchedulingGate(session, input, config),
       },
       _label: 'Postiz-ready scheduling payload prepared - no external call performed',
     });
@@ -791,7 +952,12 @@ postizIntegrationRouter.post('/package-payload', async (req: Request, res: Respo
     const session = getSession(req);
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
     const packagePayload = await buildPackagePostizPayload(input, config);
-    const gate = await sandboxSchedulingGate(config);
+    const governance = governanceFromPackage(input, packagePayload.package);
+    const gate = await sandboxSchedulingGate(session, governance, config, {
+      id: packagePayload.package.id,
+      campaignId: packagePayload.package.campaignId,
+      contentItemId: packagePayload.package.contentItemId,
+    });
     res.json({
       status: 'prepared',
       endpoint: config.baseUrl ? `${config.baseUrl.replace(/\/$/, '')}${POSTIZ_PUBLIC_API_PATH}` : null,
@@ -819,7 +985,7 @@ postizIntegrationRouter.post('/sandbox-schedule', async (req: Request, res: Resp
       ...input,
       integrationId: input.integrationId || config.integrationId || undefined,
     });
-    const gate = await sandboxSchedulingGate(config);
+    const gate = await sandboxSchedulingGate(session, input, config);
 
     if (!gate.allowed) {
       auditLog(
@@ -910,7 +1076,12 @@ postizIntegrationRouter.post('/package-sandbox-schedule', async (req: Request, r
     const input = postizPackagePayloadSchema.parse(req.body);
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
     const packagePayload = await buildPackagePostizPayload(input, config);
-    const gate = await sandboxSchedulingGate(config);
+    const governance = governanceFromPackage(input, packagePayload.package);
+    const gate = await sandboxSchedulingGate(session, governance, config, {
+      id: packagePayload.package.id,
+      campaignId: packagePayload.package.campaignId,
+      contentItemId: packagePayload.package.contentItemId,
+    });
 
     if (!gate.allowed) {
       auditLog(

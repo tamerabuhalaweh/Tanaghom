@@ -9,6 +9,10 @@ Tanaghum must never store or display raw Postiz/provider tokens.
 
 ## Required Admin Steps
 
+0. For self-hosted Postiz, configure provider app credentials before starting OAuth.
+   - Instagram/Facebook require Meta/Facebook app credentials in the Postiz deployment.
+   - At minimum, the Postiz container must have a provider client/app ID and secret for the platform.
+   - If Tanaghum diagnostics reports `clientIdStatus: missing`, the Postiz OAuth URL is not usable yet.
 1. Open the Postiz workspace used for this tenant.
 2. Connect the social channel inside Postiz.
    - For Instagram/Facebook, complete the provider OAuth flow in the same Postiz organization that owns the API key.
@@ -34,7 +38,7 @@ Most common causes:
 
 - The API key belongs to a different Postiz organization than the one where the channel was connected.
 - The provider OAuth flow was started but not completed.
-- Provider app credentials or permissions are incomplete inside Postiz.
+- Provider app credentials or permissions are incomplete inside Postiz. For Instagram/Facebook, Tanaghum diagnostics will show this when Postiz returns an OAuth URL without a provider `client_id`.
 - The connected social account does not meet provider requirements.
 
 ## Sandbox Scheduling Gates
@@ -51,6 +55,9 @@ Actual sandbox scheduling requires all of the following:
 - `POSTIZ_SANDBOX_SCHEDULING_ENABLED=true`.
 - `POSTIZ_LIVE_ENABLED=true`.
 - Human-approved publishing package.
+- Approved capability resolution for the scheduling operation.
+- Approved MCP mediation request with an allow decision.
+- Explicit M5 write-execution authorization for the sandbox scheduling action.
 
 `POSTIZ_LIVE_ENABLED` currently means "allow Postiz API scheduling execution." It does not mean uncontrolled production publishing. The product path must still use sandbox/test channels unless production authorization is explicitly approved.
 
@@ -60,7 +67,7 @@ Actual sandbox scheduling requires all of the following:
 - Do not schedule to customer production channels without explicit authorization.
 - Do not expose raw Postiz API keys or provider OAuth tokens to the frontend.
 - Do not bypass Tanaghum approval or audit records.
-- Do not enable M5 write execution for this workflow.
+- Do not enable M5 write execution for this workflow until the sandbox channel, approval, capability resolution, MCP mediation, and operator authorization are all complete.
 
 ## Useful Postiz Documentation
 

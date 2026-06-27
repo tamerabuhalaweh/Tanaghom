@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPostizChannelGuidance, buildPostizDiagnostics, toSafePostizChannel } from '../channel-contract';
+import { buildPostizChannelGuidance, buildPostizDiagnostics, inspectPostizAuthorizationUrl, toSafePostizChannel } from '../channel-contract';
 
 describe('Postiz channel contract', () => {
   it('returns credential guidance before channel listing can run', () => {
@@ -101,6 +101,49 @@ describe('Postiz channel contract', () => {
       status: 'blocked',
       action: 'Verify provider app credentials in the Postiz deployment.',
     });
+  });
+
+  it('reports provider setup when Postiz OAuth URL is missing client id', () => {
+    const diagnostics = buildPostizDiagnostics({
+      hasBaseUrl: true,
+      hasApiKey: true,
+      apiConnected: true,
+      channelCount: 0,
+      selectedIntegrationId: null,
+      oauthChecked: true,
+      oauthUrlReady: true,
+      oauthUrlHasClientId: false,
+      oauthProviderHost: 'www.facebook.com',
+      platform: 'instagram',
+      sandboxSchedulingAllowed: false,
+    });
+
+    expect(diagnostics.status).toBe('requires_provider_setup');
+    expect(diagnostics.summary).toContain('missing the provider client ID');
+    expect(diagnostics.nextActions).toContain('For Instagram/Facebook, set the Meta/Facebook app ID and app secret in the Postiz environment.');
+    expect(diagnostics.checks.find(check => check.id === 'postiz_oauth_url')).toMatchObject({
+      status: 'blocked',
+      action: 'Verify provider app credentials in the Postiz deployment.',
+    });
+  });
+
+  it('inspects Postiz OAuth URL provider readiness without leaking secrets', () => {
+    const ready = inspectPostizAuthorizationUrl('https://www.facebook.com/v20.0/dialog/oauth?client_id=meta-app-id&state=abc');
+    expect(ready).toMatchObject({
+      host: 'www.facebook.com',
+      hasClientId: true,
+      providerConfigurationReady: true,
+      failureReason: null,
+    });
+
+    const missingClientId = inspectPostizAuthorizationUrl('https://www.facebook.com/v20.0/dialog/oauth?state=abc');
+    expect(missingClientId).toMatchObject({
+      host: 'www.facebook.com',
+      hasClientId: false,
+      providerConfigurationReady: false,
+    });
+    expect(missingClientId.failureReason).toContain('provider client_id');
+    expect(JSON.stringify(missingClientId).toLowerCase()).not.toContain('secret');
   });
 
   it('reports ready only when a connected channel is selected', () => {
