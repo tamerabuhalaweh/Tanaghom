@@ -1,0 +1,85 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ClaudeLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
+
+const ORIGINAL_ENV = { ...process.env };
+
+describe('LLM provider adapter', () => {
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  it('keeps mock as the default provider', async () => {
+    delete process.env.LLM_PROVIDER;
+
+    const provider = createLLMProvider();
+    const response = await provider.generate('Write a post');
+
+    expect(provider).toBeInstanceOf(MockLLMProvider);
+    expect(response.provider).toBe('mock');
+  });
+
+  it('calls OpenAI Responses API when configured', async () => {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: 'OpenAI live generated draft',
+        usage: { input_tokens: 12, output_tokens: 7 },
+      }),
+    } as Response);
+
+    const provider = new OpenAILLMProvider();
+    const response = await provider.generate('Campaign brief', { model: 'gpt-test', timeoutMs: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/responses',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-openai-key' }),
+      }),
+    );
+    expect(response.text).toBe('OpenAI live generated draft');
+    expect(response.provider).toBe('openai');
+    expect(response.usage).toEqual({ promptTokens: 12, completionTokens: 7 });
+  });
+
+  it('calls Claude Messages API when configured', async () => {
+    process.env.CLAUDE_API_KEY = 'test-claude-key';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: 'text', text: 'Claude live generated draft' }],
+        usage: { input_tokens: 9, output_tokens: 6 },
+      }),
+    } as Response);
+
+    const provider = new ClaudeLLMProvider();
+    const response = await provider.generate('Campaign brief', { model: 'claude-test', timeoutMs: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.anthropic.com/v1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-api-key': 'test-claude-key' }),
+      }),
+    );
+    expect(response.text).toBe('Claude live generated draft');
+    expect(response.provider).toBe('claude');
+    expect(response.usage).toEqual({ promptTokens: 9, completionTokens: 6 });
+  });
+
+  it('does not call external providers when credentials are missing', async () => {
+    delete process.env.OPENAI_API_KEY;
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    await expect(new OpenAILLMProvider().generate('Brief')).rejects.toThrow('missing OPENAI_API_KEY');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

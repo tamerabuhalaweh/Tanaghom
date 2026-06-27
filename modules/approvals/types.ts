@@ -84,6 +84,50 @@ export interface ApprovalSummary {
   updatedAt: Date;
 }
 
+export interface ApprovalDecisionPacket {
+  approval: ApprovalSummary;
+  campaign: {
+    id: string;
+    topic: string;
+    objective: string;
+    audience: string | null;
+    platforms: string[];
+    cta: string | null;
+    riskCategory: string;
+    status: string;
+  } | null;
+  contentItem: {
+    id: string;
+    platform: string;
+    contentType: string;
+    draftText: string;
+    riskScore: number;
+    riskReason: string | null;
+    reachScore: number;
+    reachBreakdown: unknown;
+    status: string;
+  } | null;
+  latestDraftVersion: {
+    id: string;
+    versionNo: number;
+    text: string;
+    modelUsed: string | null;
+    createdAt: Date;
+  } | null;
+  publishingPackages: Array<{
+    id: string;
+    status: string;
+    readinessScore: number | null;
+    readinessSummary: string | null;
+    createdAt: Date;
+  }>;
+  safety: {
+    humanApprovalRequired: true;
+    externalExecutionBlocked: true;
+    m5Disabled: true;
+  };
+}
+
 export interface RoutingRule {
   riskCategory: RiskCategory;
   targetType: ApprovalTargetType;

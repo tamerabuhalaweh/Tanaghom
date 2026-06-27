@@ -4,7 +4,7 @@ import * as repo from './repository';
 import { validateCriticalDimensions } from '../saif-decisions/repository';
 import type {
   CreateApprovalInput, ApprovalDecisionInput, EscalationInput, CancellationInput,
-  ApprovalSummary,
+  ApprovalDecisionPacket, ApprovalSummary,
 } from './types';
 
 const PERMISSIONS: Record<string, string[]> = {
@@ -71,6 +71,11 @@ export async function submitForApproval(requesterRole: string, input: CreateAppr
 export async function getApproval(requesterRole: string, id: string): Promise<ApprovalSummary> {
   checkPermission(requesterRole, 'approvals:read');
   return repo.getApprovalById(id);
+}
+
+export async function getApprovalDecisionPacket(requesterRole: string, id: string): Promise<ApprovalDecisionPacket> {
+  checkPermission(requesterRole, 'approvals:read');
+  return repo.getApprovalDecisionPacket(id);
 }
 
 export async function listApprovals(requesterRole: string, filters?: {

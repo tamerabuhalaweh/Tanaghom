@@ -49,13 +49,14 @@ analyticsRouter.get('/demo', async (req: Request, res: Response, next: NextFunct
   try {
     getPayload(req);
     res.json({
-      impressions: 12500,
-      reach: 8900,
-      engagementRate: '3.56%',
-      bestPlatform: 'LinkedIn',
-      topContent: 'Educational posts with images',
-      bestTime: 'Tuesday 10:00 AM',
-      _label: 'Demo analytics data — mock provider',
+      impressions: 0,
+      reach: 0,
+      engagementRate: null,
+      bestPlatform: null,
+      topContent: null,
+      bestTime: null,
+      sourceStatus: 'requires_official_connector',
+      _label: 'No analytics data is returned until official read-only analytics connectors provide snapshots',
     });
   } catch (err) {
     next(err);

@@ -1,196 +1,599 @@
-import { useState, useEffect } from 'react';
-import { campaignsApi, approvalsApi, algoApi, aiGenerationApi } from '../api';
+import { useEffect, useState } from 'react';
+import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, campaignsApi, postizApi, publishingPackageApi, usersApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
-import { ReadinessGauge, FlowTimeline, PlatformPreviewCard, RecommendationCard, Badge } from '../components/ExecutiveUI';
+import {
+  DetailGrid,
+  EmptyProductState,
+  Field,
+  Notice,
+  PlatformPill,
+  ProgressBar,
+  PrimaryAction,
+  ProductCard,
+  ProductPage,
+  ProductStatus,
+  ReadableQueue,
+  SecondaryAction,
+  WorkflowRail,
+} from '../components/ProductUI';
+
+type RecordMap = Record<string, unknown>;
+
+function text(value: unknown, fallback = 'Not specified'): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function list(value: unknown): RecordMap[] {
+  return Array.isArray(value) ? value as RecordMap[] : [];
+}
+
+function titleCase(value: string): string {
+  if (value === 'x') return 'X / Twitter';
+  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+}
 
 export default function CampaignWorkspace() {
-  const { token } = useAuth();
-  const [campaigns, setCampaigns] = useState<Record<string, unknown>[]>([]);
-  const [selected, setSelected] = useState<Record<string, unknown> | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, unknown>[]>([]);
-  const [selectedDraft, setSelectedDraft] = useState<Record<string, unknown> | null>(null);
-  const [score, setScore] = useState<Record<string, unknown> | null>(null);
+  const { token, user } = useAuth();
+  const [campaigns, setCampaigns] = useState<RecordMap[]>([]);
+  const [departments, setDepartments] = useState<RecordMap[]>([]);
+  const [selected, setSelected] = useState<RecordMap | null>(null);
+  const [drafts, setDrafts] = useState<RecordMap[]>([]);
+  const [draftTextById, setDraftTextById] = useState<Record<string, string>>({});
+  const [selectedDraftId, setSelectedDraftId] = useState('');
+  const [score, setScore] = useState<RecordMap | null>(null);
+  const [approval, setApproval] = useState<RecordMap | null>(null);
+  const [publishingPackage, setPublishingPackage] = useState<RecordMap | null>(null);
+  const [postizPayload, setPostizPayload] = useState<RecordMap | null>(null);
+  const [postizScheduleResult, setPostizScheduleResult] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
-  const [step, setStep] = useState<'select' | 'generate' | 'score' | 'approve'>('select');
+  const [providerReady, setProviderReady] = useState(false);
+  const [providerLabel, setProviderLabel] = useState('Requires LLM provider');
+  const [showCreate, setShowCreate] = useState(false);
+  const [campaignForm, setCampaignForm] = useState({
+    topic: '',
+    objective: '',
+    audience: '',
+    targetPlatforms: ['linkedin', 'instagram', 'x'],
+    cta: '',
+    mediaRequirements: '',
+    ownerDepartmentId: '',
+    contentType: 'campaign',
+    riskCategory: 'medium',
+  });
+
+  const selectedDraft = drafts.find(draft => String(draft.contentItemId) === selectedDraftId) || drafts[0] || null;
 
   useEffect(() => {
-    if (token) campaignsApi.list(token).then(d => setCampaigns(d as Record<string, unknown>[])).catch(console.error);
+    if (!token) return;
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const [data, departmentData] = await Promise.all([
+          campaignsApi.list(token as string),
+          usersApi.departments(token as string),
+        ]);
+        if (cancelled) return;
+        const campaignList = list(data);
+        const departmentList = list(departmentData);
+        setCampaigns(campaignList);
+        setDepartments(departmentList);
+        setSelected(current => current || campaignList[0] || null);
+        setCampaignForm(current => ({
+          ...current,
+          ownerDepartmentId: current.ownerDepartmentId || String(departmentList[0]?.id || ''),
+        }));
+        try {
+          const active = await aiProviderApi.active(token as string) as RecordMap;
+          setProviderReady(active.apiKeyStatus === 'configured');
+          setProviderLabel(`${text(active.name, 'LLM provider')} / ${text(active.model, 'model configured')}`);
+        } catch (providerError) {
+          setProviderReady(false);
+          setProviderLabel(providerError instanceof Error ? providerError.message : 'Configure OpenAI or Claude before draft generation');
+        }
+      } catch (error) {
+        if (!cancelled) setMessage(`Campaigns failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
-  const selectCampaign = async (id: string) => {
-    setLoading('campaign');
-    try {
-      const c = await campaignsApi.get(id, token!);
-      setSelected(c as Record<string, unknown>);
-      setDrafts([]); setSelectedDraft(null); setScore(null); setMessage(''); setStep('generate');
-    } catch (err) { console.error(err); }
-    setLoading('');
-  };
+  function selectCampaign(campaign: RecordMap) {
+    setSelected(campaign);
+    setDrafts([]);
+    setDraftTextById({});
+    setSelectedDraftId('');
+    setScore(null);
+    setApproval(null);
+    setPublishingPackage(null);
+    setPostizPayload(null);
+    setPostizScheduleResult(null);
+    setMessage('Campaign selected.');
+  }
 
-  const generateDraft = async () => {
-    if (!selected) return;
-    setLoading('draft'); setMessage('');
+  async function createCampaign() {
+    if (!token) return;
+    setLoading('create-campaign');
+    setMessage('');
     try {
-      const result = await aiGenerationApi.generate({ campaignRequestId: selected.id, platforms: ['linkedin', 'instagram'] }, token!);
-      const draftResults = Array.isArray(result) ? result as Record<string, unknown>[] : [result as Record<string, unknown>];
-      setDrafts(draftResults); setSelectedDraft(draftResults[0] || null);
-      setMessage('Draft generated'); setStep('score');
-    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
-    setLoading('');
-  };
+      const created = await campaignsApi.create({
+        ...campaignForm,
+        targetPlatforms: campaignForm.targetPlatforms,
+      }, token) as RecordMap;
+      setCampaigns(current => [created, ...current]);
+      selectCampaign(created);
+      setShowCreate(false);
+      setMessage('Campaign created and selected. Next step: generate platform drafts.');
+    } catch (error) {
+      setMessage(`Campaign creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
 
-  const evaluateReach = async () => {
-    if (!selectedDraft) return;
-    setLoading('score'); setMessage('');
+  async function generateDrafts() {
+    if (!selected || !token || !providerReady) return;
+    setLoading('drafts');
+    setMessage('');
     try {
+      const result = await aiGenerationApi.generate({ campaignRequestId: selected.id, platforms: ['linkedin', 'instagram', 'x'] }, token);
+      const generated = Array.isArray(result) ? result as RecordMap[] : [result as RecordMap];
+      setDrafts(generated);
+      setDraftTextById(Object.fromEntries(generated.map(draft => [String(draft.contentItemId), text(draft.draftText, '')])));
+      setSelectedDraftId(String(generated[0]?.contentItemId || ''));
+      setScore(null);
+      setApproval(null);
+      setPublishingPackage(null);
+      setPostizPayload(null);
+      setPostizScheduleResult(null);
+      setMessage('Platform drafts are ready.');
+    } catch (error) {
+      setMessage(`Draft generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function saveEditedDraft() {
+    if (!selectedDraft || !token) return;
+    const draftId = String(selectedDraft.contentItemId);
+    const draftText = draftTextById[draftId] || text(selectedDraft.draftText);
+    setLoading('save-edit');
+    setMessage('');
+    try {
+      const saved = await aiGenerationApi.saveEdit({
+        contentItemId: draftId,
+        draftText,
+        editNote: 'Saved from Campaign Workspace',
+      }, token) as RecordMap;
+      setDrafts(current => current.map(draft => (
+        String(draft.contentItemId) === draftId ? { ...draft, ...saved } : draft
+      )));
+      setDraftTextById(current => ({ ...current, [draftId]: text(saved.draftText, draftText) }));
+      setMessage(`Edited draft saved as version ${text(saved.versionNo, 'latest')}.`);
+    } catch (error) {
+      setMessage(`Draft save failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function scoreDraft() {
+    if (!selectedDraft || !token) return;
+    setLoading('score');
+    setMessage('');
+    try {
+      const draftId = String(selectedDraft.contentItemId);
       const result = await algoApi.score({
-        contentItemId: selectedDraft.contentItemId as string,
-        platform: (selectedDraft.platform as string) || 'linkedin',
-        draftText: (selectedDraft.draftText as string) || 'Demo content',
-      }, token!);
-      setScore(result as Record<string, unknown>);
-      setMessage('Score calculated'); setStep('approve');
-    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
-    setLoading('');
-  };
+        contentItemId: selectedDraft.contentItemId,
+        platform: selectedDraft.platform,
+        draftText: draftTextById[draftId] || text(selectedDraft.draftText, 'Prepared social content'),
+        objective: selected?.objective,
+        audience: selected?.audience,
+        riskCategory: selected?.riskCategory,
+      }, token);
+      setScore(result as RecordMap);
+      setMessage('Readiness score is ready.');
+    } catch (error) {
+      setMessage(`Scoring failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
 
-  const submitForApproval = async () => {
-    if (!selected) return;
+  async function submitForApproval() {
+    if (!selectedDraft || !token) return;
     setLoading('approval');
+    setMessage('');
     try {
-      await approvalsApi.submit({ targetId: selected.id as string, targetType: 'campaign', riskCategory: 'medium' }, token!);
-      setMessage('Submitted for approval — human decision required');
-    } catch (err) { setMessage(`Failed: ${err instanceof Error ? err.message : 'Unknown'}`); }
-    setLoading('');
-  };
+      const result = await approvalsApi.submit({
+        targetId: selectedDraft.contentItemId,
+        targetType: 'content_item',
+        riskCategory: selected?.riskCategory || 'medium',
+        approvalType: 'brand_review',
+        requiredDepartment: 'Commercial',
+        requiredRole: 'reviewer',
+        comment: 'Review selected social draft before publishing preparation.',
+      }, token);
+      setApproval(result as RecordMap);
+      setMessage('Approval package created.');
+    } catch (error) {
+      setMessage(`Approval submission failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
 
-  const scoreValue = score?.totalScore as number || 0;
+  async function createPublishingPackage() {
+    if (!selected || !token) return;
+    setLoading('publishing');
+    setMessage('');
+    try {
+      const result = await publishingPackageApi.create({
+        campaignId: selected.id,
+        draftId: selectedDraft?.contentItemId,
+        approvalId: approval?.id,
+        platforms: ['linkedin', 'instagram', 'x'],
+      }, token);
+      setPublishingPackage(result as RecordMap);
+      setPostizScheduleResult(null);
+      setMessage('Publishing package prepared.');
+    } catch (error) {
+      setMessage(`Publishing preparation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function preparePostizPayload() {
+    if (!selectedDraft || !token) return;
+    setLoading('postiz');
+    setMessage('');
+    try {
+      const result = await postizApi.schedulePayload({
+        platform: text(selectedDraft.platform, 'linkedin'),
+        content: draftTextById[String(selectedDraft.contentItemId)] || text(selectedDraft.draftText),
+        scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        timezone: 'Asia/Amman',
+        tags: ['commercial-social'],
+      }, token);
+      setPostizPayload(result as RecordMap);
+      setPostizScheduleResult(null);
+      setMessage('Postiz payload preview is ready.');
+    } catch (error) {
+      setMessage(`Postiz payload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function attemptPostizSandboxSchedule() {
+    if (!selectedDraft || !token) return;
+    setLoading('postiz-sandbox');
+    setMessage('');
+    try {
+      const result = await postizApi.sandboxSchedule({
+        platform: text(selectedDraft.platform, 'linkedin'),
+        content: draftTextById[String(selectedDraft.contentItemId)] || text(selectedDraft.draftText),
+        scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        timezone: 'Asia/Amman',
+        tags: ['commercial-social'],
+      }, token);
+      setPostizScheduleResult(result as RecordMap);
+      setMessage('Postiz sandbox scheduling request completed.');
+    } catch (error) {
+      setPostizScheduleResult({
+        status: 'blocked',
+        reasons: [error instanceof Error ? error.message : 'Postiz sandbox scheduling is blocked'],
+      });
+      setMessage(`Postiz sandbox scheduling blocked: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  const scoreValue = typeof score?.totalScore === 'number' ? score.totalScore : 0;
+  const packagePlatforms = list(publishingPackage?.platforms);
+  const currentUserId = text((user as RecordMap | null)?.id, '');
+  const currentRole = text((user as RecordMap | null)?.role, 'viewer');
+  const canCreateCampaign = ['admin', 'cco', 'department_head', 'specialist'].includes(currentRole);
+  const createdByCurrentUser = selected ? text(selected.requesterId, '') === currentUserId : false;
+  const pendingWork = [
+    !selected ? 'Create or select a campaign brief.' : '',
+    selected && !providerReady ? 'Configure OpenAI or Claude before AI generation.' : '',
+    selected && providerReady && !drafts.length ? 'Generate LinkedIn, Instagram, and X drafts.' : '',
+    drafts.length && !score ? 'Score the selected saved draft.' : '',
+    score && !approval ? 'Send the selected draft for approval.' : '',
+    approval?.approvalStatus === 'pending' ? 'Reviewer decision is required.' : '',
+    approval?.approvalStatus === 'approved' && !publishingPackage ? 'Prepare the publishing package.' : '',
+    publishingPackage && !postizPayload ? 'Preview the Postiz-ready payload.' : '',
+  ].filter(Boolean);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Campaign Workspace</h1>
-          <p className="text-gray-500 text-sm mt-0.5">AI-powered social content creation</p>
+    <ProductPage
+      eyebrow="Campaign operations"
+      title="Campaign workspace"
+      subtitle="Select a campaign, prepare platform drafts, score the selected post, capture human approval, and prepare a Postiz-ready publishing package."
+      action={<ProductStatus tone={selected ? 'good' : 'warn'}>{selected ? 'Campaign Active' : 'Select Campaign'}</ProductStatus>}
+    >
+      <ProductCard title="What this workspace does" subtitle="Operational path for one Commercial/Social campaign.">
+        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+          <ReadableQueue items={[
+            { title: 'Create campaign brief', meta: 'Marketing or social manager defines audience, objective, platforms, CTA, and risk.', status: selected ? 'Available' : 'Required', tone: selected ? 'good' : 'warn' },
+            { title: 'Generate and edit drafts', meta: 'LLM creates platform-specific copy. Human edits are saved as real draft versions.', status: providerReady ? 'Ready' : 'Needs Provider', tone: providerReady ? 'good' : 'warn' },
+            { title: 'Score and approve', meta: 'Readiness score and human approval decide whether publishing preparation is allowed.', status: score ? 'Scored' : 'Waiting', tone: score ? 'good' : 'default' },
+            { title: 'Prepare Postiz payload', meta: 'Approved content becomes a Postiz-ready payload. Scheduling remains blocked unless authorized.', status: publishingPackage ? 'Package Ready' : 'Waiting', tone: publishingPackage ? 'good' : 'default' },
+          ]} />
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <div className="text-sm font-semibold text-neutral-950">Next required action</div>
+            <div className="mt-3 space-y-2">
+              {pendingWork.length ? pendingWork.slice(0, 3).map(item => (
+                <div key={item} className="rounded-md bg-white px-3 py-2 text-sm text-neutral-700">{item}</div>
+              )) : (
+                <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">This campaign path is ready for review.</div>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="mock">Mock LLM</Badge>
-          <Badge variant="info">Controlled Demo</Badge>
-        </div>
-      </div>
+      </ProductCard>
 
-      {/* Progress */}
-      <FlowTimeline steps={[
-        { label: 'Select', status: step === 'select' ? 'active' : 'done' },
-        { label: 'Generate', status: step === 'generate' ? 'active' : step === 'select' ? 'pending' : 'done', badge: 'Mock LLM' },
-        { label: 'Score', status: step === 'score' ? 'active' : ['select', 'generate'].includes(step) ? 'pending' : 'done' },
-        { label: 'Approve', status: step === 'approve' ? 'active' : 'pending' },
+      <WorkflowRail steps={[
+        { label: 'Brief', state: selected ? 'done' : 'active' },
+        { label: 'Drafts', state: drafts.length ? 'done' : selected ? 'active' : 'waiting' },
+        { label: 'Optimize', state: score ? 'done' : drafts.length ? 'active' : 'waiting' },
+        { label: 'Approval', state: approval ? 'done' : score ? 'active' : 'waiting' },
+        { label: 'Publishing', state: publishingPackage ? 'done' : approval ? 'active' : 'waiting' },
+        { label: 'Postiz Payload', state: postizPayload ? 'done' : publishingPackage ? 'active' : 'waiting' },
+        { label: 'Leads', state: 'waiting' },
+        { label: 'Evidence', state: approval || publishingPackage ? 'done' : 'waiting' },
       ]} />
 
-      {message && <div className={`border rounded-lg px-4 py-2 text-sm ${message.includes('Failed') ? 'bg-red-900/20 border-red-800 text-red-400' : 'bg-green-900/20 border-green-800 text-green-400'}`}>{message}</div>}
+      {message && (
+        <Notice tone={message.includes('failed') ? 'danger' : 'good'}>{message}</Notice>
+      )}
 
-      <div className="grid grid-cols-3 gap-6">
-        {/* Campaign List */}
-        <div className="space-y-3">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Demo Campaigns</h2>
-          {campaigns.map(c => (
-            <button key={c.id as string} onClick={() => selectCampaign(c.id as string)}
-              className={`w-full text-left p-4 rounded-xl border transition-all ${selected?.id === c.id ? 'bg-blue-900/20 border-blue-500/50' : 'bg-gray-900 border-gray-800 hover:border-gray-700'}`}>
-              <div className="font-medium text-white text-sm">{c.topic as string}</div>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge variant={c.status === 'approved' ? 'success' : 'warning'}>{c.status as string}</Badge>
-                <Badge variant={c.riskCategory === 'high' ? 'danger' : c.riskCategory === 'medium' ? 'warning' : 'success'}>{c.riskCategory as string}</Badge>
-              </div>
-            </button>
-          ))}
-        </div>
+      {!providerReady && (
+        <Notice tone="warn">
+          Real draft generation is blocked until this user configures OpenAI or Claude. {providerLabel}{' '}
+          <a href="/ai-settings" className="font-semibold underline">Open AI Provider Settings</a>
+        </Notice>
+      )}
 
-        {/* Detail & Actions */}
-        <div className="col-span-2 space-y-4">
-          {!selected ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-500">Select a campaign to begin</div>
-          ) : (
-            <>
-              {/* Campaign Overview */}
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3">{selected.topic as string}</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-gray-500">Objective:</span> <span className="text-gray-300">{selected.objective as string}</span></div>
-                  <div><span className="text-gray-500">Audience:</span> <span className="text-gray-300">{selected.audience as string}</span></div>
-                  <div><span className="text-gray-500">Channel:</span> <span className="text-gray-300">{selected.channel as string}</span></div>
-                  <div><span className="text-gray-500">Platforms:</span> <span className="text-gray-300">{(selected.targetPlatforms as string[])?.join(', ')}</span></div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button onClick={generateDraft} disabled={loading === 'draft'}
-                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-all">
-                  {loading === 'draft' ? 'Generating...' : 'Generate AI Draft'}
-                </button>
-                <button onClick={evaluateReach} disabled={!selectedDraft || loading === 'score'}
-                  className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm transition-all">
-                  {loading === 'score' ? 'Scoring...' : 'Evaluate Reach'}
-                </button>
-                <button onClick={submitForApproval} disabled={loading === 'approval'}
-                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium text-sm transition-all">
-                  {loading === 'approval' ? 'Submitting...' : 'Submit for Approval'}
-                </button>
-              </div>
-
-              {/* Platform Previews */}
-              {drafts.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">AI-Generated Drafts</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {drafts.map((d, i) => (
-                      <div key={i} onClick={() => setSelectedDraft(d)} className={`cursor-pointer rounded-xl transition-all ${selectedDraft === d ? 'ring-2 ring-blue-500' : ''}`}>
-                        <PlatformPreviewCard
-                          platform={(d.platform as string) || 'linkedin'}
-                          content={(d.draftText as string) || 'AI-generated content'}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Reach Score */}
-              {score && (
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Reach Readiness Score</h3>
-                    <Badge variant="mock">Deterministic Scoring</Badge>
-                  </div>
-                  <div className="flex items-center gap-8">
-                    <div className="relative">
-                      <ReadinessGauge value={scoreValue} label="Score" />
-                    </div>
-                    <div className="flex-1 grid grid-cols-2 gap-3">
-                      <RecommendationCard title="Best Platform" value={(selectedDraft?.platform as string) || 'LinkedIn'} confidence={85} />
-                      <RecommendationCard title="Best Time" value="Tuesday 10:00 AM" confidence={78} />
-                      <RecommendationCard title="Format" value="Educational post with image" confidence={82} />
-                      <RecommendationCard title="Band" value={scoreValue >= 75 ? 'Approve' : scoreValue >= 60 ? 'Optimize' : 'Revise'} />
-                    </div>
-                  </div>
-                  {score.components ? (
-                    <div className="grid grid-cols-3 gap-2 mt-4">
-                      {(score.components as { component: string; score: number }[]).map((c, i) => (
-                        <div key={i} className="bg-gray-800/50 rounded p-2 flex justify-between text-sm">
-                          <span className="text-gray-400 capitalize">{c.component}</span>
-                          <span className="text-white font-medium">{String(c.score)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </>
+      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <ProductCard
+          title="Campaign Queue"
+          subtitle="Campaigns created by your team. Create a campaign here or choose one to operate."
+          action={<PrimaryAction onClick={() => setShowCreate(current => !current)} disabled={!canCreateCampaign}>{showCreate ? 'Close Builder' : 'New Campaign'}</PrimaryAction>}
+        >
+          {!canCreateCampaign && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              Your current role is {titleCase(currentRole)}. You can review campaign work, but campaign creation is limited to Admin, CCO, Department Head, and Specialist roles.
+            </div>
           )}
+          {showCreate && (
+            <div className="mb-5 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+              <Field label="Campaign Topic">
+                <input value={campaignForm.topic} onChange={event => setCampaignForm(current => ({ ...current, topic: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="e.g. Ramadan social intelligence launch" />
+              </Field>
+              <Field label="Business Objective">
+                <textarea value={campaignForm.objective} onChange={event => setCampaignForm(current => ({ ...current, objective: event.target.value }))} className="min-h-20 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="What business outcome should this campaign create?" />
+              </Field>
+              <Field label="Target Audience">
+                <textarea value={campaignForm.audience} onChange={event => setCampaignForm(current => ({ ...current, audience: event.target.value }))} className="min-h-16 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="Who is this campaign for?" />
+              </Field>
+              <Field label="Call to Action">
+                <input value={campaignForm.cta} onChange={event => setCampaignForm(current => ({ ...current, cta: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" placeholder="e.g. Book a consultation" />
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Owner Department">
+                  <select value={campaignForm.ownerDepartmentId} onChange={event => setCampaignForm(current => ({ ...current, ownerDepartmentId: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950">
+                    {departments.map(department => <option key={String(department.id)} value={String(department.id)}>{text(department.name)}</option>)}
+                  </select>
+                </Field>
+                <Field label="Risk">
+                  <select value={campaignForm.riskCategory} onChange={event => setCampaignForm(current => ({ ...current, riskCategory: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Platforms">
+                <div className="flex flex-wrap gap-2">
+                  {['linkedin', 'instagram', 'x', 'facebook', 'tiktok'].map(platform => {
+                    const active = campaignForm.targetPlatforms.includes(platform);
+                    return (
+                      <button key={platform} type="button" onClick={() => setCampaignForm(current => ({
+                        ...current,
+                        targetPlatforms: active
+                          ? current.targetPlatforms.length === 1 ? current.targetPlatforms : current.targetPlatforms.filter(item => item !== platform)
+                          : [...current.targetPlatforms, platform],
+                      }))}>
+                        <PlatformPill active={active}>{titleCase(platform)}</PlatformPill>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+              <PrimaryAction
+                onClick={createCampaign}
+                disabled={loading === 'create-campaign' || !campaignForm.topic.trim() || !campaignForm.objective.trim() || !campaignForm.audience.trim() || !campaignForm.ownerDepartmentId}
+              >
+                {loading === 'create-campaign' ? 'Creating...' : 'Create Campaign'}
+              </PrimaryAction>
+            </div>
+          )}
+          <div className="space-y-3">
+            {campaigns.map(campaign => (
+              <button
+                key={String(campaign.id)}
+                type="button"
+                onClick={() => selectCampaign(campaign)}
+                className={`w-full rounded-lg border p-4 text-left transition ${selected?.id === campaign.id ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'}`}
+              >
+                <div className="line-clamp-3 font-semibold">{text(campaign.topic)}</div>
+                <div className={`mt-2 text-sm ${selected?.id === campaign.id ? 'text-white/60' : 'text-neutral-500'}`}>
+                  {titleCase(text(campaign.status, 'idea'))} / {titleCase(text(campaign.riskCategory, 'medium'))} risk
+                </div>
+                <div className={`mt-2 text-xs ${selected?.id === campaign.id ? 'text-white/45' : 'text-neutral-400'}`}>
+                  {text(campaign.requesterId) === currentUserId ? 'Created by you' : `Created by ${text(campaign.requesterName, 'another team member')}`}
+                </div>
+              </button>
+            ))}
+            {!campaigns.length && (
+              <EmptyProductState message="No campaigns exist yet. Create a campaign brief to begin the Commercial/Social workflow." />
+            )}
+          </div>
+        </ProductCard>
+
+        <div className="space-y-6">
+          <ProductCard title="Campaign Brief" subtitle="The customer-facing campaign inputs.">
+            {selected ? (
+              <DetailGrid items={[
+                { label: 'Objective', value: text(selected.objective) },
+                { label: 'Audience', value: text(selected.audience) },
+                { label: 'Platforms', value: ((selected.targetPlatforms as string[] | undefined) || ['linkedin', 'instagram', 'x']).map(titleCase).join(', ') },
+                { label: 'CTA', value: text(selected.cta, 'Prepared during drafting') },
+                { label: 'Owner', value: createdByCurrentUser ? 'Created by you' : text(selected.requesterName, 'Team workspace') },
+              ]} />
+            ) : (
+              <EmptyProductState message="Select a campaign to begin." />
+            )}
+          </ProductCard>
+
+          <ProductCard
+            title="Platform Drafts"
+            subtitle="Drafts are platform-specific post copy. Select one, edit it, save the human version, then score it."
+            action={<PrimaryAction onClick={generateDrafts} disabled={!providerReady || !selected || loading === 'drafts'}>{loading === 'drafts' ? 'Generating...' : 'Generate Platform Drafts'}</PrimaryAction>}
+          >
+            {drafts.length ? (
+              <div className="grid gap-4 lg:grid-cols-3">
+                {drafts.map(draft => {
+                  const id = String(draft.contentItemId);
+                  const active = selectedDraft?.contentItemId === draft.contentItemId;
+                  return (
+                    <article key={id} className={`rounded-lg border p-4 ${active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white'}`}>
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="font-semibold">{titleCase(text(draft.platform))}</h3>
+                        <button type="button" onClick={() => setSelectedDraftId(id)} className="focus:outline-none">
+                          <PlatformPill active={active}>{active ? 'Selected' : 'Select'}</PlatformPill>
+                        </button>
+                      </div>
+                      <textarea
+                        value={draftTextById[id] || text(draft.draftText)}
+                        onChange={event => setDraftTextById(current => ({ ...current, [id]: event.target.value }))}
+                        className={`min-h-[180px] w-full resize-y rounded-md border p-3 text-sm leading-6 outline-none ${active ? 'border-white/15 bg-white/10 text-white placeholder:text-white/40' : 'border-neutral-200 bg-neutral-50 text-neutral-950'}`}
+                      />
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyProductState message="Generate platform-specific drafts when the brief is ready." />
+            )}
+            {selectedDraft && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <SecondaryAction onClick={saveEditedDraft} disabled={loading === 'save-edit'}>
+                  {loading === 'save-edit' ? 'Saving...' : 'Save Edited Draft Version'}
+                </SecondaryAction>
+                <ProductStatus tone="info">Selected draft: {titleCase(text(selectedDraft.platform))}</ProductStatus>
+              </div>
+            )}
+          </ProductCard>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <ProductCard title="Optimize Selected Draft" subtitle="Score the selected draft before approval." action={<PrimaryAction onClick={scoreDraft} disabled={!selectedDraft || loading === 'score'}>{loading === 'score' ? 'Scoring...' : 'Score Draft'}</PrimaryAction>}>
+              {score ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-950 p-5 text-white">
+                    <div className="flex items-end justify-between gap-4">
+                      <div>
+                        <div className="text-sm text-white/60">Readiness score</div>
+                        <div className="mt-2 text-5xl font-semibold">{scoreValue}</div>
+                      </div>
+                      <ProductStatus tone="muted">{text(score.bandLabel, 'Ready for review')}</ProductStatus>
+                    </div>
+                    <div className="mt-5">
+                      <ProgressBar value={scoreValue} />
+                    </div>
+                  </div>
+                  <ReadableQueue items={[
+                    { title: 'Best platform', meta: titleCase(text(selectedDraft?.platform, 'linkedin')), status: 'Recommended', tone: 'good' },
+                    { title: 'Hook and CTA', meta: 'Checked for clarity and fit', status: 'Reviewed', tone: 'info' },
+                    { title: 'Risk notes', meta: 'No production action can happen before approval', status: 'Approval Required', tone: 'warn' },
+                  ]} />
+                </div>
+              ) : (
+                <EmptyProductState message="Score the selected draft to review readiness." />
+              )}
+            </ProductCard>
+
+            <ProductCard title="Approval & Publishing Preparation" subtitle="Approval unlocks publishing preparation." action={!approval ? <PrimaryAction onClick={submitForApproval} disabled={!selectedDraft || loading === 'approval'}>{loading === 'approval' ? 'Submitting...' : 'Send for Approval'}</PrimaryAction> : null}>
+              <div className="space-y-4">
+                <ReadableQueue items={[
+                  { title: 'Approval package', meta: approval ? 'Reviewer decision available in approval queue.' : 'Waiting for selected draft submission.', status: approval ? titleCase(text(approval.approvalStatus, 'pending')) : 'Approval Required', tone: approval?.approvalStatus === 'approved' ? 'good' : 'warn' },
+                  { title: 'Publishing package', meta: publishingPackage ? `${packagePlatforms.length || 3} platform payloads prepared.` : 'Available after approval.', status: publishingPackage ? 'Package Ready' : 'Waiting', tone: publishingPackage ? 'good' : 'default' },
+                ]} />
+                {approval?.approvalStatus === 'pending' && (
+                  <div className="flex flex-wrap gap-2">
+                    <PrimaryAction onClick={async () => {
+                      if (!token || !approval) return;
+                      setLoading('approve');
+                      const result = await approvalsApi.approve(String(approval.id), { comment: 'Approved for publishing preparation.' }, token);
+                      setApproval(result as RecordMap);
+                      setMessage('Approved. Publishing preparation is available.');
+                      setLoading('');
+                    }} disabled={!!loading}>Approve</PrimaryAction>
+                    <SecondaryAction onClick={async () => {
+                      if (!token || !approval) return;
+                      setLoading('changes');
+                      const result = await approvalsApi.requestChanges(String(approval.id), { comment: 'Please revise before publishing preparation.' }, token);
+                      setApproval(result as RecordMap);
+                      setMessage('Changes requested.');
+                      setLoading('');
+                    }} disabled={!!loading}>Request Changes</SecondaryAction>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <PrimaryAction onClick={createPublishingPackage} disabled={approval?.approvalStatus !== 'approved' || !!publishingPackage || loading === 'publishing'}>
+                    {publishingPackage ? 'Package Ready' : loading === 'publishing' ? 'Preparing...' : 'Prepare Package'}
+                  </PrimaryAction>
+                  <SecondaryAction onClick={preparePostizPayload} disabled={!publishingPackage || loading === 'postiz'}>
+                    {loading === 'postiz' ? 'Preparing...' : 'Preview Postiz Payload'}
+                  </SecondaryAction>
+                  <SecondaryAction onClick={attemptPostizSandboxSchedule} disabled={!postizPayload || loading === 'postiz-sandbox'}>
+                    {loading === 'postiz-sandbox' ? 'Checking Gate...' : 'Attempt Sandbox Schedule'}
+                  </SecondaryAction>
+                </div>
+                {postizPayload && (
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="font-semibold text-black">Postiz payload preview</div>
+                    <div className="mt-2 text-sm text-neutral-600">
+                      Type: {text((postizPayload.payload as RecordMap | undefined)?.type, 'schedule')} / Posts: {Array.isArray((postizPayload.payload as RecordMap | undefined)?.posts) ? ((postizPayload.payload as RecordMap).posts as unknown[]).length : 1}
+                    </div>
+                    <div className="mt-3"><ProductStatus tone="warn">Sandbox Scheduling Disabled</ProductStatus></div>
+                  </div>
+                )}
+                {postizScheduleResult && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+                    <div className="font-semibold">Sandbox scheduling result: {text(postizScheduleResult.status, 'blocked')}</div>
+                    <div className="mt-2">
+                      {Array.isArray(postizScheduleResult.reasons)
+                        ? (postizScheduleResult.reasons as unknown[]).map(String).join('; ')
+                        : text((postizScheduleResult.safety as RecordMap | undefined)?.executionPerformed, 'No external execution performed')}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ProductCard>
+          </div>
         </div>
       </div>
-    </div>
+    </ProductPage>
   );
 }

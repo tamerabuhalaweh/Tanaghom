@@ -1,8 +1,9 @@
-import { ForbiddenError, NotFoundError, ExternalServiceError } from '@shared/errors';
+import { AppError, ForbiddenError, NotFoundError, ExternalServiceError } from '@shared/errors';
 import { auditLog } from '@shared/logging';
 import { eventBus } from '@shared/events';
 import { prisma } from '@shared/database';
-import { createLLMProvider, type LLMProvider } from '@shared/providers/llm-provider';
+import type { LLMProvider } from '@shared/providers/llm-provider';
+import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
 import {
   DRAFT_EVENTS,
   type DraftGeneratedEvent,
@@ -13,6 +14,7 @@ import * as repo from './repository';
 import type {
   GenerateDraftInput,
   ReviseDraftInput,
+  SaveEditedDraftInput,
   DraftResult,
   DraftMetadata,
   Platform,
@@ -45,8 +47,8 @@ function checkPermission(role: string, permission: string): void {
 // LLM Provider (uses provider adapter, mock by default)
 // ============================================================
 
-function getLLMProvider(): LLMProvider {
-  return createLLMProvider();
+async function getLLMProvider(userId: string): Promise<LLMProvider> {
+  return resolveUserLLMProvider(userId);
 }
 
 // ============================================================
@@ -92,6 +94,7 @@ export async function generateDrafts(
   const platforms = input.platforms || (campaign.target_platforms as Platform[]);
   const tone = input.tone || 'professional';
   const results: DraftResult[] = [];
+  const failures: string[] = [];
 
   for (const platform of platforms) {
     try {
@@ -124,6 +127,7 @@ export async function generateDrafts(
       await eventBus.emit(DRAFT_EVENTS.DRAFT_GENERATED, event);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      failures.push(`${platform}: ${errorMsg}`);
 
       auditLog(
         {
@@ -144,6 +148,18 @@ export async function generateDrafts(
       };
       await eventBus.emit(DRAFT_EVENTS.DRAFT_GENERATION_FAILED, event);
     }
+  }
+
+  if (results.length === 0 && failures.length > 0) {
+    const providerRequired = failures.find(message => message.includes('LLM_PROVIDER_REQUIRED') || message.includes('No production LLM provider') || message.includes('missing credentials for this user'));
+    if (providerRequired) {
+      throw new AppError(
+        'No production LLM provider is configured for this user. Configure OpenAI or Claude in AI Provider settings.',
+        424,
+        'LLM_PROVIDER_REQUIRED',
+      );
+    }
+    throw new ExternalServiceError('LLM', `All requested platform drafts failed: ${failures.join('; ')}`);
   }
 
   return results;
@@ -172,11 +188,12 @@ export async function reviseDraft(
     tone,
   );
 
-  const llm = getLLMProvider();
+  const llm = await getLLMProvider(requesterId);
   let revisedText: string;
   try {
     revisedText = (await llm.generate(prompt)).text;
   } catch (err) {
+    if (err instanceof AppError) throw err;
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
   }
 
@@ -229,6 +246,59 @@ export async function reviseDraft(
   };
 }
 
+export async function saveEditedDraft(
+  requesterRole: string,
+  requesterId: string,
+  input: SaveEditedDraftInput,
+): Promise<DraftResult> {
+  checkPermission(requesterRole, 'drafts:revise');
+
+  const item = await repo.getContentItem(input.contentItemId);
+  if (!item.request) throw new NotFoundError('Campaign request for content item');
+
+  const latestVersion = await repo.getLatestVersion(input.contentItemId);
+  const newVersionNo = (latestVersion?.version_no || 0) + 1;
+
+  await repo.createDraftVersion(
+    input.contentItemId,
+    newVersionNo,
+    input.draftText,
+    'human-edit',
+  );
+  await repo.updateContentItemDraft(input.contentItemId, input.draftText);
+
+  auditLog(
+    {
+      actor: `user:${requesterId}`,
+      action: 'draft_human_edit_saved',
+      object_type: 'content_item',
+      object_id: input.contentItemId,
+      result: 'success',
+    },
+    `Human edited draft saved to version ${newVersionNo}`,
+  );
+
+  return {
+    contentItemId: input.contentItemId,
+    platform: item.platform as Platform,
+    contentType: item.content_type as DraftContentType,
+    draftText: input.draftText,
+    versionNo: newVersionNo,
+    metadata: {
+      objective: item.request.objective,
+      audience: item.request.audience || '',
+      cta: item.request.cta,
+      hashtags: [],
+      rationale: input.editNote || 'Saved human edit',
+      tone: 'professional',
+      hookType: 'human_edit',
+      mediaSuggestions: [],
+    },
+    riskNotes: item.risk_reason || '',
+    createdAt: new Date(),
+  };
+}
+
 // ============================================================
 // Internal Helpers
 // ============================================================
@@ -253,11 +323,12 @@ async function generateSingleDraft(
   const constraints = PLATFORM_CONSTRAINTS[platform] || PLATFORM_CONSTRAINTS.linkedin;
   const prompt = buildGenerationPrompt(campaign, platform, constraints.maxTextLength, tone);
 
-  const llm = getLLMProvider();
+  const llm = await getLLMProvider(requesterId);
   let draftText: string;
   try {
     draftText = (await llm.generate(prompt)).text;
   } catch (err) {
+    if (err instanceof AppError) throw err;
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
   }
 

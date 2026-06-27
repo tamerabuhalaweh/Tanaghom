@@ -14,6 +14,7 @@ export interface LoginResult {
     email: string;
     name: string;
     role: string;
+    tenantKey: string;
     departmentId: string | null;
     agentRepId: string | null;
   };
@@ -24,6 +25,7 @@ export interface SessionUser {
   email: string;
   name: string;
   role: string;
+  tenantKey: string;
   departmentId: string | null;
   isActive: boolean;
   agentRepId: string | null;

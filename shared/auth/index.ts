@@ -12,6 +12,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  tenantKey?: string;
   departmentId?: string;
   agentRepId?: string;
 }
@@ -20,6 +21,7 @@ export interface SessionContext {
   humanUserId: string;
   agentRepId: string;
   role: string;
+  tenantKey: string;
   departmentId?: string;
 }
 
@@ -59,6 +61,7 @@ export function resolveSessionContext(payload: JwtPayload): SessionContext {
     humanUserId: payload.sub,
     agentRepId: payload.agentRepId,
     role: payload.role,
+    tenantKey: payload.tenantKey || 'default',
     departmentId: payload.departmentId,
   };
 }

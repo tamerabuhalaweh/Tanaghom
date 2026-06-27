@@ -1,60 +1,350 @@
-import { Outlet, Link, useLocation } from 'react-router-dom'
-import { DemoBanner } from './ExecutiveUI'
+import { useEffect, useMemo, useState } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  Bot,
+  Brain,
+  ClipboardCheck,
+  FileClock,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Megaphone,
+  Menu,
+  Network,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
+import { useAuth } from '../contexts/useAuth';
+import { ProductStatus } from './ProductUI';
 
-const NAV_ITEMS = [
-  { path: '/command-center', label: 'Command Center', icon: '◉' },
-  { path: '/', label: 'Dashboard', icon: '◈' },
-  { path: '/campaigns', label: 'Campaigns', icon: '◆' },
-  { path: '/approvals', label: 'Approvals', icon: '✦' },
-  { path: '/analytics', label: 'Analytics', icon: '◉' },
-  { path: '/mcp-engine', label: 'MCP Engine', icon: '⬡' },
-  { path: '/agent-skills', label: 'Agent Skills', icon: '⎔' },
-  { path: '/ghl-readiness', label: 'GoHighLevel', icon: '◇' },
-  { path: '/ai-settings', label: 'AI Provider', icon: '◎' },
-  { path: '/safety', label: 'Safety', icon: '△' },
-]
+type NavGroup = 'Product' | 'Admin';
+type NavItem = {
+  path: string;
+  label: string;
+  description: string;
+  icon: typeof LayoutDashboard;
+  group: NavGroup;
+  roles?: string[];
+};
+
+const PRODUCT_ROLES = [
+  'admin',
+  'cco',
+  'department_head',
+  'social_media_manager',
+  'social_media_specialist',
+  'marketing_manager',
+  'sales_manager',
+  'lead_qualification_manager',
+  'reviewer',
+  'viewer',
+  'specialist',
+];
+
+const ADMIN_ROLES = ['admin', 'cco', 'department_head'];
+
+const NAV_ITEMS: NavItem[] = [
+  {
+    path: '/command-center',
+    label: 'Command Center',
+    description: 'Operational overview',
+    icon: LayoutDashboard,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
+  },
+  {
+    path: '/campaigns',
+    label: 'Campaigns',
+    description: 'Briefs, drafts, package',
+    icon: Megaphone,
+    group: 'Product',
+    roles: PRODUCT_ROLES.filter(role => role !== 'viewer'),
+  },
+  {
+    path: '/ideas',
+    label: 'AI Draft Studio',
+    description: 'Ideas and campaign creation',
+    icon: Sparkles,
+    group: 'Product',
+    roles: PRODUCT_ROLES.filter(role => role !== 'viewer'),
+  },
+  {
+    path: '/approvals',
+    label: 'Approvals & Publishing',
+    description: 'Human review and package status',
+    icon: ClipboardCheck,
+    group: 'Product',
+    roles: ['admin', 'cco', 'department_head', 'social_media_manager', 'marketing_manager', 'reviewer'],
+  },
+  {
+    path: '/analytics',
+    label: 'Analytics & Leads',
+    description: 'Performance and handoff',
+    icon: BarChart3,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
+  },
+  {
+    path: '/my-agent-rep',
+    label: 'My AI Rep',
+    description: 'Role, skills, permissions',
+    icon: UserRound,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
+  },
+  {
+    path: '/ai-settings',
+    label: 'AI Provider',
+    description: 'My model credentials',
+    icon: Brain,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
+  },
+  {
+    path: '/admin-users',
+    label: 'Users & Roles',
+    description: 'Accounts and AgentReps',
+    icon: Users,
+    group: 'Admin',
+    roles: ADMIN_ROLES,
+  },
+  {
+    path: '/agent-skills',
+    label: 'Agent Skills',
+    description: 'Governed skill inventory',
+    icon: Bot,
+    group: 'Admin',
+    roles: ADMIN_ROLES,
+  },
+  {
+    path: '/mcp-engine',
+    label: 'Integrations',
+    description: 'Connector registry',
+    icon: Network,
+    group: 'Admin',
+    roles: ADMIN_ROLES,
+  },
+  {
+    path: '/integration-credentials',
+    label: 'Credentials',
+    description: 'Secret status only',
+    icon: KeyRound,
+    group: 'Admin',
+    roles: ADMIN_ROLES,
+  },
+  {
+    path: '/safety',
+    label: 'Safety Gates',
+    description: 'Blocked external actions',
+    icon: ShieldCheck,
+    group: 'Admin',
+    roles: ADMIN_ROLES,
+  },
+  {
+    path: '/observability',
+    label: 'Evidence',
+    description: 'Audit and learning trail',
+    icon: FileClock,
+    group: 'Admin',
+    roles: ADMIN_ROLES,
+  },
+];
+
+const GROUPS: NavGroup[] = ['Product', 'Admin'];
+
+function getStringField(source: unknown, keys: string[], fallback = ''): string {
+  if (!source || typeof source !== 'object') return fallback;
+  const record = source as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return fallback;
+}
+
+function normalizeRole(role: string): string {
+  return role.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
+}
+
+function isVisibleForRole(item: NavItem, role: string): boolean {
+  if (!item.roles || item.roles.length === 0) return true;
+  if (!role || role === 'unknown') return true;
+  return item.roles.includes(role);
+}
 
 export default function Layout() {
-  const location = useLocation()
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  return (
-    <div className="flex h-screen bg-gray-950 text-gray-100">
-      {/* Sidebar */}
-      <nav className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col">
-        <div className="p-4 border-b border-gray-800">
-          <h1 className="text-base font-bold text-white tracking-tight">Tanaghum</h1>
-          <p className="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">AI Operating Platform</p>
-        </div>
-        <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-                location.pathname === item.path
-                  ? 'bg-blue-600/20 text-blue-400 font-medium border border-blue-500/30'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
-              }`}
-            >
-              <span className="text-xs w-4 text-center opacity-60">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          ))}
-        </div>
-        <div className="p-3 border-t border-gray-800">
-          <div className="text-[10px] text-gray-600 text-center">STITCH v1.0 • SAIF v1.2</div>
-        </div>
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSidebarOpen(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [sidebarOpen]);
+
+  const email = getStringField(user, ['email', 'name'], 'User');
+  const displayName = getStringField(user, ['name', 'email'], email);
+  const role = normalizeRole(getStringField(user, ['role'], 'unknown'));
+
+  const visibleNav = useMemo(
+    () => NAV_ITEMS.filter(item => isVisibleForRole(item, role)),
+    [role],
+  );
+
+  const currentItem = visibleNav.find(item => location.pathname === item.path)
+    || visibleNav.find(item => location.pathname.startsWith(item.path) && item.path !== '/')
+    || NAV_ITEMS.find(item => item.path === '/command-center');
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  const isActive = (path: string): boolean => {
+    if (location.pathname === path) return true;
+    if (location.pathname === '/' && path === '/command-center') return true;
+    return false;
+  };
+
+  const sidebar = (
+    <div className="flex h-full flex-col">
+      <div className="flex h-16 items-center justify-between border-b border-neutral-200 px-4">
+        <Link to="/command-center" onClick={() => setSidebarOpen(false)} className="min-w-0">
+          <div className="text-sm font-semibold tracking-tight text-neutral-950">Tanaghum</div>
+          <div className="text-xs text-neutral-500">Commercial/Social MVP</div>
+        </Link>
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="rounded-md p-2 text-neutral-500 hover:bg-neutral-100 lg:hidden"
+          aria-label="Close navigation menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
+        {GROUPS.map(group => {
+          const groupItems = visibleNav.filter(item => item.group === group);
+          if (!groupItems.length) return null;
+          return (
+            <div key={group} className="mb-6">
+              <div className="px-2 pb-2 text-xs font-medium text-neutral-500">
+                {group === 'Product' ? 'Commercial/Social' : 'Admin & Evidence'}
+              </div>
+              <div className="space-y-1">
+                {groupItems.map(item => {
+                  const Icon = item.icon;
+                  const active = isActive(item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      aria-current={active ? 'page' : undefined}
+                      data-active={active ? 'true' : 'false'}
+                      className="nav-link flex items-start gap-3 rounded-md px-3 py-2.5 text-sm"
+                    >
+                      <Icon className="nav-link-icon mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="block font-medium">{item.label}</span>
+                        <span className="nav-link-description block truncate text-xs">{item.description}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </nav>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-4">
-          <DemoBanner />
-          <div className="mt-4">
-            <Outlet />
+      <div className="border-t border-neutral-200 p-3">
+        <div className="rounded-lg border border-neutral-200 bg-white p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-neutral-950 text-sm font-semibold text-white">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-neutral-950">{displayName}</div>
+              <div className="truncate text-xs text-neutral-500">{role === 'unknown' ? 'Sandbox user' : role.replaceAll('_', ' ')}</div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="rounded-md p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
-      </main>
+      </div>
     </div>
-  )
+  );
+
+  return (
+    <div className="flex h-screen bg-neutral-50 text-neutral-950">
+      <a href="#main-content" className="skip-to-content">Skip to content</a>
+
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform border-r border-neutral-200 bg-white transition-transform duration-200 lg:hidden ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        aria-label="Navigation sidebar"
+        aria-hidden={!sidebarOpen}
+      >
+        {sidebar}
+      </aside>
+
+      <aside className="hidden w-72 shrink-0 border-r border-neutral-200 bg-white lg:block" aria-label="Navigation sidebar">
+        {sidebar}
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-neutral-200 bg-white/90 px-4 backdrop-blur lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-md border border-neutral-200 p-2 text-neutral-700 hover:bg-neutral-100 lg:hidden"
+              aria-label="Open navigation menu"
+              aria-expanded={sidebarOpen}
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-neutral-950">{currentItem?.label || 'Commercial/Social'}</div>
+              <div className="truncate text-xs text-neutral-500">{currentItem?.description || 'Product workspace'}</div>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 sm:flex">
+            <ProductStatus tone="warn">External Writes Off</ProductStatus>
+            <ProductStatus tone="info">Human Approval Required</ProductStatus>
+          </div>
+        </header>
+
+        <main id="main-content" className="min-h-0 flex-1 overflow-y-auto">
+          <div className="px-4 py-6 sm:px-6 lg:px-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }

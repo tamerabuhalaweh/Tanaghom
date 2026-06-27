@@ -12,12 +12,18 @@ export const EXECUTION_KILL_SWITCHES = [
   'EXTERNAL_EXECUTION_ENABLED',
   'M5_WRITE_EXECUTION_ENABLED',
   'POSTIZ_LIVE_ENABLED',
+  'POSTIZ_SANDBOX_SCHEDULING_ENABLED',
   'CRM_LIVE_ENABLED',
+  'GHL_SANDBOX_WRITE_ENABLED',
   'WHATSAPP_LIVE_ENABLED',
+  'TELEGRAM_LIVE_ENABLED',
+  'VOICE_CHAT_LIVE_ENABLED',
   'RENDERING_LIVE_ENABLED',
   'RESOURCESPACE_LIVE_ENABLED',
   'PAPERCLIP_SYNC_ENABLED',
   'ANALYTICS_LIVE_ENABLED',
+  'OPENCLAW_ORCHESTRATION_ENABLED',
+  'AGENTSCOPE_PROCESS_ENABLED',
 ] as const;
 
 export interface EnvValidationResult {
@@ -45,6 +51,24 @@ export function validateEnvironment(): EnvValidationResult {
     }
     if (WEAK_JWT_SECRETS.includes(jwtSecret)) {
       errors.push('JWT_SECRET is a known weak/default value. Change it before deployment.');
+    }
+  }
+
+  const secretVaultKey = process.env.SECRET_VAULT_ENCRYPTION_KEY || process.env.LLM_CREDENTIAL_ENCRYPTION_KEY;
+  if (process.env.NODE_ENV === 'production' && !secretVaultKey) {
+    warnings.push('SECRET_VAULT_ENCRYPTION_KEY is not configured. User-owned LLM and tenant integration credentials cannot be saved.');
+  }
+  if (process.env.LLM_CREDENTIAL_ENCRYPTION_KEY && process.env.LLM_CREDENTIAL_ENCRYPTION_KEY.length < 32) {
+    errors.push('LLM_CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters when configured.');
+  }
+  if (process.env.SECRET_VAULT_ENCRYPTION_KEY && process.env.SECRET_VAULT_ENCRYPTION_KEY.length < 32) {
+    errors.push('SECRET_VAULT_ENCRYPTION_KEY must be at least 32 characters when configured.');
+  }
+  if (process.env.EMAIL_DELIVERY_ENABLED === 'true') {
+    for (const varName of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_FROM', 'APP_BASE_URL']) {
+      if (!process.env[varName]) {
+        errors.push(`${varName} is required when EMAIL_DELIVERY_ENABLED=true`);
+      }
     }
   }
 

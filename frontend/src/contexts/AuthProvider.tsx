@@ -3,6 +3,18 @@ import type { ReactNode } from 'react';
 import { AuthContext } from './AuthContext';
 import { authApi } from '../api';
 
+type SessionEnvelope = {
+  user?: unknown;
+  agentRep?: unknown;
+};
+
+function normalizeSession(data: unknown): SessionEnvelope {
+  if (data && typeof data === 'object' && 'user' in data) {
+    return data as SessionEnvelope;
+  }
+  return { user: data, agentRep: data && typeof data === 'object' && 'agentRepId' in data ? { id: (data as Record<string, unknown>).agentRepId } : null };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState({
     token: localStorage.getItem('token'),
@@ -16,7 +28,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('token');
     if (token) {
       authApi.session(token)
-        .then(data => setState(s => ({ ...s, user: data.user, agentRep: data.agentRep, loading: false })))
+        .then(data => {
+          const session = normalizeSession(data);
+          setState(s => ({ ...s, user: session.user, agentRep: session.agentRep, loading: false }));
+        })
         .catch(() => { localStorage.removeItem('token'); setState(s => ({ ...s, token: null, loading: false })); });
     } else {
       setState(s => ({ ...s, loading: false }));

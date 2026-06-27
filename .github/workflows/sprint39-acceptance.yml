@@ -1,0 +1,52 @@
+name: Sprint 39 Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Frontend URL to test
+        required: true
+        default: http://163.123.180.104:3000
+      api_base_url:
+        description: Backend API URL to test
+        required: true
+        default: http://163.123.180.104:4000
+      require_real_llm:
+        description: Fail unless OpenAI/Claude is configured and testable
+        required: true
+        type: boolean
+        default: false
+      require_postiz_channel:
+        description: Fail unless a Postiz channel is connected and selected
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  sprint39-acceptance:
+    runs-on: ubuntu-latest
+
+    env:
+      E2E_ACCEPTANCE: "true"
+      E2E_BASE_URL: ${{ inputs.base_url }}
+      E2E_API_BASE_URL: ${{ inputs.api_base_url }}
+      E2E_REQUIRE_REAL_LLM: ${{ inputs.require_real_llm }}
+      E2E_REQUIRE_POSTIZ_CHANNEL: ${{ inputs.require_postiz_channel }}
+      E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+      E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Sprint 39 deployed acceptance
+        run: npm run test:e2e:acceptance

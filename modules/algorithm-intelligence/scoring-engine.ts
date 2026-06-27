@@ -224,7 +224,7 @@ function scoreTimingPlaceholder(): ScoreComponentResult {
     weight,
     weightedScore: (score * weight) / 100,
     maxWeightedScore: weight,
-    explanation: 'Timing optimization placeholder — will be calibrated from analytics data',
+    explanation: 'Timing recommendation uses demo intelligence until official analytics connectors are authorized',
   };
 }
 
@@ -647,12 +647,23 @@ function getSuggestionForComponent(
         sourceType: relatedRule ? 'platform_rules' : 'scoring_engine',
         confidence: (relatedRule?.confidence as 'low' | 'medium' | 'high') || 'high',
       };
+    case 'timingPlaceholder':
+      return {
+        ...baseMetadata,
+        component,
+        priority: 'low',
+        suggestion: 'Review the recommended posting time against campaign audience activity before scheduling',
+        expectedImprovement: Math.min(improvement, 10),
+        source: 'demo-intelligence',
+        sourceType: 'scoring_engine',
+        confidence: 'medium',
+      };
     default:
       return {
         ...baseMetadata,
         component,
         priority: 'low',
-        suggestion: `Improve ${component} for better reach`,
+        suggestion: 'Improve this readiness factor for better reach',
         expectedImprovement: Math.min(improvement, 10),
         source: 'scoring-engine',
         sourceType: 'scoring_engine',
