@@ -1,8 +1,8 @@
-# Sprint 42: Workflow Gates and Evidence Trail
+# Sprint 43: Workflow Gates and Evidence Trail
 
 ## Purpose
 
-Sprint 42 closes a verified architecture/product gap from the STITCH review:
+Sprint 43 closes a verified architecture/product gap from the STITCH review:
 Commercial/Social actions were visible in the UI and application logs, but core workflow steps were not consistently reconstructable from persistent database evidence.
 
 This sprint keeps the platform safe:
@@ -51,6 +51,6 @@ This sprint keeps the platform safe:
 
 - This is not a durable LangGraph execution engine yet.
 - Capability resolution is not yet the mandatory route for every commercial workflow action.
-- Existing historical actions before Sprint 42 may not have full persistent audit coverage.
+- Existing historical actions before Sprint 43 may not have full persistent audit coverage.
 - Postiz still requires real provider OAuth/channel setup before Tanaghum can see a social channel.
 - GHL, WhatsApp, Telegram, voice, OpenClaw, agentgateway, and AgentScope remain gated integration/runtime work.
