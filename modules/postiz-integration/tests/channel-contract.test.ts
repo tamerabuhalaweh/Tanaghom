@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPostizChannelGuidance, toSafePostizChannel } from '../channel-contract';
+import { buildPostizChannelGuidance, buildPostizDiagnostics, toSafePostizChannel } from '../channel-contract';
 
 describe('Postiz channel contract', () => {
   it('returns credential guidance before channel listing can run', () => {
@@ -55,5 +55,72 @@ describe('Postiz channel contract', () => {
       rawTokensReturned: false,
     });
     expect(JSON.stringify(channel)).not.toContain('should-not-leak');
+  });
+
+  it('reports OAuth-ready when Postiz validates the key but returns zero channels', () => {
+    const diagnostics = buildPostizDiagnostics({
+      hasBaseUrl: true,
+      hasApiKey: true,
+      apiConnected: true,
+      channelCount: 0,
+      selectedIntegrationId: null,
+      oauthChecked: true,
+      oauthUrlReady: true,
+      platform: 'instagram',
+      sandboxSchedulingAllowed: false,
+    });
+
+    expect(diagnostics.status).toBe('oauth_ready');
+    expect(diagnostics.summary).toContain('no connected channel is visible');
+    expect(diagnostics.nextActions).toContain('Complete the provider login and permission approval inside Postiz.');
+    expect(diagnostics.checks.find(check => check.id === 'postiz_oauth_url')).toMatchObject({
+      status: 'passed',
+    });
+    expect(diagnostics.checks.find(check => check.id === 'postiz_channel_count')).toMatchObject({
+      status: 'blocked',
+    });
+  });
+
+  it('reports provider setup when Postiz cannot create an OAuth URL', () => {
+    const diagnostics = buildPostizDiagnostics({
+      hasBaseUrl: true,
+      hasApiKey: true,
+      apiConnected: true,
+      channelCount: 0,
+      selectedIntegrationId: null,
+      oauthChecked: true,
+      oauthUrlReady: false,
+      oauthFailureReason: 'Provider app credentials are not configured.',
+      platform: 'instagram',
+      sandboxSchedulingAllowed: false,
+    });
+
+    expect(diagnostics.status).toBe('requires_provider_setup');
+    expect(diagnostics.summary).toContain('could not provide an OAuth URL');
+    expect(diagnostics.checks.find(check => check.id === 'postiz_oauth_url')).toMatchObject({
+      status: 'blocked',
+      action: 'Verify provider app credentials in the Postiz deployment.',
+    });
+  });
+
+  it('reports ready only when a connected channel is selected', () => {
+    const diagnostics = buildPostizDiagnostics({
+      hasBaseUrl: true,
+      hasApiKey: true,
+      apiConnected: true,
+      channelCount: 1,
+      selectedIntegrationId: 'postiz-channel-1',
+      oauthChecked: true,
+      oauthUrlReady: true,
+      sandboxSchedulingAllowed: false,
+    });
+
+    expect(diagnostics.status).toBe('ready');
+    expect(diagnostics.checks.find(check => check.id === 'postiz_selected_channel')).toMatchObject({
+      status: 'passed',
+    });
+    expect(diagnostics.checks.find(check => check.id === 'postiz_sandbox_execution')).toMatchObject({
+      status: 'blocked',
+    });
   });
 });

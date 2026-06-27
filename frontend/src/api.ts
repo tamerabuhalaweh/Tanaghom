@@ -186,6 +186,13 @@ export const publishingPackageApi = {
 export const postizApi = {
   status: (token: string) => apiFetch<unknown>('/postiz/status', { token }),
   channels: (token: string) => apiFetch<unknown>('/postiz/channels', { token }),
+  diagnostics: (params: { platform?: string; refresh?: string }, token: string) => {
+    const search = new URLSearchParams();
+    if (params.platform) search.set('platform', params.platform);
+    if (params.refresh) search.set('refresh', params.refresh);
+    const query = search.toString();
+    return apiFetch<unknown>(`/postiz/diagnostics${query ? `?${query}` : ''}`, { token });
+  },
   connectChannel: (data: unknown, token: string) =>
     apiFetch<unknown>('/postiz/connect-channel', { method: 'POST', body: data, token }),
   selectChannel: (data: unknown, token: string) =>
