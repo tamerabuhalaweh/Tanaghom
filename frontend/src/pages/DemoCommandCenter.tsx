@@ -7,6 +7,7 @@ import {
   analyticsApi,
   approvalsApi,
   campaignsApi,
+  commercialWorkflowApi,
   integrationStatusApi,
   leadsApi,
   postizApi,
@@ -58,6 +59,11 @@ function list(value: unknown): RecordMap[] {
     if (Array.isArray(wrapped.statuses)) return wrapped.statuses as RecordMap[];
   }
   return [];
+}
+
+function record(value: unknown): RecordMap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as RecordMap;
 }
 
 function titleCase(value: string): string {
@@ -128,6 +134,7 @@ export default function DemoCommandCenter() {
   const [packages, setPackages] = useState<RecordMap[]>([]);
   const [approvals, setApprovals] = useState<RecordMap[]>([]);
   const [integrationStatus, setIntegrationStatus] = useState<RecordMap | null>(null);
+  const [workflowState, setWorkflowState] = useState<RecordMap | null>(null);
   const [loading, setLoading] = useState('');
   const [notice, setNotice] = useState('');
   const [step, setStep] = useState<Step>('brief');
@@ -168,7 +175,17 @@ export default function DemoCommandCenter() {
     packageResult || packages.length ? 1 : 0,
     leads.length ? 1 : 0,
   ];
-  const workflowReadiness = Math.round((workflowSignals.reduce((sum, value) => sum + value, 0) / workflowSignals.length) * 100);
+  const localWorkflowReadiness = Math.round((workflowSignals.reduce((sum, value) => sum + value, 0) / workflowSignals.length) * 100);
+  const workflowCounts = record(workflowState?.counts);
+  const workflowReadiness = numberValue(record(workflowState?.readiness).score, localWorkflowReadiness);
+  const workflowNextAction = record(workflowState?.nextAction);
+  const workflowStages = list(workflowState?.stages)
+    .map(item => ({
+      label: text(item.label, 'Workflow step'),
+      state: ['done', 'active', 'waiting', 'blocked'].includes(text(item.state, 'waiting'))
+        ? text(item.state, 'waiting') as 'done' | 'active' | 'waiting' | 'blocked'
+        : 'waiting' as const,
+    }));
   const executionSafety = (integrationStatus?.safety || {}) as RecordMap;
   const externalWritesEnabled = Boolean(executionSafety.externalExecutionEnabled);
   const m5Enabled = Boolean(executionSafety.m5WriteExecutionEnabled);
@@ -186,6 +203,12 @@ export default function DemoCommandCenter() {
     ].join('|').toLowerCase() === key) === index;
   });
   const visibleCampaigns = campaignQueue.slice(0, 8);
+  const displayCampaignCount = numberValue(workflowCounts.activeCampaigns, campaignQueue.length);
+  const displayPendingApprovals = numberValue(workflowCounts.pendingApprovals, pendingApprovals);
+  const displayApprovedApprovals = numberValue(workflowCounts.approvedApprovals, approvedApprovals);
+  const displayPackageCount = numberValue(workflowCounts.publishingPackages, publishingPackageCount);
+  const displayQualifiedLeads = numberValue(workflowCounts.qualifiedLeads, numberValue(leadStats?.qualified));
+  const displayCapturedLeads = numberValue(workflowCounts.capturedLeads, numberValue(leadStats?.total));
   const setupTasks = [
     {
       title: 'Connect AI model',
@@ -235,6 +258,7 @@ export default function DemoCommandCenter() {
           approvalData,
           integrationData,
           postizChannelData,
+          workflowData,
         ] = await Promise.all([
           campaignsApi.list(token as string),
           analyticsApi.sources(token as string),
@@ -247,6 +271,7 @@ export default function DemoCommandCenter() {
           approvalsApi.list(token as string).catch(() => []),
           integrationStatusApi.get(token as string).catch(() => null),
           postizApi.channels(token as string).catch(() => ({ channels: [] })),
+          commercialWorkflowApi.state(token as string).catch(() => null),
         ]);
         if (cancelled) return;
         const campaignList = list(campaignData);
@@ -258,6 +283,7 @@ export default function DemoCommandCenter() {
         setPackages(list(packageData));
         setApprovals(list(approvalData));
         setIntegrationStatus(integrationData as RecordMap | null);
+        setWorkflowState(workflowData as RecordMap | null);
         setPostizChannels(list((postizChannelData as RecordMap).channels));
         setAnalytics(buildAnalyticsSummary(list(sourceData), list(snapshotData), list(reportData)));
         try {
@@ -285,7 +311,7 @@ export default function DemoCommandCenter() {
   async function refreshStatus() {
     if (!token) return;
     try {
-      const [leadData, leadStatData, postizData, packageData, approvalData, integrationData, postizChannelData] = await Promise.all([
+      const [leadData, leadStatData, postizData, packageData, approvalData, integrationData, postizChannelData, workflowData] = await Promise.all([
         leadsApi.list(token),
         leadsApi.stats(token),
         postizApi.status(token),
@@ -293,6 +319,7 @@ export default function DemoCommandCenter() {
         approvalsApi.list(token).catch(() => []),
         integrationStatusApi.get(token).catch(() => null),
         postizApi.channels(token).catch(() => ({ channels: [] })),
+        commercialWorkflowApi.state(token, selected?.id ? String(selected.id) : undefined).catch(() => null),
       ]);
       setLeadRecords(list(leadData));
       setLeadStats(leadStatData as RecordMap);
@@ -301,6 +328,7 @@ export default function DemoCommandCenter() {
       setApprovals(list(approvalData));
       setIntegrationStatus(integrationData as RecordMap | null);
       setPostizChannels(list((postizChannelData as RecordMap).channels));
+      setWorkflowState(workflowData as RecordMap | null);
     } catch {
       setLeadRecords([]);
       setLeadStats(null);
@@ -490,34 +518,34 @@ export default function DemoCommandCenter() {
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
             <ExecutiveKpiCard
               label="Active campaigns"
-              value={campaignQueue.length}
+              value={displayCampaignCount}
               detail={selected ? `Now focused on: ${campaignName(selected)}` : 'Create or select a campaign'}
-              tone={campaignQueue.length ? 'info' : 'warn'}
-              series={[campaignQueue.length, drafts.length, pendingApprovals, publishingPackageCount, leads.length]}
+              tone={displayCampaignCount ? 'info' : 'warn'}
+              series={[displayCampaignCount, drafts.length, displayPendingApprovals, displayPackageCount, leads.length]}
               secondary="growth work in motion"
             />
             <ExecutiveKpiCard
               label="Pending approvals"
-              value={pendingApprovals}
-              detail={`${approvedApprovals} approved decisions recorded`}
-              tone={pendingApprovals ? 'warn' : 'good'}
-              series={[approvals.length, pendingApprovals, approvedApprovals]}
+              value={displayPendingApprovals}
+              detail={`${displayApprovedApprovals} approved decisions recorded`}
+              tone={displayPendingApprovals ? 'warn' : 'good'}
+              series={[approvals.length, displayPendingApprovals, displayApprovedApprovals]}
               secondary="human review queue"
             />
             <ExecutiveKpiCard
               label="Posts ready"
-              value={publishingPackageCount}
+              value={displayPackageCount}
               detail={connectedChannelCount ? `${connectedChannelCount} Postiz channel(s) connected` : 'Connect a Postiz channel before scheduling'}
-              tone={publishingPackageCount && connectedChannelCount ? 'good' : 'warn'}
-              series={[drafts.length, approvedApprovals, publishingPackageCount, connectedChannelCount]}
+              tone={displayPackageCount && connectedChannelCount ? 'good' : 'warn'}
+              series={[drafts.length, displayApprovedApprovals, displayPackageCount, connectedChannelCount]}
               secondary="approval to schedule"
             />
             <ExecutiveKpiCard
               label="Qualified leads"
-              value={numberValue(leadStats?.qualified)}
-              detail={`${numberValue(leadStats?.total)} captured lead records`}
-              tone={numberValue(leadStats?.qualified) ? 'good' : 'info'}
-              series={[publishingPackageCount, leads.length, numberValue(leadStats?.qualified)]}
+              value={displayQualifiedLeads}
+              detail={`${displayCapturedLeads} captured lead records`}
+              tone={displayQualifiedLeads ? 'good' : 'info'}
+              series={[displayPackageCount, leads.length, displayQualifiedLeads]}
               secondary="commercial outcome"
             />
           </div>
@@ -531,6 +559,12 @@ export default function DemoCommandCenter() {
         </div>
         <div className="mt-4">
           <ExecutiveStatusGrid items={[
+            {
+              label: 'Workflow state',
+              value: workflowState ? 'Backend orchestrator active' : 'Loading backend state',
+              tone: workflowState ? 'good' : 'warn',
+              detail: workflowState ? 'Readiness and next actions are derived from STITCH backend records.' : 'The page will keep using local state until backend state loads.',
+            },
             {
               label: 'AI model',
               value: providerReady ? providerLabel : 'Connect OpenAI or Claude',
@@ -575,11 +609,11 @@ export default function DemoCommandCenter() {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="rounded-lg bg-neutral-950 p-6 text-white">
             <div className="text-sm text-white/55">Recommended action</div>
-            <div className="mt-3 text-3xl font-semibold tracking-tight">{nextAction}</div>
+            <div className="mt-3 text-3xl font-semibold tracking-tight">{text(workflowNextAction.label, nextAction)}</div>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-white/65">
-              {selected
+              {text(workflowNextAction.reason, selected
                 ? `Move "${campaignName(selected)}" through draft, score, approval, package, analytics, and lead handoff.`
-                : 'Create or select a campaign before draft generation, approval, publishing preparation, analytics, or lead handoff can produce useful output.'}
+                : 'Create or select a campaign before draft generation, approval, publishing preparation, analytics, or lead handoff can produce useful output.')}
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               {!selected && <Link to="/ideas" className="inline-flex min-h-10 items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-neutral-950">Create Campaign</Link>}
@@ -600,7 +634,7 @@ export default function DemoCommandCenter() {
       </ProductCard>
 
       <ProductCard title="Campaign Journey" subtitle="One campaign moves through this path. Detailed work happens below or in the dedicated pages.">
-        <WorkflowRail steps={[
+        <WorkflowRail steps={workflowStages.length ? workflowStages : [
           { label: 'Brief', state: stateFor(!!selected, step === 'brief') },
           { label: 'Draft', state: stateFor(!!drafts.length, step === 'drafts') },
           { label: 'Score', state: stateFor(!!score, step === 'score') },
@@ -627,10 +661,10 @@ export default function DemoCommandCenter() {
         </ProductCard>
         <ProductCard title="Commercial Funnel" subtitle="From campaign work to publishing package and captured leads.">
           <FunnelChart stages={[
-            { label: 'Campaigns', value: campaignQueue.length, tone: campaignQueue.length ? 'info' : 'default' },
+            { label: 'Campaigns', value: displayCampaignCount, tone: displayCampaignCount ? 'info' : 'default' },
             { label: 'Drafts', value: drafts.length || 0, tone: drafts.length ? 'good' : 'default' },
             { label: 'Approvals', value: approval ? 1 : 0, tone: approval ? 'good' : 'default' },
-            { label: 'Packages', value: publishingPackageCount, tone: publishingPackageCount ? 'good' : 'default' },
+            { label: 'Packages', value: displayPackageCount, tone: displayPackageCount ? 'good' : 'default' },
             { label: 'Leads', value: leads.length || 0, tone: leads.length ? 'good' : 'default' },
           ]} />
         </ProductCard>

@@ -216,6 +216,13 @@ export const integrationStatusApi = {
   get: (token: string) => apiFetch<unknown>('/integration-status', { token }),
 };
 
+export const commercialWorkflowApi = {
+  state: (token: string, campaignId?: string) => {
+    const params = campaignId ? `?${new URLSearchParams({ campaignId }).toString()}` : '';
+    return apiFetch<unknown>(`/commercial-workflow/state${params}`, { token });
+  },
+};
+
 export const integrationCredentialsApi = {
   list: (token: string) => apiFetch<unknown>('/integration-credentials', { token }),
   requirements: (token: string) => apiFetch<unknown>('/integration-credentials/requirements', { token }),
