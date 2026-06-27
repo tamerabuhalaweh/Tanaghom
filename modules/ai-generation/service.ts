@@ -385,7 +385,7 @@ Generate a platform-native draft that:
 4. Is optimized for the platform's algorithm
 5. Avoids restricted claims and sensitive topics
 
-Output the draft text only.`;
+Output only the final social post copy. Do not include explanations, headings, labels, markdown separators, or notes.`;
 }
 
 function buildRevisionPrompt(
