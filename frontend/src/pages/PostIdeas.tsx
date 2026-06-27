@@ -107,7 +107,7 @@ export default function PostIdeas() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [providerReady, setProviderReady] = useState(false);
-  const [providerLabel, setProviderLabel] = useState('Requires LLM provider');
+  const [pageLoading, setPageLoading] = useState(Boolean(token));
 
   const selectedIdea = useMemo(() => ideas.find((idea) => idea.id === selectedIdeaId) || null, [ideas, selectedIdeaId]);
   const goalPayload = buildGoalPayload(brief);
@@ -122,11 +122,11 @@ export default function PostIdeas() {
         const active = await aiProviderApi.active(token as string) as { name?: string; model?: string; apiKeyStatus?: string; _label?: string };
         if (cancelled) return;
         setProviderReady(active.apiKeyStatus === 'configured');
-        setProviderLabel(`${active.name || 'LLM provider'} / ${active.model || 'model configured'}`);
-      } catch (error) {
+      } catch {
         if (cancelled) return;
         setProviderReady(false);
-        setProviderLabel(error instanceof Error ? error.message : 'Configure DeepSeek, OpenAI, or Claude before generation');
+      } finally {
+        if (!cancelled) setPageLoading(false);
       }
     }
 
@@ -153,7 +153,7 @@ export default function PostIdeas() {
       setSelectedIdeaId(data.ideas?.[0]?.id || '');
       setWorkflowId(data.workflow.threadId);
       setProvider(data);
-      setMessage(`Generated ${data.ideas?.length || 0} campaign ideas for human review.`);
+      setMessage(`Generated ${data.ideas?.length || 0} campaign ideas for your review.`);
     } catch (error) {
       setMessage(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -169,10 +169,10 @@ export default function PostIdeas() {
       const decision = await ideasApi.resumeWorkflow(workflowId, {
         action: 'select',
         ideaId: selectedIdea.id,
-        notes: 'Selected by human operator for campaign creation.',
+        notes: 'Selected for campaign creation.',
       }, token) as WorkflowResumeResponse;
       setWorkflowDecision(decision);
-      setMessage('Human selection recorded. Campaign creation is available.');
+      setMessage('Idea selected. You can now create a campaign from it.');
     } catch (error) {
       setMessage(`Selection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -211,23 +211,41 @@ export default function PostIdeas() {
     });
   }
 
+  // ---- Skeleton loading ----
+  if (pageLoading) {
+    return (
+      <ProductPage eyebrow="Content Studio" title="Content Creator" subtitle="Loading...">
+        <div className="space-y-6">
+          <div className="skeleton-pulse h-10 w-72 rounded-lg" />
+          <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <div className="skeleton-pulse h-96 rounded-xl" />
+            <div className="skeleton-pulse h-96 rounded-xl" />
+          </div>
+        </div>
+      </ProductPage>
+    );
+  }
+
   return (
     <ProductPage
-      eyebrow="AI Draft Studio"
-      title="Create campaign ideas"
-      subtitle="For social media and marketing managers: write a campaign brief, generate platform-aware directions with your configured LLM, choose one direction, then create a campaign for drafting."
-      action={<ProductStatus tone={providerReady ? 'good' : 'warn'}>{provider ? `${provider.generationMode || provider.provider} / ${provider.model}` : providerReady ? 'Live Provider Active' : 'Requires Provider'}</ProductStatus>}
+      eyebrow="Content Studio"
+      title="Content Creator"
+      subtitle="Fill in your campaign brief and let AI generate creative directions for you to choose from."
+      action={
+        <ProductStatus tone={providerReady ? 'good' : 'warn'}>
+          {providerReady
+            ? (provider ? `${provider.generationMode || provider.provider} / ${provider.model}` : 'AI Connected')
+            : 'Connect AI Model'}
+        </ProductStatus>
+      }
     >
-      <WorkflowRail steps={[
-        { label: 'Brief', state: 'done' },
-        { label: 'Ideas', state: ideas.length ? 'done' : 'active' },
-        { label: 'Selection', state: workflowDecision?.status === 'selected' ? 'done' : ideas.length ? 'active' : 'waiting' },
-        { label: 'Campaign', state: campaign ? 'done' : workflowDecision?.status === 'selected' ? 'active' : 'waiting' },
-        { label: 'Drafts', state: campaign ? 'active' : 'waiting' },
-        { label: 'Approval', state: 'waiting' },
-        { label: 'Package', state: 'waiting' },
-        { label: 'Leads', state: 'waiting' },
-      ]} />
+      <WorkflowRail
+        steps={[
+          { label: 'Brief', state: 'active' },
+          { label: 'Ideas', state: ideas.length ? 'done' : 'waiting' },
+          { label: 'Campaign', state: campaign ? 'done' : workflowDecision?.status === 'selected' ? 'active' : 'waiting' },
+        ]}
+      />
 
       {message && (
         <Notice tone={message.includes('failed') ? 'danger' : 'good'}>{message}</Notice>
@@ -235,46 +253,118 @@ export default function PostIdeas() {
 
       {!providerReady && (
         <Notice tone="warn">
-          Real AI generation is blocked until this user configures DeepSeek, OpenAI, or Claude. {providerLabel}{' '}
-          <Link to="/ai-settings" className="font-semibold underline">Open AI Provider Settings</Link>
+          Connect an AI model to generate campaign ideas.{' '}
+          <Link to="/ai-settings" className="font-semibold underline">Go to AI Settings</Link>
         </Notice>
       )}
 
+      {/* ---- Quick guide for first-time users ---- */}
+      {!ideas.length && !campaign && (
+        <ProductCard
+          title="How it works"
+          subtitle="Three simple steps to create your campaign."
+        >
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[
+              { step: '1', title: 'Write your brief', desc: 'Tell us about your campaign goal, audience, and what action you want people to take.' },
+              { step: '2', title: 'AI generates ideas', desc: 'Your connected AI model creates platform-specific campaign directions for you to review.' },
+              { step: '3', title: 'You choose & create', desc: 'Pick the direction you like, and we create a campaign ready for content generation.' },
+            ].map((item) => (
+              <div key={item.step} className="rounded-lg border border-neutral-200 bg-neutral-50 p-5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
+                  {item.step}
+                </div>
+                <div className="mt-3 text-sm font-semibold text-neutral-950">{item.title}</div>
+                <p className="mt-1 text-sm leading-6 text-neutral-600">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </ProductCard>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <ProductCard title="Campaign Brief" subtitle="These inputs guide generation and later approval review.">
+        <ProductCard
+          title="Campaign Brief"
+          subtitle="Fill in the details below. The AI uses this to generate creative campaign directions."
+        >
           <div className="space-y-4">
             <Field label="Campaign Name">
-              <input value={brief.campaignName} onChange={(event) => updateBrief('campaignName', event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" />
+              <input
+                value={brief.campaignName}
+                onChange={(event) => updateBrief('campaignName', event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+                placeholder="e.g. Summer product launch"
+              />
             </Field>
-            <Field label="Business Objective">
-              <textarea value={brief.objective} onChange={(event) => updateBrief('objective', event.target.value)} className="min-h-24 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-6 text-neutral-950" />
+            <Field label="What's the goal?">
+              <textarea
+                value={brief.objective}
+                onChange={(event) => updateBrief('objective', event.target.value)}
+                className="min-h-24 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-6 text-neutral-950"
+                placeholder="e.g. Drive awareness for our new product line and generate 500 sign-ups"
+              />
             </Field>
-            <Field label="Target Audience">
-              <textarea value={brief.audience} onChange={(event) => updateBrief('audience', event.target.value)} className="min-h-20 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-6 text-neutral-950" />
+            <Field label="Who are you talking to?">
+              <textarea
+                value={brief.audience}
+                onChange={(event) => updateBrief('audience', event.target.value)}
+                className="min-h-20 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-6 text-neutral-950"
+                placeholder="e.g. Marketing managers at mid-size tech companies in North America"
+              />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Geography">
-                <input value={brief.geography} onChange={(event) => updateBrief('geography', event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" />
+              <Field label="Location">
+                <input
+                  value={brief.geography}
+                  onChange={(event) => updateBrief('geography', event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+                  placeholder="e.g. North America"
+                />
               </Field>
               <Field label="Tone">
-                <input value={brief.tone} onChange={(event) => updateBrief('tone', event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" />
+                <input
+                  value={brief.tone}
+                  onChange={(event) => updateBrief('tone', event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+                  placeholder="e.g. professional, casual, inspiring"
+                />
               </Field>
-              <Field label="CTA">
-                <input value={brief.cta} onChange={(event) => updateBrief('cta', event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" />
+              <Field label="Call to Action">
+                <input
+                  value={brief.cta}
+                  onChange={(event) => updateBrief('cta', event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+                  placeholder="e.g. Sign up for early access"
+                />
               </Field>
-              <Field label="Offer">
-                <input value={brief.offer} onChange={(event) => updateBrief('offer', event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" />
+              <Field label="Your Offer">
+                <input
+                  value={brief.offer}
+                  onChange={(event) => updateBrief('offer', event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+                  placeholder="e.g. 30% off first month"
+                />
               </Field>
-              <Field label="Posting Window">
-                <input value={brief.postingWindow} onChange={(event) => updateBrief('postingWindow', event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" />
+              <Field label="When to post">
+                <input
+                  value={brief.postingWindow}
+                  onChange={(event) => updateBrief('postingWindow', event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+                  placeholder="e.g. Next two weeks"
+                />
               </Field>
               <Field label="Content Category">
-                <input value={brief.pillar} onChange={(event) => updateBrief('pillar', event.target.value)} className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950" />
+                <input
+                  value={brief.pillar}
+                  onChange={(event) => updateBrief('pillar', event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+                  placeholder="e.g. Product launch, thought leadership"
+                />
               </Field>
             </div>
             <Field label="Platforms">
               <div className="flex flex-wrap gap-2">
-                {PLATFORM_OPTIONS.map(platform => (
+                {PLATFORM_OPTIONS.map((platform) => (
                   <button
                     key={platform.id}
                     type="button"
@@ -286,14 +376,25 @@ export default function PostIdeas() {
                 ))}
               </div>
             </Field>
-            <PrimaryAction onClick={generateIdeas} disabled={!providerReady || loading || brief.objective.trim().length < 6 || brief.audience.trim().length < 3}>
-              {loading ? 'Working...' : 'Generate Ideas'}
+            <PrimaryAction
+              onClick={generateIdeas}
+              disabled={
+                !providerReady ||
+                loading ||
+                brief.objective.trim().length < 6 ||
+                brief.audience.trim().length < 3
+              }
+            >
+              {loading ? 'Generating ideas...' : !providerReady ? 'Connect AI Model First' : 'Generate Campaign Ideas'}
             </PrimaryAction>
           </div>
         </ProductCard>
 
         <div className="space-y-6">
-          <ProductCard title="Generated Ideas" subtitle="Choose one AI-generated direction before creating the campaign.">
+          <ProductCard
+            title="Generated Ideas"
+            subtitle="Review the AI-generated directions and pick the one you like best."
+          >
             {ideas.length ? (
               <div className="grid gap-4 lg:grid-cols-2">
                 {ideas.map((idea) => {
@@ -303,20 +404,55 @@ export default function PostIdeas() {
                       key={idea.id}
                       type="button"
                       onClick={() => setSelectedIdeaId(idea.id)}
-                      className={`rounded-lg border p-5 text-left transition ${active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'}`}
+                      className={`rounded-lg border p-5 text-left transition ${
+                        active
+                          ? 'border-neutral-950 bg-neutral-950 text-white'
+                          : 'border-neutral-200 bg-white hover:bg-neutral-50'
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className={active ? 'text-sm font-medium text-white/60' : 'text-sm font-medium text-neutral-500'}>{platformLabel(idea.platform)} / {idea.format.replaceAll('_', ' ')}</div>
+                          <div
+                            className={
+                              active
+                                ? 'text-sm font-medium text-white/60'
+                                : 'text-sm font-medium text-neutral-500'
+                            }
+                          >
+                            {platformLabel(idea.platform)} / {idea.format.replaceAll('_', ' ')}
+                          </div>
                           <h2 className="mt-3 text-lg font-semibold leading-snug">{idea.title}</h2>
                         </div>
-                        <ProductStatus tone={active ? 'muted' : 'info'}>{active ? 'Selected' : 'Review'}</ProductStatus>
+                        <ProductStatus tone={active ? 'muted' : 'info'}>
+                          {active ? 'Selected' : 'Review'}
+                        </ProductStatus>
                       </div>
-                      <p className={`mt-4 text-sm leading-6 ${active ? 'text-white/75' : 'text-neutral-600'}`}>{idea.hook}</p>
-                      <p className={`mt-3 text-sm leading-6 ${active ? 'text-white/50' : 'text-neutral-500'}`}>{idea.rationale}</p>
+                      <p
+                        className={`mt-4 text-sm leading-6 ${
+                          active ? 'text-white/75' : 'text-neutral-600'
+                        }`}
+                      >
+                        {idea.hook}
+                      </p>
+                      <p
+                        className={`mt-3 text-sm leading-6 ${
+                          active ? 'text-white/50' : 'text-neutral-500'
+                        }`}
+                      >
+                        {idea.rationale}
+                      </p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {idea.hashtags.map((tag) => (
-                          <span key={tag} className={`rounded-md border px-2 py-1 text-xs ${active ? 'border-white/15 bg-white/10 text-white/75' : 'border-neutral-200 bg-neutral-50 text-neutral-600'}`}>{tag}</span>
+                          <span
+                            key={tag}
+                            className={`rounded-md border px-2 py-1 text-xs ${
+                              active
+                                ? 'border-white/15 bg-white/10 text-white/75'
+                                : 'border-neutral-200 bg-neutral-50 text-neutral-600'
+                            }`}
+                          >
+                            {tag}
+                          </span>
                         ))}
                       </div>
                     </button>
@@ -325,37 +461,63 @@ export default function PostIdeas() {
               </div>
             ) : (
               <EmptyProductState
-                title="Ready for AI preparation"
-                message="Complete or adjust the campaign brief, choose platforms, and generate campaign directions for human review."
+                title="Your campaign ideas will appear here"
+                message="Fill in the brief on the left and click Generate Campaign Ideas. The AI creates platform-specific directions for you to review."
               />
             )}
           </ProductCard>
 
-          <ProductCard title="Campaign Decision" subtitle="The campaign is created only after a human chooses the direction.">
+          <ProductCard
+            title="Make Your Choice"
+            subtitle="Select your favorite idea, then create a campaign from it."
+          >
             <div className="flex flex-wrap items-center gap-3">
-              <PrimaryAction onClick={approveSelectedIdea} disabled={loading || !selectedIdea || workflowDecision?.status === 'selected'}>
-                Select This Idea
+              <PrimaryAction
+                onClick={approveSelectedIdea}
+                disabled={loading || !selectedIdea || workflowDecision?.status === 'selected'}
+              >
+                {workflowDecision?.status === 'selected' ? 'Idea Selected' : 'Choose This Idea'}
               </PrimaryAction>
-              <SecondaryAction onClick={convertToCampaign} disabled={loading || workflowDecision?.status !== 'selected' || Boolean(campaign)}>
-                Create Campaign From Selected Idea
+              <SecondaryAction
+                onClick={convertToCampaign}
+                disabled={
+                  loading ||
+                  workflowDecision?.status !== 'selected' ||
+                  Boolean(campaign)
+                }
+              >
+                {campaign ? 'Campaign Created' : 'Create Campaign From Idea'}
               </SecondaryAction>
               {campaign && (
-                <Link to="/campaigns" className="inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
-                  Open Campaigns
+                <Link
+                  to="/campaigns"
+                  className="inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+                >
+                  Open in Campaigns
                 </Link>
               )}
             </div>
+            {!selectedIdea && ideas.length > 0 && (
+              <p className="mt-3 text-sm text-neutral-500">
+                Click on any idea card above to select it, then choose it as your direction.
+              </p>
+            )}
+            {workflowDecision?.status === 'selected' && !campaign && (
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                Idea selected - now click "Create Campaign From Idea" to turn it into a campaign.
+              </div>
+            )}
           </ProductCard>
 
-          <ProductCard title="Prepared Context" subtitle="Readable summary used by the AI provider.">
+          <ProductCard title="Your Brief Summary" subtitle="What the AI will work with.">
             <ProductTable
               columns={['Input', 'Value']}
               rows={[
-                ['Objective', brief.objective],
-                ['Audience', brief.audience],
-                ['CTA', brief.cta],
-                ['Platforms', platforms.map(platformLabel).join(', ')],
-                ['Safety', 'Human approval required before publishing preparation'],
+                ['Goal', brief.objective || 'Not filled in yet'],
+                ['Audience', brief.audience || 'Not filled in yet'],
+                ['Call to Action', brief.cta || 'Not filled in yet'],
+                ['Platforms', platforms.length ? platforms.map(platformLabel).join(', ') : 'Select platforms above'],
+                ['Safety', 'Human approval required before publishing'],
               ]}
             />
           </ProductCard>

@@ -358,8 +358,8 @@ export function DetailGrid({ items }: { items: { label: string; value: string }[
 export function ReadableQueue({ items }: { items: { title: string; meta: string; status?: string; tone?: Tone }[] }) {
   return (
     <div className="divide-y divide-neutral-100">
-      {items.map((item) => (
-        <div key={`${item.title}-${item.meta}`} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+      {items.map((item, index) => (
+        <div key={`${item.title}-${item.meta}-${index}`} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="font-medium text-neutral-950">{item.title}</div>
             <div className="mt-1 text-sm leading-5 text-neutral-500">{item.meta}</div>

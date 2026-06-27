@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/useAuth';
 import { aiProviderApi } from '../api';
-import { Notice, ProductCard, ProductPage, ProductStatus } from '../components/ProductUI';
+import { Notice, PrimaryAction, ProductCard, ProductPage, ProductStatus, SecondaryAction } from '../components/ProductUI';
 
 interface ProviderStatus {
   name: string;
@@ -24,7 +24,7 @@ interface CredentialStatus {
 }
 
 const PROVIDERS = [
-  { type: 'mock', name: 'Mock LLM', defaultModel: 'mock-v1', keyLabel: 'No key required' },
+  { type: 'mock', name: 'Mock', defaultModel: 'mock-v1', keyLabel: 'No key required' },
   { type: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o', keyLabel: 'OpenAI API key' },
   { type: 'claude', name: 'Claude', defaultModel: 'claude-sonnet-4-20250514', keyLabel: 'Claude API key' },
   { type: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-v4-flash', keyLabel: 'DeepSeek API key' },
@@ -43,6 +43,8 @@ export default function AIProviderSettings() {
   const [apiKey, setApiKey] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState('');
+  const [pageLoading, setPageLoading] = useState(Boolean(token));
+  const [showGuide, setShowGuide] = useState(true);
 
   async function load() {
     if (!token) return;
@@ -89,8 +91,12 @@ export default function AIProviderSettings() {
         setSelectedProvider(configurableProvider);
         setModel(credential?.model || nextMeta.defaultModel);
         setApiKey('');
+        setPageLoading(false);
       } catch (err) {
-        if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load provider settings');
+        if (!cancelled) {
+          setMessage(err instanceof Error ? err.message : 'Failed to load provider settings');
+          setPageLoading(false);
+        }
       }
     }
 
@@ -105,16 +111,19 @@ export default function AIProviderSettings() {
     [selectedProvider],
   );
 
+  const anyConnected = credentials.some((c) => c.apiKeyStatus === 'configured');
+  const connectedCount = credentials.filter((c) => c.apiKeyStatus === 'configured').length;
+
   async function saveCredential() {
     if (!token) return;
     setLoading('save');
     setMessage('');
     try {
       await aiProviderApi.saveCredential({ provider: selectedProvider, model, apiKey }, token);
-      setMessage('API key encrypted and saved for your user account only. Raw key was not returned.');
+      setMessage(`API key saved securely. Your key is encrypted and never shown after this.`);
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to save credential');
+      setMessage(err instanceof Error ? err.message : 'Failed to save key');
     } finally {
       setLoading('');
     }
@@ -128,11 +137,12 @@ export default function AIProviderSettings() {
       await aiProviderApi.saveCredential({ provider: selectedProvider, model, apiKey }, token);
       const result = await aiProviderApi.test(selectedProvider, token) as { _label?: string; status?: string };
       await aiProviderApi.select(selectedProvider, token);
-      setMessage(`${selectedMeta.name} saved, tested, and activated. ${result._label || 'Backend connection succeeded.'}`);
+      setMessage(`${selectedMeta.name} connected and activated. ${result._label || 'Connection test passed.'}`);
       setApiKey('');
+      setShowGuide(false);
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Provider activation failed');
+      setMessage(err instanceof Error ? err.message : 'Connection failed');
     } finally {
       setLoading('');
     }
@@ -145,7 +155,7 @@ export default function AIProviderSettings() {
     try {
       await aiProviderApi.select(selectedProvider, token);
       setActiveProvider(selectedProvider);
-      setMessage(`${selectedMeta.name} selected for your user session.`);
+      setMessage(`${selectedMeta.name} is now your active AI model.`);
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to select provider');
@@ -160,27 +170,98 @@ export default function AIProviderSettings() {
     setMessage('');
     try {
       const result = await aiProviderApi.test(provider, token) as { _label?: string; status?: string };
-      setMessage(result._label || `Provider test ${result.status || 'completed'}`);
+      setMessage(result._label || `Connection test ${result.status || 'completed'}`);
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Provider test failed');
+      setMessage(err instanceof Error ? err.message : 'Connection test failed');
     } finally {
       setLoading('');
     }
   }
 
+  // ---- Skeleton loading ----
+  if (pageLoading) {
+    return (
+      <ProductPage eyebrow="Content Studio" title="AI Settings" subtitle="Loading...">
+        <div className="space-y-6">
+          <div className="skeleton-pulse h-48 rounded-xl" />
+          <div className="grid gap-4 md:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="skeleton-pulse h-48 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </ProductPage>
+    );
+  }
+
   return (
     <ProductPage
-      eyebrow="My workspace"
-      title="AI Provider Settings"
-      subtitle="Choose your LLM provider, store your own API key securely, and keep model execution isolated to your account. Model calls use the backend provider adapter only."
-      action={<ProductStatus tone="good">Backend-only model calls</ProductStatus>}
+      eyebrow="Content Studio"
+      title="AI Settings"
+      subtitle="Connect your AI model to enable content generation. Your key is encrypted and never shared."
+      action={
+        <ProductStatus tone={anyConnected ? 'good' : 'warn'}>
+          {anyConnected ? `${connectedCount} model(s) connected` : 'No models connected'}
+        </ProductStatus>
+      }
     >
+      {message && (
+        <Notice tone={message.toLowerCase().includes('failed') ? 'danger' : 'good'}>{message}</Notice>
+      )}
 
-      {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
+      {/* ---- Setup Guide (collapsible) ---- */}
+      {showGuide && (
+        <ProductCard
+          title="How to connect your AI model"
+          subtitle="Three steps to enable AI-powered content generation."
+          action={
+            anyConnected ? (
+              <button
+                type="button"
+                onClick={() => setShowGuide(false)}
+                className="text-sm font-medium text-neutral-950 underline"
+              >
+                Hide guide
+              </button>
+            ) : undefined
+          }
+        >
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[
+              {
+                step: '1',
+                title: 'Get an API key',
+                desc: 'Sign up with OpenAI, Claude, or DeepSeek and create an API key. Your key stays with you - you paste it once.',
+              },
+              {
+                step: '2',
+                title: 'Choose your model',
+                desc: 'Pick which AI provider to use. You can connect multiple and switch between them anytime.',
+              },
+              {
+                step: '3',
+                title: 'Connect & test',
+                desc: 'Paste your key, test the connection, and activate. Done - your AI is ready for content generation.',
+              },
+            ].map((item) => (
+              <div key={item.step} className="rounded-lg border border-neutral-200 bg-neutral-50 p-5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
+                  {item.step}
+                </div>
+                <div className="mt-3 text-sm font-semibold text-neutral-950">{item.title}</div>
+                <p className="mt-1 text-sm leading-6 text-neutral-600">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </ProductCard>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[390px_1fr]">
-        <ProductCard title="Provider Setup" subtitle="Keys are user-owned and raw values are never returned by the backend.">
+        <ProductCard
+          title="Connect a Model"
+          subtitle="Your key is encrypted at rest and scoped to your account only."
+        >
           <div className="space-y-4">
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Provider</span>
@@ -217,36 +298,31 @@ export default function AIProviderSettings() {
                 type="password"
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
-                placeholder="Paste key once. It will be encrypted and never shown again."
+                placeholder="Paste your key once - it will be encrypted and never shown again"
                 className="mt-2 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
               />
             </label>
 
-            <div className="grid gap-3">
-              <button
-                onClick={saveTestAndUseProvider}
-                disabled={!apiKey || loading === 'activate'}
-                className="rounded-md bg-neutral-950 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
-              >
-                {loading === 'activate' ? 'Saving and testing...' : `Save, Test & Use ${selectedMeta.name}`}
-              </button>
-            </div>
+            <PrimaryAction
+              onClick={saveTestAndUseProvider}
+              disabled={!apiKey || loading === 'activate'}
+            >
+              {loading === 'activate' ? 'Connecting & testing...' : `Connect & Use ${selectedMeta.name}`}
+            </PrimaryAction>
 
             <div className="grid grid-cols-2 gap-3">
-              <button
+              <SecondaryAction
                 onClick={selectProvider}
                 disabled={loading === 'select'}
-                className="rounded-md bg-neutral-950 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
               >
-                {loading === 'select' ? 'Selecting...' : 'Use Provider'}
-              </button>
-              <button
+                {loading === 'select' ? 'Activating...' : 'Use This Model'}
+              </SecondaryAction>
+              <SecondaryAction
                 onClick={saveCredential}
                 disabled={!apiKey || loading === 'save'}
-                className="rounded-md border border-neutral-200 bg-white px-4 py-3 text-sm font-medium text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
               >
-                {loading === 'save' ? 'Saving...' : 'Save Key'}
-              </button>
+                {loading === 'save' ? 'Saving...' : 'Save Key Only'}
+              </SecondaryAction>
             </div>
           </div>
         </ProductCard>
@@ -257,31 +333,47 @@ export default function AIProviderSettings() {
               const status = providers.find((item) => item.type === provider.type);
               const credential = credentials.find((item) => item.provider === provider.type);
               const active = activeProvider === provider.type;
+              const connected = credential?.apiKeyStatus === 'configured' || status?.apiKeyStatus === 'configured';
               return (
                 <ProductCard key={provider.type} className={active ? 'border-blue-300 ring-1 ring-blue-200' : ''}>
                   <div className="space-y-4">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h3 className="text-lg font-semibold text-neutral-950">{provider.name}</h3>
-                        <p className="mt-1 text-xs text-neutral-500">{status?.scope === 'user' ? 'User credential' : provider.type === 'mock' ? 'Development/test only' : 'Environment or missing'}</p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {provider.type === 'mock'
+                            ? 'Development only'
+                            : connected
+                              ? 'Connected to your account'
+                              : 'Not connected yet'}
+                        </p>
                       </div>
-                      <ProductStatus tone={active ? 'good' : status?.configured ? 'info' : 'warn'}>{active ? 'Active' : status?.configured ? 'Configured' : 'Missing'}</ProductStatus>
+                      <ProductStatus tone={active ? 'good' : connected ? 'info' : 'warn'}>
+                        {active ? 'Active' : connected ? 'Connected' : 'Not set up'}
+                      </ProductStatus>
                     </div>
 
                     <div className="space-y-2 text-sm">
                       <Line label="Model" value={credential?.model || status?.model || provider.defaultModel} />
-                      <Line label="API key" value={provider.type === 'mock' ? 'Disabled for production' : credential ? `configured (${credential.keyFingerprint})` : status?.apiKeyStatus || 'missing'} />
-                      <Line label="Scope" value={provider.type === 'mock' ? 'not selectable' : credential ? 'user isolated' : status?.scope || 'none'} />
+                      <Line
+                        label="Status"
+                        value={
+                          provider.type === 'mock'
+                            ? 'No key needed'
+                            : connected
+                              ? 'Connected'
+                              : 'Add your key to connect'
+                        }
+                      />
                     </div>
 
                     {provider.type !== 'mock' && (
-                      <button
+                      <SecondaryAction
                         onClick={() => testProvider(provider.type)}
                         disabled={!credential || loading === `test-${provider.type}`}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
                       >
-                        {loading === `test-${provider.type}` ? 'Testing...' : 'Test Backend Connection'}
-                      </button>
+                        {loading === `test-${provider.type}` ? 'Testing...' : 'Test Connection'}
+                      </SecondaryAction>
                     )}
                   </div>
                 </ProductCard>
@@ -290,16 +382,28 @@ export default function AIProviderSettings() {
           </div>
 
           <Notice tone="info">
-            Keys are encrypted with the deployment master key and scoped to the authenticated user. The frontend receives only status and fingerprint.
+            Your keys are encrypted and belong to your account only. The app never stores or shows raw keys after you save them.
           </Notice>
 
-          <ProductCard title="Activation Checklist" subtitle="A provider is accepted only after the backend can call it successfully.">
-            <ol className="space-y-3 text-sm leading-6 text-neutral-700">
-              <li><strong>1. Save key:</strong> the raw key is sent once to the backend and encrypted at rest.</li>
-              <li><strong>2. Test backend connection:</strong> Tanaghum calls the provider adapter from the backend, never from the browser.</li>
-              <li><strong>3. Use provider:</strong> the selected provider is stored on your AgentRep metadata for your user only.</li>
-              <li><strong>4. Generate drafts:</strong> return to Command Center and run the campaign draft path.</li>
-            </ol>
+          <ProductCard title="What you can do after connecting" subtitle="Once your AI model is connected, here's what's available.">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { title: 'Generate campaign ideas', desc: 'Go to Content Creator and let AI propose creative directions.', to: '/content' },
+                { title: 'Create content drafts', desc: 'Generate platform-specific posts from your campaign brief in the Dashboard.', to: '/dashboard' },
+                { title: 'Content quality review', desc: 'AI scores your drafts for reach, clarity, and platform fit.', to: '/campaigns' },
+                { title: 'Switch models anytime', desc: 'Connect multiple AI providers and switch between them for different needs.', to: null },
+              ].map((item) => (
+                <div key={item.title} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="text-sm font-semibold text-neutral-950">{item.title}</div>
+                  <p className="mt-1 text-sm leading-6 text-neutral-600">{item.desc}</p>
+                  {item.to && (
+                    <a href={item.to} className="mt-3 inline-block text-sm font-medium text-neutral-950 underline">
+                      Open
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
           </ProductCard>
         </div>
       </div>
@@ -311,7 +415,7 @@ function Line({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
       <span className="text-neutral-500">{label}</span>
-      <span className="truncate text-right font-mono text-xs text-neutral-700">{value}</span>
+      <span className="truncate text-right text-xs text-neutral-700">{value}</span>
     </div>
   );
 }

@@ -78,9 +78,14 @@ function App() {
             <Route path="agent-skills" element={<AgentSkills />} />
             <Route path="ghl-readiness" element={<GhlReadiness />} />
             <Route path="ghl-wizard" element={<GhlWizard />} />
+            <Route path="dashboard" element={<DemoCommandCenter />} />
             <Route path="command-center" element={<DemoCommandCenter />} />
+            <Route path="content" element={<PostIdeas />} />
             <Route path="ideas" element={<PostIdeas />} />
             <Route path="draft-studio" element={<PostIdeas />} />
+            <Route path="review" element={<ApprovalQueue />} />
+            <Route path="scheduling" element={<PublishingPrep />} />
+            <Route path="performance" element={<Analytics />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
