@@ -33,6 +33,7 @@ import AcceptOnboarding from './pages/AcceptOnboarding'
 import AccountSecurity from './pages/AccountSecurity'
 import TenantAdmin from './pages/TenantAdmin'
 import OperationsReadiness from './pages/OperationsReadiness'
+import SmartLabsVoice from './pages/SmartLabsVoice'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -80,6 +81,7 @@ function App() {
             <Route path="admin-users" element={<AdminUsers />} />
             <Route path="tenant-admin" element={<TenantAdmin />} />
             <Route path="operations" element={<OperationsReadiness />} />
+            <Route path="smartlabs-voice" element={<SmartLabsVoice />} />
             <Route path="mcp-engine" element={<McpEngine />} />
             <Route path="agent-skills" element={<AgentSkills />} />
             <Route path="ghl-readiness" element={<GhlReadiness />} />

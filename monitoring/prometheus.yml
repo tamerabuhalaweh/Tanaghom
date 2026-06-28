@@ -8,4 +8,4 @@ scrape_configs:
     bearer_token_file: /run/secrets/ops_metrics_token
     static_configs:
       - targets:
-          - app:3000
+          - app:4000

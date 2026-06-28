@@ -240,6 +240,9 @@ export const tenantAdminApi = {
   summary: (token: string) => apiFetch<unknown>('/admin/tenant', { token }),
   update: (data: unknown, token: string) => apiFetch<unknown>('/admin/tenant', { method: 'PUT', body: data, token }),
   isolationReport: (token: string) => apiFetch<unknown>('/admin/tenant/isolation-report', { token }),
+  lifecycle: (token: string) => apiFetch<unknown>('/admin/tenant/lifecycle', { token }),
+  updateLifecycle: (data: unknown, token: string) =>
+    apiFetch<unknown>('/admin/tenant/lifecycle', { method: 'POST', body: data, token }),
 };
 
 export const operationsApi = {
@@ -316,6 +319,16 @@ export const leadsApi = {
   stats: (token: string) => apiFetch<unknown>('/leads/stats', { token }),
   sandboxExecution: (id: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/crm-conversion/leads/${id}/sandbox-execution`, { method: 'POST', body: data, token }),
+};
+
+export const smartLabsApi = {
+  status: (token: string) => apiFetch<unknown>('/smartlabs/status', { token }),
+  testAgents: (token: string) => apiFetch<unknown>('/smartlabs/agents/test', { method: 'POST', token }),
+  testVoices: (token: string) => apiFetch<unknown>('/smartlabs/voices/test', { method: 'POST', token }),
+  conversation: (data: unknown, token: string) =>
+    apiFetch<unknown>('/smartlabs/conversation', { method: 'POST', body: data, token }),
+  textToSpeech: (data: unknown, token: string) =>
+    apiFetch<unknown>('/smartlabs/text-to-speech', { method: 'POST', body: data, token }),
 };
 
 export const ghlApi = {

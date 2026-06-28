@@ -38,6 +38,7 @@ import { runtimeBridgesRouter } from '../modules/runtime-bridges/controller';
 import { commercialWorkflowRouter } from '../modules/commercial-workflow/controller';
 import { tenantAdminRouter } from '../modules/tenant-admin/controller';
 import { operationsRouter } from '../modules/operations/controller';
+import { smartLabsVoiceRouter } from '../modules/smartlabs-voice/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -241,6 +242,7 @@ app.use('/commercial-workflow', commercialWorkflowRouter);
 app.use('/admin/users', adminUsersRouter);
 app.use('/admin/tenant', tenantAdminRouter);
 app.use('/ops', operationsRouter);
+app.use('/smartlabs', smartLabsVoiceRouter);
 app.use('/integrations', integrationsRouter);
 app.use('/leads', leadsRouter);
 app.use('/ghl', ghlRouter);

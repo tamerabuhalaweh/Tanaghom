@@ -61,6 +61,15 @@ const REQUIRED_CREDENTIALS = [
     purpose: 'Prepare and later trigger approved test voice/chat handoff.',
   },
   {
+    provider: 'smartlabs_voice',
+    credentialType: 'api_key',
+    connectionKey: 'default',
+    label: 'SmartLabs Voice Agent',
+    requiredFields: ['apiKey'],
+    optionalFields: ['baseUrl', 'agentId', 'voiceId', 'ttsBackend'],
+    purpose: 'Connect this tenant to its own SmartLabs ConvAI and text-to-speech API. Conversations and TTS execution remain policy-gated.',
+  },
+  {
     provider: 'social_oauth',
     credentialType: 'oauth_client',
     connectionKey: 'linkedin',

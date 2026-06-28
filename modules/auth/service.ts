@@ -186,7 +186,7 @@ export function getOnboardingEmailStatus() {
 }
 
 async function ensureActiveTenantMembership(userId: string, tenantKey: string, role: LoginResult['user']['role']) {
-  await prisma.tenant.upsert({
+  const tenant = await prisma.tenant.upsert({
     where: { tenant_key: tenantKey },
     create: {
       tenant_key: tenantKey,
@@ -195,6 +195,9 @@ async function ensureActiveTenantMembership(userId: string, tenantKey: string, r
     },
     update: {},
   });
+  if (tenant.status !== 'active') {
+    throw new UnauthorizedError(`Tenant is ${tenant.status}`);
+  }
   const membership = await prisma.tenantMembership.upsert({
     where: {
       tenant_key_user_id: {

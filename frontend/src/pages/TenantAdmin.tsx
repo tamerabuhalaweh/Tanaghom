@@ -40,19 +40,23 @@ export default function TenantAdmin() {
   const { token } = useAuth();
   const [summary, setSummary] = useState<RecordMap | null>(null);
   const [isolation, setIsolation] = useState<RecordMap | null>(null);
+  const [lifecycle, setLifecycle] = useState<RecordMap | null>(null);
   const [name, setName] = useState('');
+  const [lifecycleReason, setLifecycleReason] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function load() {
     if (!token) return;
-    const [summaryResult, isolationResult] = await Promise.all([
+    const [summaryResult, isolationResult, lifecycleResult] = await Promise.all([
       tenantAdminApi.summary(token),
       tenantAdminApi.isolationReport(token),
+      tenantAdminApi.lifecycle(token),
     ]);
     const nextSummary = summaryResult as RecordMap;
     setSummary(nextSummary);
     setIsolation(isolationResult as RecordMap);
+    setLifecycle(lifecycleResult as RecordMap);
     setName(text(objectValue(nextSummary.tenant).name, ''));
   }
 
@@ -61,14 +65,16 @@ export default function TenantAdmin() {
     let cancelled = false;
     async function run() {
       try {
-        const [summaryResult, isolationResult] = await Promise.all([
+        const [summaryResult, isolationResult, lifecycleResult] = await Promise.all([
           tenantAdminApi.summary(token as string),
           tenantAdminApi.isolationReport(token as string),
+          tenantAdminApi.lifecycle(token as string),
         ]);
         if (cancelled) return;
         const nextSummary = summaryResult as RecordMap;
         setSummary(nextSummary);
         setIsolation(isolationResult as RecordMap);
+        setLifecycle(lifecycleResult as RecordMap);
         setName(text(objectValue(nextSummary.tenant).name, ''));
       } catch (err) {
         if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load tenant admin');
@@ -95,6 +101,22 @@ export default function TenantAdmin() {
     }
   }
 
+  async function changeLifecycle(action: 'suspend' | 'reactivate' | 'archive') {
+    if (!token || lifecycleReason.trim().length < 3) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const result = await tenantAdminApi.updateLifecycle({ action, reason: lifecycleReason }, token) as RecordMap;
+      setMessage(text(result._label, 'Tenant lifecycle updated.'));
+      setLifecycleReason('');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to update tenant lifecycle');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const tenant = objectValue(summary?.tenant);
   const users = objectValue(summary?.users);
   const memberships = objectValue(summary?.memberships);
@@ -103,6 +125,7 @@ export default function TenantAdmin() {
   const checks = objectValue(isolation?.checks);
   const findings = Array.isArray(isolation?.findings) ? isolation.findings as RecordMap[] : [];
   const isolationStatus = text(isolation?.status, 'not checked');
+  const lifecyclePolicy = objectValue(lifecycle?.lifecyclePolicy);
 
   return (
     <ProductPage
@@ -142,7 +165,34 @@ export default function TenantAdmin() {
           </div>
         </ProductCard>
 
-        <ProductCard title="Isolation Report" subtitle="These checks must pass before onboarding real customer data.">
+        <ProductCard title="Lifecycle Controls" subtitle="Lifecycle changes are audit-logged. Suspending or archiving a tenant blocks user sign-in.">
+          <div className="space-y-4">
+            <DetailGrid items={[
+              { label: 'Current Status', value: text(lifecycle?.status, text(tenant.status)) },
+              { label: 'Suspended Means', value: text(lifecyclePolicy.suspended) },
+              { label: 'Archived Means', value: text(lifecyclePolicy.archived) },
+              { label: 'Billing Automation', value: text(lifecyclePolicy.billingAutomation) },
+            ]} />
+            <Field label="Lifecycle Reason">
+              <textarea
+                value={lifecycleReason}
+                onChange={(event) => setLifecycleReason(event.target.value)}
+                rows={3}
+                placeholder="Required audit reason"
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+              />
+            </Field>
+            <div className="flex flex-wrap gap-3">
+              <PrimaryAction disabled={saving || lifecycleReason.trim().length < 3} onClick={() => changeLifecycle('reactivate')}>Reactivate</PrimaryAction>
+              <PrimaryAction disabled={saving || lifecycleReason.trim().length < 3} onClick={() => changeLifecycle('suspend')}>Suspend</PrimaryAction>
+              <PrimaryAction disabled={saving || lifecycleReason.trim().length < 3} onClick={() => changeLifecycle('archive')}>Archive</PrimaryAction>
+            </div>
+            <Notice tone="warn">Tenant export, tenant deletion, billing, and subscriptions still require dedicated production work. This page does not pretend those are complete.</Notice>
+          </div>
+        </ProductCard>
+      </div>
+
+      <ProductCard title="Isolation Report" subtitle="These checks must pass before onboarding real customer data.">
           <ProductTable
             columns={['Check', 'Status']}
             rows={[
@@ -153,8 +203,7 @@ export default function TenantAdmin() {
               ['Raw secrets returned', <ProductStatus tone={checks.rawSecretsReturned ? 'danger' : 'good'}>{checks.rawSecretsReturned ? 'Yes' : 'No'}</ProductStatus>],
             ]}
           />
-        </ProductCard>
-      </div>
+      </ProductCard>
 
       <ProductCard title="Isolation Findings" subtitle={`${numberValue(counts.findings)} finding(s) found for this tenant.`}>
         {findings.length ? (

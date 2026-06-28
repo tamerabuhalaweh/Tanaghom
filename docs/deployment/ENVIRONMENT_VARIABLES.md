@@ -35,6 +35,9 @@
 | `MFA_RECOVERY_CODE_PEPPER` | falls back to server secret | Stable pepper for hashing MFA recovery codes |
 | `EMAIL_DELIVERY_ENABLED` | `false` | Enables SMTP invite/password-reset email delivery |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM` | unset | SMTP delivery settings |
+| `SMARTLABS_READ_ENABLED` | `false` | Allows tenant-owned SmartLabs read tests for agents/voices |
+| `SMARTLABS_LIVE_ENABLED` | `false` | Allows SmartLabs conversation/TTS execution after all other policy gates pass |
+| `VOICE_CHAT_LIVE_ENABLED` | `false` | Required for SmartLabs execution and other voice/chat actions |
 
 ## Execution Kill Switches
 

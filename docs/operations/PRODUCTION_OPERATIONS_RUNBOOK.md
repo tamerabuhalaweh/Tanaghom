@@ -77,6 +77,7 @@ Each tenant/customer configures their own:
 - GoHighLevel API key and location ID
 - WhatsApp/Telegram/voice credentials
 - social OAuth client credentials
+- SmartLabs voice credentials (`smartlabs_voice` provider in tenant credential vault)
 
 GoHighLevel environment fallback is disabled by default. Do not enable `ALLOW_GLOBAL_GHL_CREDENTIALS=true` for multi-tenant SaaS unless there is a documented enterprise-hosted exception.
 
@@ -87,6 +88,13 @@ Run on the server:
 ```bash
 chmod +x scripts/backup-postgres.sh
 DATABASE_URL="$DATABASE_URL" DATABASE_BACKUP_DIR=/var/backups/tanaghum/postgres ./scripts/backup-postgres.sh
+```
+
+For the Docker-based VPS deployment, prefer:
+
+```bash
+chmod +x scripts/backup-postgres-docker.sh scripts/verify-postgres-backup-docker.sh
+DATABASE_BACKUP_DIR=/var/backups/tanaghum/postgres ./scripts/backup-postgres-docker.sh
 ```
 
 Backup output:
@@ -128,6 +136,12 @@ chmod +x scripts/verify-postgres-backup.sh
 scripts/verify-postgres-backup.sh /path/to/tanaghum-postgres.dump
 ```
 
+For Docker-based verification:
+
+```bash
+scripts/verify-postgres-backup-docker.sh /path/to/tanaghum-postgres.dump
+```
+
 Record the successful restore drill timestamp in `LATEST_RESTORE_DRILL_AT`.
 
 ## Monitoring Deployment
@@ -141,6 +155,28 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d prom
 ```
 
 Prometheus scrapes `/ops/prometheus`. Grafana runs on port `3001` by default.
+
+## Backup Timer
+
+Systemd unit templates are available in:
+
+- `ops/systemd/tanaghum-postgres-backup.service`
+- `ops/systemd/tanaghum-postgres-backup.timer`
+
+Install on the VPS:
+
+```bash
+sudo cp ops/systemd/tanaghum-postgres-backup.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tanaghum-postgres-backup.timer
+sudo systemctl list-timers tanaghum-postgres-backup.timer
+```
+
+Run once immediately:
+
+```bash
+sudo systemctl start tanaghum-postgres-backup.service
+```
 
 ## Alerting
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=Tanaghum PostgreSQL Docker backup
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tanaghum
+Environment=DATABASE_BACKUP_DIR=/var/backups/tanaghum/postgres
+Environment=POSTGRES_CONTAINER=tanaghum-postgres-1
+Environment=POSTGRES_USER=tanaghum
+Environment=POSTGRES_DB=tanaghum
+ExecStart=/bin/bash /opt/tanaghum/scripts/backup-postgres-docker.sh

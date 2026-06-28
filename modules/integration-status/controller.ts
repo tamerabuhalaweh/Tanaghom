@@ -31,6 +31,7 @@ integrationStatusRouter.get('/', async (req: Request, res: Response, next: NextF
     const whatsappCredential = await credentialStatus('whatsapp', 'api_key', ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'], session.tenantKey);
     const telegramCredential = await credentialStatus('telegram', 'bot_token', ['TELEGRAM_BOT_TOKEN'], session.tenantKey);
     const voiceCredential = await credentialStatus('voice_chat', 'service_endpoint', ['VOICE_CHAT_API_URL', 'VOICE_CHAT_API_KEY'], session.tenantKey);
+    const smartLabsCredential = await credentialStatus('smartlabs_voice', 'api_key', [], session.tenantKey);
     res.json({
       generatedAt: new Date().toISOString(),
       aiProvider: {
@@ -73,6 +74,13 @@ integrationStatusRouter.get('/', async (req: Request, res: Response, next: NextF
           name: 'AI Voice/Chat Agent API',
           credentialStatus: voiceCredential,
           endpointStatus: voiceCredential === 'configured' ? 'Sandbox Ready' : 'Requires Credentials',
+          executionPolicy: evaluateExternalExecution({ system: 'voice_chat', action: 'trigger_call', executionMode: 'sandbox' }),
+        },
+        {
+          id: 'smartlabs_voice',
+          name: 'SmartLabs Voice Agent',
+          credentialStatus: smartLabsCredential,
+          endpointStatus: smartLabsCredential === 'configured' ? 'Tenant Key Saved' : 'Requires Tenant Key',
           executionPolicy: evaluateExternalExecution({ system: 'voice_chat', action: 'trigger_call', executionMode: 'sandbox' }),
         },
       ],

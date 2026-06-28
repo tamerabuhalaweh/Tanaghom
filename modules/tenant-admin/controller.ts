@@ -165,3 +165,64 @@ tenantAdminRouter.get('/isolation-report', async (req: Request, res: Response, n
     next(err);
   }
 });
+
+tenantAdminRouter.get('/lifecycle', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    requireAdmin(payload.role);
+    const tenantKey = payload.tenantKey || 'default';
+    const tenant = await prisma.tenant.findUnique({ where: { tenant_key: tenantKey } });
+    res.json({
+      tenantKey,
+      status: tenant?.status || 'missing',
+      supportedActions: ['suspend', 'reactivate', 'archive'],
+      lifecyclePolicy: {
+        suspended: 'Blocks tenant login until reactivated.',
+        archived: 'Blocks tenant login and marks the workspace retired.',
+        billingAutomation: 'not_implemented',
+        subscriptionManagement: 'not_implemented',
+        tenantExport: 'manual_process_required',
+        tenantDeletion: 'manual_process_required',
+      },
+      rawSecretsReturned: false,
+      _label: 'Tenant lifecycle status',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tenantAdminRouter.post('/lifecycle', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    requireAdmin(payload.role);
+    const tenantKey = payload.tenantKey || 'default';
+    const input = z.object({
+      action: z.enum(['suspend', 'reactivate', 'archive']),
+      reason: z.string().trim().min(3).max(500),
+    }).parse(req.body);
+    const nextStatus = input.action === 'reactivate' ? 'active' : input.action === 'suspend' ? 'suspended' : 'archived';
+    const tenant = await prisma.tenant.upsert({
+      where: { tenant_key: tenantKey },
+      create: {
+        tenant_key: tenantKey,
+        name: tenantKey === 'default' ? 'Tanaghum Default Tenant' : tenantKey,
+        status: nextStatus,
+      },
+      update: { status: nextStatus },
+    });
+    auditLog(
+      { actor: `user:${payload.sub}`, action: `tenant_${input.action}`, object_type: 'tenant', object_id: tenant.id, result: 'success' },
+      `Tenant lifecycle changed to ${nextStatus}: ${input.reason}`,
+    );
+    res.json({
+      tenantKey: tenant.tenant_key,
+      status: tenant.status,
+      action: input.action,
+      loginImpact: tenant.status === 'active' ? 'tenant users can sign in' : 'tenant users are blocked from sign-in',
+      _label: 'Tenant lifecycle updated',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
