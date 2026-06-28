@@ -50,6 +50,16 @@ Required:
 - `CORS_ORIGIN`
 - `OPERATIONS_METRICS_TOKEN`
 
+For Docker deployments, use `docker-compose.ops.example.yml` as the starting point for the server-only operations override. The production host must mount backup and uptime evidence into the app container read-only:
+
+```yaml
+volumes:
+  - /var/backups/tanaghum/postgres:/var/backups/tanaghum/postgres:ro
+  - /var/lib/tanaghum/uptime:/var/lib/tanaghum/uptime:ro
+```
+
+Without these mounts, `/ops/backup/status` and `/ops/monitoring/status` cannot see host-generated evidence even when the host scripts succeed.
+
 Recommended:
 
 - `REQUEST_BODY_LIMIT=1mb`

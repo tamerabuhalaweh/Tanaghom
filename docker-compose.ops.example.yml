@@ -1,0 +1,15 @@
+services:
+  app:
+    environment:
+      OPERATIONS_METRICS_TOKEN: ${OPERATIONS_METRICS_TOKEN:?OPERATIONS_METRICS_TOKEN is required}
+      DATABASE_BACKUP_DIR: /var/backups/tanaghum/postgres
+      DATABASE_BACKUP_CRON: "daily 02:15 UTC"
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:?PUBLIC_APP_URL is required}
+      PUBLIC_HEALTH_URL: ${PUBLIC_HEALTH_URL:?PUBLIC_HEALTH_URL is required}
+      UPTIME_CHECK_EVIDENCE_PATH: /var/lib/tanaghum/uptime/latest.json
+      SMARTLABS_READ_ENABLED: "false"
+      SMARTLABS_LIVE_ENABLED: "false"
+      VOICE_CHAT_LIVE_ENABLED: "false"
+    volumes:
+      - /var/backups/tanaghum/postgres:/var/backups/tanaghum/postgres:ro
+      - /var/lib/tanaghum/uptime:/var/lib/tanaghum/uptime:ro
