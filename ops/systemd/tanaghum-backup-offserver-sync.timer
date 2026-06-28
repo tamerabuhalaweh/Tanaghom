@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Tanaghum off-server backup sync after daily backup window
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

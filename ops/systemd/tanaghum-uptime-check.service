@@ -1,0 +1,12 @@
+[Unit]
+Description=Tanaghum public uptime check
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tanaghum
+Environment=PUBLIC_APP_URL=https://tanaghum.163-123-180-104.sslip.io
+Environment=PUBLIC_HEALTH_URL=https://tanaghum.163-123-180-104.sslip.io/api/health
+Environment=UPTIME_CHECK_EVIDENCE_PATH=/var/lib/tanaghum/uptime/latest.json
+ExecStart=/bin/bash /opt/tanaghum/scripts/uptime-check.sh

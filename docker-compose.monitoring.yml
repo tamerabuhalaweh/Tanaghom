@@ -8,6 +8,7 @@ services:
       - --storage.tsdb.retention.time=15d
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
       - ./monitoring/secrets/ops_metrics_token:/run/secrets/ops_metrics_token:ro
       - prometheus_data:/prometheus
     ports:

@@ -34,6 +34,7 @@ operationsRouter.get('/readiness', async (req: Request, res: Response, next: Nex
     const email = getEmailDeliveryStatus();
     const mfaCoverage = await getTenantMfaCoverage(tenantKey);
     const backupStatus = getBackupStatus();
+    const monitoringStatus = getMonitoringStatus();
     const checks = [
       check('database', databaseHealthy, 'Database connection is healthy.'),
       check('redis', redisHealthy, 'Redis connection is healthy for queues, rate limiting, and token revocation.'),
@@ -44,7 +45,10 @@ operationsRouter.get('/readiness', async (req: Request, res: Response, next: Nex
       check('email_delivery', !process.env.EMAIL_DELIVERY_ENABLED || email.configured, email.configured ? 'Email delivery is configured.' : 'Email delivery is not configured.'),
       check('backup_target', backupStatus.configured, 'Database backup target is configured.'),
       check('backup_manifest', backupStatus.latestBackupFound, backupStatus.latestBackupFound ? 'Latest database backup manifest exists.' : 'No local backup manifest found yet.'),
+      check('backup_offserver_copy', backupStatus.offServerCopyFound, backupStatus.offServerCopyFound ? 'Latest off-server backup sync evidence exists.' : 'No off-server backup sync evidence found yet.'),
+      check('backup_restore_drill', backupStatus.restoreDrillEvidenceConfigured, backupStatus.restoreDrillEvidenceConfigured ? 'Latest restore drill evidence exists.' : 'No restore drill evidence found yet.'),
       check('alert_webhook', Boolean(process.env.ALERT_WEBHOOK_URL || process.env.OPERATIONS_ALERT_EMAIL), 'Alert destination is configured.'),
+      check('uptime_evidence', monitoringStatus.uptimeEvidenceFound, monitoringStatus.uptimeEvidenceFound ? 'Latest uptime check evidence exists.' : 'No uptime check evidence found yet.'),
       check('admin_mfa_coverage', mfaCoverage.coveragePct === 100, `Admin MFA coverage is ${mfaCoverage.coveragePct}%.`),
       check('ops_metrics_token', Boolean(process.env.OPERATIONS_METRICS_TOKEN && process.env.OPERATIONS_METRICS_TOKEN.length >= 24), 'Prometheus metrics scrape token is configured.'),
     ];
@@ -119,9 +123,9 @@ operationsRouter.get('/monitoring/status', async (req: Request, res: Response, n
     const hasMetricsToken = Boolean(process.env.OPERATIONS_METRICS_TOKEN && process.env.OPERATIONS_METRICS_TOKEN.length >= 24);
     const hasAlertDestination = Boolean(process.env.ALERT_WEBHOOK_URL || process.env.OPERATIONS_ALERT_EMAIL);
     res.json({
+      ...getMonitoringStatus(),
       prometheusMetrics: hasMetricsToken ? 'token_configured' : 'requires_token',
       alertDestination: hasAlertDestination ? 'configured' : 'missing',
-      uptimeCheckTarget: process.env.PUBLIC_HEALTH_URL ? 'configured' : 'missing',
       expectedHealthPath: '/health',
       expectedReadinessPath: '/ops/readiness',
       expectedMetricsPath: '/ops/prometheus',
@@ -177,25 +181,48 @@ function check(id: string, passed: boolean, message: string) {
   };
 }
 
-function getBackupStatus() {
+export function getBackupStatus() {
   const backupDir = process.env.DATABASE_BACKUP_DIR || './backups/postgres';
-  const storageTargetConfigured = Boolean(process.env.BACKUP_STORAGE_TARGET);
+  const storageTargetConfigured = Boolean(process.env.BACKUP_STORAGE_TARGET || process.env.BACKUP_RSYNC_TARGET || process.env.BACKUP_S3_URI);
   const latestManifestPath = join(backupDir, 'latest.json');
+  const latestOffServerManifestPath = join(backupDir, 'offserver-latest.json');
+  const latestRestoreDrillManifestPath = join(backupDir, 'restore-drill-latest.json');
   const latestManifest = readJsonIfExists(latestManifestPath);
+  const latestOffServerManifest = readJsonIfExists(latestOffServerManifestPath);
+  const latestRestoreDrillManifest = readJsonIfExists(latestRestoreDrillManifestPath);
   const latestDump = findLatestDump(backupDir);
-  const latestBackupAt = stringOrNull(latestManifest?.timestamp) || latestDump?.createdAt || null;
-  const latestBackupAgeSeconds = latestBackupAt ? Math.max(0, Math.round((Date.now() - new Date(latestBackupAt).getTime()) / 1000)) : null;
+  const latestBackupAt = normalizeTimestamp(stringOrNull(latestManifest?.timestamp)) || latestDump?.createdAt || null;
+  const latestBackupAgeSeconds = latestBackupAt ? Math.max(0, Math.round((Date.now() - Date.parse(latestBackupAt)) / 1000)) : null;
+  const latestOffServerSyncAt = normalizeTimestamp(stringOrNull(latestOffServerManifest?.syncedAt) || stringOrNull(process.env.BACKUP_OFFSERVER_LAST_SYNC_AT));
+  const latestRestoreDrillAt = normalizeTimestamp(stringOrNull(latestRestoreDrillManifest?.restoredAt) || stringOrNull(process.env.LATEST_RESTORE_DRILL_AT));
   return {
     configured: Boolean(process.env.DATABASE_BACKUP_DIR || process.env.BACKUP_STORAGE_TARGET),
     backupDirConfigured: Boolean(process.env.DATABASE_BACKUP_DIR),
     storageTargetConfigured,
+    storageProvider: backupStorageProvider(),
     scheduleConfigured: Boolean(process.env.DATABASE_BACKUP_CRON),
-    restoreDrillEvidenceConfigured: Boolean(process.env.LATEST_RESTORE_DRILL_AT),
+    restoreDrillEvidenceConfigured: Boolean(latestRestoreDrillAt),
     latestBackupFound: Boolean(latestManifest || latestDump),
     latestBackupAt,
     latestBackupAgeSeconds,
     latestManifestPath: latestManifest ? latestManifestPath : null,
     latestChecksumFound: Boolean(latestManifest?.checksumFile || latestDump?.checksumFile),
+    offServerCopyFound: Boolean(latestOffServerManifest),
+    latestOffServerSyncAt,
+    offServerManifestPath: latestOffServerManifest ? latestOffServerManifestPath : null,
+    latestRestoreDrillAt,
+    restoreDrillManifestPath: latestRestoreDrillManifest ? latestRestoreDrillManifestPath : null,
+  };
+}
+
+function getMonitoringStatus() {
+  const uptimeEvidencePath = process.env.UPTIME_CHECK_EVIDENCE_PATH || './ops/uptime-latest.json';
+  const uptimeEvidence = readJsonIfExists(uptimeEvidencePath);
+  return {
+    uptimeCheckTarget: process.env.PUBLIC_HEALTH_URL ? 'configured' : 'missing',
+    uptimeEvidenceFound: Boolean(uptimeEvidence),
+    latestUptimeCheckAt: stringOrNull(uptimeEvidence?.checkedAt),
+    latestUptimeStatus: stringOrNull(uptimeEvidence?.status) || 'missing',
   };
 }
 
@@ -233,6 +260,23 @@ function findLatestDump(backupDir: string): { createdAt: string; checksumFile: s
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function normalizeTimestamp(value: string | null): string | null {
+  if (!value) return null;
+  const compact = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  const candidate = compact
+    ? `${compact[1]}-${compact[2]}-${compact[3]}T${compact[4]}:${compact[5]}:${compact[6]}Z`
+    : value;
+  const timestamp = Date.parse(candidate);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function backupStorageProvider(): string {
+  if (process.env.BACKUP_RSYNC_TARGET) return 'rsync';
+  if (process.env.BACKUP_S3_URI) return 's3_compatible';
+  if (process.env.BACKUP_STORAGE_TARGET) return 'configured';
+  return 'missing';
 }
 
 function assertMetricsToken(req: Request): void {

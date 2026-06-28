@@ -241,6 +241,10 @@ export const tenantAdminApi = {
   update: (data: unknown, token: string) => apiFetch<unknown>('/admin/tenant', { method: 'PUT', body: data, token }),
   isolationReport: (token: string) => apiFetch<unknown>('/admin/tenant/isolation-report', { token }),
   lifecycle: (token: string) => apiFetch<unknown>('/admin/tenant/lifecycle', { token }),
+  exportData: (token: string) => apiFetch<unknown>('/admin/tenant/export', { token }),
+  deletionReadiness: (token: string) => apiFetch<unknown>('/admin/tenant/deletion-readiness', { token }),
+  requestDeletion: (data: unknown, token: string) =>
+    apiFetch<unknown>('/admin/tenant/deletion-request', { method: 'POST', body: data, token }),
   updateLifecycle: (data: unknown, token: string) =>
     apiFetch<unknown>('/admin/tenant/lifecycle', { method: 'POST', body: data, token }),
 };

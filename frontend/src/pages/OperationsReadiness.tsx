@@ -119,7 +119,7 @@ export default function OperationsReadiness() {
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Readiness Checks" value={`${numberValue(summary.passed)}/${numberValue(summary.passed) + numberValue(summary.failed)}`} detail={`${numberValue(summary.criticalFailed)} critical failures`} tone={numberValue(summary.criticalFailed) === 0 ? 'good' : 'danger'} />
         <MetricCard label="Admin MFA" value={`${numberValue(mfaCoverage.coveragePct)}%`} detail={`${numberValue(mfaCoverage.adminUsersWithMfa)}/${numberValue(mfaCoverage.adminUsers)} protected admins`} tone={numberValue(mfaCoverage.coveragePct) === 100 ? 'good' : 'warn'} />
-        <MetricCard label="Backup" value={backup?.latestBackupFound ? 'Found' : 'Missing'} detail={backup?.latestBackupAt ? text(backup.latestBackupAt) : 'No latest backup manifest'} tone={backup?.latestBackupFound ? 'good' : 'warn'} />
+        <MetricCard label="Backup" value={backup?.latestBackupFound ? 'Local Found' : 'Missing'} detail={backup?.latestBackupAt ? text(backup.latestBackupAt) : 'No latest backup manifest'} tone={backup?.latestBackupFound ? 'good' : 'warn'} />
         <MetricCard label="Runtime" value={`${numberValue(metrics?.uptimeSeconds)}s`} detail={`Heap ${formatBytes(numberValue(memory.heapUsed))}`} tone="info" />
       </div>
 
@@ -159,8 +159,12 @@ export default function OperationsReadiness() {
           <DetailGrid items={[
             { label: 'Backup Directory Configured', value: backup?.backupDirConfigured ? 'Yes' : 'No' },
             { label: 'Off-Server Target Configured', value: backup?.storageTargetConfigured ? 'Yes' : 'No' },
+            { label: 'Off-Server Copy Evidence', value: backup?.offServerCopyFound ? 'Yes' : 'No' },
+            { label: 'Off-Server Sync Time', value: text(backup?.latestOffServerSyncAt, 'No off-server sync evidence') },
+            { label: 'Storage Provider', value: text(backup?.storageProvider) },
             { label: 'Schedule Configured', value: backup?.scheduleConfigured ? 'Yes' : 'No' },
             { label: 'Restore Drill Evidence', value: backup?.restoreDrillEvidenceConfigured ? 'Yes' : 'No' },
+            { label: 'Latest Restore Drill', value: text(backup?.latestRestoreDrillAt, 'No restore drill evidence') },
             { label: 'Latest Backup', value: text(backup?.latestBackupAt, 'No local backup found') },
             { label: 'Checksum Found', value: backup?.latestChecksumFound ? 'Yes' : 'No' },
           ]} />
@@ -171,6 +175,9 @@ export default function OperationsReadiness() {
             { label: 'Prometheus Metrics Token', value: text(monitoring?.prometheusMetrics) },
             { label: 'Alert Destination', value: text(monitoring?.alertDestination) },
             { label: 'Uptime Check Target', value: text(monitoring?.uptimeCheckTarget) },
+            { label: 'Uptime Evidence', value: monitoring?.uptimeEvidenceFound ? 'Yes' : 'No' },
+            { label: 'Latest Uptime Check', value: text(monitoring?.latestUptimeCheckAt, 'No uptime evidence') },
+            { label: 'Latest Uptime Status', value: text(monitoring?.latestUptimeStatus) },
             { label: 'Health Path', value: text(monitoring?.expectedHealthPath) },
             { label: 'Readiness Path', value: text(monitoring?.expectedReadinessPath) },
             { label: 'Metrics Path', value: text(monitoring?.expectedMetricsPath) },

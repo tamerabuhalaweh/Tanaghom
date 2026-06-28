@@ -1,0 +1,38 @@
+groups:
+  - name: tanaghum-production
+    rules:
+      - alert: TanaghumBackendDown
+        expr: tanaghum_backend_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tanaghum backend is down
+          description: The backend process availability metric is 0 for more than 2 minutes.
+
+      - alert: TanaghumDatabaseDown
+        expr: tanaghum_database_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tanaghum database is unavailable
+          description: The application cannot reach PostgreSQL.
+
+      - alert: TanaghumRedisDown
+        expr: tanaghum_redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tanaghum Redis is unavailable
+          description: Redis is required for rate limiting, token revocation, and queues.
+
+      - alert: TanaghumBackupMissingOrStale
+        expr: tanaghum_backup_latest_age_seconds < 0 or tanaghum_backup_latest_age_seconds > 93600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Tanaghum database backup is missing or stale
+          description: No recent local PostgreSQL backup was found within the expected daily backup window.
