@@ -15,6 +15,9 @@ export async function getCommercialWorkflowState(
   campaignId?: string,
 ): Promise<CommercialWorkflowState> {
   const campaigns = await prisma.contentRequest.findMany({
+    where: {
+      tenant_key: session.tenantKey,
+    },
     orderBy: { created_at: 'desc' },
     take: 100,
     include: {
@@ -41,18 +44,30 @@ export async function getCommercialWorkflowState(
     postizCredential,
   ] = await Promise.all([
     prisma.approval.findMany({
+      where: {
+        tenant_key: session.tenantKey,
+      },
       orderBy: { created_at: 'desc' },
       take: 100,
     }),
     prisma.publishingPackage.findMany({
+      where: {
+        tenant_key: session.tenantKey,
+      },
       orderBy: { created_at: 'desc' },
       take: 100,
     }),
     prisma.campaignPerformanceReport.findMany({
+      where: {
+        tenant_key: session.tenantKey,
+      },
       orderBy: { created_at: 'desc' },
       take: 50,
     }),
     prisma.leadCaptureRecord.findMany({
+      where: {
+        tenant_key: session.tenantKey,
+      },
       orderBy: { created_at: 'desc' },
       take: 100,
     }),

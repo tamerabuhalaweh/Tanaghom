@@ -241,6 +241,10 @@ export const tenantAdminApi = {
   update: (data: unknown, token: string) => apiFetch<unknown>('/admin/tenant', { method: 'PUT', body: data, token }),
   isolationReport: (token: string) => apiFetch<unknown>('/admin/tenant/isolation-report', { token }),
   lifecycle: (token: string) => apiFetch<unknown>('/admin/tenant/lifecycle', { token }),
+  plans: (token: string) => apiFetch<unknown>('/admin/tenant/plans', { token }),
+  subscription: (token: string) => apiFetch<unknown>('/admin/tenant/subscription', { token }),
+  updateSubscription: (data: unknown, token: string) =>
+    apiFetch<unknown>('/admin/tenant/subscription', { method: 'POST', body: data, token }),
   exportData: (token: string) => apiFetch<unknown>('/admin/tenant/export', { token }),
   deletionReadiness: (token: string) => apiFetch<unknown>('/admin/tenant/deletion-readiness', { token }),
   requestDeletion: (data: unknown, token: string) =>
@@ -272,6 +276,15 @@ export const commercialWorkflowApi = {
     const params = campaignId ? `?${new URLSearchParams({ campaignId }).toString()}` : '';
     return apiFetch<unknown>(`/commercial-workflow/state${params}`, { token });
   },
+  runs: (token: string) => apiFetch<unknown>('/commercial-workflow/runs', { token }),
+  startRun: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-workflow/runs', { method: 'POST', body: data, token }),
+  currentRun: (token: string, campaignId?: string) => {
+    const params = campaignId ? `?${new URLSearchParams({ campaignId }).toString()}` : '';
+    return apiFetch<unknown>(`/commercial-workflow/runs/current${params}`, { token });
+  },
+  syncRun: (runId: string, token: string) =>
+    apiFetch<unknown>(`/commercial-workflow/runs/${runId}/sync`, { method: 'POST', token }),
   evidence: (token: string, campaignId?: string) => {
     const params = campaignId ? `?${new URLSearchParams({ campaignId }).toString()}` : '';
     return apiFetch<unknown>(`/commercial-workflow/evidence${params}`, { token });

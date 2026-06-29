@@ -39,14 +39,15 @@ async function checkPostizSandbox(): Promise<{ reachable: boolean; statusCode: n
 publishingPackageRouter.post('/create', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
     const { campaignId, draftId, approvalId, platforms, scheduledTime } = req.body;
     if (!payload.agentRepId) throw new ForbiddenError('AgentRep session context is required before publishing package creation');
 
-    const campaign = await prisma.contentRequest.findUnique({ where: { id: campaignId } });
+    const campaign = await prisma.contentRequest.findFirst({ where: { id: campaignId, tenant_key: tenantKey } });
     if (!campaign) throw new NotFoundError('Campaign', campaignId);
 
     if (!approvalId) throw new ForbiddenError('Approved approvalId is required before publishing package creation');
-    const approval = await prisma.approval.findUnique({ where: { id: approvalId } });
+    const approval = await prisma.approval.findFirst({ where: { id: approvalId, tenant_key: tenantKey } });
     if (!approval) throw new NotFoundError('Approval', approvalId);
     const gate = validatePublishingApprovalGate({
       approvalId,
@@ -78,8 +79,8 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
     }
 
     const contentItem = draftId
-      ? await prisma.contentItem.findUnique({
-        where: { id: draftId },
+      ? await prisma.contentItem.findFirst({
+        where: { id: draftId, tenant_key: tenantKey },
         include: { draft_versions: { orderBy: { version_no: 'desc' }, take: 1 } },
       })
       : null;
@@ -114,6 +115,7 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
 
     const pkg = await prisma.publishingPackage.create({
       data: {
+        tenant_key: tenantKey,
         campaign_id: campaignId,
         content_item_id: contentItem?.id ?? null,
         draft_version_id: latestDraft?.id ?? null,
@@ -289,8 +291,10 @@ publishingPackageRouter.post('/create', async (req: Request, res: Response, next
 
 publishingPackageRouter.get('/list', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
     const packages = await prisma.publishingPackage.findMany({
+      where: { tenant_key: tenantKey },
       orderBy: { created_at: 'desc' },
       take: 10,
     });

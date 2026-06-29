@@ -33,6 +33,8 @@
 | `PUBLIC_HEALTH_URL` | unset | Public uptime-monitor URL for `/health` |
 | `LATEST_RESTORE_DRILL_AT` | unset | ISO timestamp after successful restore drill |
 | `MFA_RECOVERY_CODE_PEPPER` | falls back to server secret | Stable pepper for hashing MFA recovery codes |
+| `ENFORCE_TENANT_SUBSCRIPTION` | `false` | When `true`, login is blocked unless the tenant has an active/trialing non-expired current subscription |
+| `TENANT_EXPORT_EVIDENCE_DIR` | `./ops/tenant-exports` | Directory for retained tenant export evidence manifests |
 | `EMAIL_DELIVERY_ENABLED` | `false` | Enables SMTP invite/password-reset email delivery |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM` | unset | SMTP delivery settings |
 | `SMARTLABS_READ_ENABLED` | `false` | Allows tenant-owned SmartLabs read tests for agents/voices |

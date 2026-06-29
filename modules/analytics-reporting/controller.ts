@@ -23,8 +23,9 @@ analyticsRouter.get('/sources', async (req: Request, res: Response, next: NextFu
 
 analyticsRouter.get('/snapshots', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
     const snapshots = await repo.listSnapshots({
+      tenantKey: payload.tenantKey || 'default',
       sourceId: req.query.sourceId as string | undefined,
     });
     res.json(snapshots);
@@ -35,8 +36,9 @@ analyticsRouter.get('/snapshots', async (req: Request, res: Response, next: Next
 
 analyticsRouter.get('/reports', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
     const reports = await repo.listPerformanceReports({
+      tenantKey: payload.tenantKey || 'default',
       campaignId: req.query.campaignId as string | undefined,
     });
     res.json(reports);

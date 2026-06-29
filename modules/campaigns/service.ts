@@ -37,27 +37,29 @@ function checkPermission(role: string, permission: string): void {
 
 export async function listCampaigns(
   requesterRole: string,
+  tenantKey: string,
   requesterId?: string,
   status?: ContentState,
   platform?: string,
 ): Promise<CampaignSummary[]> {
   checkPermission(requesterRole, 'campaigns:read');
-  return repo.listCampaigns(requesterId, status, platform);
+  return repo.listCampaigns(tenantKey, requesterId, status, platform);
 }
 
-export async function getCampaign(requesterRole: string, id: string): Promise<CampaignSummary> {
+export async function getCampaign(requesterRole: string, tenantKey: string, id: string): Promise<CampaignSummary> {
   checkPermission(requesterRole, 'campaigns:read');
-  return repo.getCampaignById(id);
+  return repo.getCampaignById(tenantKey, id);
 }
 
 export async function createCampaign(
   requesterRole: string,
+  tenantKey: string,
   requesterId: string,
   channel: string,
   input: CreateCampaignInput,
 ): Promise<CampaignSummary> {
   checkPermission(requesterRole, 'campaigns:create');
-  const campaign = await repo.createCampaign(requesterId, channel, input);
+  const campaign = await repo.createCampaign(tenantKey, requesterId, channel, input);
 
   auditLog(
     {
@@ -85,13 +87,14 @@ export async function createCampaign(
 
 export async function updateCampaign(
   requesterRole: string,
+  tenantKey: string,
   requesterId: string,
   id: string,
   input: UpdateCampaignInput,
 ): Promise<CampaignSummary> {
   checkPermission(requesterRole, 'campaigns:update');
 
-  const campaign = await repo.updateCampaign(id, input);
+  const campaign = await repo.updateCampaign(tenantKey, id, input);
 
   auditLog(
     {
@@ -117,6 +120,7 @@ export async function updateCampaign(
 
 export async function transitionCampaign(
   requesterRole: string,
+  tenantKey: string,
   requesterId: string,
   id: string,
   toState: ContentState,
@@ -124,13 +128,13 @@ export async function transitionCampaign(
 ): Promise<CampaignSummary> {
   checkPermission(requesterRole, 'campaigns:transition');
 
-  const existing = await repo.getCampaignById(id);
+  const existing = await repo.getCampaignById(tenantKey, id);
   const fromState = existing.status;
 
   // Validate the transition is allowed by the state machine
   validateTransition(fromState, toState);
 
-  const campaign = await repo.updateCampaignStatus(id, toState);
+  const campaign = await repo.updateCampaignStatus(tenantKey, id, toState);
 
   auditLog(
     {

@@ -71,11 +71,27 @@ export async function listAccountReferences(postizConnectorId: string): Promise<
 // PublishingExecutionRequest
 // ============================================================
 
-export async function validateReadiness(input: CreateExecutionRequestInput): Promise<ReadinessValidation> {
+async function ensurePublishingPackageBelongsToTenant(packageId: string, tenantKey: string): Promise<void> {
+  const pkg = await prisma.publishingPackage.findFirst({
+    where: { id: packageId, tenant_key: tenantKey },
+    select: { id: true },
+  });
+  if (!pkg) throw new NotFoundError('PublishingPackage', packageId);
+}
+
+async function getTenantPublishingPackageIds(tenantKey: string): Promise<string[]> {
+  const packages = await prisma.publishingPackage.findMany({
+    where: { tenant_key: tenantKey },
+    select: { id: true },
+  });
+  return packages.map(pkg => pkg.id);
+}
+
+export async function validateReadiness(input: CreateExecutionRequestInput, tenantKey: string): Promise<ReadinessValidation> {
   const blockedReasons: string[] = [];
 
   // Check PublishingPackage exists
-  const pkg = await prisma.publishingPackage.findUnique({ where: { id: input.publishingPackageId } });
+  const pkg = await prisma.publishingPackage.findFirst({ where: { id: input.publishingPackageId, tenant_key: tenantKey } });
   if (!pkg) {
     blockedReasons.push('PublishingPackage not found');
   } else if (pkg.package_status !== 'ready_for_future_execution') {
@@ -118,9 +134,9 @@ export async function validateReadiness(input: CreateExecutionRequestInput): Pro
   return { valid: blockedReasons.length === 0, blockedReasons };
 }
 
-export async function createExecutionRequest(input: CreateExecutionRequestInput): Promise<ExecutionRequestSummary> {
+export async function createExecutionRequest(input: CreateExecutionRequestInput, tenantKey: string): Promise<ExecutionRequestSummary> {
   // Validate readiness
-  const validation = await validateReadiness(input);
+  const validation = await validateReadiness(input, tenantKey);
   
   const request = await prisma.publishingExecutionRequest.create({
     data: {
@@ -144,19 +160,28 @@ export async function createExecutionRequest(input: CreateExecutionRequestInput)
   return mapExecutionRequest(request);
 }
 
-export async function getExecutionRequestById(id: string): Promise<ExecutionRequestSummary> {
+export async function getExecutionRequestById(id: string, tenantKey: string): Promise<ExecutionRequestSummary> {
   const request = await prisma.publishingExecutionRequest.findUnique({ where: { id } });
   if (!request) throw new NotFoundError('PublishingExecutionRequest', id);
+  await ensurePublishingPackageBelongsToTenant(request.publishing_package_id, tenantKey);
   return mapExecutionRequest(request);
 }
 
 export async function listExecutionRequests(filters?: {
+  tenantKey?: string;
   publishingPackageId?: string;
   requestStatus?: string;
   requestedByUserId?: string;
 }): Promise<ExecutionRequestSummary[]> {
   const where: Record<string, unknown> = {};
-  if (filters?.publishingPackageId) where.publishing_package_id = filters.publishingPackageId;
+  if (filters?.tenantKey) {
+    const packageIds = await getTenantPublishingPackageIds(filters.tenantKey);
+    if (packageIds.length === 0) return [];
+    if (filters?.publishingPackageId && !packageIds.includes(filters.publishingPackageId)) return [];
+    where.publishing_package_id = filters?.publishingPackageId || { in: packageIds };
+  } else if (filters?.publishingPackageId) {
+    where.publishing_package_id = filters.publishingPackageId;
+  }
   if (filters?.requestStatus) where.request_status = filters.requestStatus;
   if (filters?.requestedByUserId) where.requested_by_user_id = filters.requestedByUserId;
 
@@ -164,9 +189,10 @@ export async function listExecutionRequests(filters?: {
   return requests.map(mapExecutionRequest);
 }
 
-export async function updateExecutionRequestStatus(id: string, status: ExecutionRequestStatus, blockedReason?: string): Promise<ExecutionRequestSummary> {
+export async function updateExecutionRequestStatus(id: string, tenantKey: string, status: ExecutionRequestStatus, blockedReason?: string): Promise<ExecutionRequestSummary> {
   const existing = await prisma.publishingExecutionRequest.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError('PublishingExecutionRequest', id);
+  await ensurePublishingPackageBelongsToTenant(existing.publishing_package_id, tenantKey);
 
   const request = await prisma.publishingExecutionRequest.update({
     where: { id },
@@ -183,6 +209,7 @@ export async function updateExecutionRequestStatus(id: string, status: Execution
 // ============================================================
 
 export async function createPublishingJob(
+  tenantKey: string,
   executionRequestId: string,
   publishingPackageId: string,
   platform: string,
@@ -190,6 +217,8 @@ export async function createPublishingJob(
   payloadHash?: string,
   payloadSummary?: string,
 ): Promise<PublishingJobSummary> {
+  await ensurePublishingPackageBelongsToTenant(publishingPackageId, tenantKey);
+
   const job = await prisma.postizPublishingJob.create({
     data: {
       publishing_execution_request_id: executionRequestId,
@@ -204,20 +233,29 @@ export async function createPublishingJob(
 }
 
 export async function listPublishingJobs(filters?: {
+  tenantKey?: string;
   publishingPackageId?: string;
   jobStatus?: string;
 }): Promise<PublishingJobSummary[]> {
   const where: Record<string, unknown> = {};
-  if (filters?.publishingPackageId) where.publishing_package_id = filters.publishingPackageId;
+  if (filters?.tenantKey) {
+    const packageIds = await getTenantPublishingPackageIds(filters.tenantKey);
+    if (packageIds.length === 0) return [];
+    if (filters?.publishingPackageId && !packageIds.includes(filters.publishingPackageId)) return [];
+    where.publishing_package_id = filters?.publishingPackageId || { in: packageIds };
+  } else if (filters?.publishingPackageId) {
+    where.publishing_package_id = filters.publishingPackageId;
+  }
   if (filters?.jobStatus) where.job_status = filters.jobStatus;
 
   const jobs = await prisma.postizPublishingJob.findMany({ where, orderBy: { created_at: 'desc' } });
   return jobs.map(mapPublishingJob);
 }
 
-export async function updatePublishingJobStatus(id: string, status: PostizJobStatus, externalRef?: string): Promise<PublishingJobSummary> {
+export async function updatePublishingJobStatus(id: string, tenantKey: string, status: PostizJobStatus, externalRef?: string): Promise<PublishingJobSummary> {
   const existing = await prisma.postizPublishingJob.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError('PostizPublishingJob', id);
+  await ensurePublishingPackageBelongsToTenant(existing.publishing_package_id, tenantKey);
 
   const job = await prisma.postizPublishingJob.update({
     where: { id },

@@ -32,6 +32,7 @@ crmConversionRouter.get('/leads', async (req: Request, res: Response, next: Next
   try {
     const session = getSession(req);
     const leads = await service.listLeadCaptureRecords(session.role, {
+      tenantKey: session.tenantKey,
       leadStatus: req.query.leadStatus as string | undefined,
       campaignId: req.query.campaignId as string | undefined,
       platform: req.query.platform as string | undefined,
@@ -52,7 +53,7 @@ crmConversionRouter.post('/leads', async (req: Request, res: Response, next: Nex
       createdByUserId: session.humanUserId,
       createdByAgentRepId: session.agentRepId,
     }) as CreateLeadCaptureRecordInput;
-    const lead = await service.createLeadCaptureRecord(session.role, session.humanUserId, session.agentRepId, input);
+    const lead = await service.createLeadCaptureRecord(session.role, session.tenantKey, session.humanUserId, session.agentRepId, input);
     res.status(201).json({
       ...lead,
       _label: 'Lead captured in STITCH - no CRM write performed',
@@ -65,7 +66,7 @@ crmConversionRouter.post('/leads', async (req: Request, res: Response, next: Nex
 crmConversionRouter.get('/leads/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const session = getSession(req);
-    const lead = await service.getLeadCaptureRecord(session.role, req.params.id as string);
+    const lead = await service.getLeadCaptureRecord(session.role, session.tenantKey, req.params.id as string);
     res.json(lead);
   } catch (err) {
     next(err);
@@ -80,7 +81,7 @@ crmConversionRouter.post('/leads/:id/intents', async (req: Request, res: Respons
       leadCaptureRecordId: req.params.id,
       confidence: req.body.confidence ?? 'low',
     }) as CreateConversionIntentInput;
-    const intent = await service.createConversionIntent(session.role, input);
+    const intent = await service.createConversionIntent(session.role, session.tenantKey, input);
     res.status(201).json({
       ...intent,
       _label: 'Lead qualification recorded - advisory only',
@@ -108,7 +109,7 @@ crmConversionRouter.post('/leads/:id/crm-handoff', async (req: Request, res: Res
       mcpMediationRequestId: input.mcpMediationRequestId,
       humanApproved: Boolean(input.approvalId),
     });
-    const handoff = await service.createCrmHandoffRequest(session.role, session.humanUserId, session.agentRepId, input);
+    const handoff = await service.createCrmHandoffRequest(session.role, session.tenantKey, session.humanUserId, session.agentRepId, input);
     res.status(201).json({
       ...handoff,
       executionPolicy: policy,
@@ -137,7 +138,7 @@ crmConversionRouter.post('/leads/:id/whatsapp-handoff', async (req: Request, res
       mcpMediationRequestId: input.mcpMediationRequestId,
       humanApproved: Boolean(input.approvalId),
     });
-    const handoff = await service.createWhatsAppHandoffRequest(session.role, session.humanUserId, session.agentRepId, input);
+    const handoff = await service.createWhatsAppHandoffRequest(session.role, session.tenantKey, session.humanUserId, session.agentRepId, input);
     res.status(201).json({
       ...handoff,
       executionPolicy: policy,
@@ -157,7 +158,7 @@ crmConversionRouter.post('/leads/:id/sequence-plans', async (req: Request, res: 
       createdByUserId: session.humanUserId,
       createdByAgentRepId: session.agentRepId,
     });
-    const plan = await service.createConversionSequencePlan(session.role, session.humanUserId, session.agentRepId, input);
+    const plan = await service.createConversionSequencePlan(session.role, session.tenantKey, session.humanUserId, session.agentRepId, input);
     res.status(201).json({
       ...plan,
       _label: 'Follow-up sequence prepared - no CRM, WhatsApp, Telegram, or voice execution',
@@ -177,7 +178,7 @@ crmConversionRouter.post('/leads/:id/handoff-preview', async (req: Request, res:
       consentStatus: z.string().default('unknown'),
     });
     const input = validateOrThrow(schema, req.body);
-    const lead = await service.getLeadCaptureRecord(session.role, req.params.id as string);
+    const lead = await service.getLeadCaptureRecord(session.role, session.tenantKey, req.params.id as string);
     const policy = evaluateExternalExecution({
       system: input.target ?? 'gohighlevel',
       action: input.target === 'voice_chat' ? 'trigger_call' : input.target === 'gohighlevel' ? 'write' : 'send_message',
@@ -217,7 +218,7 @@ crmConversionRouter.post('/leads/:id/sandbox-execution', async (req: Request, re
       capabilityResolutionId: z.string().uuid().optional(),
       mcpMediationRequestId: z.string().uuid().optional(),
     }), req.body);
-    const lead = await service.getLeadCaptureRecord(session.role, req.params.id as string);
+    const lead = await service.getLeadCaptureRecord(session.role, session.tenantKey, req.params.id as string);
     const payload = buildSandboxHandoffPayload(input.target, lead as unknown as Record<string, unknown>, input.message);
     const gate = await sandboxCommunicationGate(input.target, session.tenantKey);
     const policy = evaluateExternalExecution({

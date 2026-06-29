@@ -3,6 +3,7 @@ import { NotFoundError } from '@shared/errors';
 import type { DraftResult, DraftMetadata, DraftVersionResult, Platform, DraftContentType } from './types';
 
 export async function createContentItem(
+  tenantKey: string,
   campaignRequestId: string,
   platform: Platform,
   contentType: DraftContentType,
@@ -13,6 +14,7 @@ export async function createContentItem(
   const item = await prisma.contentItem.create({
     data: {
       request_id: campaignRequestId,
+      tenant_key: tenantKey,
       platform,
       content_type: contentType,
       draft_text: draftText,
@@ -59,9 +61,9 @@ export async function createDraftVersion(
   };
 }
 
-export async function getContentItem(id: string) {
-  const item = await prisma.contentItem.findUnique({
-    where: { id },
+export async function getContentItem(id: string, tenantKey: string) {
+  const item = await prisma.contentItem.findFirst({
+    where: { id, tenant_key: tenantKey },
     include: {
       draft_versions: { orderBy: { version_no: 'desc' } },
       request: true,
@@ -71,9 +73,9 @@ export async function getContentItem(id: string) {
   return item;
 }
 
-export async function getContentItemsByCampaign(campaignRequestId: string) {
+export async function getContentItemsByCampaign(campaignRequestId: string, tenantKey: string) {
   return prisma.contentItem.findMany({
-    where: { request_id: campaignRequestId },
+    where: { request_id: campaignRequestId, tenant_key: tenantKey },
     include: {
       draft_versions: { orderBy: { version_no: 'desc' } },
     },
@@ -89,7 +91,10 @@ export async function getLatestVersion(contentItemId: string) {
   return version;
 }
 
-export async function updateContentItemDraft(id: string, draftText: string) {
+export async function updateContentItemDraft(id: string, tenantKey: string, draftText: string) {
+  const existing = await prisma.contentItem.findFirst({ where: { id, tenant_key: tenantKey }, select: { id: true } });
+  if (!existing) throw new NotFoundError('Content item', id);
+
   return prisma.contentItem.update({
     where: { id },
     data: { draft_text: draftText },

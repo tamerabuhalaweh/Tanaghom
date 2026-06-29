@@ -4,7 +4,18 @@ import { verifyToken, type JwtPayload } from '@shared/auth';
 import { ForbiddenError, UnauthorizedError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
-import { buildDeletionReadiness, sanitizeTenantExportValue } from './lifecycle';
+import {
+  buildDeletionReadiness,
+  readTenantExportEvidence,
+  recordTenantExportEvidence,
+  sanitizeTenantExportValue,
+} from './lifecycle';
+import {
+  DEFAULT_PRODUCTION_ENTITLEMENTS,
+  DEFAULT_PRODUCTION_PLAN_KEY,
+  buildSubscriptionHealth,
+  sanitizeSubscriptionEventState,
+} from './subscription';
 
 export const tenantAdminRouter = Router();
 
@@ -25,12 +36,20 @@ tenantAdminRouter.get('/', async (req: Request, res: Response, next: NextFunctio
     const payload = getPayload(req);
     requireAdmin(payload.role);
     const tenantKey = payload.tenantKey || 'default';
-    const [tenant, users, memberships, credentials] = await Promise.all([
+    const [tenant, users, memberships, credentials, subscription] = await Promise.all([
       prisma.tenant.findUnique({ where: { tenant_key: tenantKey } }),
       prisma.user.findMany({ where: { tenant_key: tenantKey }, select: { id: true, role: true, is_active: true } }),
       prisma.tenantMembership.findMany({ where: { tenant_key: tenantKey }, select: { user_id: true, role: true, is_active: true } }),
       prisma.integrationCredential.findMany({ where: { tenant_key: tenantKey }, select: { id: true, provider: true, is_active: true } }),
+      getCurrentTenantSubscription(tenantKey),
     ]);
+    const subscriptionHealth = buildSubscriptionHealth({
+      tenantStatus: tenant?.status || 'missing',
+      subscriptionStatus: subscription?.status,
+      currentPeriodEnd: subscription?.current_period_end,
+      entitlements: subscription?.plan.entitlements,
+      entitlementOverrides: subscription?.entitlements_override,
+    });
 
     const roleCounts = users.reduce<Record<string, number>>((acc, user) => {
       acc[user.role] = (acc[user.role] || 0) + 1;
@@ -68,6 +87,20 @@ tenantAdminRouter.get('/', async (req: Request, res: Response, next: NextFunctio
           return acc;
         }, {}),
         rawSecretsReturned: false,
+      },
+      subscription: subscription ? {
+        id: subscription.id,
+        status: subscription.status,
+        source: subscription.source,
+        planKey: subscription.plan.plan_key,
+        planName: subscription.plan.name,
+        currentPeriodEnd: subscription.current_period_end,
+        serviceAccess: subscriptionHealth.serviceAccess,
+        blockers: subscriptionHealth.blockers,
+      } : {
+        status: 'missing',
+        serviceAccess: false,
+        blockers: subscriptionHealth.blockers,
       },
       _label: 'Tenant admin summary loaded for authenticated tenant only',
     });
@@ -173,6 +206,14 @@ tenantAdminRouter.get('/lifecycle', async (req: Request, res: Response, next: Ne
     requireAdmin(payload.role);
     const tenantKey = payload.tenantKey || 'default';
     const tenant = await prisma.tenant.findUnique({ where: { tenant_key: tenantKey } });
+    const subscription = await getCurrentTenantSubscription(tenantKey);
+    const subscriptionHealth = buildSubscriptionHealth({
+      tenantStatus: tenant?.status || 'missing',
+      subscriptionStatus: subscription?.status,
+      currentPeriodEnd: subscription?.current_period_end,
+      entitlements: subscription?.plan.entitlements,
+      entitlementOverrides: subscription?.entitlements_override,
+    });
     res.json({
       tenantKey,
       status: tenant?.status || 'missing',
@@ -180,14 +221,164 @@ tenantAdminRouter.get('/lifecycle', async (req: Request, res: Response, next: Ne
       lifecyclePolicy: {
         suspended: 'Blocks tenant login until reactivated.',
         archived: 'Blocks tenant login and marks the workspace retired.',
-        billingAutomation: 'not_implemented',
-        subscriptionManagement: 'not_implemented',
+        billingAutomation: 'manual_or_external_until_payment_provider_connected',
+        subscriptionManagement: 'available_from_admin_api',
         tenantExport: 'available_from_admin_api',
         tenantDeletion: 'archive_then_offline_purge_job_required',
+      },
+      subscription: subscription ? {
+        id: subscription.id,
+        status: subscription.status,
+        source: subscription.source,
+        planKey: subscription.plan.plan_key,
+        planName: subscription.plan.name,
+        currentPeriodEnd: subscription.current_period_end,
+        serviceAccess: subscriptionHealth.serviceAccess,
+        blockers: subscriptionHealth.blockers,
+        warnings: subscriptionHealth.warnings,
+      } : {
+        status: 'missing',
+        serviceAccess: false,
+        blockers: subscriptionHealth.blockers,
       },
       rawSecretsReturned: false,
       _label: 'Tenant lifecycle status',
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tenantAdminRouter.get('/plans', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    requireAdmin(payload.role);
+    await ensureTenantPlanCatalog();
+    const plans = await prisma.tenantPlan.findMany({ orderBy: { created_at: 'asc' } });
+    res.json({
+      plans: plans.map(plan => ({
+        id: plan.id,
+        planKey: plan.plan_key,
+        name: plan.name,
+        description: plan.description,
+        status: plan.status,
+        billingInterval: plan.billing_interval,
+        currency: plan.currency,
+        monthlyPriceCents: plan.monthly_price_cents,
+        annualPriceCents: plan.annual_price_cents,
+        entitlements: plan.entitlements,
+      })),
+      billingCollection: 'external_or_manual_until_payment_provider_connected',
+      rawSecretsReturned: false,
+      _label: 'Tenant plan catalog loaded',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tenantAdminRouter.get('/subscription', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    requireAdmin(payload.role);
+    const tenantKey = payload.tenantKey || 'default';
+    await ensureTenantPlanCatalog();
+    const state = await buildTenantSubscriptionResponse(tenantKey);
+    res.json(state);
+  } catch (err) {
+    next(err);
+  }
+});
+
+tenantAdminRouter.post('/subscription', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    requireAdmin(payload.role);
+    const tenantKey = payload.tenantKey || 'default';
+    const input = z.object({
+      planKey: z.string().trim().min(2).max(120).default(DEFAULT_PRODUCTION_PLAN_KEY),
+      status: z.enum(['trialing', 'active', 'past_due', 'suspended', 'cancelled', 'expired']),
+      source: z.enum(['manual', 'stripe', 'external_contract']).default('manual'),
+      currentPeriodEnd: z.string().datetime().optional(),
+      trialEndsAt: z.string().datetime().optional(),
+      externalCustomerRef: z.string().trim().max(200).optional(),
+      externalSubscriptionRef: z.string().trim().max(200).optional(),
+      entitlementsOverride: z.record(z.unknown()).optional(),
+      notes: z.string().trim().max(2000).optional(),
+      reason: z.string().trim().min(5).max(1000),
+    }).parse(req.body);
+    await ensureTenantPlanCatalog();
+    const tenant = await prisma.tenant.upsert({
+      where: { tenant_key: tenantKey },
+      create: {
+        tenant_key: tenantKey,
+        name: tenantKey === 'default' ? 'Tanaghum Default Tenant' : tenantKey,
+        status: 'active',
+      },
+      update: {},
+    });
+    const plan = await prisma.tenantPlan.findUnique({ where: { plan_key: input.planKey } });
+    if (!plan || plan.status !== 'active') {
+      res.status(422).json({
+        error: 'Selected tenant plan is not active',
+        _label: 'Subscription update blocked by inactive or missing plan.',
+      });
+      return;
+    }
+    const previous = await getCurrentTenantSubscription(tenantKey);
+    const subscription = await prisma.$transaction(async tx => {
+      await tx.tenantSubscription.updateMany({
+        where: { tenant_key: tenantKey, is_current: true },
+        data: { is_current: false },
+      });
+      const nextSubscription = await tx.tenantSubscription.create({
+        data: {
+          tenant_key: tenant.tenant_key,
+          plan_id: plan.id,
+          status: input.status,
+          source: input.source,
+          is_current: true,
+          current_period_start: new Date(),
+          current_period_end: input.currentPeriodEnd ? new Date(input.currentPeriodEnd) : null,
+          trial_ends_at: input.trialEndsAt ? new Date(input.trialEndsAt) : null,
+          external_customer_ref: input.externalCustomerRef,
+          external_subscription_ref: input.externalSubscriptionRef,
+          entitlements_override: input.entitlementsOverride
+            ? sanitizeSubscriptionEventState(input.entitlementsOverride)
+            : undefined,
+          notes: input.notes,
+        },
+      });
+      await tx.tenantSubscriptionEvent.create({
+        data: {
+          tenant_key: tenant.tenant_key,
+          subscription_id: nextSubscription.id,
+          event_type: previous ? 'subscription_changed' : 'subscription_created',
+          actor_user_id: payload.sub,
+          reason: input.reason,
+          before_state: sanitizeSubscriptionEventState(previous ? {
+            id: previous.id,
+            status: previous.status,
+            source: previous.source,
+            planKey: previous.plan.plan_key,
+            currentPeriodEnd: previous.current_period_end,
+          } : {}),
+          after_state: sanitizeSubscriptionEventState({
+            id: nextSubscription.id,
+            status: nextSubscription.status,
+            source: nextSubscription.source,
+            planKey: plan.plan_key,
+            currentPeriodEnd: nextSubscription.current_period_end,
+          }),
+        },
+      });
+      return nextSubscription;
+    });
+    auditLog(
+      { actor: `user:${payload.sub}`, action: 'tenant_subscription_updated', object_type: 'tenant', object_id: tenant.id, result: 'success' },
+      `Tenant subscription updated for ${tenantKey}: ${subscription.status}`,
+    );
+    res.status(201).json(await buildTenantSubscriptionResponse(tenantKey));
   } catch (err) {
     next(err);
   }
@@ -199,12 +390,14 @@ tenantAdminRouter.get('/export', async (req: Request, res: Response, next: NextF
     requireAdmin(payload.role);
     const tenantKey = payload.tenantKey || 'default';
     const bundle = await buildTenantExportBundle(tenantKey);
+    const evidence = recordTenantExportEvidence(tenantKey, bundle);
     auditLog(
       { actor: `user:${payload.sub}`, action: 'tenant_export_generated', object_type: 'tenant', object_id: bundle.tenant.id, result: 'success' },
       `Tenant export generated for ${tenantKey}`,
     );
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="tanaghum-tenant-${tenantKey}-export.json"`);
+    res.setHeader('X-Tanaghum-Tenant-Export-Evidence', evidence.bundleHash);
     res.json(bundle);
   } catch (err) {
     next(err);
@@ -321,10 +514,6 @@ async function buildTenantExportBundle(tenantKey: string) {
     orderBy: { created_at: 'asc' },
   });
   const userIds = users.map(user => user.id);
-  const agentRepIds = await prisma.agentRep.findMany({
-    where: { user_id: { in: userIds } },
-    select: { id: true },
-  }).then(records => records.map(record => record.id));
   const [
     memberships,
     departments,
@@ -337,6 +526,12 @@ async function buildTenantExportBundle(tenantKey: string) {
     integrationCredentials,
     socialConnections,
     oauthStates,
+    commercialWorkflowRuns,
+    analyticsIngestionRequests,
+    analyticsSnapshots,
+    campaignPerformanceReports,
+    tenantSubscriptions,
+    tenantSubscriptionEvents,
   ] = await Promise.all([
     prisma.tenantMembership.findMany({
       where: { tenant_key: tenantKey },
@@ -370,9 +565,10 @@ async function buildTenantExportBundle(tenantKey: string) {
       orderBy: { created_at: 'asc' },
     }),
     prisma.contentRequest.findMany({
-      where: { requester_id: { in: userIds } },
+      where: { tenant_key: tenantKey },
       select: {
         id: true,
+        tenant_key: true,
         requester_id: true,
         channel: true,
         objective: true,
@@ -407,16 +603,10 @@ async function buildTenantExportBundle(tenantKey: string) {
       take: 500,
     }),
     prisma.approval.findMany({
-      where: {
-        OR: [
-          { requester_user_id: { in: userIds } },
-          { approver_user_id: { in: userIds } },
-          { requester_agent_rep_id: { in: agentRepIds } },
-          { approver_agent_rep_id: { in: agentRepIds } },
-        ],
-      },
+      where: { tenant_key: tenantKey },
       select: {
         id: true,
+        tenant_key: true,
         target_type: true,
         target_id: true,
         requester_user_id: true,
@@ -440,9 +630,10 @@ async function buildTenantExportBundle(tenantKey: string) {
       take: 500,
     }),
     prisma.publishingPackage.findMany({
-      where: { created_by_user_id: { in: userIds } },
+      where: { tenant_key: tenantKey },
       select: {
         id: true,
+        tenant_key: true,
         package_status: true,
         package_type: true,
         campaign_id: true,
@@ -462,9 +653,10 @@ async function buildTenantExportBundle(tenantKey: string) {
       take: 500,
     }),
     prisma.leadCaptureRecord.findMany({
-      where: { created_by_user_id: { in: userIds } },
+      where: { tenant_key: tenantKey },
       select: {
         id: true,
+        tenant_key: true,
         lead_status: true,
         lead_source: true,
         campaign_id: true,
@@ -506,6 +698,154 @@ async function buildTenantExportBundle(tenantKey: string) {
       orderBy: { created_at: 'desc' },
       take: 100,
     }),
+    prisma.commercialWorkflowRun.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        id: true,
+        tenant_key: true,
+        campaign_id: true,
+        created_by_user_id: true,
+        created_by_agent_rep_id: true,
+        status: true,
+        active_stage: true,
+        readiness_score: true,
+        blockers: true,
+        source: true,
+        metadata: true,
+        started_at: true,
+        updated_at: true,
+        completed_at: true,
+        steps: {
+          select: {
+            id: true,
+            stage_id: true,
+            step_status: true,
+            summary: true,
+            blocking_reason: true,
+            evidence_count: true,
+            metadata: true,
+            started_at: true,
+            completed_at: true,
+            updated_at: true,
+          },
+        },
+      },
+      orderBy: { started_at: 'desc' },
+      take: 500,
+    }),
+    prisma.analyticsIngestionRequest.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        id: true,
+        tenant_key: true,
+        source_id: true,
+        campaign_id: true,
+        content_item_id: true,
+        publishing_package_id: true,
+        platform: true,
+        requested_by_user_id: true,
+        requested_by_agent_rep_id: true,
+        status: true,
+        requested_at: true,
+        completed_at: true,
+        blocked_reason: true,
+        created_at: true,
+        updated_at: true,
+      },
+      orderBy: { requested_at: 'desc' },
+      take: 500,
+    }),
+    prisma.analyticsSnapshot.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        id: true,
+        tenant_key: true,
+        source_id: true,
+        ingestion_request_id: true,
+        campaign_id: true,
+        content_item_id: true,
+        publishing_package_id: true,
+        platform: true,
+        metrics: true,
+        normalized_metrics: true,
+        confidence: true,
+        source_freshness: true,
+        collected_at: true,
+        created_at: true,
+      },
+      orderBy: { collected_at: 'desc' },
+      take: 500,
+    }),
+    prisma.campaignPerformanceReport.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        id: true,
+        tenant_key: true,
+        reporting_period_id: true,
+        campaign_id: true,
+        generated_by_user_id: true,
+        generated_by_agent_rep_id: true,
+        report_status: true,
+        summary: true,
+        top_findings: true,
+        risks: true,
+        recommendations: true,
+        linked_learning_signal_ids: true,
+        linked_saif_decision_record_id: true,
+        created_at: true,
+        updated_at: true,
+      },
+      orderBy: { created_at: 'desc' },
+      take: 500,
+    }),
+    prisma.tenantSubscription.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        id: true,
+        tenant_key: true,
+        status: true,
+        source: true,
+        is_current: true,
+        external_customer_ref: true,
+        external_subscription_ref: true,
+        trial_ends_at: true,
+        current_period_start: true,
+        current_period_end: true,
+        cancel_at: true,
+        cancelled_at: true,
+        entitlements_override: true,
+        notes: true,
+        created_at: true,
+        updated_at: true,
+        plan: {
+          select: {
+            plan_key: true,
+            name: true,
+            status: true,
+            billing_interval: true,
+            currency: true,
+            entitlements: true,
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    }),
+    prisma.tenantSubscriptionEvent.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        id: true,
+        tenant_key: true,
+        subscription_id: true,
+        event_type: true,
+        actor_user_id: true,
+        reason: true,
+        before_state: true,
+        after_state: true,
+        created_at: true,
+      },
+      orderBy: { created_at: 'desc' },
+      take: 500,
+    }),
   ]);
 
   return sanitizeTenantExportValue({
@@ -546,6 +886,12 @@ async function buildTenantExportBundle(tenantKey: string) {
       integrationCredentials,
       socialConnections,
       oauthStates,
+      commercialWorkflowRuns,
+      analyticsIngestionRequests,
+      analyticsSnapshots,
+      campaignPerformanceReports,
+      tenantSubscriptions,
+      tenantSubscriptionEvents,
     },
     counts: {
       users: users.length,
@@ -560,37 +906,47 @@ async function buildTenantExportBundle(tenantKey: string) {
       integrationCredentials: integrationCredentials.length,
       socialConnections: socialConnections.length,
       oauthStates: oauthStates.length,
+      commercialWorkflowRuns: commercialWorkflowRuns.length,
+      analyticsIngestionRequests: analyticsIngestionRequests.length,
+      analyticsSnapshots: analyticsSnapshots.length,
+      campaignPerformanceReports: campaignPerformanceReports.length,
+      tenantSubscriptions: tenantSubscriptions.length,
+      tenantSubscriptionEvents: tenantSubscriptionEvents.length,
     },
   }) as Record<string, unknown> & { tenant: { id: string } };
 }
 
 async function buildTenantDeletionReadiness(tenantKey: string) {
   const tenant = await prisma.tenant.findUnique({ where: { tenant_key: tenantKey } });
-  const userIds = await prisma.user.findMany({
-    where: { tenant_key: tenantKey },
-    select: { id: true },
-  }).then(users => users.map(user => user.id));
   const [
     activeUsers,
     activeMemberships,
     activeCredentials,
+    activeSubscriptions,
     pendingApprovals,
     pendingPackages,
   ] = await Promise.all([
     prisma.user.count({ where: { tenant_key: tenantKey, is_active: true } }),
     prisma.tenantMembership.count({ where: { tenant_key: tenantKey, is_active: true } }),
     prisma.integrationCredential.count({ where: { tenant_key: tenantKey, is_active: true } }),
-    prisma.approval.count({ where: { requester_user_id: { in: userIds }, approval_status: { in: ['pending', 'escalated'] } } }),
-    prisma.publishingPackage.count({ where: { created_by_user_id: { in: userIds }, package_status: { in: ['draft', 'validating', 'ready_for_future_execution'] } } }),
+    prisma.tenantSubscription.count({ where: { tenant_key: tenantKey, is_current: true, status: { in: ['trialing', 'active', 'past_due'] } } }),
+    prisma.approval.count({ where: { tenant_key: tenantKey, approval_status: { in: ['pending', 'escalated'] } } }),
+    prisma.publishingPackage.count({ where: { tenant_key: tenantKey, package_status: { in: ['draft', 'validating', 'ready_for_future_execution'] } } }),
   ]);
 
-  const exportGenerated = process.env.LATEST_TENANT_EXPORT_AT ? true : false;
+  const exportEvidence = readTenantExportEvidence(tenantKey);
   return {
     status: tenant?.status || 'missing',
+    exportEvidence: exportEvidence ? {
+      generatedAt: exportEvidence.generatedAt,
+      bundleHash: exportEvidence.bundleHash,
+      counts: exportEvidence.counts,
+    } : null,
     counts: {
       activeUsers,
       activeMemberships,
       activeCredentials,
+      activeSubscriptions,
       pendingApprovals,
       pendingPackages,
     },
@@ -599,9 +955,102 @@ async function buildTenantDeletionReadiness(tenantKey: string) {
       activeUsers,
       activeMemberships,
       activeCredentials,
+      activeSubscriptions,
       pendingApprovals,
       pendingPackages,
-      exportGenerated,
+      exportGenerated: Boolean(exportEvidence),
     }),
+  };
+}
+
+async function ensureTenantPlanCatalog() {
+  await prisma.tenantPlan.upsert({
+    where: { plan_key: DEFAULT_PRODUCTION_PLAN_KEY },
+    create: {
+      plan_key: DEFAULT_PRODUCTION_PLAN_KEY,
+      name: 'Commercial/Social Production',
+      description: 'Production Commercial/Social workspace with customer-owned AI and integration credentials.',
+      status: 'active',
+      billing_interval: 'monthly',
+      currency: 'USD',
+      monthly_price_cents: null,
+      annual_price_cents: null,
+      entitlements: DEFAULT_PRODUCTION_ENTITLEMENTS,
+    },
+    update: {
+      name: 'Commercial/Social Production',
+      description: 'Production Commercial/Social workspace with customer-owned AI and integration credentials.',
+      status: 'active',
+      billing_interval: 'monthly',
+      currency: 'USD',
+      entitlements: DEFAULT_PRODUCTION_ENTITLEMENTS,
+    },
+  });
+}
+
+async function getCurrentTenantSubscription(tenantKey: string) {
+  return prisma.tenantSubscription.findFirst({
+    where: { tenant_key: tenantKey, is_current: true },
+    include: { plan: true },
+    orderBy: { created_at: 'desc' },
+  });
+}
+
+async function buildTenantSubscriptionResponse(tenantKey: string) {
+  const tenant = await prisma.tenant.findUnique({ where: { tenant_key: tenantKey } });
+  const subscription = await getCurrentTenantSubscription(tenantKey);
+  const events = subscription
+    ? await prisma.tenantSubscriptionEvent.findMany({
+        where: { tenant_key: tenantKey, subscription_id: subscription.id },
+        orderBy: { created_at: 'desc' },
+        take: 20,
+      })
+    : [];
+  const health = buildSubscriptionHealth({
+    tenantStatus: tenant?.status || 'missing',
+    subscriptionStatus: subscription?.status,
+    currentPeriodEnd: subscription?.current_period_end,
+    entitlements: subscription?.plan.entitlements,
+    entitlementOverrides: subscription?.entitlements_override,
+  });
+
+  return {
+    tenantKey,
+    subscription: subscription ? {
+      id: subscription.id,
+      status: subscription.status,
+      source: subscription.source,
+      isCurrent: subscription.is_current,
+      planKey: subscription.plan.plan_key,
+      planName: subscription.plan.name,
+      planStatus: subscription.plan.status,
+      billingInterval: subscription.plan.billing_interval,
+      currency: subscription.plan.currency,
+      monthlyPriceCents: subscription.plan.monthly_price_cents,
+      annualPriceCents: subscription.plan.annual_price_cents,
+      externalCustomerRefConfigured: Boolean(subscription.external_customer_ref),
+      externalSubscriptionRefConfigured: Boolean(subscription.external_subscription_ref),
+      trialEndsAt: subscription.trial_ends_at,
+      currentPeriodStart: subscription.current_period_start,
+      currentPeriodEnd: subscription.current_period_end,
+      cancelAt: subscription.cancel_at,
+      cancelledAt: subscription.cancelled_at,
+      notes: subscription.notes,
+    } : null,
+    health,
+    recentEvents: events.map(event => ({
+      id: event.id,
+      eventType: event.event_type,
+      actorUserId: event.actor_user_id,
+      reason: event.reason,
+      createdAt: event.created_at,
+    })),
+    paymentProvider: {
+      status: 'not_configured',
+      supportedSources: ['manual', 'external_contract', 'stripe'],
+      message: 'Payment collection is not connected yet. Subscription state is production-owned internally and can reference future external billing records.',
+    },
+    rawSecretsReturned: false,
+    _label: 'Tenant subscription status loaded',
   };
 }

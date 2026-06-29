@@ -14,9 +14,10 @@ import type {
 // LeadCaptureRecord
 // ============================================================
 
-export async function createLeadCaptureRecord(input: CreateLeadCaptureRecordInput): Promise<LeadCaptureRecordSummary> {
+export async function createLeadCaptureRecord(input: CreateLeadCaptureRecordInput, tenantKey: string): Promise<LeadCaptureRecordSummary> {
   const record = await prisma.leadCaptureRecord.create({
     data: {
+      tenant_key: tenantKey,
       lead_source: input.leadSource,
       campaign_id: input.campaignId,
       content_item_id: input.contentItemId,
@@ -36,19 +37,21 @@ export async function createLeadCaptureRecord(input: CreateLeadCaptureRecordInpu
   return mapLeadCaptureRecord(record);
 }
 
-export async function getLeadCaptureRecordById(id: string): Promise<LeadCaptureRecordSummary> {
-  const record = await prisma.leadCaptureRecord.findUnique({ where: { id } });
+export async function getLeadCaptureRecordById(id: string, tenantKey: string): Promise<LeadCaptureRecordSummary> {
+  const record = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!record) throw new NotFoundError('LeadCaptureRecord', id);
   return mapLeadCaptureRecord(record);
 }
 
 export async function listLeadCaptureRecords(filters?: {
+  tenantKey?: string;
   leadStatus?: string;
   campaignId?: string;
   platform?: string;
   createdByUserId?: string;
 }): Promise<LeadCaptureRecordSummary[]> {
   const where: Record<string, unknown> = {};
+  if (filters?.tenantKey) where.tenant_key = filters.tenantKey;
   if (filters?.leadStatus) where.lead_status = filters.leadStatus;
   if (filters?.campaignId) where.campaign_id = filters.campaignId;
   if (filters?.platform) where.platform = filters.platform;
@@ -62,7 +65,9 @@ export async function listLeadCaptureRecords(filters?: {
 // LeadSourceAttribution
 // ============================================================
 
-export async function createLeadSourceAttribution(input: CreateLeadSourceAttributionInput): Promise<LeadSourceAttributionSummary> {
+export async function createLeadSourceAttribution(input: CreateLeadSourceAttributionInput, tenantKey: string): Promise<LeadSourceAttributionSummary> {
+  await getLeadCaptureRecordById(input.leadCaptureRecordId, tenantKey);
+
   const attribution = await prisma.leadSourceAttribution.create({
     data: {
       lead_capture_record_id: input.leadCaptureRecordId,
@@ -84,7 +89,9 @@ export async function createLeadSourceAttribution(input: CreateLeadSourceAttribu
 // ConversionIntent
 // ============================================================
 
-export async function createConversionIntent(input: CreateConversionIntentInput): Promise<ConversionIntentSummary> {
+export async function createConversionIntent(input: CreateConversionIntentInput, tenantKey: string): Promise<ConversionIntentSummary> {
+  await getLeadCaptureRecordById(input.leadCaptureRecordId, tenantKey);
+
   const intent = await prisma.conversionIntent.create({
     data: {
       lead_capture_record_id: input.leadCaptureRecordId,
@@ -102,7 +109,9 @@ export async function createConversionIntent(input: CreateConversionIntentInput)
 // CrmHandoffRequest
 // ============================================================
 
-export async function createCrmHandoffRequest(input: CreateCrmHandoffRequestInput): Promise<CrmHandoffRequestSummary> {
+export async function createCrmHandoffRequest(input: CreateCrmHandoffRequestInput, tenantKey: string): Promise<CrmHandoffRequestSummary> {
+  await getLeadCaptureRecordById(input.leadCaptureRecordId, tenantKey);
+
   // Validate MCP mediation
   if (!input.mcpMediationRequestId) {
     throw new ForbiddenError('Direct CRM access is blocked. MCP mediation is required.');
@@ -123,8 +132,10 @@ export async function createCrmHandoffRequest(input: CreateCrmHandoffRequestInpu
   return mapCrmHandoffRequest(request);
 }
 
-export async function getCrmHandoffRequestById(id: string): Promise<CrmHandoffRequestSummary> {
-  const request = await prisma.crmHandoffRequest.findUnique({ where: { id } });
+export async function getCrmHandoffRequestById(id: string, tenantKey: string): Promise<CrmHandoffRequestSummary> {
+  const request = await prisma.crmHandoffRequest.findFirst({
+    where: { id, lead_capture_record: { tenant_key: tenantKey } },
+  });
   if (!request) throw new NotFoundError('CrmHandoffRequest', id);
   return mapCrmHandoffRequest(request);
 }
@@ -133,7 +144,9 @@ export async function getCrmHandoffRequestById(id: string): Promise<CrmHandoffRe
 // WhatsAppHandoffRequest
 // ============================================================
 
-export async function createWhatsAppHandoffRequest(input: CreateWhatsAppHandoffRequestInput): Promise<WhatsAppHandoffRequestSummary> {
+export async function createWhatsAppHandoffRequest(input: CreateWhatsAppHandoffRequestInput, tenantKey: string): Promise<WhatsAppHandoffRequestSummary> {
+  await getLeadCaptureRecordById(input.leadCaptureRecordId, tenantKey);
+
   // Validate MCP mediation
   if (!input.mcpMediationRequestId) {
     throw new ForbiddenError('Direct WhatsApp access is blocked. MCP mediation is required.');
@@ -155,8 +168,10 @@ export async function createWhatsAppHandoffRequest(input: CreateWhatsAppHandoffR
   return mapWhatsAppHandoffRequest(request);
 }
 
-export async function getWhatsAppHandoffRequestById(id: string): Promise<WhatsAppHandoffRequestSummary> {
-  const request = await prisma.whatsAppHandoffRequest.findUnique({ where: { id } });
+export async function getWhatsAppHandoffRequestById(id: string, tenantKey: string): Promise<WhatsAppHandoffRequestSummary> {
+  const request = await prisma.whatsAppHandoffRequest.findFirst({
+    where: { id, lead_capture_record: { tenant_key: tenantKey } },
+  });
   if (!request) throw new NotFoundError('WhatsAppHandoffRequest', id);
   return mapWhatsAppHandoffRequest(request);
 }
@@ -165,7 +180,9 @@ export async function getWhatsAppHandoffRequestById(id: string): Promise<WhatsAp
 // ConversionSequencePlan
 // ============================================================
 
-export async function createConversionSequencePlan(input: CreateConversionSequencePlanInput): Promise<ConversionSequencePlanSummary> {
+export async function createConversionSequencePlan(input: CreateConversionSequencePlanInput, tenantKey: string): Promise<ConversionSequencePlanSummary> {
+  await getLeadCaptureRecordById(input.leadCaptureRecordId, tenantKey);
+
   const plan = await prisma.conversionSequencePlan.create({
     data: {
       lead_capture_record_id: input.leadCaptureRecordId,
@@ -182,8 +199,10 @@ export async function createConversionSequencePlan(input: CreateConversionSequen
   return mapConversionSequencePlan(plan);
 }
 
-export async function getConversionSequencePlanById(id: string): Promise<ConversionSequencePlanSummary> {
-  const plan = await prisma.conversionSequencePlan.findUnique({ where: { id } });
+export async function getConversionSequencePlanById(id: string, tenantKey: string): Promise<ConversionSequencePlanSummary> {
+  const plan = await prisma.conversionSequencePlan.findFirst({
+    where: { id, lead_capture_record: { tenant_key: tenantKey } },
+  });
   if (!plan) throw new NotFoundError('ConversionSequencePlan', id);
   return mapConversionSequencePlan(plan);
 }

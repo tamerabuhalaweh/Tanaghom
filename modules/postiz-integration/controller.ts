@@ -547,6 +547,7 @@ postizIntegrationRouter.get('/execution-requests', async (req: Request, res: Res
   try {
     const session = getSession(req);
     const requests = await service.listExecutionRequests(session.role, {
+      tenantKey: session.tenantKey,
       publishingPackageId: req.query.publishingPackageId as string | undefined,
       requestStatus: req.query.status as string | undefined,
       requestedByUserId: req.query.mine === 'true' ? session.humanUserId : undefined,
@@ -576,7 +577,7 @@ postizIntegrationRouter.post('/execution-requests', async (req: Request, res: Re
       mcpMediationRequestId: input.mcpMediationRequestId,
       humanApproved: Boolean(input.approvalId),
     });
-    const request = await service.createExecutionRequest(session.role, session.humanUserId, session.agentRepId, input);
+    const request = await service.createExecutionRequest(session.role, session.tenantKey, session.humanUserId, session.agentRepId, input);
     res.status(201).json({
       ...request,
       executionPolicy: policy,
@@ -600,6 +601,7 @@ postizIntegrationRouter.post('/execution-requests/:id/prepare-draft', async (req
     );
     const job = await service.prepareDraft(
       session.role,
+      session.tenantKey,
       session.humanUserId,
       session.agentRepId,
       req.params.id as string,
@@ -628,6 +630,7 @@ postizIntegrationRouter.post('/execution-requests/:id/prepare-schedule', async (
     );
     const job = await service.prepareSchedule(
       session.role,
+      session.tenantKey,
       session.humanUserId,
       session.agentRepId,
       req.params.id as string,
@@ -697,9 +700,10 @@ async function resolvePostizRuntimeConfig(tenantKey = 'default'): Promise<Postiz
 async function buildPackagePostizPayload(
   input: z.infer<typeof postizPackagePayloadSchema>,
   config: PostizRuntimeConfig,
+  tenantKey: string,
 ) {
-  const pkg = await prisma.publishingPackage.findUnique({
-    where: { id: input.publishingPackageId },
+  const pkg = await prisma.publishingPackage.findFirst({
+    where: { id: input.publishingPackageId, tenant_key: tenantKey },
     include: {
       items: true,
       targets: true,
@@ -713,8 +717,8 @@ async function buildPackagePostizPayload(
   }
 
   const [contentItem, campaign] = await Promise.all([
-    pkg.content_item_id ? prisma.contentItem.findUnique({ where: { id: pkg.content_item_id } }) : Promise.resolve(null),
-    pkg.campaign_id ? prisma.contentRequest.findUnique({ where: { id: pkg.campaign_id } }) : Promise.resolve(null),
+    pkg.content_item_id ? prisma.contentItem.findFirst({ where: { id: pkg.content_item_id, tenant_key: tenantKey } }) : Promise.resolve(null),
+    pkg.campaign_id ? prisma.contentRequest.findFirst({ where: { id: pkg.campaign_id, tenant_key: tenantKey } }) : Promise.resolve(null),
   ]);
   const target = input.platform
     ? pkg.targets.find(item => item.platform === input.platform)
@@ -817,7 +821,7 @@ async function validatePostizSchedulingEvidence(input: {
   if (!governance.approvalId) {
     reasons.push('Approval ID is required for Postiz sandbox scheduling');
   } else {
-    const approval = await prisma.approval.findUnique({ where: { id: governance.approvalId } });
+    const approval = await prisma.approval.findFirst({ where: { id: governance.approvalId, tenant_key: session.tenantKey } });
     if (!approval) {
       reasons.push('Approval record was not found');
     } else {
@@ -951,7 +955,7 @@ postizIntegrationRouter.post('/package-payload', async (req: Request, res: Respo
     const input = postizPackagePayloadSchema.parse(req.body);
     const session = getSession(req);
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
-    const packagePayload = await buildPackagePostizPayload(input, config);
+    const packagePayload = await buildPackagePostizPayload(input, config, session.tenantKey);
     const governance = governanceFromPackage(input, packagePayload.package);
     const gate = await sandboxSchedulingGate(session, governance, config, {
       id: packagePayload.package.id,
@@ -1075,7 +1079,7 @@ postizIntegrationRouter.post('/package-sandbox-schedule', async (req: Request, r
     const session = getSession(req);
     const input = postizPackagePayloadSchema.parse(req.body);
     const config = await resolvePostizRuntimeConfig(session.tenantKey);
-    const packagePayload = await buildPackagePostizPayload(input, config);
+    const packagePayload = await buildPackagePostizPayload(input, config, session.tenantKey);
     const governance = governanceFromPackage(input, packagePayload.package);
     const gate = await sandboxSchedulingGate(session, governance, config, {
       id: packagePayload.package.id,

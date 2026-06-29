@@ -5,8 +5,12 @@ const prismaMocks = vi.hoisted(() => ({
     create: vi.fn(),
     findMany: vi.fn(),
   },
+  user: {
+    findMany: vi.fn(),
+  },
   contentRequest: {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
     findMany: vi.fn(),
   },
   contentItem: {
@@ -49,7 +53,8 @@ const session = {
 describe('commercial workflow evidence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prismaMocks.contentRequest.findUnique.mockResolvedValue({
+    prismaMocks.user.findMany.mockResolvedValue([{ id: session.humanUserId }]);
+    prismaMocks.contentRequest.findFirst.mockResolvedValue({
       id: '550e8400-e29b-41d4-a716-446655440000',
       raw_message: 'Campaign: CEO launch',
       objective: 'Objective: Generate qualified leads',

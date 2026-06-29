@@ -117,6 +117,10 @@ export default function DemoCommandCenter() {
   const workflowReadiness = numberValue((workflowState?.readiness as RecordMap)?.score);
   const workflowStages = list(workflowState?.stages);
   const workflowNextAction = (workflowState?.nextAction || {}) as RecordMap;
+  const workflowRun = (workflowState?.workflowRun || {}) as RecordMap;
+  const workflowRunStatus = text(workflowRun.status, selected ? 'active' : 'not started');
+  const workflowRunActiveStage = friendlyNextAction(titleCase(text(workflowRun.activeStage, 'brief')));
+  const workflowRunReady = Boolean(workflowRun.id);
 
   const postiz = (workflowState?.postiz || {}) as RecordMap;
   const postizServerReachable =
@@ -615,12 +619,12 @@ export default function DemoCommandCenter() {
           <ExecutiveStatusGrid
             items={[
               {
-                label: 'System',
-                value: workflowState ? 'Ready' : 'Connecting...',
-                tone: workflowState ? 'good' : 'warn',
-                detail: workflowState
-                  ? `${workflowStages.length || 6} workflow checks loaded${integrationConnectorCount ? `, ${integrationConnectorCount} integration checks active` : ''}.`
-                  : 'Loading your workspace. This page will update automatically.',
+                label: 'Workflow run',
+                value: workflowRunReady ? titleCase(workflowRunStatus) : 'Start with campaign',
+                tone: workflowRunStatus === 'blocked' ? 'warn' : workflowRunReady ? 'good' : 'warn',
+                detail: workflowRunReady
+                  ? `One governed journey is tracking this campaign across ${workflowStages.length || 6} steps. Current step: ${workflowRunActiveStage}${integrationConnectorCount ? `, with ${integrationConnectorCount} integration checks.` : '.'}`
+                  : 'Create or select a campaign to start the governed content journey.',
               },
               {
                 label: 'AI model',

@@ -193,15 +193,16 @@ async function optionalFindMany<T>(query: Promise<T[]>): Promise<T[]> {
 demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
 
     const campaigns = await prisma.contentRequest.findMany({
-      where: { requester_id: payload.sub },
+      where: { requester_id: payload.sub, tenant_key: tenantKey },
       orderBy: { created_at: 'desc' },
       take: 10,
     });
 
     const approvals = await prisma.approval.findMany({
-      where: { requester_user_id: payload.sub },
+      where: { requester_user_id: payload.sub, tenant_key: tenantKey },
       orderBy: { created_at: 'desc' },
       take: 10,
     });
@@ -217,6 +218,7 @@ demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction
     }));
 
     const leadCaptures = await optionalFindMany(prisma.leadCaptureRecord.findMany({
+      where: { tenant_key: tenantKey },
       orderBy: { created_at: 'desc' },
       take: 5,
     }));
@@ -227,6 +229,7 @@ demoRouter.get('/status', async (req: Request, res: Response, next: NextFunction
     }));
 
     const publishingPackages = await optionalFindMany(prisma.publishingPackage.findMany({
+      where: { tenant_key: tenantKey },
       orderBy: { created_at: 'desc' },
       take: 5,
     }));
@@ -340,8 +343,10 @@ demoRouter.get('/audit-trail', async (req: Request, res: Response, next: NextFun
 
 demoRouter.get('/leads', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
     const leads = await optionalFindMany(prisma.leadCaptureRecord.findMany({
+      where: { tenant_key: tenantKey },
       orderBy: { created_at: 'desc' },
       take: 10,
     }));

@@ -73,6 +73,7 @@ export async function listAnalyticsSources(requesterRole: string, filters?: { st
 
 export async function createIngestionRequest(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreateIngestionRequestInput,
@@ -86,7 +87,7 @@ export async function createIngestionRequest(
     throw new ForbiddenError('Write-enabled analytics sources are blocked');
   }
 
-  const request = await repo.createIngestionRequest(input);
+  const request = await repo.createIngestionRequest(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'ingestion_request_created', object_type: 'analytics_ingestion_request', object_id: request.id, result: request.status === 'blocked' ? 'blocked' : 'success' },
@@ -108,12 +109,13 @@ export async function createIngestionRequest(
   return request;
 }
 
-export async function getIngestionRequest(requesterRole: string, id: string): Promise<IngestionRequestSummary> {
+export async function getIngestionRequest(requesterRole: string, tenantKey: string, id: string): Promise<IngestionRequestSummary> {
   checkPermission(requesterRole, 'analytics:read');
-  return repo.getIngestionRequestById(id);
+  return repo.getIngestionRequestById(id, tenantKey);
 }
 
 export async function listIngestionRequests(requesterRole: string, filters?: {
+  tenantKey?: string;
   sourceId?: string;
   campaignId?: string;
   status?: string;
@@ -125,13 +127,14 @@ export async function listIngestionRequests(requesterRole: string, filters?: {
 
 export async function mockCompleteIngestion(
   requesterRole: string,
+  tenantKey: string,
   ingestionRequestId: string,
   platform: string,
   campaignId?: string,
 ): Promise<AnalyticsSnapshotSummary> {
   checkPermission(requesterRole, 'analytics:ingest');
 
-  const request = await repo.getIngestionRequestById(ingestionRequestId);
+  const request = await repo.getIngestionRequestById(ingestionRequestId, tenantKey);
   if (request.status !== 'completed') {
     throw new ForbiddenError(`Ingestion request is ${request.status}, not completed`);
   }
@@ -151,7 +154,7 @@ export async function mockCompleteIngestion(
     normalizedMetrics: snapshot.normalizedMetrics,
     confidence: snapshot.confidence,
     sourceFreshness: snapshot.sourceFreshness,
-  });
+  }, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'mock_snapshot_created', object_type: 'analytics_snapshot', object_id: analyticsSnapshot.id, result: 'success' },
@@ -165,12 +168,13 @@ export async function mockCompleteIngestion(
 // Snapshot Service
 // ============================================================
 
-export async function getSnapshot(requesterRole: string, id: string): Promise<AnalyticsSnapshotSummary> {
+export async function getSnapshot(requesterRole: string, tenantKey: string, id: string): Promise<AnalyticsSnapshotSummary> {
   checkPermission(requesterRole, 'analytics:read');
-  return repo.getSnapshotById(id);
+  return repo.getSnapshotById(id, tenantKey);
 }
 
 export async function listSnapshots(requesterRole: string, filters?: {
+  tenantKey?: string;
   sourceId?: string;
   campaignId?: string;
   contentItemId?: string;
@@ -228,6 +232,7 @@ export async function getReportingPeriod(requesterRole: string, id: string): Pro
 
 export async function createPerformanceReport(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreatePerformanceReportInput,
@@ -236,7 +241,7 @@ export async function createPerformanceReport(
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.generatedByUserId, input.generatedByAgentRepId);
 
   // Reports are advisory only — cannot approve, publish, or change strategy
-  const report = await repo.createPerformanceReport(input);
+  const report = await repo.createPerformanceReport(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'performance_report_created', object_type: 'campaign_performance_report', object_id: report.id, result: 'success' },
@@ -258,12 +263,13 @@ export async function createPerformanceReport(
   return report;
 }
 
-export async function getPerformanceReport(requesterRole: string, id: string): Promise<PerformanceReportSummary> {
+export async function getPerformanceReport(requesterRole: string, tenantKey: string, id: string): Promise<PerformanceReportSummary> {
   checkPermission(requesterRole, 'analytics:read');
-  return repo.getPerformanceReportById(id);
+  return repo.getPerformanceReportById(id, tenantKey);
 }
 
 export async function listPerformanceReports(requesterRole: string, filters?: {
+  tenantKey?: string;
   campaignId?: string;
   reportingPeriodId?: string;
   reportStatus?: string;

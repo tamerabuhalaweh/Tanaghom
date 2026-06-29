@@ -150,6 +150,7 @@ ideasRouter.post('/convert-to-campaign', async (req: Request, res: Response, nex
         audience: input.audience,
         channel: 'social_media',
         content_type: 'campaign',
+        tenant_key: payload.tenantKey || 'default',
         risk_category: 'low',
         status: 'idea',
         requester_id: payload.sub,

@@ -9,6 +9,7 @@ import { AUTH_EVENTS, type UserAuthenticatedEvent, type UserLoginFailedEvent } f
 import { findUserByEmail, findUserById, findAgentRepByUserId } from './repository';
 import { assertMfaSatisfied } from './mfa-service';
 import type { LoginInput, LoginResult, SessionUser } from './types';
+import { buildSubscriptionHealth } from '@modules/tenant-admin/subscription';
 
 export async function login(input: LoginInput): Promise<LoginResult> {
   const user = await findUserByEmail(input.email);
@@ -198,6 +199,7 @@ async function ensureActiveTenantMembership(userId: string, tenantKey: string, r
   if (tenant.status !== 'active') {
     throw new UnauthorizedError(`Tenant is ${tenant.status}`);
   }
+  await assertTenantSubscriptionAllowsAccess(tenantKey, tenant.status);
   const membership = await prisma.tenantMembership.upsert({
     where: {
       tenant_key_user_id: {
@@ -217,4 +219,23 @@ async function ensureActiveTenantMembership(userId: string, tenantKey: string, r
     throw new UnauthorizedError('Tenant membership is disabled');
   }
   return membership;
+}
+
+async function assertTenantSubscriptionAllowsAccess(tenantKey: string, tenantStatus: string) {
+  if (process.env.ENFORCE_TENANT_SUBSCRIPTION !== 'true') return;
+  const subscription = await prisma.tenantSubscription.findFirst({
+    where: { tenant_key: tenantKey, is_current: true },
+    include: { plan: true },
+    orderBy: { created_at: 'desc' },
+  });
+  const health = buildSubscriptionHealth({
+    tenantStatus,
+    subscriptionStatus: subscription?.status,
+    currentPeriodEnd: subscription?.current_period_end,
+    entitlements: subscription?.plan.entitlements,
+    entitlementOverrides: subscription?.entitlements_override,
+  });
+  if (!health.serviceAccess) {
+    throw new UnauthorizedError(`Tenant subscription is not active: ${health.blockers.join(' ')}`);
+  }
 }

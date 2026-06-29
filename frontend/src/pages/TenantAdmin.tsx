@@ -42,10 +42,17 @@ export default function TenantAdmin() {
   const [summary, setSummary] = useState<RecordMap | null>(null);
   const [isolation, setIsolation] = useState<RecordMap | null>(null);
   const [lifecycle, setLifecycle] = useState<RecordMap | null>(null);
+  const [subscriptionState, setSubscriptionState] = useState<RecordMap | null>(null);
+  const [plans, setPlans] = useState<RecordMap[]>([]);
   const [deletionReadiness, setDeletionReadiness] = useState<RecordMap | null>(null);
   const [exportSummary, setExportSummary] = useState<RecordMap | null>(null);
   const [name, setName] = useState('');
   const [lifecycleReason, setLifecycleReason] = useState('');
+  const [subscriptionPlanKey, setSubscriptionPlanKey] = useState('commercial_social_production');
+  const [subscriptionStatus, setSubscriptionStatus] = useState('active');
+  const [subscriptionSource, setSubscriptionSource] = useState('manual');
+  const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = useState('');
+  const [subscriptionReason, setSubscriptionReason] = useState('');
   const [deletionReason, setDeletionReason] = useState('');
   const [retentionApproved, setRetentionApproved] = useState(false);
   const [exportReviewed, setExportReviewed] = useState(false);
@@ -54,18 +61,29 @@ export default function TenantAdmin() {
 
   async function load() {
     if (!token) return;
-    const [summaryResult, isolationResult, lifecycleResult, deletionResult] = await Promise.all([
+    const [summaryResult, isolationResult, lifecycleResult, plansResult, subscriptionResult, deletionResult] = await Promise.all([
       tenantAdminApi.summary(token),
       tenantAdminApi.isolationReport(token),
       tenantAdminApi.lifecycle(token),
+      tenantAdminApi.plans(token),
+      tenantAdminApi.subscription(token),
       tenantAdminApi.deletionReadiness(token),
     ]);
     const nextSummary = summaryResult as RecordMap;
+    const nextSubscriptionState = subscriptionResult as RecordMap;
+    const currentSubscription = objectValue(nextSubscriptionState.subscription);
     setSummary(nextSummary);
     setIsolation(isolationResult as RecordMap);
     setLifecycle(lifecycleResult as RecordMap);
+    setPlans(Array.isArray((plansResult as RecordMap).plans) ? (plansResult as RecordMap).plans as RecordMap[] : []);
+    setSubscriptionState(nextSubscriptionState);
     setDeletionReadiness(deletionResult as RecordMap);
     setName(text(objectValue(nextSummary.tenant).name, ''));
+    setSubscriptionPlanKey(text(currentSubscription.planKey, 'commercial_social_production'));
+    setSubscriptionStatus(text(currentSubscription.status, 'active'));
+    setSubscriptionSource(text(currentSubscription.source, 'manual'));
+    const periodEnd = text(currentSubscription.currentPeriodEnd, '');
+    setSubscriptionPeriodEnd(periodEnd ? periodEnd.slice(0, 10) : '');
   }
 
   useEffect(() => {
@@ -73,19 +91,30 @@ export default function TenantAdmin() {
     let cancelled = false;
     async function run() {
       try {
-        const [summaryResult, isolationResult, lifecycleResult, deletionResult] = await Promise.all([
+        const [summaryResult, isolationResult, lifecycleResult, plansResult, subscriptionResult, deletionResult] = await Promise.all([
           tenantAdminApi.summary(token as string),
           tenantAdminApi.isolationReport(token as string),
           tenantAdminApi.lifecycle(token as string),
+          tenantAdminApi.plans(token as string),
+          tenantAdminApi.subscription(token as string),
           tenantAdminApi.deletionReadiness(token as string),
         ]);
         if (cancelled) return;
         const nextSummary = summaryResult as RecordMap;
+        const nextSubscriptionState = subscriptionResult as RecordMap;
+        const currentSubscription = objectValue(nextSubscriptionState.subscription);
         setSummary(nextSummary);
         setIsolation(isolationResult as RecordMap);
         setLifecycle(lifecycleResult as RecordMap);
+        setPlans(Array.isArray((plansResult as RecordMap).plans) ? (plansResult as RecordMap).plans as RecordMap[] : []);
+        setSubscriptionState(nextSubscriptionState);
         setDeletionReadiness(deletionResult as RecordMap);
         setName(text(objectValue(nextSummary.tenant).name, ''));
+        setSubscriptionPlanKey(text(currentSubscription.planKey, 'commercial_social_production'));
+        setSubscriptionStatus(text(currentSubscription.status, 'active'));
+        setSubscriptionSource(text(currentSubscription.source, 'manual'));
+        const periodEnd = text(currentSubscription.currentPeriodEnd, '');
+        setSubscriptionPeriodEnd(periodEnd ? periodEnd.slice(0, 10) : '');
       } catch (err) {
         if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load tenant admin');
       }
@@ -122,6 +151,31 @@ export default function TenantAdmin() {
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to update tenant lifecycle');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateSubscription() {
+    if (!token || subscriptionReason.trim().length < 5) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload: Record<string, unknown> = {
+        planKey: subscriptionPlanKey,
+        status: subscriptionStatus,
+        source: subscriptionSource,
+        reason: subscriptionReason,
+      };
+      if (subscriptionPeriodEnd) {
+        payload.currentPeriodEnd = new Date(`${subscriptionPeriodEnd}T23:59:59.000Z`).toISOString();
+      }
+      await tenantAdminApi.updateSubscription(payload, token);
+      setMessage('Subscription updated and audit event recorded.');
+      setSubscriptionReason('');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to update subscription');
     } finally {
       setSaving(false);
     }
@@ -182,6 +236,12 @@ export default function TenantAdmin() {
   const findings = Array.isArray(isolation?.findings) ? isolation.findings as RecordMap[] : [];
   const isolationStatus = text(isolation?.status, 'not checked');
   const lifecyclePolicy = objectValue(lifecycle?.lifecyclePolicy);
+  const subscription = objectValue(subscriptionState?.subscription);
+  const subscriptionHealth = objectValue(subscriptionState?.health);
+  const subscriptionBlockers = Array.isArray(subscriptionHealth.blockers) ? subscriptionHealth.blockers as string[] : [];
+  const subscriptionWarnings = Array.isArray(subscriptionHealth.warnings) ? subscriptionHealth.warnings as string[] : [];
+  const entitlements = objectValue(subscriptionHealth.entitlements);
+  const paymentProvider = objectValue(subscriptionState?.paymentProvider);
   const deletionCounts = objectValue(deletionReadiness?.counts);
   const deletionBlockers = Array.isArray(deletionReadiness?.blockers) ? deletionReadiness.blockers as string[] : [];
   const deletionReady = deletionReadiness?.deletionReady === true;
@@ -246,10 +306,89 @@ export default function TenantAdmin() {
               <PrimaryAction disabled={saving || lifecycleReason.trim().length < 3} onClick={() => changeLifecycle('suspend')}>Suspend</PrimaryAction>
               <PrimaryAction disabled={saving || lifecycleReason.trim().length < 3} onClick={() => changeLifecycle('archive')}>Archive</PrimaryAction>
             </div>
-            <Notice tone="warn">Billing and subscriptions still require dedicated production work. Tenant export is available now. Tenant deletion is intentionally controlled through archive plus an offline purge review, not a dangerous UI hard-delete.</Notice>
+            <Notice tone="warn">Subscription state and entitlements are managed below. Payment collection remains manual or external until a payment provider is connected. Tenant deletion is intentionally controlled through archive plus an offline purge review, not a dangerous UI hard-delete.</Notice>
           </div>
         </ProductCard>
       </div>
+
+      <ProductCard
+        title="Subscription & Entitlements"
+        subtitle="Production access is governed by tenant-owned subscription state. Payment collection can be manual, contract-based, or later connected to Stripe without changing customer data ownership."
+      >
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-4">
+              <MetricCard label="Plan" value={text(subscription.planName, 'Not configured')} detail={text(subscription.planKey, 'missing')} tone={subscription ? 'good' : 'warn'} />
+              <MetricCard label="Subscription" value={text(subscription.status, 'missing')} detail={text(subscription.source, 'source missing')} tone={subscriptionHealth.serviceAccess ? 'good' : 'warn'} />
+              <MetricCard label="Service Access" value={subscriptionHealth.serviceAccess ? 'Allowed' : 'Blocked'} detail="Computed from tenant + subscription" tone={subscriptionHealth.serviceAccess ? 'good' : 'danger'} />
+              <MetricCard label="Payment Provider" value={text(paymentProvider.status, 'not configured')} detail="No shared customer billing secrets" tone="info" />
+            </div>
+            <ProductTable
+              columns={['Entitlement', 'Value']}
+              rows={Object.entries(entitlements).map(([key, value]) => [
+                key.replace(/([A-Z])/g, ' $1'),
+                typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+                  ? String(value)
+                  : JSON.stringify(value),
+              ])}
+            />
+            {subscriptionBlockers.length ? <ReadableBlockers blockers={subscriptionBlockers} /> : <Notice tone="good">Subscription health is clear.</Notice>}
+            {subscriptionWarnings.map(warning => <Notice key={warning} tone="warn">{warning}</Notice>)}
+          </div>
+          <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <Field label="Plan">
+              <select
+                value={subscriptionPlanKey}
+                onChange={(event) => setSubscriptionPlanKey(event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+              >
+                {plans.map(plan => (
+                  <option key={text(plan.planKey)} value={text(plan.planKey)}>{text(plan.name)} ({text(plan.status)})</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Subscription Status">
+              <select
+                value={subscriptionStatus}
+                onChange={(event) => setSubscriptionStatus(event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+              >
+                {['trialing', 'active', 'past_due', 'suspended', 'cancelled', 'expired'].map(status => <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>)}
+              </select>
+            </Field>
+            <Field label="Billing Source">
+              <select
+                value={subscriptionSource}
+                onChange={(event) => setSubscriptionSource(event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+              >
+                {['manual', 'external_contract', 'stripe'].map(source => <option key={source} value={source}>{source.replaceAll('_', ' ')}</option>)}
+              </select>
+            </Field>
+            <Field label="Current Period End">
+              <input
+                type="date"
+                value={subscriptionPeriodEnd}
+                onChange={(event) => setSubscriptionPeriodEnd(event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+              />
+            </Field>
+            <Field label="Reason">
+              <textarea
+                value={subscriptionReason}
+                onChange={(event) => setSubscriptionReason(event.target.value)}
+                rows={3}
+                placeholder="Required audit reason for subscription change"
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+              />
+            </Field>
+            <PrimaryAction disabled={saving || subscriptionReason.trim().length < 5} onClick={updateSubscription}>
+              Update Subscription
+            </PrimaryAction>
+            <Notice tone="info">This controls Tanaghum tenant access and entitlements. It does not collect payment until a payment provider is connected.</Notice>
+          </div>
+        </div>
+      </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <ProductCard

@@ -3,11 +3,12 @@ import { NotFoundError, ValidationError } from '@shared/errors';
 import type { CreateCampaignInput, UpdateCampaignInput, CampaignSummary, ContentState } from './types';
 
 export async function listCampaigns(
+  tenantKey: string,
   requesterId?: string,
   status?: ContentState,
   platform?: string,
 ): Promise<CampaignSummary[]> {
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { tenant_key: tenantKey };
   if (requesterId) where.requester_id = requesterId;
   if (status) where.status = status;
   if (platform) where.target_platforms = { has: platform };
@@ -23,9 +24,9 @@ export async function listCampaigns(
   return campaigns.map((c) => mapCampaign(c));
 }
 
-export async function getCampaignById(id: string): Promise<CampaignSummary> {
-  const campaign = await prisma.contentRequest.findUnique({
-    where: { id },
+export async function getCampaignById(tenantKey: string, id: string): Promise<CampaignSummary> {
+  const campaign = await prisma.contentRequest.findFirst({
+    where: { id, tenant_key: tenantKey },
     include: {
       requester: { select: { id: true, name: true } },
     },
@@ -35,6 +36,7 @@ export async function getCampaignById(id: string): Promise<CampaignSummary> {
 }
 
 export async function createCampaign(
+  tenantKey: string,
   requesterId: string,
   channel: string,
   input: CreateCampaignInput,
@@ -45,6 +47,7 @@ export async function createCampaign(
   const campaign = await prisma.contentRequest.create({
     data: {
       requester_id: requesterId,
+      tenant_key: tenantKey,
       channel,
       raw_message: input.topic,
       objective: input.objective,
@@ -66,8 +69,8 @@ export async function createCampaign(
   return mapCampaign(campaign);
 }
 
-export async function updateCampaign(id: string, input: UpdateCampaignInput): Promise<CampaignSummary> {
-  const existing = await prisma.contentRequest.findUnique({ where: { id } });
+export async function updateCampaign(tenantKey: string, id: string, input: UpdateCampaignInput): Promise<CampaignSummary> {
+  const existing = await prisma.contentRequest.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('Campaign', id);
 
   if (input.ownerDepartmentId !== undefined) {
@@ -98,7 +101,10 @@ export async function updateCampaign(id: string, input: UpdateCampaignInput): Pr
   return mapCampaign(campaign);
 }
 
-export async function updateCampaignStatus(id: string, toState: ContentState): Promise<CampaignSummary> {
+export async function updateCampaignStatus(tenantKey: string, id: string, toState: ContentState): Promise<CampaignSummary> {
+  const existing = await prisma.contentRequest.findFirst({ where: { id, tenant_key: tenantKey }, select: { id: true } });
+  if (!existing) throw new NotFoundError('Campaign', id);
+
   const campaign = await prisma.contentRequest.update({
     where: { id },
     data: { status: toState },

@@ -16,7 +16,7 @@ aiGenerationRouter.post('/generate', async (req: Request, res: Response, next: N
   try {
     const payload = getPayload(req);
     const input = validateGenerateDraft(req.body);
-    const drafts = await generateDrafts(payload.role, payload.sub, input);
+    const drafts = await generateDrafts(payload.role, payload.sub, payload.tenantKey || 'default', input);
     res.status(201).json(drafts);
   } catch (err) {
     next(err);
@@ -27,7 +27,7 @@ aiGenerationRouter.post('/revise', async (req: Request, res: Response, next: Nex
   try {
     const payload = getPayload(req);
     const input = validateReviseDraft(req.body);
-    const draft = await reviseDraft(payload.role, payload.sub, input);
+    const draft = await reviseDraft(payload.role, payload.sub, payload.tenantKey || 'default', input);
     res.json(draft);
   } catch (err) {
     next(err);
@@ -38,7 +38,7 @@ aiGenerationRouter.post('/save-edit', async (req: Request, res: Response, next: 
   try {
     const payload = getPayload(req);
     const input = validateSaveEditedDraft(req.body);
-    const draft = await saveEditedDraft(payload.role, payload.sub, input);
+    const draft = await saveEditedDraft(payload.role, payload.sub, payload.tenantKey || 'default', input);
     res.json(draft);
   } catch (err) {
     next(err);

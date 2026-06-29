@@ -44,10 +44,10 @@ function validateApproverNotFunctionalAgent(agentType: string): void {
   }
 }
 
-export async function submitForApproval(requesterRole: string, input: CreateApprovalInput): Promise<ApprovalSummary> {
+export async function submitForApproval(requesterRole: string, tenantKey: string, input: CreateApprovalInput): Promise<ApprovalSummary> {
   checkPermission(requesterRole, 'approvals:create');
 
-  const approval = await repo.createApproval(input);
+  const approval = await repo.createApproval(input, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'approval_submitted', object_type: 'approval', object_id: approval.id, result: 'success' },
@@ -85,17 +85,18 @@ export async function submitForApproval(requesterRole: string, input: CreateAppr
   return approval;
 }
 
-export async function getApproval(requesterRole: string, id: string): Promise<ApprovalSummary> {
+export async function getApproval(requesterRole: string, tenantKey: string, id: string): Promise<ApprovalSummary> {
   checkPermission(requesterRole, 'approvals:read');
-  return repo.getApprovalById(id);
+  return repo.getApprovalById(id, tenantKey);
 }
 
-export async function getApprovalDecisionPacket(requesterRole: string, id: string): Promise<ApprovalDecisionPacket> {
+export async function getApprovalDecisionPacket(requesterRole: string, tenantKey: string, id: string): Promise<ApprovalDecisionPacket> {
   checkPermission(requesterRole, 'approvals:read');
-  return repo.getApprovalDecisionPacket(id);
+  return repo.getApprovalDecisionPacket(id, tenantKey);
 }
 
 export async function listApprovals(requesterRole: string, filters?: {
+  tenantKey?: string;
   targetId?: string;
   targetType?: string;
   approvalStatus?: string;
@@ -109,6 +110,7 @@ export async function listApprovals(requesterRole: string, filters?: {
 
 export async function approve(
   requesterRole: string,
+  tenantKey: string,
   approvalId: string,
   sessionUserId: string,
   sessionAgentRepId: string,
@@ -120,7 +122,7 @@ export async function approve(
   validateApproverNotFunctionalAgent(sessionAgentType);
 
   // Check SAIF critical dimensions if decision record is linked
-  const approval = await repo.getApprovalById(approvalId);
+  const approval = await repo.getApprovalById(approvalId, tenantKey);
   if (approval.saifDecisionRecordId) {
     const { valid, missing } = await validateCriticalDimensions(approval.saifDecisionRecordId);
     if (!valid) {
@@ -130,7 +132,7 @@ export async function approve(
     }
   }
 
-  const result = await repo.approve(approvalId, input);
+  const result = await repo.approve(approvalId, tenantKey, input);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'approval_decided', object_type: 'approval', object_id: approvalId, result: 'success', policy_decision: 'approved' },
@@ -167,6 +169,7 @@ export async function approve(
 
 export async function reject(
   requesterRole: string,
+  tenantKey: string,
   approvalId: string,
   sessionUserId: string,
   sessionAgentRepId: string,
@@ -177,7 +180,7 @@ export async function reject(
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.approverUserId, input.approverAgentRepId);
   validateApproverNotFunctionalAgent(sessionAgentType);
 
-  const result = await repo.reject(approvalId, input);
+  const result = await repo.reject(approvalId, tenantKey, input);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'approval_decided', object_type: 'approval', object_id: approvalId, result: 'success', policy_decision: 'rejected' },
@@ -214,6 +217,7 @@ export async function reject(
 
 export async function requestChanges(
   requesterRole: string,
+  tenantKey: string,
   approvalId: string,
   sessionUserId: string,
   sessionAgentRepId: string,
@@ -224,7 +228,7 @@ export async function requestChanges(
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.approverUserId, input.approverAgentRepId);
   validateApproverNotFunctionalAgent(sessionAgentType);
 
-  const result = await repo.requestChanges(approvalId, input);
+  const result = await repo.requestChanges(approvalId, tenantKey, input);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'approval_decided', object_type: 'approval', object_id: approvalId, result: 'success', policy_decision: 'changes_requested' },
@@ -261,6 +265,7 @@ export async function requestChanges(
 
 export async function escalate(
   requesterRole: string,
+  tenantKey: string,
   approvalId: string,
   sessionUserId: string,
   sessionAgentRepId: string,
@@ -269,7 +274,7 @@ export async function escalate(
   checkPermission(requesterRole, 'approvals:escalate');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.escalatedByUserId, input.escalatedByAgentRepId);
 
-  const result = await repo.escalate(approvalId, input);
+  const result = await repo.escalate(approvalId, tenantKey, input);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'approval_escalated', object_type: 'approval', object_id: approvalId, result: 'success' },
@@ -293,6 +298,7 @@ export async function escalate(
 
 export async function cancel(
   requesterRole: string,
+  tenantKey: string,
   approvalId: string,
   sessionUserId: string,
   sessionAgentRepId: string,
@@ -301,7 +307,7 @@ export async function cancel(
   checkPermission(requesterRole, 'approvals:cancel');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.cancelledByUserId, input.cancelledByAgentRepId);
 
-  const result = await repo.cancel(approvalId, input);
+  const result = await repo.cancel(approvalId, tenantKey, input);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'approval_cancelled', object_type: 'approval', object_id: approvalId, result: 'success' },

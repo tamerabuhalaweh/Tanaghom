@@ -24,8 +24,10 @@ function deriveQualificationScore(lead: Record<string, unknown>): number {
 
 leadsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
     const leads = await prisma.leadCaptureRecord.findMany({
+      where: { tenant_key: tenantKey },
       orderBy: { created_at: 'desc' },
       take: 50,
     });
@@ -47,10 +49,17 @@ leadsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => 
 leadsRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
     const { sourcePlatform, campaignId, consentStatus, leadName, leadPhone, leadEmail } = req.body;
+
+    if (campaignId) {
+      const campaign = await prisma.contentRequest.findFirst({ where: { id: campaignId, tenant_key: tenantKey }, select: { id: true } });
+      if (!campaign) throw new NotFoundError('Campaign', campaignId);
+    }
 
     const lead = await prisma.leadCaptureRecord.create({
       data: {
+        tenant_key: tenantKey,
         lead_source: sourcePlatform || 'manual',
         platform: sourcePlatform || 'manual',
         campaign_id: campaignId || null,
@@ -86,9 +95,10 @@ leadsRouter.post('/', async (req: Request, res: Response, next: NextFunction) =>
 leadsRouter.post('/:id/qualify', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
     const id = req.params.id as string;
 
-    const lead = await prisma.leadCaptureRecord.findUnique({ where: { id } }) as Record<string, unknown> | null;
+    const lead = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } }) as Record<string, unknown> | null;
     if (!lead) throw new NotFoundError('Lead', id);
 
     const score = deriveQualificationScore(lead);
@@ -117,12 +127,13 @@ leadsRouter.post('/:id/qualify', async (req: Request, res: Response, next: NextF
 
 leadsRouter.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
 
-    const total = await prisma.leadCaptureRecord.count();
-    const qualified = await prisma.leadCaptureRecord.count({ where: { lead_status: 'qualified' as LeadStatus } });
-    const nurturing = await prisma.leadCaptureRecord.count({ where: { lead_status: 'nurturing' as LeadStatus } });
-    const newLeads = await prisma.leadCaptureRecord.count({ where: { lead_status: 'new_lead' as LeadStatus } });
+    const total = await prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey } });
+    const qualified = await prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey, lead_status: 'qualified' as LeadStatus } });
+    const nurturing = await prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey, lead_status: 'nurturing' as LeadStatus } });
+    const newLeads = await prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey, lead_status: 'new_lead' as LeadStatus } });
 
     res.json({
       total,

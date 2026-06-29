@@ -92,6 +92,7 @@ export async function listAccountReferences(requesterRole: string, postizConnect
 
 export async function createExecutionRequest(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreateExecutionRequestInput,
@@ -109,7 +110,7 @@ export async function createExecutionRequest(
     throw new ForbiddenError('Direct Postiz access is blocked. MCP mediation is required.');
   }
 
-  const request = await repo.createExecutionRequest(input);
+  const request = await repo.createExecutionRequest(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'execution_request_created', object_type: 'publishing_execution_request', object_id: request.id, result: request.requestStatus === 'blocked' ? 'blocked' : 'success' },
@@ -131,12 +132,13 @@ export async function createExecutionRequest(
   return request;
 }
 
-export async function getExecutionRequest(requesterRole: string, id: string): Promise<ExecutionRequestSummary> {
+export async function getExecutionRequest(requesterRole: string, tenantKey: string, id: string): Promise<ExecutionRequestSummary> {
   checkPermission(requesterRole, 'postiz:read');
-  return repo.getExecutionRequestById(id);
+  return repo.getExecutionRequestById(id, tenantKey);
 }
 
 export async function listExecutionRequests(requesterRole: string, filters?: {
+  tenantKey?: string;
   publishingPackageId?: string;
   requestStatus?: string;
   requestedByUserId?: string;
@@ -151,6 +153,7 @@ export async function listExecutionRequests(requesterRole: string, filters?: {
 
 export async function prepareDraft(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   executionRequestId: string,
@@ -160,7 +163,7 @@ export async function prepareDraft(
 ): Promise<PublishingJobSummary> {
   checkPermission(requesterRole, 'postiz:execute');
 
-  const request = await repo.getExecutionRequestById(executionRequestId);
+  const request = await repo.getExecutionRequestById(executionRequestId, tenantKey);
   if (request.requestStatus !== 'ready') {
     throw new ForbiddenError(`Execution request is ${request.requestStatus}, not ready`);
   }
@@ -173,6 +176,7 @@ export async function prepareDraft(
   });
 
   const job = await repo.createPublishingJob(
+    tenantKey,
     executionRequestId,
     request.publishingPackageId,
     platform,
@@ -181,8 +185,8 @@ export async function prepareDraft(
     result.payloadSummary,
   );
 
-  await repo.updatePublishingJobStatus(job.id, 'prepared', result.externalReference);
-  await repo.updateExecutionRequestStatus(executionRequestId, 'completed');
+  await repo.updatePublishingJobStatus(job.id, tenantKey, 'prepared', result.externalReference);
+  await repo.updateExecutionRequestStatus(executionRequestId, tenantKey, 'completed');
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'mock_draft_prepared', object_type: 'postiz_publishing_job', object_id: job.id, result: 'success' },
@@ -206,6 +210,7 @@ export async function prepareDraft(
 
 export async function prepareSchedule(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   executionRequestId: string,
@@ -217,7 +222,7 @@ export async function prepareSchedule(
 ): Promise<PublishingJobSummary> {
   checkPermission(requesterRole, 'postiz:execute');
 
-  const request = await repo.getExecutionRequestById(executionRequestId);
+  const request = await repo.getExecutionRequestById(executionRequestId, tenantKey);
   if (request.requestStatus !== 'ready') {
     throw new ForbiddenError(`Execution request is ${request.requestStatus}, not ready`);
   }
@@ -232,6 +237,7 @@ export async function prepareSchedule(
   });
 
   const job = await repo.createPublishingJob(
+    tenantKey,
     executionRequestId,
     request.publishingPackageId,
     platform,
@@ -240,8 +246,8 @@ export async function prepareSchedule(
     result.payloadSummary,
   );
 
-  await repo.updatePublishingJobStatus(job.id, 'scheduled', result.externalReference);
-  await repo.updateExecutionRequestStatus(executionRequestId, 'completed');
+  await repo.updatePublishingJobStatus(job.id, tenantKey, 'scheduled', result.externalReference);
+  await repo.updateExecutionRequestStatus(executionRequestId, tenantKey, 'completed');
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'mock_schedule_prepared', object_type: 'postiz_publishing_job', object_id: job.id, result: 'success' },
@@ -268,6 +274,7 @@ export async function prepareSchedule(
 // ============================================================
 
 export async function listPublishingJobs(requesterRole: string, filters?: {
+  tenantKey?: string;
   publishingPackageId?: string;
   jobStatus?: string;
 }): Promise<PublishingJobSummary[]> {

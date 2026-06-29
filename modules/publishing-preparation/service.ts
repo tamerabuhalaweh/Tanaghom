@@ -44,6 +44,7 @@ function validateSessionContextLock(
 
 export async function createPackage(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreatePackageInput,
@@ -54,7 +55,7 @@ export async function createPackage(
   // M5 execution remains blocked
   // Package creation is allowed — it's preparation only
 
-  const pkg = await repo.createPackage(input);
+  const pkg = await repo.createPackage(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'publishing_package_created', object_type: 'publishing_package', object_id: pkg.id, result: 'success' },
@@ -76,12 +77,13 @@ export async function createPackage(
   return pkg;
 }
 
-export async function getPackage(requesterRole: string, id: string): Promise<PublishingPackageSummary> {
+export async function getPackage(requesterRole: string, tenantKey: string, id: string): Promise<PublishingPackageSummary> {
   checkPermission(requesterRole, 'publishing:read');
-  return repo.getPackageById(id);
+  return repo.getPackageById(id, tenantKey);
 }
 
 export async function listPackages(requesterRole: string, filters?: {
+  tenantKey?: string;
   packageStatus?: string;
   campaignId?: string;
   contentItemId?: string;
@@ -97,10 +99,11 @@ export async function listPackages(requesterRole: string, filters?: {
 
 export async function createPackageItem(
   requesterRole: string,
+  tenantKey: string,
   input: CreatePackageItemInput,
 ): Promise<PackageItemSummary> {
   checkPermission(requesterRole, 'publishing:create');
-  const item = await repo.createPackageItem(input);
+  const item = await repo.createPackageItem(input, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'package_item_created', object_type: 'publishing_package_item', object_id: item.id, result: 'success' },
@@ -110,9 +113,9 @@ export async function createPackageItem(
   return item;
 }
 
-export async function listPackageItems(requesterRole: string, packageId: string): Promise<PackageItemSummary[]> {
+export async function listPackageItems(requesterRole: string, tenantKey: string, packageId: string): Promise<PackageItemSummary[]> {
   checkPermission(requesterRole, 'publishing:read');
-  return repo.listPackageItems(packageId);
+  return repo.listPackageItems(packageId, tenantKey);
 }
 
 // ============================================================
@@ -121,6 +124,7 @@ export async function listPackageItems(requesterRole: string, packageId: string)
 
 export async function createPublishingTarget(
   requesterRole: string,
+  tenantKey: string,
   input: CreatePublishingTargetInput,
 ): Promise<PublishingTargetSummary> {
   checkPermission(requesterRole, 'publishing:create');
@@ -128,7 +132,7 @@ export async function createPublishingTarget(
   // No real platform account connection
   // Account references are placeholders only
 
-  const target = await repo.createPublishingTarget(input);
+  const target = await repo.createPublishingTarget(input, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'publishing_target_created', object_type: 'publishing_target', object_id: target.id, result: 'success' },
@@ -138,9 +142,9 @@ export async function createPublishingTarget(
   return target;
 }
 
-export async function listPublishingTargets(requesterRole: string, packageId: string): Promise<PublishingTargetSummary[]> {
+export async function listPublishingTargets(requesterRole: string, tenantKey: string, packageId: string): Promise<PublishingTargetSummary[]> {
   checkPermission(requesterRole, 'publishing:read');
-  return repo.listPublishingTargets(packageId);
+  return repo.listPublishingTargets(packageId, tenantKey);
 }
 
 // ============================================================
@@ -149,10 +153,11 @@ export async function listPublishingTargets(requesterRole: string, packageId: st
 
 export async function createReadinessCheck(
   requesterRole: string,
+  tenantKey: string,
   input: CreateReadinessCheckInput,
 ): Promise<ReadinessCheckSummary> {
   checkPermission(requesterRole, 'publishing:create');
-  const check = await repo.createReadinessCheck(input);
+  const check = await repo.createReadinessCheck(input, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'readiness_check_created', object_type: 'publishing_readiness_check', object_id: check.id, result: 'success' },
@@ -162,18 +167,19 @@ export async function createReadinessCheck(
   return check;
 }
 
-export async function listReadinessChecks(requesterRole: string, packageId: string): Promise<ReadinessCheckSummary[]> {
+export async function listReadinessChecks(requesterRole: string, tenantKey: string, packageId: string): Promise<ReadinessCheckSummary[]> {
   checkPermission(requesterRole, 'publishing:read');
-  return repo.listReadinessChecks(packageId);
+  return repo.listReadinessChecks(packageId, tenantKey);
 }
 
 export async function validateReadiness(
   requesterRole: string,
+  tenantKey: string,
   packageId: string,
 ): Promise<{ ready: boolean; blockedReasons: string[]; score: number }> {
   checkPermission(requesterRole, 'publishing:validate');
 
-  const result = await repo.validatePackageReadiness(packageId);
+  const result = await repo.validatePackageReadiness(packageId, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'readiness_validated', object_type: 'publishing_package', object_id: packageId, result: result.ready ? 'success' : 'blocked' },
@@ -189,6 +195,7 @@ export async function validateReadiness(
 
 export async function generateManifest(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: GenerateManifestInput,
@@ -197,7 +204,7 @@ export async function generateManifest(
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.generatedByUserId, input.generatedByAgentRepId);
 
   // Manifest is preview/preparation only — must not trigger publishing
-  const manifest = await repo.generateManifest(input);
+  const manifest = await repo.generateManifest(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'manifest_generated', object_type: 'publishing_manifest', object_id: manifest.id, result: 'success' },
@@ -219,7 +226,7 @@ export async function generateManifest(
   return manifest;
 }
 
-export async function getManifest(requesterRole: string, packageId: string): Promise<PublishingManifestSummary | null> {
+export async function getManifest(requesterRole: string, tenantKey: string, packageId: string): Promise<PublishingManifestSummary | null> {
   checkPermission(requesterRole, 'publishing:read');
-  return repo.getManifest(packageId);
+  return repo.getManifest(packageId, tenantKey);
 }

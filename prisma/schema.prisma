@@ -46,6 +46,52 @@ enum TenantStatus {
   archived
 }
 
+enum TenantPlanStatus {
+  active
+  retired
+}
+
+enum TenantSubscriptionStatus {
+  trialing
+  active
+  past_due
+  suspended
+  cancelled
+  expired
+}
+
+enum TenantSubscriptionSource {
+  manual
+  stripe
+  external_contract
+}
+
+enum CommercialWorkflowRunStatus {
+  active
+  blocked
+  completed
+  cancelled
+}
+
+enum CommercialWorkflowStageId {
+  brief
+  draft
+  optimize
+  approval
+  package
+  postiz
+  analytics
+  leads
+  evidence
+}
+
+enum CommercialWorkflowStepStatus {
+  done
+  active
+  waiting
+  blocked
+}
+
 model Tenant {
   id          String       @id @default(uuid()) @db.Uuid
   tenant_key  String       @unique
@@ -56,8 +102,93 @@ model Tenant {
 
   users       User[]
   memberships TenantMembership[]
+  content_requests ContentRequest[]
+  content_items ContentItem[]
+  approvals Approval[]
+  publishing_packages PublishingPackage[]
+  analytics_ingestion_requests AnalyticsIngestionRequest[]
+  analytics_snapshots AnalyticsSnapshot[]
+  campaign_performance_reports CampaignPerformanceReport[]
+  lead_capture_records LeadCaptureRecord[]
+  commercial_workflow_runs CommercialWorkflowRun[]
+  subscriptions TenantSubscription[]
+  subscription_events TenantSubscriptionEvent[]
 
   @@map("tenants")
+}
+
+model TenantPlan {
+  id                 String           @id @default(uuid()) @db.Uuid
+  plan_key           String           @unique
+  name               String
+  description        String?          @db.Text
+  status             TenantPlanStatus @default(active)
+  billing_interval   String           @default("monthly")
+  currency           String           @default("USD")
+  monthly_price_cents Int?
+  annual_price_cents  Int?
+  entitlements       Json
+  created_at         DateTime         @default(now())
+  updated_at         DateTime         @updatedAt
+
+  subscriptions TenantSubscription[]
+
+  @@index([status])
+  @@map("tenant_plans")
+}
+
+model TenantSubscription {
+  id                        String                   @id @default(uuid()) @db.Uuid
+  tenant_key                String
+  plan_id                   String                   @db.Uuid
+  status                    TenantSubscriptionStatus @default(trialing)
+  source                    TenantSubscriptionSource @default(manual)
+  is_current                Boolean                  @default(true)
+  external_customer_ref     String?
+  external_subscription_ref String?
+  trial_ends_at             DateTime?
+  current_period_start      DateTime?
+  current_period_end        DateTime?
+  cancel_at                 DateTime?
+  cancelled_at              DateTime?
+  entitlements_override     Json?
+  notes                     String?                  @db.Text
+  created_at                DateTime                 @default(now())
+  updated_at                DateTime                 @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
+  plan   TenantPlan @relation(fields: [plan_id], references: [id])
+  events TenantSubscriptionEvent[]
+
+  @@index([tenant_key])
+  @@index([plan_id])
+  @@index([status])
+  @@index([is_current])
+  @@index([current_period_end])
+  @@map("tenant_subscriptions")
+}
+
+model TenantSubscriptionEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  subscription_id String   @db.Uuid
+  event_type      String
+  actor_user_id   String?  @db.Uuid
+  reason          String?  @db.Text
+  before_state    Json?
+  after_state     Json?
+  created_at      DateTime @default(now())
+
+  tenant       Tenant             @relation(fields: [tenant_key], references: [tenant_key])
+  subscription TenantSubscription @relation(fields: [subscription_id], references: [id])
+  actor        User?              @relation(fields: [actor_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([subscription_id])
+  @@index([event_type])
+  @@index([actor_user_id])
+  @@index([created_at])
+  @@map("tenant_subscription_events")
 }
 
 model TenantMembership {
@@ -128,6 +259,8 @@ model User {
   social_account_connections SocialAccountConnection[]
   oauth_connection_states OAuthConnectionState[]
   langgraph_workflows LangGraphWorkflow[]
+  commercial_workflow_runs CommercialWorkflowRun[] @relation("CommercialWorkflowRunUser")
+  tenant_subscription_events TenantSubscriptionEvent[]
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
   @@map("users")
@@ -357,6 +490,7 @@ model AgentRep {
   spine_artifacts_created  SpineArtifact[]
   assets_created           Asset[]
   asset_lineage_created    AssetLineage[]
+  commercial_workflow_runs CommercialWorkflowRun[] @relation("CommercialWorkflowRunAgentRep")
 
   @@map("agent_reps")
 }
@@ -437,6 +571,7 @@ enum ContentState {
 
 model ContentRequest {
   id                  String        @id @default(uuid()) @db.Uuid
+  tenant_key          String        @default("default")
   requester_id        String        @db.Uuid
   channel             String
   raw_message         String        @db.Text
@@ -454,14 +589,98 @@ model ContentRequest {
   created_at          DateTime      @default(now())
   updated_at          DateTime      @updatedAt
 
+  tenant        Tenant         @relation(fields: [tenant_key], references: [tenant_key])
   requester     User           @relation(fields: [requester_id], references: [id])
   content_items ContentItem[]
+  commercial_workflow_runs CommercialWorkflowRun[]
 
+  @@index([tenant_key])
   @@map("content_requests")
+}
+
+// ============================================================
+// Commercial / Social Unified WorkflowRun
+// ============================================================
+
+model CommercialWorkflowRun {
+  id                      String                      @id @default(uuid()) @db.Uuid
+  tenant_key              String
+  campaign_id             String?                     @db.Uuid
+  created_by_user_id      String                      @db.Uuid
+  created_by_agent_rep_id String?                     @db.Uuid
+  status                  CommercialWorkflowRunStatus @default(active)
+  active_stage            CommercialWorkflowStageId   @default(brief)
+  readiness_score         Int                         @default(0)
+  blockers                String[]                    @default([])
+  source                  String                      @default("STITCH")
+  metadata                Json?
+  started_at              DateTime                    @default(now())
+  updated_at              DateTime                    @updatedAt
+  completed_at            DateTime?
+
+  tenant       Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  campaign     ContentRequest? @relation(fields: [campaign_id], references: [id])
+  created_by_user User         @relation("CommercialWorkflowRunUser", fields: [created_by_user_id], references: [id])
+  created_by_agent_rep AgentRep? @relation("CommercialWorkflowRunAgentRep", fields: [created_by_agent_rep_id], references: [id])
+  steps        CommercialWorkflowStep[]
+  events       CommercialWorkflowRunEvent[]
+
+  @@index([tenant_key])
+  @@index([campaign_id])
+  @@index([created_by_user_id])
+  @@index([status])
+  @@index([active_stage])
+  @@map("commercial_workflow_runs")
+}
+
+model CommercialWorkflowStep {
+  id              String                       @id @default(uuid()) @db.Uuid
+  run_id          String                       @db.Uuid
+  stage_id        CommercialWorkflowStageId
+  step_status     CommercialWorkflowStepStatus
+  summary         String                       @db.Text
+  blocking_reason String?                      @db.Text
+  evidence_count  Int                          @default(0)
+  metadata        Json?
+  started_at      DateTime?
+  completed_at    DateTime?
+  updated_at      DateTime                     @updatedAt
+
+  run CommercialWorkflowRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
+
+  @@unique([run_id, stage_id])
+  @@index([run_id])
+  @@index([stage_id])
+  @@index([step_status])
+  @@map("commercial_workflow_steps")
+}
+
+model CommercialWorkflowRunEvent {
+  id                 String      @id @default(uuid()) @db.Uuid
+  run_id             String      @db.Uuid
+  audit_record_id    String?     @db.Uuid
+  action             String
+  result             AuditResult
+  source_module      String?
+  target_object_type String?
+  target_object_id   String?
+  reason             String?     @db.Text
+  metadata           Json?
+  created_at         DateTime    @default(now())
+
+  run CommercialWorkflowRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
+
+  @@index([run_id])
+  @@index([audit_record_id])
+  @@index([action])
+  @@index([result])
+  @@index([created_at])
+  @@map("commercial_workflow_run_events")
 }
 
 model ContentItem {
   id               String       @id @default(uuid()) @db.Uuid
+  tenant_key       String       @default("default")
   request_id       String       @db.Uuid
   platform         String
   content_type     String       @default("post")
@@ -475,11 +694,13 @@ model ContentItem {
   created_at       DateTime     @default(now())
   updated_at       DateTime     @updatedAt
 
+  tenant           Tenant           @relation(fields: [tenant_key], references: [tenant_key])
   request          ContentRequest   @relation(fields: [request_id], references: [id])
   draft_versions   DraftVersion[]
   approval_events  ApprovalEvent[]
   schedule_events  ScheduleEvent[]
 
+  @@index([tenant_key])
   @@map("content_items")
 }
 
@@ -564,6 +785,7 @@ enum MetricWindow {
 
 model AnalyticsSnapshot {
   id                      String   @id @default(uuid()) @db.Uuid
+  tenant_key              String   @default("default")
   source_id               String   @db.Uuid
   ingestion_request_id    String?  @db.Uuid
   campaign_id             String?  @db.Uuid
@@ -579,9 +801,11 @@ model AnalyticsSnapshot {
   collected_at            DateTime @default(now())
   created_at              DateTime @default(now())
 
+  tenant             Tenant                    @relation(fields: [tenant_key], references: [tenant_key])
   source             AnalyticsSource           @relation(fields: [source_id], references: [id])
   ingestion_request  AnalyticsIngestionRequest? @relation(fields: [ingestion_request_id], references: [id])
 
+  @@index([tenant_key])
   @@index([source_id])
   @@index([campaign_id])
   @@index([content_item_id])
@@ -959,6 +1183,7 @@ enum ApprovalType {
 
 model Approval {
   id                       String            @id @default(uuid()) @db.Uuid
+  tenant_key               String            @default("default")
   target_type              ApprovalTargetType
   target_id                String            @db.Uuid
   saif_decision_record_id  String?           @db.Uuid
@@ -981,6 +1206,7 @@ model Approval {
   created_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
 
+  tenant              Tenant              @relation(fields: [tenant_key], references: [tenant_key])
   requester_user      User                @relation("ApprovalRequesterUser", fields: [requester_user_id], references: [id])
   requester_agent_rep AgentRep            @relation("ApprovalRequesterAgentRep", fields: [requester_agent_rep_id], references: [id])
   approver_user       User?               @relation("ApprovalApproverUser", fields: [approver_user_id], references: [id])
@@ -990,6 +1216,7 @@ model Approval {
   spine_runs          SpineRun[]
   spine_artifacts     SpineArtifact[]
 
+  @@index([tenant_key])
   @@index([target_type, target_id])
   @@index([approval_status])
   @@index([requester_user_id])
@@ -2160,6 +2387,7 @@ enum ManifestStatus {
 
 model PublishingPackage {
   id                       String        @id @default(uuid()) @db.Uuid
+  tenant_key               String        @default("default")
   package_status           PackageStatus @default(draft)
   package_type             PackageType   @default(single_post)
   campaign_id              String?       @db.Uuid
@@ -2179,11 +2407,13 @@ model PublishingPackage {
   created_at               DateTime      @default(now())
   updated_at               DateTime      @updatedAt
 
+  tenant         Tenant                  @relation(fields: [tenant_key], references: [tenant_key])
   items           PublishingPackageItem[]
   targets         PublishingTarget[]
   readiness_checks PublishingReadinessCheck[]
   manifest        PublishingManifest?
 
+  @@index([tenant_key])
   @@index([package_status])
   @@index([campaign_id])
   @@index([content_item_id])
@@ -2477,6 +2707,7 @@ model AnalyticsSource {
 
 model AnalyticsIngestionRequest {
   id                      String              @id @default(uuid()) @db.Uuid
+  tenant_key              String              @default("default")
   source_id               String              @db.Uuid
   campaign_id             String?             @db.Uuid
   content_item_id         String?             @db.Uuid
@@ -2493,9 +2724,11 @@ model AnalyticsIngestionRequest {
   created_at              DateTime            @default(now())
   updated_at              DateTime            @updatedAt
 
+  tenant    Tenant          @relation(fields: [tenant_key], references: [tenant_key])
   source    AnalyticsSource @relation(fields: [source_id], references: [id])
   snapshots AnalyticsSnapshot[]
 
+  @@index([tenant_key])
   @@index([source_id])
   @@index([status])
   @@index([campaign_id])
@@ -2536,6 +2769,7 @@ model ReportingPeriod {
 
 model CampaignPerformanceReport {
   id                        String     @id @default(uuid()) @db.Uuid
+  tenant_key                String     @default("default")
   reporting_period_id       String     @db.Uuid
   campaign_id               String     @db.Uuid
   generated_by_user_id      String     @db.Uuid
@@ -2550,8 +2784,10 @@ model CampaignPerformanceReport {
   created_at                DateTime   @default(now())
   updated_at                DateTime   @updatedAt
 
+  tenant           Tenant          @relation(fields: [tenant_key], references: [tenant_key])
   reporting_period ReportingPeriod @relation(fields: [reporting_period_id], references: [id])
 
+  @@index([tenant_key])
   @@index([reporting_period_id])
   @@index([campaign_id])
   @@index([report_status])
@@ -2716,6 +2952,7 @@ enum PlanStatus {
 
 model LeadCaptureRecord {
   id                           String       @id @default(uuid()) @db.Uuid
+  tenant_key                   String       @default("default")
   lead_status                  LeadStatus   @default(new_lead)
   lead_source                  String?
   campaign_id                  String?      @db.Uuid
@@ -2734,12 +2971,14 @@ model LeadCaptureRecord {
   created_at                   DateTime     @default(now())
   updated_at                   DateTime     @updatedAt
 
+  tenant           Tenant @relation(fields: [tenant_key], references: [tenant_key])
   attributions     LeadSourceAttribution[]
   intents          ConversionIntent[]
   crm_handoffs     CrmHandoffRequest[]
   whatsapp_handoffs WhatsAppHandoffRequest[]
   sequence_plans   ConversionSequencePlan[]
 
+  @@index([tenant_key])
   @@index([lead_status])
   @@index([campaign_id])
   @@index([platform])

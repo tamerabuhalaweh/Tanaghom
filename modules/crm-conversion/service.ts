@@ -46,6 +46,7 @@ function validateSessionContextLock(
 
 export async function createLeadCaptureRecord(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreateLeadCaptureRecordInput,
@@ -53,7 +54,7 @@ export async function createLeadCaptureRecord(
   checkPermission(requesterRole, 'conversion:create');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.createdByUserId, input.createdByAgentRepId);
 
-  const record = await repo.createLeadCaptureRecord(input);
+  const record = await repo.createLeadCaptureRecord(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'lead_captured', object_type: 'lead_capture_record', object_id: record.id, result: 'success' },
@@ -75,12 +76,13 @@ export async function createLeadCaptureRecord(
   return record;
 }
 
-export async function getLeadCaptureRecord(requesterRole: string, id: string): Promise<LeadCaptureRecordSummary> {
+export async function getLeadCaptureRecord(requesterRole: string, tenantKey: string, id: string): Promise<LeadCaptureRecordSummary> {
   checkPermission(requesterRole, 'conversion:read');
-  return repo.getLeadCaptureRecordById(id);
+  return repo.getLeadCaptureRecordById(id, tenantKey);
 }
 
 export async function listLeadCaptureRecords(requesterRole: string, filters?: {
+  tenantKey?: string;
   leadStatus?: string;
   campaignId?: string;
   platform?: string;
@@ -96,10 +98,11 @@ export async function listLeadCaptureRecords(requesterRole: string, filters?: {
 
 export async function createLeadSourceAttribution(
   requesterRole: string,
+  tenantKey: string,
   input: CreateLeadSourceAttributionInput,
 ): Promise<LeadSourceAttributionSummary> {
   checkPermission(requesterRole, 'conversion:create');
-  const attribution = await repo.createLeadSourceAttribution(input);
+  const attribution = await repo.createLeadSourceAttribution(input, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'lead_attribution_created', object_type: 'lead_source_attribution', object_id: attribution.id, result: 'success' },
@@ -115,10 +118,11 @@ export async function createLeadSourceAttribution(
 
 export async function createConversionIntent(
   requesterRole: string,
+  tenantKey: string,
   input: CreateConversionIntentInput,
 ): Promise<ConversionIntentSummary> {
   checkPermission(requesterRole, 'conversion:create');
-  const intent = await repo.createConversionIntent(input);
+  const intent = await repo.createConversionIntent(input, tenantKey);
 
   auditLog(
     { actor: `role:${requesterRole}`, action: 'conversion_intent_created', object_type: 'conversion_intent', object_id: intent.id, result: 'success' },
@@ -134,6 +138,7 @@ export async function createConversionIntent(
 
 export async function createCrmHandoffRequest(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreateCrmHandoffRequestInput,
@@ -149,7 +154,7 @@ export async function createCrmHandoffRequest(
   // M5 write-enabled blocked by default
   // This is a write operation to external CRM
 
-  const request = await repo.createCrmHandoffRequest(input);
+  const request = await repo.createCrmHandoffRequest(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'crm_handoff_requested', object_type: 'crm_handoff_request', object_id: request.id, result: 'success' },
@@ -171,9 +176,9 @@ export async function createCrmHandoffRequest(
   return request;
 }
 
-export async function getCrmHandoffRequest(requesterRole: string, id: string): Promise<CrmHandoffRequestSummary> {
+export async function getCrmHandoffRequest(requesterRole: string, tenantKey: string, id: string): Promise<CrmHandoffRequestSummary> {
   checkPermission(requesterRole, 'conversion:read');
-  return repo.getCrmHandoffRequestById(id);
+  return repo.getCrmHandoffRequestById(id, tenantKey);
 }
 
 // ============================================================
@@ -182,6 +187,7 @@ export async function getCrmHandoffRequest(requesterRole: string, id: string): P
 
 export async function createWhatsAppHandoffRequest(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreateWhatsAppHandoffRequestInput,
@@ -197,7 +203,7 @@ export async function createWhatsAppHandoffRequest(
   // M5 write-enabled blocked by default
   // No real messages sent
 
-  const request = await repo.createWhatsAppHandoffRequest(input);
+  const request = await repo.createWhatsAppHandoffRequest(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'whatsapp_handoff_requested', object_type: 'whatsapp_handoff_request', object_id: request.id, result: 'success' },
@@ -219,9 +225,9 @@ export async function createWhatsAppHandoffRequest(
   return request;
 }
 
-export async function getWhatsAppHandoffRequest(requesterRole: string, id: string): Promise<WhatsAppHandoffRequestSummary> {
+export async function getWhatsAppHandoffRequest(requesterRole: string, tenantKey: string, id: string): Promise<WhatsAppHandoffRequestSummary> {
   checkPermission(requesterRole, 'conversion:read');
-  return repo.getWhatsAppHandoffRequestById(id);
+  return repo.getWhatsAppHandoffRequestById(id, tenantKey);
 }
 
 // ============================================================
@@ -230,6 +236,7 @@ export async function getWhatsAppHandoffRequest(requesterRole: string, id: strin
 
 export async function createConversionSequencePlan(
   requesterRole: string,
+  tenantKey: string,
   sessionUserId: string,
   sessionAgentRepId: string,
   input: CreateConversionSequencePlanInput,
@@ -238,7 +245,7 @@ export async function createConversionSequencePlan(
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.createdByUserId, input.createdByAgentRepId);
 
   // Advisory/planning only - does not send messages or execute follow-up
-  const plan = await repo.createConversionSequencePlan(input);
+  const plan = await repo.createConversionSequencePlan(input, tenantKey);
 
   auditLog(
     { actor: `user:${sessionUserId}`, action: 'conversion_plan_created', object_type: 'conversion_sequence_plan', object_id: plan.id, result: 'success' },
@@ -260,7 +267,7 @@ export async function createConversionSequencePlan(
   return plan;
 }
 
-export async function getConversionSequencePlan(requesterRole: string, id: string): Promise<ConversionSequencePlanSummary> {
+export async function getConversionSequencePlan(requesterRole: string, tenantKey: string, id: string): Promise<ConversionSequencePlanSummary> {
   checkPermission(requesterRole, 'conversion:read');
-  return repo.getConversionSequencePlanById(id);
+  return repo.getConversionSequencePlanById(id, tenantKey);
 }

@@ -83,12 +83,13 @@ const BRAND_VOICE = {
 export async function generateDrafts(
   requesterRole: string,
   requesterId: string,
+  tenantKey: string,
   input: GenerateDraftInput,
 ): Promise<DraftResult[]> {
   checkPermission(requesterRole, 'drafts:generate');
 
-  const campaign = await prisma.contentRequest.findUnique({
-    where: { id: input.campaignRequestId },
+  const campaign = await prisma.contentRequest.findFirst({
+    where: { id: input.campaignRequestId, tenant_key: tenantKey },
   });
   if (!campaign) throw new NotFoundError('Campaign request', input.campaignRequestId);
 
@@ -100,6 +101,7 @@ export async function generateDrafts(
   for (const platform of platforms) {
     try {
       const result = await generateSingleDraft(
+        tenantKey,
         requesterId,
         campaign,
         platform,
@@ -193,11 +195,12 @@ export async function generateDrafts(
 export async function reviseDraft(
   requesterRole: string,
   requesterId: string,
+  tenantKey: string,
   input: ReviseDraftInput,
 ): Promise<DraftResult> {
   checkPermission(requesterRole, 'drafts:revise');
 
-  const item = await repo.getContentItem(input.contentItemId);
+  const item = await repo.getContentItem(input.contentItemId, tenantKey);
   if (!item.request) throw new NotFoundError('Campaign request for content item');
 
   const latestVersion = await repo.getLatestVersion(input.contentItemId);
@@ -229,7 +232,7 @@ export async function reviseDraft(
     'mock-llm',
   );
 
-  await repo.updateContentItemDraft(input.contentItemId, revisedText);
+  await repo.updateContentItemDraft(input.contentItemId, tenantKey, revisedText);
 
   auditLog(
     {
@@ -284,11 +287,12 @@ export async function reviseDraft(
 export async function saveEditedDraft(
   requesterRole: string,
   requesterId: string,
+  tenantKey: string,
   input: SaveEditedDraftInput,
 ): Promise<DraftResult> {
   checkPermission(requesterRole, 'drafts:revise');
 
-  const item = await repo.getContentItem(input.contentItemId);
+  const item = await repo.getContentItem(input.contentItemId, tenantKey);
   if (!item.request) throw new NotFoundError('Campaign request for content item');
 
   const latestVersion = await repo.getLatestVersion(input.contentItemId);
@@ -300,7 +304,7 @@ export async function saveEditedDraft(
     input.draftText,
     'human-edit',
   );
-  await repo.updateContentItemDraft(input.contentItemId, input.draftText);
+  await repo.updateContentItemDraft(input.contentItemId, tenantKey, input.draftText);
 
   auditLog(
     {
@@ -360,6 +364,7 @@ interface CampaignData {
 }
 
 async function generateSingleDraft(
+  tenantKey: string,
   requesterId: string,
   campaign: CampaignData,
   platform: Platform,
@@ -381,6 +386,7 @@ async function generateSingleDraft(
   const riskNotes = assessRisk(campaign);
 
   const result = await repo.createContentItem(
+    tenantKey,
     campaign.id,
     platform,
     constraints.recommendedFormat,

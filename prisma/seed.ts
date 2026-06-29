@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../shared/auth';
 import { ENTERPRISE_CAPABILITIES } from '../modules/capability-registry/registry-data';
+import { DEFAULT_PRODUCTION_ENTITLEMENTS, DEFAULT_PRODUCTION_PLAN_KEY } from '../modules/tenant-admin/subscription';
 
 const prisma = new PrismaClient();
 
@@ -41,6 +42,53 @@ async function seed() {
       create: dept,
     });
     console.log(`  Department: ${dept.name}`);
+  }
+
+  const defaultTenant = await prisma.tenant.upsert({
+    where: { tenant_key: 'default' },
+    update: { name: 'Tanaghum Default Tenant', status: 'active' },
+    create: {
+      tenant_key: 'default',
+      name: 'Tanaghum Default Tenant',
+      status: 'active',
+    },
+  });
+  console.log('  Tenant: default');
+
+  const defaultPlan = await prisma.tenantPlan.upsert({
+    where: { plan_key: DEFAULT_PRODUCTION_PLAN_KEY },
+    update: {
+      name: 'Commercial/Social Production',
+      status: 'active',
+      entitlements: DEFAULT_PRODUCTION_ENTITLEMENTS,
+    },
+    create: {
+      plan_key: DEFAULT_PRODUCTION_PLAN_KEY,
+      name: 'Commercial/Social Production',
+      description: 'Production Commercial/Social workspace with customer-owned AI and integration credentials.',
+      status: 'active',
+      billing_interval: 'monthly',
+      currency: 'USD',
+      entitlements: DEFAULT_PRODUCTION_ENTITLEMENTS,
+    },
+  });
+  const currentSubscription = await prisma.tenantSubscription.findFirst({
+    where: { tenant_key: defaultTenant.tenant_key, is_current: true },
+  });
+  if (!currentSubscription) {
+    await prisma.tenantSubscription.create({
+      data: {
+        tenant_key: defaultTenant.tenant_key,
+        plan_id: defaultPlan.id,
+        status: 'active',
+        source: 'manual',
+        is_current: true,
+        current_period_start: new Date(),
+        current_period_end: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365),
+        notes: 'Seeded default production entitlement subscription.',
+      },
+    });
+    console.log('  TenantSubscription: default -> Commercial/Social Production');
   }
 
   // Seed admin user
@@ -195,6 +243,7 @@ async function seed() {
         channel: 'social_media',
         content_type: 'campaign' as const,
         requester_id: demandUser.id,
+        tenant_key: demandUser.tenant_key,
       },
       {
         raw_message: 'Product Feature Announcement',
@@ -211,7 +260,7 @@ async function seed() {
 
     for (const campaign of demoCampaigns) {
       const existing = await prisma.contentRequest.findFirst({
-        where: { raw_message: campaign.raw_message, requester_id: demandUser.id },
+        where: { raw_message: campaign.raw_message, requester_id: demandUser.id, tenant_key: demandUser.tenant_key },
       });
       if (existing) {
         await prisma.contentRequest.update({

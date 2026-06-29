@@ -6,12 +6,13 @@ import type {
 } from './types';
 import { getRoutingRule, validateApprovalTransition } from './types';
 
-export async function createApproval(input: CreateApprovalInput): Promise<ApprovalSummary> {
+export async function createApproval(input: CreateApprovalInput, tenantKey: string): Promise<ApprovalSummary> {
   const routingRule = getRoutingRule(input.riskCategory, input.targetType);
 
   const approval = await prisma.approval.create({
     data: {
       target_type: input.targetType,
+      tenant_key: tenantKey,
       target_id: input.targetId,
       saif_decision_record_id: input.saifDecisionRecordId,
       requester_user_id: input.requesterUserId,
@@ -26,13 +27,14 @@ export async function createApproval(input: CreateApprovalInput): Promise<Approv
   return mapApproval(approval);
 }
 
-export async function getApprovalById(id: string): Promise<ApprovalSummary> {
-  const approval = await prisma.approval.findUnique({ where: { id } });
+export async function getApprovalById(id: string, tenantKey: string): Promise<ApprovalSummary> {
+  const approval = await prisma.approval.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!approval) throw new NotFoundError('Approval', id);
   return mapApproval(approval);
 }
 
 export async function listApprovals(filters?: {
+  tenantKey?: string;
   targetId?: string;
   targetType?: string;
   approvalStatus?: string;
@@ -41,6 +43,7 @@ export async function listApprovals(filters?: {
   requiredDepartment?: string;
 }): Promise<ApprovalSummary[]> {
   const where: Record<string, unknown> = {};
+  if (filters?.tenantKey) where.tenant_key = filters.tenantKey;
   if (filters?.targetId) where.target_id = filters.targetId;
   if (filters?.targetType) where.target_type = filters.targetType;
   if (filters?.approvalStatus) where.approval_status = filters.approvalStatus;
@@ -55,8 +58,8 @@ export async function listApprovals(filters?: {
   return approvals.map(mapApproval);
 }
 
-export async function getApprovalDecisionPacket(id: string): Promise<ApprovalDecisionPacket> {
-  const approval = await prisma.approval.findUnique({ where: { id } });
+export async function getApprovalDecisionPacket(id: string, tenantKey: string): Promise<ApprovalDecisionPacket> {
+  const approval = await prisma.approval.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!approval) throw new NotFoundError('Approval', id);
 
   const summary = mapApproval(approval);
@@ -65,8 +68,8 @@ export async function getApprovalDecisionPacket(id: string): Promise<ApprovalDec
   let latestDraftVersion: Record<string, unknown> | null = null;
 
   if (summary.targetType === 'content_item') {
-    contentItem = await prisma.contentItem.findUnique({
-      where: { id: summary.targetId },
+    contentItem = await prisma.contentItem.findFirst({
+      where: { id: summary.targetId, tenant_key: tenantKey },
       include: {
         request: true,
         draft_versions: { orderBy: { version_no: 'desc' }, take: 1 },
@@ -78,10 +81,10 @@ export async function getApprovalDecisionPacket(id: string): Promise<ApprovalDec
       latestDraftVersion = versions?.[0] ?? null;
     }
   } else if (summary.targetType === 'campaign') {
-    campaign = await prisma.contentRequest.findUnique({ where: { id: summary.targetId } }) as Record<string, unknown> | null;
+    campaign = await prisma.contentRequest.findFirst({ where: { id: summary.targetId, tenant_key: tenantKey } }) as Record<string, unknown> | null;
   } else if (summary.targetType === 'draft_version') {
-    latestDraftVersion = await prisma.draftVersion.findUnique({
-      where: { id: summary.targetId },
+    latestDraftVersion = await prisma.draftVersion.findFirst({
+      where: { id: summary.targetId, content_item: { tenant_key: tenantKey } },
       include: { content_item: { include: { request: true } } },
     }) as Record<string, unknown> | null;
     const item = latestDraftVersion?.content_item as Record<string, unknown> | undefined;
@@ -93,6 +96,7 @@ export async function getApprovalDecisionPacket(id: string): Promise<ApprovalDec
   const contentItemId = contentItem?.id as string | undefined;
   const packages = await prisma.publishingPackage.findMany({
     where: {
+      tenant_key: tenantKey,
       OR: [
         { approval_id: summary.id },
         ...(campaignId ? [{ campaign_id: campaignId }] : []),
@@ -148,8 +152,8 @@ export async function getApprovalDecisionPacket(id: string): Promise<ApprovalDec
   };
 }
 
-export async function approve(id: string, input: ApprovalDecisionInput): Promise<ApprovalSummary> {
-  const existing = await prisma.approval.findUnique({ where: { id } });
+export async function approve(id: string, tenantKey: string, input: ApprovalDecisionInput): Promise<ApprovalSummary> {
+  const existing = await prisma.approval.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('Approval', id);
 
   validateApprovalTransition(existing.approval_status as ApprovalStatus, 'approved');
@@ -169,8 +173,8 @@ export async function approve(id: string, input: ApprovalDecisionInput): Promise
   return mapApproval(approval);
 }
 
-export async function reject(id: string, input: ApprovalDecisionInput): Promise<ApprovalSummary> {
-  const existing = await prisma.approval.findUnique({ where: { id } });
+export async function reject(id: string, tenantKey: string, input: ApprovalDecisionInput): Promise<ApprovalSummary> {
+  const existing = await prisma.approval.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('Approval', id);
 
   validateApprovalTransition(existing.approval_status as ApprovalStatus, 'rejected');
@@ -194,8 +198,8 @@ export async function reject(id: string, input: ApprovalDecisionInput): Promise<
   return mapApproval(approval);
 }
 
-export async function requestChanges(id: string, input: ApprovalDecisionInput): Promise<ApprovalSummary> {
-  const existing = await prisma.approval.findUnique({ where: { id } });
+export async function requestChanges(id: string, tenantKey: string, input: ApprovalDecisionInput): Promise<ApprovalSummary> {
+  const existing = await prisma.approval.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('Approval', id);
 
   validateApprovalTransition(existing.approval_status as ApprovalStatus, 'changes_requested');
@@ -219,8 +223,8 @@ export async function requestChanges(id: string, input: ApprovalDecisionInput): 
   return mapApproval(approval);
 }
 
-export async function escalate(id: string, input: EscalationInput): Promise<ApprovalSummary> {
-  const existing = await prisma.approval.findUnique({ where: { id } });
+export async function escalate(id: string, tenantKey: string, input: EscalationInput): Promise<ApprovalSummary> {
+  const existing = await prisma.approval.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('Approval', id);
 
   validateApprovalTransition(existing.approval_status as ApprovalStatus, 'escalated');
@@ -236,8 +240,8 @@ export async function escalate(id: string, input: EscalationInput): Promise<Appr
   return mapApproval(approval);
 }
 
-export async function cancel(id: string, input: CancellationInput): Promise<ApprovalSummary> {
-  const existing = await prisma.approval.findUnique({ where: { id } });
+export async function cancel(id: string, tenantKey: string, input: CancellationInput): Promise<ApprovalSummary> {
+  const existing = await prisma.approval.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('Approval', id);
 
   validateApprovalTransition(existing.approval_status as ApprovalStatus, 'cancelled');

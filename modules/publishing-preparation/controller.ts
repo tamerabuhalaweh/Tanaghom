@@ -13,8 +13,9 @@ function getPayload(req: Request): JwtPayload {
 
 publishingPrepRouter.get('/packages', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
     const packages = await repo.listPackages({
+      tenantKey: payload.tenantKey || 'default',
       campaignId: req.query.campaignId as string | undefined,
       packageStatus: req.query.status as string | undefined,
     });
@@ -26,8 +27,8 @@ publishingPrepRouter.get('/packages', async (req: Request, res: Response, next: 
 
 publishingPrepRouter.get('/packages/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
-    const pkg = await repo.getPackageById(req.params.id as string);
+    const payload = getPayload(req);
+    const pkg = await repo.getPackageById(req.params.id as string, payload.tenantKey || 'default');
     res.json(pkg);
   } catch (err) {
     next(err);
@@ -36,8 +37,8 @@ publishingPrepRouter.get('/packages/:id', async (req: Request, res: Response, ne
 
 publishingPrepRouter.get('/packages/:id/readiness', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
-    const checks = await repo.listReadinessChecks(req.params.id as string);
+    const payload = getPayload(req);
+    const checks = await repo.listReadinessChecks(req.params.id as string, payload.tenantKey || 'default');
     res.json(checks);
   } catch (err) {
     next(err);

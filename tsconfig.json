@@ -20,6 +20,6 @@
       "@modules/*": ["./modules/*"]
     }
   },
-  "include": ["src/**/*.ts", "modules/**/*.ts", "shared/**/*.ts"],
+  "include": ["src/**/*.ts", "modules/**/*.ts", "shared/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts", "frontend"]
 }

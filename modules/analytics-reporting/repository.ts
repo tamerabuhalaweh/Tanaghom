@@ -64,11 +64,12 @@ export async function validateIngestionRequest(input: CreateIngestionRequestInpu
   return { valid: blockedReasons.length === 0, blockedReasons };
 }
 
-export async function createIngestionRequest(input: CreateIngestionRequestInput): Promise<IngestionRequestSummary> {
+export async function createIngestionRequest(input: CreateIngestionRequestInput, tenantKey: string): Promise<IngestionRequestSummary> {
   const validation = await validateIngestionRequest(input);
 
   const request = await prisma.analyticsIngestionRequest.create({
     data: {
+      tenant_key: tenantKey,
       source_id: input.sourceId,
       campaign_id: input.campaignId,
       content_item_id: input.contentItemId,
@@ -86,19 +87,21 @@ export async function createIngestionRequest(input: CreateIngestionRequestInput)
   return mapIngestionRequest(request);
 }
 
-export async function getIngestionRequestById(id: string): Promise<IngestionRequestSummary> {
-  const request = await prisma.analyticsIngestionRequest.findUnique({ where: { id } });
+export async function getIngestionRequestById(id: string, tenantKey: string): Promise<IngestionRequestSummary> {
+  const request = await prisma.analyticsIngestionRequest.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!request) throw new NotFoundError('AnalyticsIngestionRequest', id);
   return mapIngestionRequest(request);
 }
 
 export async function listIngestionRequests(filters?: {
+  tenantKey?: string;
   sourceId?: string;
   campaignId?: string;
   status?: string;
   requestedByUserId?: string;
 }): Promise<IngestionRequestSummary[]> {
   const where: Record<string, unknown> = {};
+  if (filters?.tenantKey) where.tenant_key = filters.tenantKey;
   if (filters?.sourceId) where.source_id = filters.sourceId;
   if (filters?.campaignId) where.campaign_id = filters.campaignId;
   if (filters?.status) where.status = filters.status;
@@ -112,9 +115,10 @@ export async function listIngestionRequests(filters?: {
 // AnalyticsSnapshot
 // ============================================================
 
-export async function createSnapshot(input: CreateAnalyticsSnapshotInput): Promise<AnalyticsSnapshotSummary> {
+export async function createSnapshot(input: CreateAnalyticsSnapshotInput, tenantKey: string): Promise<AnalyticsSnapshotSummary> {
   const snapshot = await prisma.analyticsSnapshot.create({
     data: {
+      tenant_key: tenantKey,
       source_id: input.sourceId,
       ingestion_request_id: input.ingestionRequestId,
       campaign_id: input.campaignId,
@@ -132,19 +136,21 @@ export async function createSnapshot(input: CreateAnalyticsSnapshotInput): Promi
   return mapAnalyticsSnapshot(snapshot);
 }
 
-export async function getSnapshotById(id: string): Promise<AnalyticsSnapshotSummary> {
-  const snapshot = await prisma.analyticsSnapshot.findUnique({ where: { id } });
+export async function getSnapshotById(id: string, tenantKey: string): Promise<AnalyticsSnapshotSummary> {
+  const snapshot = await prisma.analyticsSnapshot.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!snapshot) throw new NotFoundError('AnalyticsSnapshot', id);
   return mapAnalyticsSnapshot(snapshot);
 }
 
 export async function listSnapshots(filters?: {
+  tenantKey?: string;
   sourceId?: string;
   campaignId?: string;
   contentItemId?: string;
   platform?: string;
 }): Promise<AnalyticsSnapshotSummary[]> {
   const where: Record<string, unknown> = {};
+  if (filters?.tenantKey) where.tenant_key = filters.tenantKey;
   if (filters?.sourceId) where.source_id = filters.sourceId;
   if (filters?.campaignId) where.campaign_id = filters.campaignId;
   if (filters?.contentItemId) where.content_item_id = filters.contentItemId;
@@ -205,9 +211,10 @@ export async function getReportingPeriodById(id: string): Promise<ReportingPerio
 // CampaignPerformanceReport
 // ============================================================
 
-export async function createPerformanceReport(input: CreatePerformanceReportInput): Promise<PerformanceReportSummary> {
+export async function createPerformanceReport(input: CreatePerformanceReportInput, tenantKey: string): Promise<PerformanceReportSummary> {
   const report = await prisma.campaignPerformanceReport.create({
     data: {
+      tenant_key: tenantKey,
       reporting_period_id: input.reportingPeriodId,
       campaign_id: input.campaignId,
       generated_by_user_id: input.generatedByUserId,
@@ -223,18 +230,20 @@ export async function createPerformanceReport(input: CreatePerformanceReportInpu
   return mapPerformanceReport(report);
 }
 
-export async function getPerformanceReportById(id: string): Promise<PerformanceReportSummary> {
-  const report = await prisma.campaignPerformanceReport.findUnique({ where: { id } });
+export async function getPerformanceReportById(id: string, tenantKey: string): Promise<PerformanceReportSummary> {
+  const report = await prisma.campaignPerformanceReport.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!report) throw new NotFoundError('CampaignPerformanceReport', id);
   return mapPerformanceReport(report);
 }
 
 export async function listPerformanceReports(filters?: {
+  tenantKey?: string;
   campaignId?: string;
   reportingPeriodId?: string;
   reportStatus?: string;
 }): Promise<PerformanceReportSummary[]> {
   const where: Record<string, unknown> = {};
+  if (filters?.tenantKey) where.tenant_key = filters.tenantKey;
   if (filters?.campaignId) where.campaign_id = filters.campaignId;
   if (filters?.reportingPeriodId) where.reporting_period_id = filters.reportingPeriodId;
   if (filters?.reportStatus) where.report_status = filters.reportStatus;

@@ -29,6 +29,7 @@ approvalsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
   try {
     const payload = getPayload(req);
     const approvals = await listApprovals(payload.role, {
+      tenantKey: payload.tenantKey || 'default',
       targetId: req.query.targetId as string | undefined,
       targetType: req.query.targetType as string | undefined,
       approvalStatus: req.query.status as string | undefined,
@@ -45,7 +46,7 @@ approvalsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
 approvalsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const approval = await getApproval(payload.role, getId(req));
+    const approval = await getApproval(payload.role, payload.tenantKey || 'default', getId(req));
     res.json(approval);
   } catch (err) {
     next(err);
@@ -55,7 +56,7 @@ approvalsRouter.get('/:id', async (req: Request, res: Response, next: NextFuncti
 approvalsRouter.get('/:id/decision-packet', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const packet = await getApprovalDecisionPacket(payload.role, getId(req));
+    const packet = await getApprovalDecisionPacket(payload.role, payload.tenantKey || 'default', getId(req));
     res.json(packet);
   } catch (err) {
     next(err);
@@ -65,7 +66,7 @@ approvalsRouter.get('/:id/decision-packet', async (req: Request, res: Response, 
 approvalsRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const approval = await submitForApproval(payload.role, {
+    const approval = await submitForApproval(payload.role, payload.tenantKey || 'default', {
       ...req.body,
       requesterUserId: payload.sub,
       requesterAgentRepId: payload.agentRepId || '',
@@ -81,6 +82,7 @@ approvalsRouter.post('/:id/approve', async (req: Request, res: Response, next: N
     const payload = getPayload(req);
     const result = await approve(
       payload.role,
+      payload.tenantKey || 'default',
       getId(req),
       payload.sub,
       payload.agentRepId || '',
@@ -98,6 +100,7 @@ approvalsRouter.post('/:id/reject', async (req: Request, res: Response, next: Ne
     const payload = getPayload(req);
     const result = await reject(
       payload.role,
+      payload.tenantKey || 'default',
       getId(req),
       payload.sub,
       payload.agentRepId || '',
@@ -115,6 +118,7 @@ approvalsRouter.post('/:id/request-changes', async (req: Request, res: Response,
     const payload = getPayload(req);
     const result = await requestChanges(
       payload.role,
+      payload.tenantKey || 'default',
       getId(req),
       payload.sub,
       payload.agentRepId || '',

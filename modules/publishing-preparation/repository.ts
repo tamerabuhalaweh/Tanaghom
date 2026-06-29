@@ -15,9 +15,10 @@ import { createHash } from 'crypto';
 // PublishingPackage
 // ============================================================
 
-export async function createPackage(input: CreatePackageInput): Promise<PublishingPackageSummary> {
+export async function createPackage(input: CreatePackageInput, tenantKey: string): Promise<PublishingPackageSummary> {
   const pkg = await prisma.publishingPackage.create({
     data: {
+      tenant_key: tenantKey,
       package_type: input.packageType,
       campaign_id: input.campaignId,
       content_item_id: input.contentItemId,
@@ -35,19 +36,21 @@ export async function createPackage(input: CreatePackageInput): Promise<Publishi
   return mapPackage(pkg);
 }
 
-export async function getPackageById(id: string): Promise<PublishingPackageSummary> {
-  const pkg = await prisma.publishingPackage.findUnique({ where: { id } });
+export async function getPackageById(id: string, tenantKey: string): Promise<PublishingPackageSummary> {
+  const pkg = await prisma.publishingPackage.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!pkg) throw new NotFoundError('PublishingPackage', id);
   return mapPackage(pkg);
 }
 
 export async function listPackages(filters?: {
+  tenantKey?: string;
   packageStatus?: string;
   campaignId?: string;
   contentItemId?: string;
   createdByUserId?: string;
 }): Promise<PublishingPackageSummary[]> {
   const where: Record<string, unknown> = {};
+  if (filters?.tenantKey) where.tenant_key = filters.tenantKey;
   if (filters?.packageStatus) where.package_status = filters.packageStatus;
   if (filters?.campaignId) where.campaign_id = filters.campaignId;
   if (filters?.contentItemId) where.content_item_id = filters.contentItemId;
@@ -57,8 +60,8 @@ export async function listPackages(filters?: {
   return packages.map(mapPackage);
 }
 
-export async function updatePackageStatus(id: string, status: PackageStatus): Promise<PublishingPackageSummary> {
-  const existing = await prisma.publishingPackage.findUnique({ where: { id } });
+export async function updatePackageStatus(id: string, tenantKey: string, status: PackageStatus): Promise<PublishingPackageSummary> {
+  const existing = await prisma.publishingPackage.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('PublishingPackage', id);
 
   validatePackageTransition(existing.package_status as PackageStatus, status);
@@ -74,7 +77,9 @@ export async function updatePackageStatus(id: string, status: PackageStatus): Pr
 // PublishingPackageItem
 // ============================================================
 
-export async function createPackageItem(input: CreatePackageItemInput): Promise<PackageItemSummary> {
+export async function createPackageItem(input: CreatePackageItemInput, tenantKey: string): Promise<PackageItemSummary> {
+  await getPackageById(input.publishingPackageId, tenantKey);
+
   const item = await prisma.publishingPackageItem.create({
     data: {
       publishing_package_id: input.publishingPackageId,
@@ -89,7 +94,9 @@ export async function createPackageItem(input: CreatePackageItemInput): Promise<
   return mapPackageItem(item);
 }
 
-export async function listPackageItems(packageId: string): Promise<PackageItemSummary[]> {
+export async function listPackageItems(packageId: string, tenantKey: string): Promise<PackageItemSummary[]> {
+  await getPackageById(packageId, tenantKey);
+
   const items = await prisma.publishingPackageItem.findMany({
     where: { publishing_package_id: packageId },
     orderBy: { created_at: 'desc' },
@@ -101,7 +108,9 @@ export async function listPackageItems(packageId: string): Promise<PackageItemSu
 // PublishingTarget
 // ============================================================
 
-export async function createPublishingTarget(input: CreatePublishingTargetInput): Promise<PublishingTargetSummary> {
+export async function createPublishingTarget(input: CreatePublishingTargetInput, tenantKey: string): Promise<PublishingTargetSummary> {
+  await getPackageById(input.publishingPackageId, tenantKey);
+
   const target = await prisma.publishingTarget.create({
     data: {
       publishing_package_id: input.publishingPackageId,
@@ -118,7 +127,9 @@ export async function createPublishingTarget(input: CreatePublishingTargetInput)
   return mapPublishingTarget(target);
 }
 
-export async function listPublishingTargets(packageId: string): Promise<PublishingTargetSummary[]> {
+export async function listPublishingTargets(packageId: string, tenantKey: string): Promise<PublishingTargetSummary[]> {
+  await getPackageById(packageId, tenantKey);
+
   const targets = await prisma.publishingTarget.findMany({
     where: { publishing_package_id: packageId },
     orderBy: { created_at: 'desc' },
@@ -130,7 +141,9 @@ export async function listPublishingTargets(packageId: string): Promise<Publishi
 // PublishingReadinessCheck
 // ============================================================
 
-export async function createReadinessCheck(input: CreateReadinessCheckInput): Promise<ReadinessCheckSummary> {
+export async function createReadinessCheck(input: CreateReadinessCheckInput, tenantKey: string): Promise<ReadinessCheckSummary> {
+  await getPackageById(input.publishingPackageId, tenantKey);
+
   const check = await prisma.publishingReadinessCheck.create({
     data: {
       publishing_package_id: input.publishingPackageId,
@@ -144,7 +157,9 @@ export async function createReadinessCheck(input: CreateReadinessCheckInput): Pr
   return mapReadinessCheck(check);
 }
 
-export async function listReadinessChecks(packageId: string): Promise<ReadinessCheckSummary[]> {
+export async function listReadinessChecks(packageId: string, tenantKey: string): Promise<ReadinessCheckSummary[]> {
+  await getPackageById(packageId, tenantKey);
+
   const checks = await prisma.publishingReadinessCheck.findMany({
     where: { publishing_package_id: packageId },
     orderBy: { created_at: 'desc' },
@@ -152,7 +167,9 @@ export async function listReadinessChecks(packageId: string): Promise<ReadinessC
   return checks.map(mapReadinessCheck);
 }
 
-export async function validatePackageReadiness(packageId: string): Promise<{ ready: boolean; blockedReasons: string[]; score: number }> {
+export async function validatePackageReadiness(packageId: string, tenantKey: string): Promise<{ ready: boolean; blockedReasons: string[]; score: number }> {
+  await getPackageById(packageId, tenantKey);
+
   const checks = await prisma.publishingReadinessCheck.findMany({
     where: { publishing_package_id: packageId },
   });
@@ -200,9 +217,9 @@ export async function validatePackageReadiness(packageId: string): Promise<{ rea
 // PublishingManifest
 // ============================================================
 
-export async function generateManifest(input: GenerateManifestInput): Promise<PublishingManifestSummary> {
-  const pkg = await prisma.publishingPackage.findUnique({
-    where: { id: input.publishingPackageId },
+export async function generateManifest(input: GenerateManifestInput, tenantKey: string): Promise<PublishingManifestSummary> {
+  const pkg = await prisma.publishingPackage.findFirst({
+    where: { id: input.publishingPackageId, tenant_key: tenantKey },
     include: { items: true, targets: true, readiness_checks: true },
   });
   if (!pkg) throw new NotFoundError('PublishingPackage', input.publishingPackageId);
@@ -256,9 +273,9 @@ export async function generateManifest(input: GenerateManifestInput): Promise<Pu
   return mapManifest(manifest);
 }
 
-export async function getManifest(packageId: string): Promise<PublishingManifestSummary | null> {
-  const manifest = await prisma.publishingManifest.findUnique({
-    where: { publishing_package_id: packageId },
+export async function getManifest(packageId: string, tenantKey: string): Promise<PublishingManifestSummary | null> {
+  const manifest = await prisma.publishingManifest.findFirst({
+    where: { publishing_package_id: packageId, publishing_package: { tenant_key: tenantKey } },
   });
   return manifest ? mapManifest(manifest) : null;
 }

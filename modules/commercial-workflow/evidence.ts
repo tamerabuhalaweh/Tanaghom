@@ -3,6 +3,7 @@ import { prisma } from '@shared/database';
 import type { SessionContext } from '@shared/auth';
 import { logger } from '@shared/logging';
 import { getCommercialWorkflowState } from './service';
+import { recordCommercialWorkflowRunEventFromAudit } from './run-service';
 
 const SOCIAL_PLATFORMS = new Set(['linkedin', 'instagram', 'x', 'twitter', 'facebook', 'threads', 'tiktok', 'youtube']);
 
@@ -27,7 +28,7 @@ export interface WorkflowAuditInput {
 
 export async function recordCommercialWorkflowAudit(input: WorkflowAuditInput): Promise<void> {
   try {
-    await prisma.auditRecord.create({
+    const auditRecord = await prisma.auditRecord.create({
       data: {
         audit_type: 'commercial_social_workflow',
         action: input.action,
@@ -48,6 +49,7 @@ export async function recordCommercialWorkflowAudit(input: WorkflowAuditInput): 
         approval_id: input.approvalId || undefined,
       },
     });
+    await recordCommercialWorkflowRunEventFromAudit(input, auditRecord?.id);
   } catch (err) {
     logger.warn({ err, action: input.action, targetObjectId: input.targetObjectId }, 'Commercial workflow audit persistence failed');
   }
@@ -58,7 +60,7 @@ export async function getCommercialWorkflowEvidence(
   campaignId?: string,
 ) {
   const workflow = await getCommercialWorkflowState(session, campaignId);
-  const campaign = await resolveCampaign(campaignId || workflow.activeCampaign?.id || null);
+  const campaign = await resolveCampaign(session, campaignId || workflow.activeCampaign?.id || null);
 
   if (!campaign) {
     return {
@@ -85,7 +87,7 @@ export async function getCommercialWorkflowEvidence(
   }
 
   const contentItems = await prisma.contentItem.findMany({
-    where: { request_id: campaign.id },
+    where: { request_id: campaign.id, tenant_key: session.tenantKey },
     orderBy: { created_at: 'desc' },
   });
   const contentItemIds = contentItems.map(item => item.id);
@@ -93,6 +95,7 @@ export async function getCommercialWorkflowEvidence(
 
   const approvals = await prisma.approval.findMany({
     where: {
+      tenant_key: session.tenantKey,
       OR: [
         { target_type: 'campaign' as const, target_id: campaign.id },
         ...contentItemTargetClauses,
@@ -104,6 +107,7 @@ export async function getCommercialWorkflowEvidence(
 
   const packages = await prisma.publishingPackage.findMany({
     where: {
+      tenant_key: session.tenantKey,
       OR: [
         { campaign_id: campaign.id },
         ...contentItemIds.map(id => ({ content_item_id: id })),
@@ -185,10 +189,20 @@ export async function getCommercialWorkflowEvidence(
   };
 }
 
-async function resolveCampaign(campaignId: string | null) {
-  if (campaignId) return prisma.contentRequest.findUnique({ where: { id: campaignId } });
+async function resolveCampaign(session: SessionContext, campaignId: string | null) {
+  if (campaignId) {
+    return prisma.contentRequest.findFirst({
+      where: {
+        id: campaignId,
+        tenant_key: session.tenantKey,
+      },
+    });
+  }
 
   const campaigns = await prisma.contentRequest.findMany({
+    where: {
+      tenant_key: session.tenantKey,
+    },
     orderBy: { created_at: 'desc' },
     take: 50,
   });
