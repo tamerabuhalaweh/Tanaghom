@@ -27,22 +27,25 @@ test.describe('Sprint 39 Commercial/Social live acceptance', () => {
     await page.getByRole('textbox', { name: 'Password' }).fill(password);
     await page.getByRole('button', { name: 'Open Command Center' }).click();
     await page.waitForURL(/command-center/);
-    await expect(page.getByRole('heading', { name: /Commercial Command Center/i })).toBeVisible();
-    await expect(page.getByText(/Marketing growth dashboard/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Dashboard$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Content Overview/i })).toBeVisible();
+    await expect(page.getByText(/Your Content Workflow/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Content Journey/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Performance & Results/i })).toBeVisible();
 
     await expect.poll(async () => page.locator('body').innerText(), {
       timeout: 20000,
-      message: 'Command Center should load nonzero live records',
-    }).toMatch(/Active campaigns\s+[1-9]/i);
+      message: 'Dashboard should load nonzero live records',
+    }).toMatch(/Campaigns\s+[1-9]/i);
 
     const body = await page.locator('body').innerText();
-    expect(body).toMatch(/Active campaigns\s+[1-9]/i);
-    expect(body).toMatch(/Pending approvals\s+[1-9]/i);
-    expect(body).toMatch(/Posts ready\s+[1-9]/i);
-    expect(body).toMatch(/Qualified leads\s+[1-9]/i);
-    expect(body).toMatch(/Production Writes Locked|External Writes Off/i);
-    expect(body).toMatch(/AI model/i);
-    expect(body).toMatch(/Postiz server online|Postiz server needs attention/i);
+    expect(body).toMatch(/Campaigns\s+[1-9]/i);
+    expect(body).toMatch(/Awaiting review\s+[1-9]/i);
+    expect(body).toMatch(/Content packages\s+[1-9]/i);
+    expect(body).toMatch(/Customer interest\s+[1-9]/i);
+    expect(body).toMatch(/Publishing Controlled/i);
+    expect(body).toMatch(/AI model\s+Connected|AI model\s+Needs setup/i);
+    expect(body).toMatch(/Scheduling service\s+Connected|Scheduling service\s+Needs setup/i);
 
     const loginResponse = await request.post(`${apiBaseUrl}/auth/login`, {
       data: { email, password },
