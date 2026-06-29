@@ -37,6 +37,13 @@ function tone(value: string): 'good' | 'warn' | 'danger' | 'info' {
   return 'info';
 }
 
+function humanize(value: unknown, fallback = 'Not available'): string {
+  return text(value, fallback)
+    .replaceAll('_', ' ')
+    .replaceAll('-', ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
 export default function TenantAdmin() {
   const { token } = useAuth();
   const [summary, setSummary] = useState<RecordMap | null>(null);
@@ -315,20 +322,20 @@ export default function TenantAdmin() {
         title="Subscription & Entitlements"
         subtitle="Production access is governed by tenant-owned subscription state. Payment collection can be manual, contract-based, or later connected to Stripe without changing customer data ownership."
       >
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-4">
               <MetricCard label="Plan" value={text(subscription.planName, 'Not configured')} detail={text(subscription.planKey, 'missing')} tone={subscription ? 'good' : 'warn'} />
-              <MetricCard label="Subscription" value={text(subscription.status, 'missing')} detail={text(subscription.source, 'source missing')} tone={subscriptionHealth.serviceAccess ? 'good' : 'warn'} />
+              <MetricCard label="Subscription" value={humanize(subscription.status, 'Missing')} detail={humanize(subscription.source, 'Source missing')} tone={subscriptionHealth.serviceAccess ? 'good' : 'warn'} />
               <MetricCard label="Service Access" value={subscriptionHealth.serviceAccess ? 'Allowed' : 'Blocked'} detail="Computed from tenant + subscription" tone={subscriptionHealth.serviceAccess ? 'good' : 'danger'} />
-              <MetricCard label="Payment Provider" value={text(paymentProvider.status, 'not configured')} detail="No shared customer billing secrets" tone="info" />
+              <MetricCard label="Payment Provider" value={humanize(paymentProvider.status, 'Not configured')} detail="No shared customer billing secrets" tone="info" />
             </div>
             <ProductTable
               columns={['Entitlement', 'Value']}
               rows={Object.entries(entitlements).map(([key, value]) => [
                 key.replace(/([A-Z])/g, ' $1'),
                 typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-                  ? String(value)
+                  ? humanize(value)
                   : JSON.stringify(value),
               ])}
             />

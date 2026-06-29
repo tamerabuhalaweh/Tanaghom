@@ -118,7 +118,7 @@ export function ProductCard({
 
 export function ProductStatus({ children, tone = 'default' }: { children: ReactNode; tone?: Tone }) {
   return (
-    <span className={cx('inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium', statusClasses[tone])}>
+    <span className={cx('inline-flex max-w-full items-center rounded-md border px-2 py-1 text-xs font-medium leading-5', statusClasses[tone])}>
       {children}
     </span>
   );
@@ -180,15 +180,15 @@ export function MetricCard({
   const valueText = String(value);
   const compact = valueText.length > 14;
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+    <div className="min-w-0 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</div>
+        <div className="min-w-0 text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</div>
         <span className={cx('h-2 w-2 rounded-full', tone === 'good' ? 'bg-emerald-500' : tone === 'warn' ? 'bg-amber-500' : tone === 'danger' ? 'bg-red-500' : tone === 'info' ? 'bg-blue-500' : 'bg-neutral-300')} />
       </div>
-      <div className={cx('mt-3 font-semibold tracking-tight text-neutral-950', compact ? 'text-xl leading-snug' : 'text-3xl')}>
+      <div className={cx('mt-3 break-words [overflow-wrap:anywhere] font-semibold tracking-tight text-neutral-950', compact ? 'text-xl leading-snug' : 'text-3xl')}>
         {value}
       </div>
-      {detail && <div className="mt-2 line-clamp-2 text-sm leading-5 text-neutral-500">{detail}</div>}
+      {detail && <div className="mt-2 line-clamp-3 break-words text-sm leading-5 text-neutral-500">{detail}</div>}
     </div>
   );
 }
@@ -344,11 +344,11 @@ export function WorkflowRail({ steps }: { steps: { label: string; state: 'done' 
 
 export function DetailGrid({ items }: { items: { label: string; value: string }[] }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
       {items.map((item) => (
-        <div key={item.label} className="rounded-md border border-neutral-100 bg-neutral-50 p-4">
+        <div key={item.label} className="min-w-0 rounded-md border border-neutral-100 bg-neutral-50 p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{item.label}</div>
-          <div className="mt-2 text-sm font-medium leading-6 text-neutral-800">{item.value}</div>
+          <div className="mt-2 break-words text-sm font-medium leading-6 text-neutral-800">{item.value}</div>
         </div>
       ))}
     </div>

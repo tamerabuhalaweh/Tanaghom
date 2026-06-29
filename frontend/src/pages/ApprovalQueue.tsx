@@ -120,7 +120,7 @@ export default function ApprovalQueue() {
         </div>
       </ProductCard>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <ProductCard title="Review Queue" subtitle="Content waiting for your approval decision.">
           {approvals.length ? (
             <div className="space-y-4">
@@ -135,9 +135,9 @@ export default function ApprovalQueue() {
                 const packetPackages = Array.isArray(packet.publishingPackages) ? packet.publishingPackages as RecordMap[] : [];
                 const draftText = text(latestDraft.text, text(contentItem.draftText, 'No draft text available.'));
                 return (
-                  <article key={id} className="rounded-lg border border-neutral-200 bg-white p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
+                  <article key={id} className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+                    <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_300px]">
+                      <div className="min-w-0 p-5">
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="text-lg font-semibold text-black">{text(campaign.topic, titleCase(text(approval.targetType, 'Content')))}</h2>
                           <ProductStatus tone={status === 'approved' ? 'good' : status === 'rejected' ? 'warn' : 'info'}>
@@ -152,13 +152,13 @@ export default function ApprovalQueue() {
                           <Mini label="Reviewer Role" value={text(approval.requiredRole, 'Reviewer')} />
                           <Mini label="Priority" value={titleCase(text(approval.riskCategory, 'medium'))} />
                         </div>
-                        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                        <div className="mt-4 space-y-4">
+                          <div className="min-w-0 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                             <div className="mb-2 flex flex-wrap items-center gap-2">
                               <ProductStatus tone="info">{titleCase(text(contentItem.platform, 'selected platform'))}</ProductStatus>
                               <ProductStatus tone="muted">Version {text(latestDraft.versionNo, 'current')}</ProductStatus>
                             </div>
-                            <div className="whitespace-pre-wrap text-sm leading-6 text-neutral-800">{draftText}</div>
+                            <div className="max-h-[380px] overflow-auto whitespace-pre-wrap break-words pr-2 text-sm leading-6 text-neutral-800">{draftText}</div>
                           </div>
                           <DetailGrid items={[
                             { label: 'Audience', value: text(campaign.audience, 'Not specified') },
@@ -170,16 +170,22 @@ export default function ApprovalQueue() {
                         </div>
                       </div>
                       {pending && (
-                        <div className="flex min-w-[220px] flex-col gap-2">
+                        <div className="border-t border-neutral-100 bg-neutral-50 p-5 xl:border-l xl:border-t-0">
+                          <div className="mb-3">
+                            <div className="text-sm font-semibold text-neutral-950">Decision</div>
+                            <p className="mt-1 text-xs leading-5 text-neutral-500">Add a note, then choose what happens next.</p>
+                          </div>
                           <textarea
                             value={decisionComments[id] || ''}
                             onChange={event => setDecisionComments(current => ({ ...current, [id]: event.target.value }))}
-                            className="min-h-24 rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
+                            className="min-h-28 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
                             placeholder="Add a comment (optional)"
                           />
-                          <PrimaryAction onClick={() => handleAction(id, 'approve')} disabled={!!loading}>{loading === `approve-${id}` ? 'Approving...' : 'Approve'}</PrimaryAction>
-                          <SecondaryAction onClick={() => handleAction(id, 'request-changes')} disabled={!!loading}>Request Changes</SecondaryAction>
-                          <SecondaryAction onClick={() => handleAction(id, 'reject')} disabled={!!loading}>Reject</SecondaryAction>
+                          <div className="mt-3 grid gap-2">
+                            <PrimaryAction onClick={() => handleAction(id, 'approve')} disabled={!!loading}>{loading === `approve-${id}` ? 'Approving...' : 'Approve'}</PrimaryAction>
+                            <SecondaryAction onClick={() => handleAction(id, 'request-changes')} disabled={!!loading}>Request Changes</SecondaryAction>
+                            <SecondaryAction onClick={() => handleAction(id, 'reject')} disabled={!!loading}>Reject</SecondaryAction>
+                          </div>
                         </div>
                       )}
                     </div>
