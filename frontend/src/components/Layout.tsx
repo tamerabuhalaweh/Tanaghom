@@ -234,6 +234,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [adminExpanded, setAdminExpanded] = useState(false);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -267,6 +268,7 @@ export default function Layout() {
     if (location.pathname === '/' && path === '/command-center') return true;
     return false;
   };
+  const adminNavVisible = adminExpanded || currentItem?.group === 'Admin';
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -290,10 +292,20 @@ export default function Layout() {
           if (!groupItems.length) return null;
           return (
             <div key={group} className="mb-6">
-              <div className="px-2 pb-2 text-xs font-medium text-neutral-500">
-                {group === 'Product' ? 'Content Studio' : 'Admin & Settings'}
-              </div>
-              <div className="space-y-1">
+              {group === 'Admin' ? (
+                <button
+                  type="button"
+                  onClick={() => setAdminExpanded(current => !current)}
+                  className="mb-2 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                  aria-expanded={adminNavVisible}
+                >
+                  <span>Admin & Settings</span>
+                  <span aria-hidden="true">{adminNavVisible ? '-' : '+'}</span>
+                </button>
+              ) : (
+                <div className="px-2 pb-2 text-xs font-medium text-neutral-500">Content Studio</div>
+              )}
+              <div className={`space-y-1 ${group === 'Admin' && !adminNavVisible ? 'hidden' : ''}`}>
                 {groupItems.map(item => {
                   const Icon = item.icon;
                   const active = isActive(item.path);

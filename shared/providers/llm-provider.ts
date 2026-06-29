@@ -30,13 +30,18 @@ export interface LLMProviderStatus {
 }
 
 export class MockLLMProvider implements LLMProvider {
-  name = 'Mock LLM';
+  name = 'Fallback Content Provider';
   type = 'mock' as const;
 
   async generate(prompt: string, _options?: GenerateOptions): Promise<LLMResponse> {
+    const platform = extractPromptValue(prompt, 'PLATFORM') || 'linkedin';
+    const objective = extractPromptValue(prompt, 'Objective') || 'Generate qualified course leads';
+    const audience = extractPromptValue(prompt, 'Audience') || 'course buyers and coaching prospects';
+    const cta = extractPromptValue(prompt, 'CTA') || 'request the course details';
+    const copy = buildFallbackCourseCopy({ platform, objective, audience, cta });
     return {
-      text: `[Mock LLM] Generated content for: ${prompt.substring(0, 50)}...`,
-      model: 'mock-v1',
+      text: copy,
+      model: 'fallback-course-social-v1',
       provider: 'mock',
     };
   }
@@ -50,7 +55,7 @@ export class MockLLMProvider implements LLMProvider {
       name: this.name,
       type: this.type,
       configured: true,
-      model: 'mock-v1',
+      model: 'fallback-course-social-v1',
       apiKeyStatus: 'configured',
     };
   }
@@ -354,4 +359,55 @@ function extractOpenAIText(data: OpenAIResponsePayload): string {
     .map((part) => part.text || '')
     .join('\n')
     .trim() || '';
+}
+
+function extractPromptValue(prompt: string, label: string): string {
+  const match = prompt.match(new RegExp(`- ${label}:\\s*(.+)`, 'i'))
+    || prompt.match(new RegExp(`${label}:\\s*(.+)`, 'i'));
+  return match?.[1]?.trim() || '';
+}
+
+function buildFallbackCourseCopy(input: {
+  platform: string;
+  objective: string;
+  audience: string;
+  cta: string;
+}): string {
+  const platform = input.platform.toLowerCase();
+  if (platform.includes('instagram')) {
+    return [
+      'Most course posts fail because they explain the offer before they make the problem feel real.',
+      '',
+      `For ${input.audience}, start with the moment they already recognize: the decision they keep delaying, the result they want, or the question they are afraid to ask.`,
+      '',
+      'Then give one useful step they can try today.',
+      '',
+      `CTA: ${input.cta}.`,
+      '',
+      'Visual idea: 5-slide carousel or Reel with a strong first frame, one practical lesson, and a final registration prompt.',
+      '',
+      '#Coaching #OnlineCourses #PersonalGrowth #CourseCreation',
+    ].join('\n');
+  }
+  if (platform === 'x' || platform.includes('twitter')) {
+    return [
+      'A strong course post does not start with the course.',
+      '',
+      'It starts with the exact problem your follower is trying to solve today.',
+      '',
+      `For ${input.audience}: name the problem, give one practical step, then invite them to ${input.cta}.`,
+    ].join('\n');
+  }
+  return [
+    `If the goal is "${input.objective}", the content needs to earn trust before it asks for action.`,
+    '',
+    `For ${input.audience}, lead with a practical lesson from the course or coaching method:`,
+    '',
+    '1. Name the problem in plain language.',
+    '2. Share one useful step or mindset shift.',
+    '3. Explain what changes when they apply it.',
+    `4. Invite the right people to ${input.cta}.`,
+    '',
+    'This keeps the post valuable, credible, and ready for human review before scheduling.',
+  ].join('\n');
 }

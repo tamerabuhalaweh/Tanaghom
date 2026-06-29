@@ -145,6 +145,20 @@ smartLabsVoiceRouter.post('/conversation', async (req: Request, res: Response, n
       message: input.message,
       conversationHistory: input.conversationHistory,
     });
+    if (input.mode === 'preview' && !payload.agent_id) {
+      auditSmartLabsAction({ userId: session.humanUserId, tenantKey: session.tenantKey, action: 'smartlabs_conversation_preview_requires_setup', result: 'blocked' });
+      res.json({
+        status: 'requires_agent_id',
+        payload,
+        reasons: ['SmartLabs agentId is missing. Add it in tenant integration credentials before execution.'],
+        safety: {
+          externalCallPerformed: false,
+          rawSecretsReturned: false,
+        },
+        _label: 'SmartLabs handoff package prepared; tenant agentId must be configured before execution',
+      });
+      return;
+    }
     requireAgentId(payload);
     const gate = smartLabsExecutionGate(config, input);
 

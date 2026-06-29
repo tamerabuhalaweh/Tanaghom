@@ -53,28 +53,46 @@ async function getLLMProvider(userId: string): Promise<LLMProvider> {
 }
 
 // ============================================================
-// Brand Voice (from SOUL.md)
+// Customer Content Profile
 // ============================================================
 
-const BRAND_VOICE = {
-  tone: 'Professional but approachable — not clinical or cold',
+const COURSE_CREATOR_PROFILE = {
+  audienceFallback: 'Course buyers, coaching prospects, founders, and professionals seeking practical personal growth',
+  tone: 'Confident, warm, practical, transformation-focused, and culturally aware for GCC/Jordan audiences',
   do: [
-    'Use clear, simple language to explain health concepts',
-    'Highlight convenience, accuracy, and speed of results',
-    'Share educational content about preventive health',
-    'Include clear calls-to-action',
-    'Adapt tone to platform',
+    'Open with a concrete pain point, outcome, or personal-brand lesson',
+    'Connect the idea to a course, coaching program, live session, lead magnet, or discovery conversation',
+    'Give useful advice before asking for action',
+    'Use proof-led language without inventing testimonials, numbers, or guarantees',
+    'Make the next step obvious: join waitlist, comment keyword, request details, book a call, or register',
+    'Match the language of the campaign brief; use Arabic, English, or bilingual phrasing only when the brief suggests it',
+    'Adapt format to each platform: LinkedIn authority, Instagram hook and visual idea, X concise conversation',
   ],
   dont: [
-    'Make medical claims without evidence or disclaimers',
-    'Use fear-based health messaging',
-    'Use excessive emojis or informal slang on professional platforms',
-    'Make competitor comparisons without verified data',
-    'Promise specific health outcomes',
+    'Promise guaranteed transformation, income, virality, or overnight results',
+    'Invent social proof, testimonials, engagement numbers, or customer outcomes',
+    'Use manipulative scarcity, fake urgency, scraping, trend manipulation, auto-DMs, or fake engagement',
+    'Create medical, financial, legal, or mental-health claims without explicit source material and review',
+    'Use generic filler unless it is tied to a specific course outcome',
   ],
-  preferredVocabulary: ['wellness', 'diagnostics', 'proactive health', 'insights', 'accuracy', 'convenience', 'results', 'prevention', 'screening', 'innovation'],
-  avoidVocabulary: ['cure', 'treatment', 'diagnosis', 'guaranteed', 'miracle', 'secret', 'hack'],
+  preferredVocabulary: [
+    'course',
+    'coaching',
+    'transformation',
+    'practical steps',
+    'clarity',
+    'confidence',
+    'community',
+    'waitlist',
+    'registration',
+    'free session',
+    'book a call',
+    'comment',
+    'learn',
+  ],
+  avoidVocabulary: ['guaranteed', 'overnight', 'secret hack', 'viral guaranteed', 'miracle', 'get rich', 'fake proof'],
 };
+
 
 // ============================================================
 // Draft Generation Service
@@ -218,8 +236,11 @@ export async function reviseDraft(
 
   const llm = await getLLMProvider(requesterId);
   let revisedText: string;
+  let modelUsed = 'provider-adapter';
   try {
-    revisedText = (await llm.generate(prompt)).text;
+    const generation = await llm.generate(prompt);
+    revisedText = generation.text;
+    modelUsed = `${generation.provider}:${generation.model}`;
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
@@ -229,7 +250,7 @@ export async function reviseDraft(
     input.contentItemId,
     newVersionNo,
     revisedText,
-    'mock-llm',
+    modelUsed,
   );
 
   await repo.updateContentItemDraft(input.contentItemId, tenantKey, revisedText);
@@ -375,8 +396,11 @@ async function generateSingleDraft(
 
   const llm = await getLLMProvider(requesterId);
   let draftText: string;
+  let modelUsed = 'provider-adapter';
   try {
-    draftText = (await llm.generate(prompt)).text;
+    const generation = await llm.generate(prompt);
+    draftText = generation.text;
+    modelUsed = `${generation.provider}:${generation.model}`;
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw new ExternalServiceError('LLM', err instanceof Error ? err.message : 'Generation failed');
@@ -399,7 +423,7 @@ async function generateSingleDraft(
     result.contentItemId,
     1,
     draftText,
-    'mock-llm',
+    modelUsed,
   );
 
   return result;
@@ -407,22 +431,33 @@ async function generateSingleDraft(
 
 function buildGenerationPrompt(campaign: CampaignData, platform: Platform, maxLength: number, tone: Tone): string {
   const constraints = PLATFORM_CONSTRAINTS[platform];
-  return `You are a social media content writer for SmartLabs, a health-tech company.
+  return `You are a senior social media strategist and copywriter for a high-trust course and life-coaching creator brand.
 
-BRAND VOICE: ${BRAND_VOICE.tone}
-DO: ${BRAND_VOICE.do.join(', ')}
-DON'T: ${BRAND_VOICE.dont.join(', ')}
+CUSTOMER CONTEXT:
+- The business sells courses, live coaching, and personal development programs through social media.
+- The creator is a public personal brand. Trust, clarity, and credibility matter more than hype.
+- The content should help the marketing team turn followers into qualified course leads.
+
+BRAND VOICE: ${COURSE_CREATOR_PROFILE.tone}
+DO: ${COURSE_CREATOR_PROFILE.do.join(', ')}
+DON'T: ${COURSE_CREATOR_PROFILE.dont.join(', ')}
+PREFERRED WORDS: ${COURSE_CREATOR_PROFILE.preferredVocabulary.join(', ')}
+AVOID WORDS: ${COURSE_CREATOR_PROFILE.avoidVocabulary.join(', ')}
 
 PLATFORM: ${platform}
 MAX LENGTH: ${maxLength} characters
 FORMAT: ${constraints.recommendedFormat}
 HOOK REQUIRED: ${constraints.hookRequired}
 PLATFORM NOTES: ${constraints.notes}
+PLATFORM ADAPTATION:
+- LinkedIn: authority insight, practical lesson, professional CTA.
+- Instagram: strong first line, visual/Reels/carousel idea, comment or DM-style CTA without triggering auto-DMs.
+- X: concise opinion, lesson, or short thread starter that invites conversation.
 
 CAMPAIGN:
 - Topic: ${campaign.raw_message}
 - Objective: ${campaign.objective}
-- Audience: ${campaign.audience || 'General health-conscious audience'}
+- Audience: ${campaign.audience || COURSE_CREATOR_PROFILE.audienceFallback}
 - CTA: ${campaign.cta || 'No specific CTA'}
 - Content Type: ${campaign.content_type}
 - Risk Category: ${campaign.risk_category}
@@ -433,8 +468,8 @@ Generate a platform-native draft that:
 1. Follows brand voice
 2. Respects platform rules and character limits
 3. Includes a clear hook, body, and CTA
-4. Is optimized for the platform's algorithm
-5. Avoids restricted claims and sensitive topics
+4. Improves reach readiness through clarity, native format, strong first line, useful value, and clean CTA
+5. Avoids restricted claims, fake proof, fake engagement, scraping, trend manipulation, and manipulative promises
 
 Output only the final social post copy. Do not include explanations, headings, labels, markdown separators, or notes.`;
 }
@@ -446,7 +481,7 @@ function buildRevisionPrompt(
   maxLength: number,
   tone: Tone,
 ): string {
-  return `You are revising a social media draft for SmartLabs.
+  return `You are revising a social media draft for a course and life-coaching creator brand.
 
 ORIGINAL DRAFT:
 ${originalDraft}
@@ -455,19 +490,20 @@ FEEDBACK: ${feedback}
 OBJECTIVE: ${objective}
 MAX LENGTH: ${maxLength} characters
 TONE: ${tone}
-BRAND VOICE: ${BRAND_VOICE.tone}
+BRAND VOICE: ${COURSE_CREATOR_PROFILE.tone}
 
 Revise the draft based on the feedback while maintaining brand voice and platform rules.
+Keep useful value, a clear next step, and no invented proof or guarantees.
 Output the revised draft text only.`;
 }
 
 function buildMetadata(campaign: CampaignData, platform: Platform, tone: Tone): DraftMetadata {
   return {
     objective: campaign.objective,
-    audience: campaign.audience || 'General health-conscious audience',
+    audience: campaign.audience || COURSE_CREATOR_PROFILE.audienceFallback,
     cta: campaign.cta || null,
     hashtags: generateHashtags(platform, campaign.content_type),
-    rationale: `Platform-native ${PLATFORM_CONSTRAINTS[platform].recommendedFormat} for ${platform}, targeting ${campaign.audience || 'general audience'} with ${tone} tone.`,
+    rationale: `Platform-native ${PLATFORM_CONSTRAINTS[platform].recommendedFormat} for ${platform}, targeting ${campaign.audience || COURSE_CREATOR_PROFILE.audienceFallback} with ${tone} tone and course-sales conversion intent.`,
     tone,
     hookType: PLATFORM_CONSTRAINTS[platform].hookRequired ? 'question' : 'statement',
     mediaSuggestions: generateMediaSuggestions(platform, PLATFORM_CONSTRAINTS[platform].recommendedFormat),
@@ -475,14 +511,14 @@ function buildMetadata(campaign: CampaignData, platform: Platform, tone: Tone): 
 }
 
 function generateHashtags(platform: Platform, _contentType: string): string[] {
-  const base = ['#SmartLabs', '#HealthTech', '#Wellness'];
+  const base = ['#CourseCreation', '#Coaching', '#PersonalGrowth'];
   const platformSpecific: Record<Platform, string[]> = {
-    linkedin: ['#Healthcare', '#Diagnostics', '#B2B'],
-    instagram: ['#HealthTips', '#Prevention', '#Screening'],
-    x: ['#Health'],
-    facebook: ['#Community', '#LocalHealth'],
-    tiktok: ['#HealthTok', '#WellnessCheck'],
-    youtube: ['#HealthEducation', '#MedicalScience'],
+    linkedin: ['#Leadership', '#Marketing', '#Learning'],
+    instagram: ['#Mindset', '#SelfDevelopment', '#OnlineCourses'],
+    x: ['#Learning', '#Creators'],
+    facebook: ['#Community', '#Courses'],
+    tiktok: ['#LearnOnTikTok', '#CoachingTips'],
+    youtube: ['#CourseLaunch', '#CoachingBusiness'],
     reddit: [],
   };
   const max = PLATFORM_CONSTRAINTS[platform].maxHashtags;
@@ -490,15 +526,16 @@ function generateHashtags(platform: Platform, _contentType: string): string[] {
 }
 
 function generateMediaSuggestions(platform: Platform, format: string): string[] {
-  if (format === 'reel' || format === 'video') return ['Short-form video with text overlay', 'First 3 seconds: bold hook statement'];
-  if (format === 'carousel') return ['5-slide carousel with problem → solution structure', 'First slide: bold question or stat'];
-  return ['Native image with brand colors', 'Text overlay with key stat or CTA'];
+  if (format === 'reel' || format === 'video') return ['Short video: pain point, lesson, next step', 'First 3 seconds: bold course outcome or common mistake'];
+  if (format === 'carousel') return ['5-slide carousel: problem to lesson to action', 'First slide: specific question, myth, or transformation promise without guarantees'];
+  if (platform === 'instagram') return ['Creator photo or course visual with clean text overlay', 'Story frame with question sticker or registration reminder'];
+  return ['Native image with personal-brand style', 'Text overlay with course lesson or clear CTA'];
 }
 
 function assessRisk(campaign: CampaignData): string {
   const risks: string[] = [];
-  if (campaign.risk_category === 'high') risks.push('High-risk content — requires compliance review');
-  if (campaign.content_type === 'announcement') risks.push('Announcement — verify claims before publishing');
-  if (!campaign.cta) risks.push('No CTA defined — may reduce engagement');
-  return risks.length > 0 ? risks.join('; ') : 'Low risk — standard content';
+  if (campaign.risk_category === 'high') risks.push('High-risk content - requires claim and compliance review');
+  if (campaign.content_type === 'announcement') risks.push('Announcement - verify course claims, dates, pricing, and availability before publishing');
+  if (!campaign.cta) risks.push('No CTA defined - may reduce lead capture and course conversion');
+  return risks.length > 0 ? risks.join('; ') : 'Low risk - standard course-sales content';
 }

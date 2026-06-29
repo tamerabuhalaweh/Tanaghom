@@ -160,4 +160,36 @@ describe('Sprint 56 production product integrity contracts', () => {
       expect(campaigns, `${oldScatteredCue} should not remain in the customer-facing Campaigns copy`).not.toContain(oldScatteredCue);
     }
   });
+
+  it('keeps Sprint 58 customer content and lead handoff aligned to the course-sales product', () => {
+    const aiGeneration = source('modules', 'ai-generation', 'service.ts');
+    const llmProvider = source('shared', 'providers', 'llm-provider.ts');
+    const leadsController = source('modules', 'leads', 'controller.ts');
+    const analytics = source('frontend', 'src', 'pages', 'Analytics.tsx');
+
+    for (const expectedCue of [
+      'course and life-coaching creator brand',
+      'turn followers into qualified course leads',
+      'course-sales conversion intent',
+      'fake engagement',
+    ]) {
+      expect(aiGeneration).toContain(expectedCue);
+    }
+
+    for (const staleCue of ['health-tech company', 'General health-conscious audience', '#HealthTech', '#Wellness']) {
+      expect(aiGeneration, `${staleCue} must not remain in draft generation`).not.toContain(staleCue);
+    }
+
+    expect(llmProvider).toContain('Fallback Content Provider');
+    expect(llmProvider).toContain('fallback-course-social-v1');
+    expect(llmProvider).not.toContain('[Mock LLM] Generated content');
+
+    for (const leadField of ['leadName', 'leadEmail', 'leadPhone']) {
+      expect(leadsController, `${leadField} must be returned to the tenant UI`).toContain(leadField);
+      expect(analytics, `${leadField} must be displayed in Performance`).toContain(leadField);
+    }
+
+    expect(analytics).toContain('Preview Voice/Chat Handoff');
+    expect(analytics).toContain('Voice/Chat Handoff Preview');
+  });
 });

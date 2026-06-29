@@ -192,21 +192,30 @@ Expected result:
 - Scheduling remains blocked unless the customer has connected a channel and authorized scheduling.
 - The UI should not imply live publishing is active when it is not.
 
-## Walkthrough 7 — Performance
+## Walkthrough 7 - Performance
 
-Purpose: review campaign performance and customer interest.
+Purpose: review campaign performance, captured customer interest, and handoff readiness.
 
 1. Open **Performance**.
-2. Review content performance cards.
-3. Review customer journey and leads.
-4. Confirm empty states explain what is missing when no connected source exists.
+2. Review the top KPI cards for connected data sources, reach, impressions, reports, and customer interest.
+3. Review **Course Sales Performance** to understand whether content is moving toward leads and qualified opportunities.
+4. If official analytics are not connected, confirm the page shows an honest setup state instead of invented metrics.
+5. Use **Add a Lead** to record a real customer interest with name, email, phone, source, and consent status.
+6. Select the lead in **Your Leads**.
+7. Review **Lead Details & Handoff**.
+8. Click **Mark as Qualified** when the lead should move into the qualified follow-up path.
+9. Click **Preview CRM Handoff** to prepare the GoHighLevel payload without writing to CRM.
+10. Click **Preview Voice/Chat Handoff** to prepare the SmartLabs conversation package without triggering a call or chat.
 
 Expected result:
 
-- The page should show real internal records and connected-source data when available.
-- It should not show fake social metrics when official social analytics are not connected.
+- The page shows real tenant lead records entered by users.
+- Lead names and contact fields entered by the user are visible to authorized tenant users.
+- GoHighLevel handoff preview is prepared by the backend and does not write externally unless credentials and execution approval are configured.
+- SmartLabs voice/chat handoff preview is prepared by the backend and does not trigger a call, chat, or message unless credentials, agent ID, execution flags, and approval are configured.
+- The page should not show fake social metrics when official social analytics are not connected.
 
-## Walkthrough 8 — AI Settings
+## Walkthrough 8 - AI Settings
 
 Purpose: connect a tenant-owned AI provider.
 

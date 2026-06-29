@@ -261,6 +261,7 @@ test('Commercial/Social product routes are wired with current UX vocabulary', as
   await page.locator('a[href="/analytics"]:visible').click();
   await expect(page.getByRole('heading', { name: /^Performance$/i })).toBeVisible();
 
+  await page.getByRole('button', { name: /Admin & Settings/i }).click();
   await page.locator('a[href="/tenant-admin"]:visible').click();
   await expect(page.getByRole('heading', { name: /Tenant Administration/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Subscription & Entitlements/i })).toBeVisible();

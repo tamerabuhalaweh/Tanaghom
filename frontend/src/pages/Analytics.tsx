@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { analyticsApi, ghlApi, leadsApi, socialGrowthApi } from '../api';
+import { analyticsApi, ghlApi, leadsApi, smartLabsApi, socialGrowthApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -54,6 +54,7 @@ export default function Analytics() {
   const [leadStats, setLeadStats] = useState<RecordMap | null>(null);
   const [selectedLeadIndex, setSelectedLeadIndex] = useState(0);
   const [ghlPreview, setGhlPreview] = useState<RecordMap | null>(null);
+  const [voicePreview, setVoicePreview] = useState<RecordMap | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState('');
   const [pageLoading, setPageLoading] = useState(Boolean(token));
@@ -121,6 +122,9 @@ export default function Analytics() {
   const impressions = metricTotal(snapshots, 'impressions');
   const engagement = metricTotal(snapshots, 'engagement');
   const selectedLead = leads[selectedLeadIndex] || leads[0] || null;
+  const selectedLeadName = selectedLead
+    ? text(selectedLead.leadName, `${titleCase(text(selectedLead.sourcePlatform, 'Manual'))} lead`)
+    : '';
   const qualified = numberValue(leadStats?.qualified);
   const totalLeads = numberValue(leadStats?.total);
   const hasAnalyticsData = snapshots.length > 0 || reports.length > 0;
@@ -132,8 +136,17 @@ export default function Analytics() {
     () =>
       selectedLead
         ? [
+            { label: 'Lead', value: selectedLeadName },
             { label: 'Platform', value: titleCase(text(selectedLead.sourcePlatform, 'manual')) },
             { label: 'Status', value: titleCase(text(selectedLead.leadStatus, 'new_lead')) },
+            {
+              label: 'Email',
+              value: text(selectedLead.leadEmail, 'Not provided'),
+            },
+            {
+              label: 'Phone',
+              value: text(selectedLead.leadPhone, 'Not provided'),
+            },
             {
               label: 'Interest Score',
               value: String(numberValue(selectedLead.qualificationScore)),
@@ -148,7 +161,7 @@ export default function Analytics() {
             },
           ]
         : [],
-    [selectedLead],
+    [selectedLead, selectedLeadName],
   );
 
   async function captureLead() {
@@ -206,6 +219,30 @@ export default function Analytics() {
     } catch (error) {
       setMessage(
         `Preview failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function previewVoicePayload() {
+    if (!token || !selectedLead) return;
+    setLoading('voice-preview');
+    setMessage('');
+    try {
+      const result = (await smartLabsApi.conversation(
+        {
+          mode: 'preview',
+          message: `Prepare a follow-up conversation for ${selectedLeadName}. Source: ${titleCase(text(selectedLead.sourcePlatform, 'manual'))}. Interest score: ${numberValue(selectedLead.qualificationScore)}. Goal: answer course questions and guide the lead to the right next step.`,
+          conversationHistory: [],
+        },
+        token,
+      )) as RecordMap;
+      setVoicePreview(result);
+      setMessage('Voice/chat handoff preview prepared.');
+    } catch (error) {
+      setMessage(
+        `Voice/chat preview failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     } finally {
       setLoading('');
@@ -523,6 +560,7 @@ export default function Analytics() {
                     onClick={() => {
                       setSelectedLeadIndex(index);
                       setGhlPreview(null);
+                      setVoicePreview(null);
                     }}
                     className={`w-full rounded-lg border p-4 text-left transition ${
                       active
@@ -531,7 +569,7 @@ export default function Analytics() {
                     }`}
                   >
                     <div className="font-semibold">
-                      {titleCase(text(lead.sourcePlatform, 'Manual'))} lead
+                      {text(lead.leadName, `${titleCase(text(lead.sourcePlatform, 'Manual'))} lead`)}
                     </div>
                     <div
                       className={`mt-2 text-sm ${
@@ -540,6 +578,7 @@ export default function Analytics() {
                     >
                       {titleCase(text(lead.leadStatus, 'new_lead'))} / interest score{' '}
                       {numberValue(lead.qualificationScore)}
+                      {lead.leadEmail ? ` / ${text(lead.leadEmail)}` : ''}
                     </div>
                   </button>
                 );
@@ -573,20 +612,30 @@ export default function Analytics() {
                 >
                   {loading === 'ghl-preview' ? 'Preparing...' : 'Preview CRM Handoff'}
                 </SecondaryAction>
+                <SecondaryAction
+                  onClick={previewVoicePayload}
+                  disabled={loading === 'voice-preview'}
+                >
+                  {loading === 'voice-preview' ? 'Preparing...' : 'Preview Voice/Chat Handoff'}
+                </SecondaryAction>
               </div>
               <ReadableQueue
                 items={[
                   {
                     title: 'CRM handoff',
-                    meta: 'Preview available. Requires sandbox credentials and admin authorization to execute.',
-                    status: 'Setup Required',
-                    tone: 'info',
+                    meta: ghlPreview
+                      ? 'Backend prepared the GoHighLevel payload for this selected lead.'
+                      : 'Preview available. Requires sandbox credentials and admin authorization to execute.',
+                    status: ghlPreview ? 'Prepared' : 'Setup Required',
+                    tone: ghlPreview ? 'good' : 'info',
                   },
                   {
-                    title: 'Follow-up',
-                    meta: 'Available after consent is granted and admin sets up outreach channels.',
-                    status: 'Setup Required',
-                    tone: 'info',
+                    title: 'Voice/chat follow-up',
+                    meta: voicePreview
+                      ? 'Backend prepared the SmartLabs conversation package for this selected lead.'
+                      : 'Available after consent is granted and admin sets up the SmartLabs connector.',
+                    status: voicePreview ? 'Prepared' : 'Setup Required',
+                    tone: voicePreview ? 'good' : 'info',
                   },
                 ]}
               />
@@ -615,6 +664,41 @@ export default function Analytics() {
                           value: text(
                             (ghlPreview.safety as RecordMap | undefined)?.executionPerformed,
                             'No - preview only',
+                          ),
+                        },
+                      ]}
+                    />
+                  </div>
+                </div>
+              )}
+              {voicePreview && (
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="font-semibold text-neutral-950">Voice/Chat Handoff Preview</div>
+                  <div className="mt-1 text-sm text-neutral-500">
+                    Prepared by the backend for SmartLabs. No call, chat, or message was triggered.
+                  </div>
+                  <div className="mt-4">
+                    <DetailGrid
+                      items={[
+                        { label: 'Status', value: titleCase(text(voicePreview.status)) },
+                        {
+                          label: 'Agent Setup',
+                          value: Array.isArray(voicePreview.reasons) && voicePreview.reasons.length
+                            ? 'Requires configuration'
+                            : 'Ready for configured tenant agent',
+                        },
+                        {
+                          label: 'External Action',
+                          value: text(
+                            (voicePreview.safety as RecordMap | undefined)?.externalCallPerformed,
+                            'No - preview only',
+                          ),
+                        },
+                        {
+                          label: 'Secrets',
+                          value: text(
+                            (voicePreview.safety as RecordMap | undefined)?.rawSecretsReturned,
+                            'Not returned',
                           ),
                         },
                       ]}

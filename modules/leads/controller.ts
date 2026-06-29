@@ -22,6 +22,21 @@ function deriveQualificationScore(lead: Record<string, unknown>): number {
   return Math.min(score, 100);
 }
 
+function summarizeLead(lead: Record<string, unknown>) {
+  return {
+    id: lead.id,
+    sourcePlatform: lead.platform,
+    campaignId: lead.campaign_id,
+    leadStatus: lead.lead_status,
+    qualificationScore: deriveQualificationScore(lead),
+    consentStatus: lead.consent_status,
+    leadName: lead.lead_name_placeholder,
+    leadEmail: lead.lead_email_placeholder,
+    leadPhone: lead.lead_phone_placeholder,
+    createdAt: lead.created_at,
+  };
+}
+
 leadsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
@@ -32,15 +47,7 @@ leadsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => 
       take: 50,
     });
 
-    res.json(leads.map((lead: Record<string, unknown>) => ({
-      id: lead.id,
-      sourcePlatform: lead.platform,
-      campaignId: lead.campaign_id,
-      leadStatus: lead.lead_status,
-      qualificationScore: deriveQualificationScore(lead),
-      consentStatus: lead.consent_status,
-      createdAt: lead.created_at,
-    })));
+    res.json(leads.map((lead: Record<string, unknown>) => summarizeLead(lead)));
   } catch (err) {
     next(err);
   }
@@ -79,12 +86,7 @@ leadsRouter.post('/', async (req: Request, res: Response, next: NextFunction) =>
     );
 
     res.status(201).json({
-      id: lead.id,
-      sourcePlatform: lead.platform,
-      campaignId: lead.campaign_id,
-      leadStatus: lead.lead_status,
-      qualificationScore: deriveQualificationScore(lead as unknown as Record<string, unknown>),
-      consentStatus: lead.consent_status,
+      ...summarizeLead(lead as unknown as Record<string, unknown>),
       _label: 'Lead captured - no external CRM write',
     });
   } catch (err) {
