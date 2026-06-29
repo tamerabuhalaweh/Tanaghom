@@ -55,7 +55,7 @@ Expected result:
 - A non-technical manager should understand the current next action without reading architecture documents.
 - If the AI model or social channel is missing, the Dashboard should direct the user to setup.
 
-## Walkthrough 2A â€” Growth Engine
+## Walkthrough 2A - Growth Engine
 
 Purpose: understand whether social content is turning into course-sales output.
 
@@ -80,7 +80,7 @@ Expected result:
 - The product does not claim private social algorithm access.
 - If official analytics, GHL, SmartLabs, or Postiz are missing, the page should show setup requirements instead of fake data.
 
-## Walkthrough 3 — Create Campaign Ideas
+## Walkthrough 3 - Create Campaign Ideas
 
 Purpose: use AI to propose campaign directions.
 
@@ -108,30 +108,46 @@ Expected result:
 - The system creates a campaign from a human-selected idea.
 - The workflow does not create campaigns from autonomous AI decisions without user selection.
 
-## Walkthrough 4 — Campaigns
+## Walkthrough 4 - Campaigns
 
 Purpose: create/select campaigns and move through content preparation.
 
 1. Open **Campaigns**.
-2. Review **What this workspace does**.
-3. Review **Course Sales Starters**.
-4. Select a campaign template if the campaign is course-sales related.
-5. Click **Create From Template**, or click **New Campaign** if creating a custom campaign manually.
-6. Fill the campaign brief if using manual creation.
-7. Click **Create Campaign**.
-8. Select the campaign from **Campaign Queue**.
-9. Review **Campaign Brief**.
-10. Click **Generate Drafts**.
-11. Review **Platform Drafts**.
-12. Select or edit the strongest draft.
-13. Click **Review Quality**.
-14. Review score, quality notes, and risk/compliance indicators.
-15. Click **Send for Review**.
+2. Review the dark **Today's campaign step** panel at the top.
+   - It shows the current campaign.
+   - It shows the current workflow step.
+   - It shows the next required action.
+3. Use **Campaign Queue** to search or filter campaigns.
+   - **Active** shows active work.
+   - **Mine** shows campaigns created by the current user.
+   - **All** shows the broader workspace list.
+4. To create a campaign, click **New Campaign**.
+5. Choose one of the course-sales templates, or fill the custom campaign form.
+6. If using a template, click **Use Selected Template**.
+7. If using a custom brief, fill:
+   - campaign topic
+   - business objective
+   - target audience
+   - call to action
+   - owner department
+   - platforms
+   - review sensitivity
+8. Click **Create Custom Campaign**.
+9. Follow the highlighted current step:
+   - **Brief**: confirm audience, objective, offer, CTA, and platforms.
+   - **Drafts**: generate LinkedIn, Instagram, and X drafts.
+   - **Quality**: review the selected draft quality.
+   - **Approval**: send the selected draft for human review.
+   - **Package**: prepare the approved scheduling package.
+   - **Scheduling**: preview the scheduling-service payload.
+   - **Leads**: prepare CRM and voice/chat handoff paths.
+10. Use **Workflow Guide** to understand which steps are done, current, or locked.
 
 Expected result:
 
 - Campaign creation is user-driven.
 - Draft generation uses the configured backend AI provider.
+- The page shows one active step at a time instead of scattered inactive panels.
 - Drafts are reviewed before human approval.
 
 ## Walkthrough 5 — Review & Approve

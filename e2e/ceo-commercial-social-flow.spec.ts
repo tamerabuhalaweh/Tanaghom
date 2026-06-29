@@ -246,7 +246,9 @@ test('Commercial/Social product routes are wired with current UX vocabulary', as
   await page.locator('a[href="/campaigns"]:visible').click();
   await expect(page.getByRole('heading', { name: /^Campaigns$/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /New Campaign/i })).toBeVisible();
-  await expect(page.getByText(/Platform Drafts/i)).toBeVisible();
+  await expect(page.getByText(/Today's campaign step/i)).toBeVisible();
+  await expect(page.getByText(/Workflow Guide/i)).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2)).toBe(true);
 
   await page.locator('a[href="/approvals"]:visible').click();
   await expect(page.getByRole('heading', { name: /Review & Approve/i })).toBeVisible();

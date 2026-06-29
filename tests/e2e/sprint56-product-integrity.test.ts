@@ -136,4 +136,28 @@ describe('Sprint 56 production product integrity contracts', () => {
       expect(commandCenter, `${forbiddenStaticCue} should not dominate customer-facing Dashboard copy`).not.toContain(forbiddenStaticCue);
     }
   });
+
+  it('keeps Campaigns as a guided customer workflow instead of a scattered workspace', () => {
+    const campaigns = source('frontend', 'src', 'pages', 'CampaignWorkspace.tsx');
+
+    for (const requiredCustomerCue of [
+      "Today's campaign step",
+      'Create a Course-Sales Campaign',
+      'Workflow Guide',
+      'What happens next',
+      'Search campaigns',
+      'Only the current step opens in detail',
+      'Live Scheduling Controlled',
+    ]) {
+      expect(campaigns).toContain(requiredCustomerCue);
+    }
+
+    for (const oldScatteredCue of [
+      'What this workspace does',
+      'Course Sales Starters',
+      'Postiz payload preview',
+    ]) {
+      expect(campaigns, `${oldScatteredCue} should not remain in the customer-facing Campaigns copy`).not.toContain(oldScatteredCue);
+    }
+  });
 });
