@@ -24,6 +24,7 @@ describe('Sprint 56 production product integrity contracts', () => {
       '/smartlabs',
       '/ghl',
       '/leads',
+      '/social-growth',
     ];
 
     for (const prefix of contracts) {
@@ -38,6 +39,7 @@ describe('Sprint 56 production product integrity contracts', () => {
 
     const navigationContracts = [
       { path: '/command-center', route: 'command-center', label: 'Dashboard' },
+      { path: '/growth', route: 'growth', label: 'Growth Engine' },
       { path: '/campaigns', route: 'campaigns', label: 'Campaigns' },
       { path: '/ideas', route: 'ideas', label: 'Content Creator' },
       { path: '/approvals', route: 'approvals', label: 'Review & Approve' },
@@ -110,6 +112,7 @@ describe('Sprint 56 production product integrity contracts', () => {
       'analyticsApi.snapshots',
       'analyticsApi.reports',
       'integrationStatusApi.get',
+      'socialGrowthApi.summary',
     ]) {
       expect(commandCenter, `${runtimeApi} must feed Dashboard state`).toContain(runtimeApi);
     }
@@ -119,6 +122,8 @@ describe('Sprint 56 production product integrity contracts', () => {
       'Your Content Workflow',
       'Content Journey',
       'Performance & Results',
+      'Social Growth Control Room',
+      'Growth Engine Next Actions',
       'Generate Content',
       'Review Content Quality',
       'Send for Review',

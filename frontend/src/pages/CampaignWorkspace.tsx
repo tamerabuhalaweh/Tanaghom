@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, campaignsApi, postizApi, publishingPackageApi, usersApi } from '../api';
+import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, campaignsApi, postizApi, publishingPackageApi, socialGrowthApi, usersApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -50,6 +50,8 @@ export default function CampaignWorkspace() {
   const [providerReady, setProviderReady] = useState(false);
   const [providerLabel, setProviderLabel] = useState('Requires LLM provider');
   const [showCreate, setShowCreate] = useState(false);
+  const [templates, setTemplates] = useState<RecordMap[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [campaignForm, setCampaignForm] = useState({
     topic: '',
     objective: '',
@@ -63,6 +65,7 @@ export default function CampaignWorkspace() {
   });
 
   const selectedDraft = drafts.find(draft => String(draft.contentItemId) === selectedDraftId) || drafts[0] || null;
+  const selectedTemplate = templates.find(template => String(template.id) === selectedTemplateId) || templates[0] || null;
 
   useEffect(() => {
     if (!token) return;
@@ -70,15 +73,19 @@ export default function CampaignWorkspace() {
 
     async function run() {
       try {
-        const [data, departmentData] = await Promise.all([
+        const [data, departmentData, templateData] = await Promise.all([
           campaignsApi.list(token as string),
           usersApi.departments(token as string),
+          socialGrowthApi.templates(token as string).catch(() => ({ templates: [] })),
         ]);
         if (cancelled) return;
         const campaignList = list(data);
         const departmentList = list(departmentData);
         setCampaigns(campaignList);
         setDepartments(departmentList);
+        const templateList = list((templateData as RecordMap).templates);
+        setTemplates(templateList);
+        setSelectedTemplateId(current => current || String(templateList[0]?.id || ''));
         setSelected(current => current || campaignList[0] || null);
         setCampaignForm(current => ({
           ...current,
@@ -131,6 +138,22 @@ export default function CampaignWorkspace() {
       setMessage('Campaign created and selected. Next step: generate platform drafts.');
     } catch (error) {
       setMessage(`Campaign creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function createCampaignFromTemplate(templateId: string) {
+    if (!token) return;
+    setLoading(`template:${templateId}`);
+    setMessage('');
+    try {
+      const created = await socialGrowthApi.createCampaignFromTemplate(templateId, {}, token) as RecordMap;
+      setCampaigns(current => [created, ...current]);
+      selectCampaign(created);
+      setMessage('Course-sales campaign created from template. Next step: generate platform drafts.');
+    } catch (error) {
+      setMessage(`Template campaign creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading('');
     }
@@ -363,6 +386,64 @@ export default function CampaignWorkspace() {
           <a href="/ai-settings" className="font-semibold underline">Open AI Provider Settings</a>
         </Notice>
       )}
+
+      <ProductCard
+        title="Course Sales Starters"
+        subtitle="Use a customer-ready campaign motion for course launches, lead magnets, events, testimonials, or book/app-to-course conversion."
+        action={selectedTemplate ? (
+          <PrimaryAction
+            onClick={() => createCampaignFromTemplate(String(selectedTemplate.id))}
+            disabled={!canCreateCampaign || loading === `template:${String(selectedTemplate.id)}`}
+          >
+            {loading === `template:${String(selectedTemplate.id)}` ? 'Creating...' : 'Create From Template'}
+          </PrimaryAction>
+        ) : null}
+      >
+        {templates.length ? (
+          <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="space-y-3">
+              {templates.map(template => {
+                const active = String(template.id) === selectedTemplateId;
+                return (
+                  <button
+                    key={String(template.id)}
+                    type="button"
+                    onClick={() => setSelectedTemplateId(String(template.id))}
+                    className={`w-full rounded-lg border p-4 text-left transition ${active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'}`}
+                  >
+                    <div className="font-semibold">{text(template.name)}</div>
+                    <div className={`mt-2 text-sm leading-5 ${active ? 'text-white/65' : 'text-neutral-500'}`}>
+                      {text(template.useCase)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {selectedTemplate && (
+              <div className="space-y-4">
+                <DetailGrid
+                  items={[
+                    { label: 'Audience', value: text(selectedTemplate.audience) },
+                    { label: 'CTA', value: text(selectedTemplate.cta) },
+                    { label: 'Expected Outcome', value: text(selectedTemplate.expectedOutcome) },
+                    { label: 'Platforms', value: (Array.isArray(selectedTemplate.targetPlatforms) ? selectedTemplate.targetPlatforms.map(String).map(titleCase) : []).join(', ') },
+                  ]}
+                />
+                <ReadableQueue
+                  items={list(selectedTemplate.recommendedFunnel).map((step, index) => ({
+                    title: `Step ${index + 1}`,
+                    meta: text(step),
+                    status: index === 0 ? 'Start Here' : 'Next',
+                    tone: index === 0 ? 'good' : 'info',
+                  }))}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <EmptyProductState message="Course-sales templates are unavailable. You can still create a campaign manually below." />
+        )}
+      </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <ProductCard

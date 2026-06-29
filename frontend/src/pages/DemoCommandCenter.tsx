@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, analyticsApi, campaignsApi, commercialWorkflowApi, integrationStatusApi, leadsApi, postizApi, publishingPackageApi } from '../api';
+import { aiGenerationApi, aiProviderApi, algoApi, approvalsApi, analyticsApi, campaignsApi, commercialWorkflowApi, integrationStatusApi, leadsApi, postizApi, publishingPackageApi, socialGrowthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   BarList,
@@ -107,6 +107,7 @@ export default function DemoCommandCenter() {
   const [workflowState, setWorkflowState] = useState<RecordMap | null>(null);
   const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
   const [analytics, setAnalytics] = useState<RecordMap>({});
+  const [socialGrowth, setSocialGrowth] = useState<RecordMap | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
@@ -148,6 +149,9 @@ export default function DemoCommandCenter() {
   const displayPackageCount = numberValue(workflowCounts.publishingPackages) || publishingPackageCount;
   const displayQualifiedLeads = numberValue(workflowCounts.qualifiedLeads) || numberValue(leadStats?.qualified);
   const displayCapturedLeads = numberValue(workflowCounts.capturedLeads) || numberValue(leadStats?.total);
+  const growthKpis = (socialGrowth?.kpis || {}) as RecordMap;
+  const growthProfile = (socialGrowth?.profile || {}) as RecordMap;
+  const growthActions = list(socialGrowth?.recommendedNextActions);
 
   const selectedScore = (score || {}) as RecordMap;
   const totalScore = numberValue(selectedScore.totalScore);
@@ -249,6 +253,7 @@ export default function DemoCommandCenter() {
           integrationData,
           postizChannelData,
           workflowData,
+          growthData,
         ] = await Promise.all([
           campaignsApi.list(token as string),
           analyticsApi.sources(token as string),
@@ -262,6 +267,7 @@ export default function DemoCommandCenter() {
           integrationStatusApi.get(token as string).catch(() => null),
           postizApi.channels(token as string).catch(() => ({ channels: [] })),
           commercialWorkflowApi.state(token as string).catch(() => null),
+          socialGrowthApi.summary(token as string).catch(() => null),
         ]);
         if (cancelled) return;
         const campaignList = list(campaignData);
@@ -275,6 +281,7 @@ export default function DemoCommandCenter() {
         setIntegrationStatus(integrationData as RecordMap | null);
         setWorkflowState(workflowData as RecordMap | null);
         setPostizChannels(list(((postizChannelData as RecordMap)?.channels || []) as unknown));
+        setSocialGrowth(growthData as RecordMap | null);
         setAnalytics(buildAnalyticsSummary(list(sourceData), list(snapshotData), list(reportData)));
         try {
           const status = (await aiProviderApi.status(token as string)) as RecordMap;
@@ -329,6 +336,7 @@ export default function DemoCommandCenter() {
       setIntegrationStatus(integrationData as RecordMap | null);
       setPostizChannels(list(((postizChannelData as RecordMap)?.channels || []) as unknown));
       setWorkflowState(workflowData as RecordMap | null);
+      socialGrowthApi.summary(token).then(data => setSocialGrowth(data as RecordMap)).catch(() => undefined);
     } catch {
       setLeads([]);
       setLeadStats(null);
@@ -548,37 +556,42 @@ export default function DemoCommandCenter() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
-              Content Overview
+              Social Growth Control Room
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-white/58">
-              Campaign progress, content review status, and scheduling readiness at a glance.
+              {text(growthProfile.promise, 'AI-assisted content, course-sales leads, approval, scheduling readiness, and handoff status at a glance.')}
             </p>
           </div>
-          <ProductStatus tone={externalWritesEnabled && m5Enabled ? 'warn' : 'good'}>
-            {externalWritesEnabled && m5Enabled ? 'Publishing Armed' : 'Publishing Controlled'}
-          </ProductStatus>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/growth">
+              <ProductStatus tone="info">Open Growth Engine</ProductStatus>
+            </Link>
+            <ProductStatus tone={externalWritesEnabled && m5Enabled ? 'warn' : 'good'}>
+              {externalWritesEnabled && m5Enabled ? 'Publishing Armed' : 'Publishing Controlled'}
+            </ProductStatus>
+          </div>
         </div>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <ExecutiveKpiCard
-              label="Campaigns"
-              value={displayCampaignCount}
-              detail={selected ? `Active: ${campaignName(selected)}` : 'Create or select a campaign'}
+              label="Course Campaigns"
+              value={numberValue(growthKpis.activeCampaigns) || displayCampaignCount}
+              detail={selected ? `Active: ${campaignName(selected)}` : 'Start with a course launch, event, or lead magnet'}
               tone={displayCampaignCount ? 'info' : 'warn'}
-              series={[displayCampaignCount, drafts.length, displayPendingApprovals, displayPackageCount, leads.length]}
-              secondary="in progress"
+              series={[numberValue(growthKpis.activeCampaigns) || displayCampaignCount, numberValue(growthKpis.postsPrepared), displayPendingApprovals, displayPackageCount, leads.length]}
+              secondary="course sales motion"
             />
             <ExecutiveKpiCard
-              label="Awaiting review"
-              value={displayPendingApprovals}
-              detail={`${displayApprovedApprovals} approved`}
-              tone={displayPendingApprovals ? 'warn' : 'good'}
-              series={[approvals.length, displayPendingApprovals, displayApprovedApprovals]}
-              secondary="pending decisions"
+              label="Posts Prepared"
+              value={numberValue(growthKpis.postsPrepared) || drafts.length}
+              detail={`${displayPendingApprovals} awaiting review`}
+              tone={numberValue(growthKpis.postsPrepared) || drafts.length ? 'good' : 'warn'}
+              series={[numberValue(growthKpis.activeCampaigns), numberValue(growthKpis.postsPrepared), displayApprovedApprovals]}
+              secondary="AI content velocity"
             />
             <ExecutiveKpiCard
-              label="Content packages"
-              value={displayPackageCount}
+              label="Scheduling Packages"
+              value={numberValue(growthKpis.schedulingPackages) || displayPackageCount}
               detail={
                 connectedChannelCount
                   ? `${connectedChannelCount} channel(s) connected`
@@ -586,23 +599,23 @@ export default function DemoCommandCenter() {
               }
               tone={displayPackageCount && connectedChannelCount ? 'good' : 'warn'}
               series={[drafts.length, displayApprovedApprovals, displayPackageCount, connectedChannelCount]}
-              secondary="after review"
+              secondary="after approval"
             />
             <ExecutiveKpiCard
-              label="Customer interest"
-              value={displayQualifiedLeads}
-              detail={`${displayCapturedLeads} captured`}
+              label="Qualified Leads"
+              value={numberValue(growthKpis.qualifiedLeads) || displayQualifiedLeads}
+              detail={`${numberValue(growthKpis.capturedLeads) || displayCapturedLeads} captured / ${numberValue(growthKpis.courseCtaClicks)} CTA clicks`}
               tone={displayQualifiedLeads ? 'good' : 'info'}
-              series={[displayPackageCount, leads.length, displayQualifiedLeads]}
-              secondary="qualified leads"
+              series={[displayPackageCount, numberValue(growthKpis.capturedLeads) || leads.length, numberValue(growthKpis.qualifiedLeads) || displayQualifiedLeads]}
+              secondary="course-sales interest"
             />
           </div>
           <ExecutiveGauge
-            value={workflowReadiness}
-            label="Readiness"
+            value={numberValue(growthKpis.growthReadinessScore) || workflowReadiness}
+            label="Growth Readiness"
             detail={
               !selected
-                ? 'Choose a campaign.'
+                ? 'Create or choose a course-sales campaign.'
                 : !providerReady
                   ? 'Connect AI model.'
                   : !drafts.length
@@ -611,7 +624,7 @@ export default function DemoCommandCenter() {
                       ? 'Review and approve.'
                       : !packageResult
                         ? 'Prepare package.'
-                        : 'Ready for next step.'
+                        : 'Ready for lead and analytics follow-up.'
             }
           />
         </div>
@@ -619,12 +632,12 @@ export default function DemoCommandCenter() {
           <ExecutiveStatusGrid
             items={[
               {
-                label: 'Workflow run',
+                label: 'Course-sales workflow',
                 value: workflowRunReady ? titleCase(workflowRunStatus) : 'Start with campaign',
                 tone: workflowRunStatus === 'blocked' ? 'warn' : workflowRunReady ? 'good' : 'warn',
                 detail: workflowRunReady
                   ? `One governed journey is tracking this campaign across ${workflowStages.length || 6} steps. Current step: ${workflowRunActiveStage}${integrationConnectorCount ? `, with ${integrationConnectorCount} integration checks.` : '.'}`
-                  : 'Create or select a campaign to start the governed content journey.',
+                  : 'Create or select a course campaign to start the governed growth journey.',
               },
               {
                 label: 'AI model',
@@ -645,10 +658,10 @@ export default function DemoCommandCenter() {
                   : 'Add your scheduling service credentials to connect.',
               },
               {
-                label: 'Social channels',
+                label: 'Course lead handoff',
                 value: connectedChannelCount ? `${connectedChannelCount} channel(s)` : 'None',
-                tone: connectedChannelCount ? 'good' : 'warn',
-                detail: 'Connect social accounts through your scheduling service.',
+                tone: numberValue(growthKpis.qualifiedLeads) ? 'good' : 'info',
+                detail: `${numberValue(growthKpis.qualifiedLeads) || displayQualifiedLeads} qualified lead(s). GHL and SmartLabs need tenant credentials before live handoff.`,
               },
             ]}
           />
@@ -725,6 +738,23 @@ export default function DemoCommandCenter() {
               </Link>
             ))}
           </div>
+        </ProductCard>
+      )}
+
+      {growthActions.length > 0 && (
+        <ProductCard
+          title="Growth Engine Next Actions"
+          subtitle="The shortest path from content creation to course-sales impact."
+          action={<Link to="/growth" className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50">Open Growth Engine</Link>}
+        >
+          <ReadableQueue
+            items={growthActions.slice(0, 4).map(action => ({
+              title: text(action.title),
+              meta: text(action.detail),
+              status: titleCase(text(action.priority, 'medium')),
+              tone: text(action.priority) === 'high' ? 'warn' : 'info',
+            }))}
+          />
         </ProductCard>
       )}
 

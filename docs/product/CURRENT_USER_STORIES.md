@@ -18,6 +18,7 @@ As a Platform Admin, I can:
 
 - Sign in to the production workspace.
 - View the Dashboard and understand campaign progress, review load, scheduling readiness, customer interest, and workflow readiness.
+- Open **Growth Engine** to understand course-sales campaign progress, content velocity, qualified leads, CTA signals, integration readiness, and next best actions.
 - Add users from **Users & Roles**.
 - Assign business roles such as marketing manager, social media manager, reviewer, analyst, or admin.
 - Generate one-time onboarding tokens for new users.
@@ -26,6 +27,7 @@ As a Platform Admin, I can:
 - Store provider keys securely without exposing raw API keys back to the browser.
 - Configure integration credentials in **Credentials**.
 - Review Postiz scheduling status and connected channel requirements.
+- Review Social Algorithm Knowledge Pack sources and confirm that no private/social algorithm access is being claimed.
 - Review SmartLabs voice connector readiness.
 - Review integration and MCP connector registry entries in **Integrations**.
 - Manage workspace identity, lifecycle, subscription, entitlements, tenant export, deletion readiness, and deletion review from **Tenant Admin**.
@@ -41,6 +43,7 @@ As a Marketing Manager, I can:
 
 - Open the Dashboard to understand the current content workflow status.
 - Create a campaign brief from **Campaigns**.
+- Create a course-sales campaign from templates such as course launch, lead magnet, live event, testimonial, or book/app-to-course bridge.
 - Use **Content Creator** to generate campaign ideas after an AI model is connected.
 - Select a preferred idea and convert it into a campaign.
 - Generate platform-specific draft content for LinkedIn, Instagram, and X/Twitter.
@@ -50,6 +53,7 @@ As a Marketing Manager, I can:
 - Track whether content has been approved, rejected, or returned for changes.
 - Review approved content packages in **Scheduling**.
 - Review customer interest and performance in **Performance**.
+- Review Growth Engine next actions to understand what should happen next for course lead generation.
 
 ### Social Media Manager
 
@@ -59,6 +63,7 @@ As a Social Media Manager, I can:
 
 - View active campaigns assigned to the team.
 - Create or select a campaign brief.
+- Start from a course-sales campaign template when the goal is registration, lead capture, event signup, testimonial conversion, or book/app-to-course conversion.
 - Generate platform-specific content drafts.
 - Edit drafts before approval.
 - Review quality scoring and recommendations.
@@ -91,6 +96,7 @@ As an Analyst or Lead Manager, I can:
 - Open **Performance**.
 - See content results and customer-interest indicators as data becomes available.
 - Review captured and qualified leads.
+- Review course CTA clicks and lead qualification rate when official analytics data is connected.
 - Understand whether GHL, SmartLabs voice, WhatsApp, Telegram, or other handoff channels are configured.
 - Prepare handoff packages when credentials and authorization exist.
 - Confirm that no external CRM, messaging, or voice execution happens without customer-owned credentials and approval.
@@ -121,6 +127,7 @@ The current product provides a usable Commercial/Social operating workflow:
 8. Performance and customer-interest view.
 9. Lead and handoff readiness.
 10. Tenant, user, credential, security, and operations administration.
+11. Course-sales Growth Engine with governed algorithm guidance, course campaign templates, lead funnel visibility, and CRM/voice readiness.
 
 ## Customer-Owned Prerequisites
 
@@ -131,7 +138,7 @@ The following are not hardcoded by Tanaghum and must be supplied by the customer
 - Meta/Facebook/Instagram business account requirements where applicable.
 - GoHighLevel API/MCP credentials if CRM handoff execution is required.
 - WhatsApp, Telegram, SmartLabs voice, or other channel credentials.
+- Official social analytics access if course CTA clicks, engagement rate, and platform performance should be pulled automatically.
 - External alert destination.
 - Off-server backup destination.
 - Billing/payment-provider decision if automated billing is required.
-

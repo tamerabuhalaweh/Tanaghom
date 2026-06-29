@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { analyticsApi, ghlApi, leadsApi } from '../api';
+import { analyticsApi, ghlApi, leadsApi, socialGrowthApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -57,6 +57,7 @@ export default function Analytics() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState('');
   const [pageLoading, setPageLoading] = useState(Boolean(token));
+  const [growthSummary, setGrowthSummary] = useState<RecordMap | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [leadForm, setLeadForm] = useState({
     sourcePlatform: 'linkedin',
@@ -68,18 +69,20 @@ export default function Analytics() {
 
   async function load() {
     if (!token) return;
-    const [sourceData, snapshotData, reportData, leadData, statsData] = await Promise.all([
+    const [sourceData, snapshotData, reportData, leadData, statsData, growthData] = await Promise.all([
       analyticsApi.sources(token),
       analyticsApi.snapshots(token),
       analyticsApi.reports(token),
       leadsApi.list(token),
       leadsApi.stats(token),
+      socialGrowthApi.summary(token).catch(() => null),
     ]);
     setSources(list(sourceData));
     setSnapshots(list(snapshotData));
     setReports(list(reportData));
     setLeads(list(leadData));
     setLeadStats(statsData as RecordMap);
+    setGrowthSummary(growthData as RecordMap | null);
   }
 
   useEffect(() => {
@@ -121,6 +124,9 @@ export default function Analytics() {
   const qualified = numberValue(leadStats?.qualified);
   const totalLeads = numberValue(leadStats?.total);
   const hasAnalyticsData = snapshots.length > 0 || reports.length > 0;
+  const growthKpis = (growthSummary?.kpis || {}) as RecordMap;
+  const growthIntegrations = (growthSummary?.integrations || {}) as RecordMap;
+  const growthFunnel = list(growthSummary?.funnel);
 
   const selectedLeadDetails = useMemo(
     () =>
@@ -275,6 +281,48 @@ export default function Analytics() {
           tone={qualified ? 'good' : totalLeads ? 'info' : 'default'}
         />
       </div>
+
+      <ProductCard
+        title="Course Sales Performance"
+        subtitle="How social content is converting into course interest. These values come from internal records and connected analytics only."
+      >
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <FunnelChart
+            stages={growthFunnel.length ? growthFunnel.map(stage => ({
+              label: text(stage.label),
+              value: numberValue(stage.value),
+              tone: numberValue(stage.value) ? 'info' : 'default',
+            })) : [
+              { label: 'Campaigns', value: numberValue(growthKpis.activeCampaigns), tone: 'info' },
+              { label: 'Drafts', value: numberValue(growthKpis.postsPrepared), tone: 'info' },
+              { label: 'Leads', value: totalLeads, tone: totalLeads ? 'good' : 'default' },
+              { label: 'Qualified', value: qualified, tone: qualified ? 'good' : 'default' },
+            ]}
+          />
+          <ReadableQueue
+            items={[
+              {
+                title: 'Course CTA clicks',
+                meta: 'Captured when official analytics snapshots include click metrics.',
+                status: String(numberValue(growthKpis.courseCtaClicks)),
+                tone: numberValue(growthKpis.courseCtaClicks) ? 'good' : 'default',
+              },
+              {
+                title: 'GoHighLevel handoff',
+                meta: 'Qualified leads can be prepared for CRM after tenant-owned credentials are configured.',
+                status: titleCase(text(growthIntegrations.goHighLevel, 'requires_credentials')),
+                tone: text(growthIntegrations.goHighLevel) === 'configured' ? 'good' : 'warn',
+              },
+              {
+                title: 'SmartLabs voice/chat',
+                meta: 'Hot leads can be prepared for the existing voice/chat agent after tenant credentials and execution approval.',
+                status: titleCase(text(growthIntegrations.smartLabsVoice, 'requires_credentials')),
+                tone: text(growthIntegrations.smartLabsVoice) === 'configured' ? 'good' : 'warn',
+              },
+            ]}
+          />
+        </div>
+      </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)_380px]">
         <ScoreRing

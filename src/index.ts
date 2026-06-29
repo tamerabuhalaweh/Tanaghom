@@ -39,6 +39,7 @@ import { commercialWorkflowRouter } from '../modules/commercial-workflow/control
 import { tenantAdminRouter } from '../modules/tenant-admin/controller';
 import { operationsRouter } from '../modules/operations/controller';
 import { smartLabsVoiceRouter } from '../modules/smartlabs-voice/controller';
+import { socialGrowthRouter } from '../modules/social-growth/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -243,6 +244,7 @@ app.use('/admin/users', adminUsersRouter);
 app.use('/admin/tenant', tenantAdminRouter);
 app.use('/ops', operationsRouter);
 app.use('/smartlabs', smartLabsVoiceRouter);
+app.use('/social-growth', socialGrowthRouter);
 app.use('/integrations', integrationsRouter);
 app.use('/leads', leadsRouter);
 app.use('/ghl', ghlRouter);

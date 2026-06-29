@@ -34,6 +34,7 @@ import AccountSecurity from './pages/AccountSecurity'
 import TenantAdmin from './pages/TenantAdmin'
 import OperationsReadiness from './pages/OperationsReadiness'
 import SmartLabsVoice from './pages/SmartLabsVoice'
+import SocialGrowthIntelligence from './pages/SocialGrowthIntelligence'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -61,6 +62,7 @@ function App() {
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DemoCommandCenter />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
+            <Route path="growth" element={<SocialGrowthIntelligence />} />
             <Route path="approvals" element={<ApprovalQueue />} />
             <Route path="saif" element={<SaifDecisions />} />
             <Route path="capabilities" element={<CapabilityResolution />} />
@@ -88,6 +90,7 @@ function App() {
             <Route path="ghl-wizard" element={<GhlWizard />} />
             <Route path="dashboard" element={<DemoCommandCenter />} />
             <Route path="command-center" element={<DemoCommandCenter />} />
+            <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />
             <Route path="content" element={<PostIdeas />} />
             <Route path="ideas" element={<PostIdeas />} />
             <Route path="draft-studio" element={<PostIdeas />} />

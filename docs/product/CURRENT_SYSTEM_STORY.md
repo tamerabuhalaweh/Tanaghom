@@ -19,18 +19,28 @@ The system does not hardcode customer integrations. Each customer tenant brings 
    - AI model status
    - Scheduling service status
    - Social channel status
-4. A marketing user creates or selects a campaign.
-5. If an AI provider is configured, the user can generate campaign ideas and platform-specific drafts.
-6. Drafts are saved as content records and can be edited by the user.
-7. The selected draft is reviewed for quality and readiness.
-8. The user submits the draft for human review.
-9. A reviewer approves, rejects, or requests changes.
-10. Approved content unlocks publishing package preparation.
-11. The system prepares a scheduling payload for Postiz-compatible scheduling.
-12. Scheduling execution remains controlled until the customer has connected a real channel and authorized scheduling.
-13. Performance and customer-interest views show real internal records and connected data sources as they become available.
-14. Lead and handoff packages can be prepared for CRM or voice/chat systems when tenant credentials exist.
-15. Administrative actions, workflow activity, credentials, and security-sensitive operations are recorded for evidence.
+   - Course-sales growth readiness
+   - Qualified leads and course CTA signals where connected data exists
+4. The Growth Engine summarizes the course-sales operating model:
+   - course campaign templates,
+   - content velocity,
+   - course lead funnel,
+   - Social Algorithm Knowledge Pack,
+   - GoHighLevel and SmartLabs readiness,
+   - recommended next actions.
+5. A marketing user creates or selects a campaign, including course-sales templates for launch, lead magnet, event, testimonial, or book/app-to-course conversion.
+6. If an AI provider is configured, the user can generate campaign ideas and platform-specific drafts.
+7. Drafts are saved as content records and can be edited by the user.
+8. The selected draft is reviewed for quality and readiness.
+9. The Social Algorithm Knowledge Pack supplies approved guidance for hook, CTA, format, hashtag, risk, and platform-fit recommendations.
+10. The user submits the draft for human review.
+11. A reviewer approves, rejects, or requests changes.
+12. Approved content unlocks publishing package preparation.
+13. The system prepares a scheduling payload for Postiz-compatible scheduling.
+14. Scheduling execution remains controlled until the customer has connected a real channel and authorized scheduling.
+15. Performance and customer-interest views show real internal records and connected data sources as they become available.
+16. Lead and handoff packages can be prepared for CRM or voice/chat systems when tenant credentials exist.
+17. Administrative actions, workflow activity, credentials, and security-sensitive operations are recorded for evidence.
 
 ## Current Architecture Behavior
 
@@ -51,11 +61,19 @@ The system does not hardcode customer integrations. Each customer tenant brings 
 
 ### Campaign and Content Workflow
 
-- Campaigns are created from user-entered briefs or selected AI-generated ideas.
+- Campaigns are created from user-entered briefs, selected AI-generated ideas, or governed course-sales templates.
 - Content drafts are generated per platform.
 - Users can edit drafts.
 - The system scores/reviews content quality before approval.
 - Human approval is mandatory before scheduling preparation.
+
+### Social Growth Intelligence
+
+- The Growth Engine calculates KPIs from real tenant records: campaigns, drafts, approvals, packages, leads, and analytics snapshots.
+- Course-sales templates create real campaign records and then use the same AI drafting, scoring, approval, packaging, and handoff workflow.
+- The Social Algorithm Knowledge Pack uses official/public references, approved platform rules, and customer-owned analytics when connected.
+- The platform does not claim access to private platform algorithms, does not scrape, does not fake engagement, and does not invent social metrics.
+- Official social analytics connectors are still required before course CTA clicks, reach, engagement, and platform performance become complete live data.
 
 ### Publishing and Postiz
 
@@ -112,4 +130,3 @@ The platform is stronger than the previous deployed version, but these remain be
 - OpenClaw, agentgateway, and AgentScope are not full production runtime infrastructure yet.
 - Independent penetration test is still required.
 - Final browser CSP/security verification should be repeated after customer domain finalization.
-

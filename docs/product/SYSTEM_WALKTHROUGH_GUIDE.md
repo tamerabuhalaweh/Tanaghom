@@ -32,27 +32,53 @@ Confirm these basics:
 Purpose: understand the current Commercial/Social workspace at a glance.
 
 1. Open **Dashboard** from the sidebar.
-2. Review **Content Overview**.
+2. Review **Social Growth Control Room**.
 3. Confirm these cards are visible:
-   - Campaigns
-   - Awaiting review
-   - Content packages
-   - Customer interest
-   - Readiness
+   - Course Campaigns
+   - Posts Prepared
+   - Scheduling Packages
+   - Qualified Leads
+   - Growth Readiness
 4. Review the status grid:
    - Workflow run
    - AI model
    - Scheduling service
    - Social channels
 5. Review **Quick Setup** if any item needs attention.
-6. Review **Your Content Workflow**.
-7. Review **Content Journey**.
-8. Review **Performance & Results**.
+6. Review **Growth Engine Next Actions** if shown.
+7. Review **Your Content Workflow**.
+8. Review **Content Journey**.
+9. Review **Performance & Results**.
 
 Expected result:
 
 - A non-technical manager should understand the current next action without reading architecture documents.
 - If the AI model or social channel is missing, the Dashboard should direct the user to setup.
+
+## Walkthrough 2A â€” Growth Engine
+
+Purpose: understand whether social content is turning into course-sales output.
+
+1. Open **Growth Engine** from the sidebar.
+2. Review **Course Sales Command Center**.
+3. Confirm the KPI cards are visible:
+   - Campaigns
+   - Posts Prepared
+   - Qualified Leads
+   - Growth Readiness
+4. Review **What this system improves for the customer**.
+5. Review **Course Sales Funnel**.
+6. Review **Next Best Actions**.
+7. Review **Course Campaign Templates**.
+8. Select one template, such as **Course Launch Waitlist** or **Lead Magnet / Comment Keyword**.
+9. Click **Create Selected Campaign** if your role allows campaign creation.
+10. Review **Social Algorithm Knowledge Pack**.
+
+Expected result:
+
+- The user understands how the system supports course launches, lead magnets, events, testimonials, and book/app-to-course conversion.
+- The product does not claim private social algorithm access.
+- If official analytics, GHL, SmartLabs, or Postiz are missing, the page should show setup requirements instead of fake data.
 
 ## Walkthrough 3 — Create Campaign Ideas
 
@@ -88,17 +114,19 @@ Purpose: create/select campaigns and move through content preparation.
 
 1. Open **Campaigns**.
 2. Review **What this workspace does**.
-3. Click **New Campaign** if creating a new campaign manually.
-4. Fill the campaign brief.
-5. Click **Create Campaign**.
-6. Select the campaign from **Campaign Queue**.
-7. Review **Campaign Brief**.
-8. Click **Generate Drafts**.
-9. Review **Platform Drafts**.
-10. Select or edit the strongest draft.
-11. Click **Review Quality**.
-12. Review score, quality notes, and risk/compliance indicators.
-13. Click **Send for Review**.
+3. Review **Course Sales Starters**.
+4. Select a campaign template if the campaign is course-sales related.
+5. Click **Create From Template**, or click **New Campaign** if creating a custom campaign manually.
+6. Fill the campaign brief if using manual creation.
+7. Click **Create Campaign**.
+8. Select the campaign from **Campaign Queue**.
+9. Review **Campaign Brief**.
+10. Click **Generate Drafts**.
+11. Review **Platform Drafts**.
+12. Select or edit the strongest draft.
+13. Click **Review Quality**.
+14. Review score, quality notes, and risk/compliance indicators.
+15. Click **Send for Review**.
 
 Expected result:
 
@@ -262,4 +290,3 @@ The following are not product UI bugs; they require customer/operator inputs:
 - Customer SmartLabs voice key if voice execution is required.
 - Customer social OAuth provider credentials.
 - Payment provider for automated billing.
-

@@ -363,3 +363,11 @@ export const ideasApi = {
   convertToCampaign: (data: unknown, token: string) =>
     apiFetch<unknown>('/ideas/convert-to-campaign', { method: 'POST', body: data, token }),
 };
+
+export const socialGrowthApi = {
+  summary: (token: string) => apiFetch<unknown>('/social-growth/summary', { token }),
+  templates: (token: string) => apiFetch<unknown>('/social-growth/templates', { token }),
+  createCampaignFromTemplate: (templateId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/social-growth/templates/${templateId}/campaign`, { method: 'POST', body: data, token }),
+  algorithmPack: (token: string) => apiFetch<unknown>('/social-growth/algorithm-pack', { token }),
+};
