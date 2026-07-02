@@ -6,6 +6,8 @@ import {
   validateTransitionEvent,
   validateLinkCampaign,
   validateLinkLead,
+  validateCreateKpiRecord,
+  validateUpdateKpiRecord,
 } from '../validators';
 import { ValidationError } from '@shared/errors';
 
@@ -172,6 +174,53 @@ describe('commercial-events/validators', () => {
 
     it('rejects invalid UUID', () => {
       expect(() => validateLinkLead({ leadId: 'not-a-uuid' })).toThrow(ValidationError);
+    });
+  });
+
+  describe('validateCreateKpiRecord', () => {
+    it('accepts valid manual KPI input', () => {
+      const result = validateCreateKpiRecord({
+        metricDate: '2026-07-02T12:00:00Z',
+        channel: 'instagram',
+        reach: 12000,
+        impressions: 18000,
+        interactions: 950,
+        formCompletions: 80,
+        leads: 52,
+        meetingsBooked: 16,
+        purchases: 7,
+        spend: 1500,
+      });
+
+      expect(result.metricDate).toBe('2026-07-02T12:00:00Z');
+      expect(result.channel).toBe('instagram');
+      expect(result.leads).toBe(52);
+    });
+
+    it('rejects negative KPI values', () => {
+      expect(() => validateCreateKpiRecord({
+        metricDate: '2026-07-02T12:00:00Z',
+        leads: -1,
+      })).toThrow(ValidationError);
+    });
+
+    it('rejects invalid metric date', () => {
+      expect(() => validateCreateKpiRecord({
+        metricDate: 'not-a-date',
+        leads: 10,
+      })).toThrow(ValidationError);
+    });
+  });
+
+  describe('validateUpdateKpiRecord', () => {
+    it('accepts partial KPI update', () => {
+      const result = validateUpdateKpiRecord({ purchases: 8, notes: 'Updated after sales review' });
+      expect(result.purchases).toBe(8);
+      expect(result.notes).toBe('Updated after sales review');
+    });
+
+    it('rejects empty KPI update', () => {
+      expect(() => validateUpdateKpiRecord({})).toThrow(ValidationError);
     });
   });
 });

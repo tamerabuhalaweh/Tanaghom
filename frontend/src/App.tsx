@@ -35,6 +35,8 @@ import TenantAdmin from './pages/TenantAdmin'
 import OperationsReadiness from './pages/OperationsReadiness'
 import SmartLabsVoice from './pages/SmartLabsVoice'
 import SocialGrowthIntelligence from './pages/SocialGrowthIntelligence'
+import EventDashboard from './pages/EventDashboard'
+import EventStrategyWizard from './pages/EventStrategyWizard'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -61,6 +63,9 @@ function App() {
           <Route path="/accept-onboarding" element={<AcceptOnboarding />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DemoCommandCenter />} />
+            <Route path="events" element={<EventDashboard />} />
+            <Route path="events/new" element={<EventStrategyWizard />} />
+            <Route path="events/:eventId" element={<EventDashboard />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
             <Route path="approvals" element={<ApprovalQueue />} />

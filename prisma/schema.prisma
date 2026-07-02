@@ -112,6 +112,7 @@ model Tenant {
   lead_capture_records LeadCaptureRecord[]
   commercial_workflow_runs CommercialWorkflowRun[]
   commercial_events CommercialEvent[]
+  event_kpi_records EventKpiRecord[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
 
@@ -3313,6 +3314,12 @@ enum CommercialEventStatus {
   cancelled
 }
 
+enum EventKpiSourceType {
+  manual
+  imported
+  connector
+}
+
 model CommercialEvent {
   id                  String               @id @default(uuid()) @db.Uuid
   tenant_key          String
@@ -3345,6 +3352,7 @@ model CommercialEvent {
   campaigns           ContentRequest[]     @relation("EventCampaigns")
   leads               LeadCaptureRecord[]  @relation("EventLeads")
   publishing_packages PublishingPackage[]  @relation("EventPublishingPackages")
+  kpi_records         EventKpiRecord[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -3352,4 +3360,40 @@ model CommercialEvent {
   @@index([owner_user_id])
   @@index([event_date])
   @@map("commercial_events")
+}
+
+model EventKpiRecord {
+  id                 String             @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  event_id           String             @db.Uuid
+  source_type        EventKpiSourceType @default(manual)
+  source_name        String             @default("manual")
+  metric_date        DateTime
+  channel            String             @default("manual")
+  reach              Int                @default(0)
+  impressions        Int                @default(0)
+  interactions       Int                @default(0)
+  clicks             Int                @default(0)
+  form_completions   Int                @default(0)
+  leads              Int                @default(0)
+  meetings_booked    Int                @default(0)
+  meetings_attended  Int                @default(0)
+  purchases          Int                @default(0)
+  no_shows           Int                @default(0)
+  spend              Decimal            @default(0) @db.Decimal(12, 2)
+  notes              String?            @db.Text
+  created_by_user_id String             @db.Uuid
+  updated_by_user_id String?            @db.Uuid
+  created_at         DateTime           @default(now())
+  updated_at         DateTime           @updatedAt
+
+  tenant             Tenant             @relation(fields: [tenant_key], references: [tenant_key])
+  event              CommercialEvent    @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([metric_date])
+  @@index([channel])
+  @@index([source_type])
+  @@map("event_kpi_records")
 }
