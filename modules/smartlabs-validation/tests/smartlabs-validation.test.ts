@@ -24,7 +24,7 @@ describe('SmartLabs voice validation', () => {
     const credential = assessCredentialReadiness({
       configured: true,
       source: 'tenant_vault',
-      apiKey: 'sk-tenant-owned',
+      apiKey: 'tenant-owned-api-key-placeholder',
       baseUrl: 'https://api.thesmartlabs.net',
       agentId: 'agent-123',
       voiceId: 'smarttts2-xms-default',
@@ -43,7 +43,7 @@ describe('SmartLabs voice validation', () => {
     const credential = assessCredentialReadiness({
       configured: true,
       source: 'tenant_vault',
-      apiKey: 'sk-tenant-owned',
+      apiKey: 'tenant-owned-api-key-placeholder',
       baseUrl: '',
       agentId: 'agent-123',
       voiceId: '',
@@ -90,7 +90,7 @@ describe('SmartLabs voice validation', () => {
     const credential = assessCredentialReadiness({
       configured: true,
       source: 'tenant_vault',
-      apiKey: 'sk-tenant-owned',
+      apiKey: 'tenant-owned-api-key-placeholder',
       baseUrl: 'https://api.thesmartlabs.net',
       agentId: 'agent-123',
       voiceId: 'smarttts2-xms-default',
@@ -116,7 +116,7 @@ describe('SmartLabs voice validation', () => {
     const credential = assessCredentialReadiness({
       configured: true,
       source: 'tenant_vault',
-      apiKey: 'sk-super-secret-tenant-key',
+      apiKey: 'tenant-secret-placeholder',
       baseUrl: 'https://api.thesmartlabs.net',
       agentId: 'agent-123',
       voiceId: 'smarttts2-xms-default',
@@ -132,7 +132,7 @@ describe('SmartLabs voice validation', () => {
     });
 
     const serialized = JSON.stringify(summary);
-    expect(serialized).not.toContain('sk-super-secret-tenant-key');
+    expect(serialized).not.toContain('tenant-secret-placeholder');
     expect(summary.safety.rawSecretsReturned).toBe(false);
   });
 
@@ -140,7 +140,7 @@ describe('SmartLabs voice validation', () => {
     const credential = assessCredentialReadiness({
       configured: true,
       source: 'tenant_vault',
-      apiKey: 'sk-tenant-owned',
+      apiKey: 'tenant-owned-api-key-placeholder',
       baseUrl: 'https://api.thesmartlabs.net',
       agentId: 'agent-123',
       voiceId: 'smarttts2-xms-default',
