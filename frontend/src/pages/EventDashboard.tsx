@@ -481,6 +481,7 @@ export default function EventDashboard() {
       action={(
         <>
           <ProductStatus tone="info">Amro Workspace</ProductStatus>
+          <SecondaryAction onClick={() => navigate('/events/master')}>Portfolio Dashboard</SecondaryAction>
           <PrimaryAction onClick={() => navigate('/events/new')}>Create Event</PrimaryAction>
         </>
       )}

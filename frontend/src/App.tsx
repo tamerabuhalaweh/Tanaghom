@@ -37,6 +37,7 @@ import SmartLabsVoice from './pages/SmartLabsVoice'
 import SocialGrowthIntelligence from './pages/SocialGrowthIntelligence'
 import EventDashboard from './pages/EventDashboard'
 import EventStrategyWizard from './pages/EventStrategyWizard'
+import MasterEventsDashboard from './pages/MasterEventsDashboard'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -63,6 +64,7 @@ function App() {
           <Route path="/accept-onboarding" element={<AcceptOnboarding />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DemoCommandCenter />} />
+            <Route path="events/master" element={<MasterEventsDashboard />} />
             <Route path="events" element={<EventDashboard />} />
             <Route path="events/new" element={<EventStrategyWizard />} />
             <Route path="events/:eventId" element={<EventDashboard />} />
