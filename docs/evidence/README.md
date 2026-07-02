@@ -12,6 +12,8 @@
 | Acceptance Checklist | [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md) | Pre-demo verification |
 | Customer Onboarding Guide | [../product/CUSTOMER_ONBOARDING_AND_OPERATOR_GUIDE.md](../product/CUSTOMER_ONBOARDING_AND_OPERATOR_GUIDE.md) | Customer/operator handoff workflow |
 | Customer-Owned Credential Checklist | [../integrations/CUSTOMER_OWNED_CREDENTIAL_CHECKLIST.md](../integrations/CUSTOMER_OWNED_CREDENTIAL_CHECKLIST.md) | Required customer accounts, credentials, scopes, and gated actions |
+| Sprint 65 Customer Acceptance Workflow | [sprint-65/CUSTOMER_ACCEPTANCE_WORKFLOW.md](sprint-65/CUSTOMER_ACCEPTANCE_WORKFLOW.md) | Final 15-minute customer acceptance path |
+| Sprint 65 Deployed Release Gate | [sprint-65/DEPLOYED_RELEASE_GATE.md](sprint-65/DEPLOYED_RELEASE_GATE.md) | VPS smoke, operations, and release decision evidence |
 
 ## Usage
 

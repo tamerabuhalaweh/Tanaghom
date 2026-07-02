@@ -1,0 +1,52 @@
+name: Sprint 65 Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Frontend URL to test
+        required: true
+        default: https://tanaghum.163-123-180-104.sslip.io
+      api_base_url:
+        description: Backend API URL to test
+        required: true
+        default: https://tanaghum.163-123-180-104.sslip.io/api
+      allow_acceptance_writes:
+        description: Allow test event/lead writes on approved sandbox/test tenant
+        required: true
+        type: boolean
+        default: false
+      require_real_ai:
+        description: Fail unless real AI generation is configured and usable
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  sprint65-acceptance:
+    runs-on: ubuntu-latest
+
+    env:
+      E2E_SPRINT65_ACCEPTANCE: "true"
+      E2E_BASE_URL: ${{ inputs.base_url }}
+      E2E_API_BASE_URL: ${{ inputs.api_base_url }}
+      E2E_ALLOW_ACCEPTANCE_WRITES: ${{ inputs.allow_acceptance_writes }}
+      E2E_REQUIRE_REAL_AI: ${{ inputs.require_real_ai }}
+      E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+      E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Sprint 65 customer acceptance
+        run: npm run test:e2e:sprint65

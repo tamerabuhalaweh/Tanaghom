@@ -501,6 +501,11 @@ Turn the event-centered product into a customer-acceptable release candidate.
 - `docs/product/CUSTOMER_ONBOARDING_AND_OPERATOR_GUIDE.md`
 - `docs/integrations/CUSTOMER_OWNED_CREDENTIAL_CHECKLIST.md`
 - `docs/sprints/SPRINT-65-customer-onboarding-credential-readiness.md`
+- `e2e/sprint65-customer-acceptance.spec.ts`
+- `.github/workflows/sprint65-acceptance.yml`
+- `docs/evidence/sprint-65/CUSTOMER_ACCEPTANCE_WORKFLOW.md`
+- `docs/evidence/sprint-65/DEPLOYED_RELEASE_GATE.md`
+- `docs/sprints/SPRINT-65-acceptance-release-gate.md`
 
 ## Integration Sequencing Rules
 
