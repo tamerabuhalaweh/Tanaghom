@@ -161,9 +161,9 @@ function dashboardBody(events: EventRecord[], records: KpiRecord[]) {
     campaigns: [],
     leads: [],
     sourceStatus: {
-      manualRecords: records.length,
-      importedRecords: 0,
-      connectorRecords: 0,
+      manualRecords: records.filter(record => record.sourceType === 'manual').length,
+      importedRecords: records.filter(record => record.sourceType === 'imported').length,
+      connectorRecords: records.filter(record => record.sourceType === 'connector').length,
     },
   };
 }
@@ -171,6 +171,16 @@ function dashboardBody(events: EventRecord[], records: KpiRecord[]) {
 async function installEventApiMocks(page: Page) {
   const events: EventRecord[] = [];
   const records: KpiRecord[] = [];
+  const mappings: Array<{
+    id: string;
+    eventId: string;
+    connectorId: string;
+    displayName: string;
+    targetType: string;
+    validationStatus: string;
+    fieldMappings: Array<{ sourceField: string; targetField: string }>;
+  }> = [];
+  let lastDryRunRows: KpiRecord[] = [];
 
   await page.route(/http:\/\/(127\.0\.0\.1|localhost):4000\/.*/, async (route) => {
     const url = new URL(route.request().url());
@@ -249,6 +259,81 @@ async function installEventApiMocks(page: Page) {
       return;
     }
 
+    if (pathname === '/connector-mappings' && method === 'GET') {
+      await json(mappings);
+      return;
+    }
+
+    if (pathname === '/connector-mappings' && method === 'POST') {
+      const body = route.request().postDataJSON() as {
+        eventId: string;
+        connectorId: string;
+        displayName: string;
+        targetType: string;
+        fieldMappings: Array<{ sourceField: string; targetField: string }>;
+      };
+      const mapping = {
+        id: 'mapping-11111111-1111-4111-8111-111111111111',
+        eventId: body.eventId,
+        connectorId: body.connectorId,
+        displayName: body.displayName,
+        targetType: body.targetType,
+        validationStatus: 'valid',
+        fieldMappings: body.fieldMappings,
+      };
+      mappings.splice(0, mappings.length, mapping);
+      await json(mapping, 201);
+      return;
+    }
+
+    if (pathname === '/csv-import/dry-run' && method === 'POST') {
+      const body = route.request().postDataJSON() as {
+        eventId: string;
+        mappingId: string;
+        rows: Array<Record<string, string>>;
+      };
+      lastDryRunRows = body.rows.map((row, index) => ({
+        id: `dry-run-${index + 1}`,
+        metricDate: `${row.date || row.metricDate}T12:00:00.000Z`,
+        channel: row.channel || 'manual',
+        reach: Number(row.reach || 0),
+        impressions: Number(row.impressions || 0),
+        interactions: Number(row.interactions || 0),
+        clicks: Number(row.clicks || 0),
+        formCompletions: Number(row.formCompletions || row.forms || 0),
+        leads: Number(row.leads || 0),
+        meetingsBooked: Number(row.meetingsBooked || row.meetings || 0),
+        meetingsAttended: Number(row.meetingsAttended || 0),
+        purchases: Number(row.purchases || 0),
+        noShows: Number(row.noShows || 0),
+        spend: Number(row.spend || 0),
+        sourceType: 'connector',
+      }));
+      await json({
+        mappingId: body.mappingId,
+        eventId: body.eventId,
+        mappingUpdatedAt: '2026-07-02T12:00:00.000Z',
+        totalRows: body.rows.length,
+        validRows: lastDryRunRows.length,
+        invalidRows: 0,
+        kpiRows: lastDryRunRows,
+        validationErrors: [],
+        warnings: [],
+      });
+      return;
+    }
+
+    if (pathname === '/csv-import/approve-import' && method === 'POST') {
+      records.push(...lastDryRunRows);
+      await json({
+        mappingId: 'mapping-11111111-1111-4111-8111-111111111111',
+        eventId: eventRecord.id,
+        imported: { kpiRecords: lastDryRunRows.length },
+        auditRecordId: 'audit-1',
+      });
+      return;
+    }
+
     await json({});
   });
 }
@@ -293,5 +378,18 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
   await expect(page.getByText(/2,800 SAR actual spend/i)).toBeVisible();
   await expect(page.getByText(/Channel Performance/i)).toBeVisible();
   await expect(page.getByText(/KPI Evidence/i)).toBeVisible();
+
+  await expect(page.getByText(/Import KPI CSV/i)).toBeVisible();
+  await page.getByLabel(/CSV rows/i).fill('date,channel,leads,purchases,spend\n2026-07-03,formaloo,11,2,350');
+  await page.getByRole('button', { name: /Detect Headers/i }).click();
+  await expect(page.getByText(/Headers detected/i)).toBeVisible();
+  await page.getByRole('button', { name: /Save Mapping/i }).click();
+  await expect(page.getByText(/Connector mapping saved/i)).toBeVisible();
+  await page.getByRole('button', { name: /Run Dry-Run/i }).click();
+  await expect(page.getByText(/Dry-run complete: 1 valid row/i)).toBeVisible();
+  await page.getByRole('button', { name: /Approve Import/i }).click();
+  await expect(page.getByText(/Import approved: 1 KPI record/i)).toBeVisible();
+  await expect(page.getByText(/Approved Import Active/i)).toBeVisible();
+  await expect(page.getByText(/1 connector/i)).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });

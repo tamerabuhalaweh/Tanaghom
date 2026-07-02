@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, leadsApi } from '../api';
+import { connectorMappingsApi, csvImportApi, eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, leadsApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -32,6 +32,7 @@ type ContentAssetType = 'video' | 'image' | 'caption' | 'landing_page' | 'carous
 type ContentRequirementStatus = 'pending' | 'in_progress' | 'ready' | 'blocked' | 'delivered';
 type SalesTaskType = 'inquiry_response' | 'follow_up' | 'closing' | 'discovery_call' | 'no_show_recovery' | 'feedback_collection';
 type SalesTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
+type ConnectorSource = 'manual_csv' | 'formaloo' | 'meta_ads' | 'youtube' | 'ghl' | 'whatsapp';
 
 const LEAD_STATUSES: LeadStatus[] = ['new_lead', 'qualified', 'nurturing', 'contacted', 'meeting_booked', 'meeting_attended', 'no_show', 'purchased', 'follow_up_needed', 'lost', 'archived'];
 const LEAD_TEMPERATURES: LeadTemperature[] = ['cold', 'warm', 'hot', 'buyer'];
@@ -43,6 +44,13 @@ const PROBLEM_SOURCES: ProblemSource[] = ['manual', 'kpi_review', 'lead_review',
 const CONTENT_ASSET_TYPES: ContentAssetType[] = ['video', 'image', 'caption', 'landing_page', 'carousel', 'story', 'email_template', 'whatsapp_template'];
 const CONTENT_REQUIREMENT_STATUSES: ContentRequirementStatus[] = ['pending', 'in_progress', 'ready', 'blocked', 'delivered'];
 const SALES_TASK_TYPES: SalesTaskType[] = ['inquiry_response', 'follow_up', 'closing', 'discovery_call', 'no_show_recovery', 'feedback_collection'];
+const CONNECTOR_SOURCES: ConnectorSource[] = ['manual_csv', 'formaloo', 'meta_ads', 'youtube', 'ghl', 'whatsapp'];
+const KPI_TARGET_FIELDS = [
+  'metricDate', 'channel', 'reach', 'impressions', 'interactions', 'clicks',
+  'formCompletions', 'leads', 'meetingsBooked', 'meetingsAttended',
+  'purchases', 'noShows', 'spend', 'notes',
+] as const;
+const REQUIRED_IMPORT_FIELDS = ['metricDate', 'channel'] as const;
 const SALES_TASK_STATUSES: SalesTaskStatus[] = ['pending', 'in_progress', 'completed', 'blocked'];
 
 const LEAD_TRANSITIONS: Record<LeadStatus, LeadStatus[]> = {
@@ -216,6 +224,64 @@ function countEntries(value: unknown): { label: string; value: number }[] {
     .sort((a, b) => b.value - a.value);
 }
 
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ',' && !quoted) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseCsv(textValue: string): { headers: string[]; rows: Record<string, string>[]; error: string } {
+  const lines = textValue
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return { headers: [], rows: [], error: 'Paste a CSV header row and at least one data row.' };
+  const headers = parseCsvLine(lines[0]).map(header => header.trim()).filter(Boolean);
+  if (!headers.length) return { headers: [], rows: [], error: 'CSV header row is empty.' };
+  const rows = lines.slice(1).map(line => {
+    const cells = parseCsvLine(line);
+    return headers.reduce<Record<string, string>>((record, header, index) => {
+      record[header] = cells[index] || '';
+      return record;
+    }, {});
+  });
+  return { headers, rows, error: '' };
+}
+
+function inferSourceField(headers: string[], targetField: string): string {
+  const normalizedTarget = targetField.toLowerCase();
+  const aliases: Record<string, string[]> = {
+    metricDate: ['metricdate', 'date', 'day', 'reportdate'],
+    channel: ['channel', 'source', 'platform', 'medium'],
+    formCompletions: ['formcompletions', 'forms', 'submissions', 'formfills'],
+    meetingsBooked: ['meetingsbooked', 'meetings', 'bookedmeetings', 'bookings'],
+    meetingsAttended: ['meetingsattended', 'attendedmeetings', 'attended'],
+    noShows: ['noshows', 'no_show', 'noshow'],
+  };
+  const candidates = aliases[targetField] || [normalizedTarget];
+  return headers.find(header => {
+    const normalized = header.toLowerCase().replace(/[\s_-]/g, '');
+    return candidates.includes(normalized);
+  }) || '';
+}
+
 function strongestChannel(rows: RecordMap[]): RecordMap | null {
   if (!rows.length) return null;
   return [...rows].sort((a, b) => {
@@ -308,6 +374,17 @@ export default function EventDashboard() {
     spend: '',
     notes: '',
   });
+  const [connectorMappings, setConnectorMappings] = useState<RecordMap[]>([]);
+  const [importForm, setImportForm] = useState({
+    connectorId: 'manual_csv' as ConnectorSource,
+    displayName: 'Event KPI CSV Import',
+    csvText: '',
+    selectedMappingId: '',
+    notes: '',
+  });
+  const [fieldSelections, setFieldSelections] = useState<Record<string, string>>({});
+  const [csvDryRun, setCsvDryRun] = useState<RecordMap | null>(null);
+  const [csvParseMessage, setCsvParseMessage] = useState('');
   const [problemForm, setProblemForm] = useState({
     title: '',
     category: 'sales' as ProblemCategory,
@@ -372,7 +449,7 @@ export default function EventDashboard() {
     const nextEventId = selected || String(normalizedEvents[0]?.id || '');
     if (nextEventId) {
       setCloseoutReport(null);
-      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData] = await Promise.all([
+      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData, mappingData] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
         eventProblemsApi.dashboard(nextEventId, token),
@@ -382,6 +459,7 @@ export default function EventDashboard() {
         eventPlannerApi.upsellPlans(nextEventId, token),
         eventPlannerApi.contentRequirements(nextEventId, token),
         eventPlannerApi.salesTasks(nextEventId, token),
+        connectorMappingsApi.list(token),
       ]);
       setDashboard(data as RecordMap);
       setSalesLeads(list(leadData));
@@ -399,6 +477,7 @@ export default function EventDashboard() {
       setUpsellPlans(list(upsellData));
       setContentRequirements(list(contentData));
       setSalesTasks(list(salesTaskData));
+      setConnectorMappings(list(mappingData).filter(mapping => !mapping.eventId || String(mapping.eventId) === nextEventId));
     } else {
       setDashboard(null);
       setSalesLeads([]);
@@ -411,6 +490,7 @@ export default function EventDashboard() {
       setUpsellPlans([]);
       setContentRequirements([]);
       setSalesTasks([]);
+      setConnectorMappings([]);
     }
   }
 
@@ -445,9 +525,117 @@ export default function EventDashboard() {
   const kpiRecords = list(dashboard?.kpiRecords);
   const leads = list(dashboard?.leads);
   const campaigns = list(dashboard?.campaigns);
+  const parsedCsv = useMemo(() => parseCsv(importForm.csvText), [importForm.csvText]);
+  const eventConnectorMappings = useMemo(
+    () => connectorMappings.filter(mapping => !mapping.eventId || String(mapping.eventId) === selectedEventId),
+    [connectorMappings, selectedEventId],
+  );
+  const dryRunRows = list(csvDryRun?.kpiRows);
+  const dryRunErrors = list(csvDryRun?.validationErrors);
   const problemTopBlockers = list(problemDashboard?.topBlockers);
   const problemCountsByCategory = (problemDashboard?.byCategory || {}) as RecordMap;
   const daysRemaining = daysUntil(event.eventDate);
+
+  function applyHeaderAutoMap() {
+    if (!parsedCsv.headers.length) {
+      setCsvParseMessage(parsedCsv.error || 'Paste CSV data before mapping fields.');
+      return;
+    }
+    const nextSelections = KPI_TARGET_FIELDS.reduce<Record<string, string>>((acc, targetField) => {
+      acc[targetField] = inferSourceField(parsedCsv.headers, targetField);
+      return acc;
+    }, {});
+    setFieldSelections(nextSelections);
+    setCsvParseMessage('Headers detected. Review required mappings before saving.');
+  }
+
+  async function saveCsvMapping() {
+    if (!token || !selectedEventId) return;
+    if (!parsedCsv.headers.length) {
+      setCsvParseMessage(parsedCsv.error || 'Paste CSV data before saving a mapping.');
+      return;
+    }
+    const missingRequired = REQUIRED_IMPORT_FIELDS.filter(field => !fieldSelections[field]);
+    if (missingRequired.length) {
+      setCsvParseMessage(`Map required field(s): ${missingRequired.map(titleCase).join(', ')}.`);
+      return;
+    }
+    const fieldMappings = KPI_TARGET_FIELDS
+      .map(targetField => ({ targetField, sourceField: fieldSelections[targetField] || '' }))
+      .filter(mapping => mapping.sourceField);
+    setLoading('save-csv-mapping');
+    setMessage('');
+    try {
+      const mapping = await connectorMappingsApi.create({
+        connectorId: importForm.connectorId,
+        eventId: selectedEventId,
+        displayName: importForm.displayName || `${titleCase(importForm.connectorId)} KPI Import`,
+        targetType: 'event_kpi_record',
+        fieldMappings,
+      }, token) as RecordMap;
+      const mappingId = String(mapping.id || '');
+      setImportForm(current => ({ ...current, selectedMappingId: mappingId }));
+      await load(selectedEventId);
+      setMessage('Connector mapping saved. Run dry-run preview before importing KPI records.');
+    } catch (error) {
+      setMessage(`Mapping could not be saved: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function runCsvDryRun() {
+    if (!token || !selectedEventId) return;
+    const mappingId = importForm.selectedMappingId;
+    if (!mappingId) {
+      setMessage('Save or choose a mapping before running a CSV dry-run.');
+      return;
+    }
+    if (!parsedCsv.rows.length) {
+      setMessage(parsedCsv.error || 'Paste CSV rows before running a dry-run.');
+      return;
+    }
+    setLoading('csv-dry-run');
+    setMessage('');
+    try {
+      const result = await csvImportApi.dryRun({ mappingId, eventId: selectedEventId, rows: parsedCsv.rows }, token) as RecordMap;
+      setCsvDryRun(result);
+      setMessage(`Dry-run complete: ${numberValue(result.validRows)} valid row(s), ${numberValue(result.invalidRows)} invalid row(s).`);
+    } catch (error) {
+      setCsvDryRun(null);
+      setMessage(`CSV dry-run failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function approveCsvImport() {
+    if (!token || !selectedEventId) return;
+    const mappingId = importForm.selectedMappingId;
+    if (!mappingId || !csvDryRun) {
+      setMessage('Run a successful dry-run before approving the import.');
+      return;
+    }
+    setLoading('csv-approve-import');
+    setMessage('');
+    try {
+      const result = await csvImportApi.approveImport({
+        mappingId,
+        eventId: selectedEventId,
+        notes: importForm.notes || 'Approved from Event Dashboard CSV import workflow.',
+      }, token) as RecordMap;
+      const imported = (result.imported || {}) as RecordMap;
+      setCsvDryRun(null);
+      setImportForm(current => ({ ...current, csvText: '', notes: '' }));
+      await load(selectedEventId);
+      setMessage(`Import approved: ${numberValue(imported.kpiRecords)} KPI record(s) added to this event.`);
+    } catch (error) {
+      setMessage(`CSV import could not be approved: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
   const filteredSalesLeads = useMemo(
     () => salesLeads.filter(lead => {
       const status = leadStatus(lead.leadStatus || lead.status);
@@ -1130,6 +1318,161 @@ export default function EventDashboard() {
                 </PrimaryAction>
               </div>
             </ProductCard>
+
+            <ProductCard title="Import KPI CSV" subtitle="Bring real event results from customer-owned exports. Paste CSV, map fields, dry-run, then approve import.">
+              <div className="space-y-4">
+                <Notice tone="info">
+                  This does not call Meta, YouTube, Formaloo, GHL, or WhatsApp. It imports customer-provided CSV data into this event after validation.
+                </Notice>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Source">
+                    <select
+                      value={importForm.connectorId}
+                      onChange={event => setImportForm(current => ({ ...current, connectorId: event.target.value as ConnectorSource, selectedMappingId: '' }))}
+                      className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                    >
+                      {CONNECTOR_SOURCES.map(source => (
+                        <option key={source} value={source}>{titleCase(source)}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Mapping name">
+                    <input
+                      value={importForm.displayName}
+                      onChange={event => setImportForm(current => ({ ...current, displayName: event.target.value }))}
+                      className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      placeholder="Formaloo event export"
+                    />
+                  </Field>
+                </div>
+
+                {eventConnectorMappings.length > 0 && (
+                  <Field label="Saved mapping">
+                    <select
+                      value={importForm.selectedMappingId}
+                      onChange={event => {
+                        const mappingId = event.target.value;
+                        const mapping = eventConnectorMappings.find(item => String(item.id) === mappingId);
+                        const entries = list(mapping?.fieldMappings);
+                        setImportForm(current => ({ ...current, selectedMappingId: mappingId }));
+                        setFieldSelections(entries.reduce<Record<string, string>>((acc, entry) => {
+                          acc[text(entry.targetField, '')] = text(entry.sourceField, '');
+                          return acc;
+                        }, {}));
+                      }}
+                      className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                    >
+                      <option value="">Create or choose mapping</option>
+                      {eventConnectorMappings.map(mapping => (
+                        <option key={String(mapping.id)} value={String(mapping.id)}>
+                          {text(mapping.displayName)} / {titleCase(text(mapping.connectorId))}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+
+                <Field label="CSV rows" helper="First row must be headers. Required target fields are metric date and channel.">
+                  <textarea
+                    value={importForm.csvText}
+                    onChange={event => {
+                      setImportForm(current => ({ ...current, csvText: event.target.value }));
+                      setCsvDryRun(null);
+                      setCsvParseMessage('');
+                    }}
+                    className="min-h-32 w-full rounded-md border border-neutral-200 px-3 py-2 font-mono text-xs leading-5"
+                    placeholder="date,channel,reach,leads,purchases,spend&#10;2026-07-01,instagram,1200,18,3,450"
+                  />
+                </Field>
+
+                <div className="flex flex-wrap gap-2">
+                  <SecondaryAction onClick={applyHeaderAutoMap} disabled={!importForm.csvText.trim()}>Detect Headers</SecondaryAction>
+                  <PrimaryAction onClick={saveCsvMapping} disabled={loading === 'save-csv-mapping' || !parsedCsv.headers.length}>
+                    {loading === 'save-csv-mapping' ? 'Saving...' : 'Save Mapping'}
+                  </PrimaryAction>
+                </div>
+
+                {(csvParseMessage || parsedCsv.error) && (
+                  <Notice tone={parsedCsv.error && !parsedCsv.headers.length ? 'warn' : 'info'}>
+                    {csvParseMessage || parsedCsv.error}
+                  </Notice>
+                )}
+
+                {parsedCsv.headers.length > 0 && (
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-neutral-950">Field mapping</div>
+                        <p className="mt-1 text-xs leading-5 text-neutral-500">
+                          {parsedCsv.rows.length} row(s) detected. Map only fields that exist in the CSV.
+                        </p>
+                      </div>
+                      <ProductStatus tone="info">{parsedCsv.headers.length} headers</ProductStatus>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {KPI_TARGET_FIELDS.map(targetField => (
+                        <Field key={targetField} label={`${titleCase(targetField)}${REQUIRED_IMPORT_FIELDS.includes(targetField as typeof REQUIRED_IMPORT_FIELDS[number]) ? ' *' : ''}`}>
+                          <select
+                            value={fieldSelections[targetField] || ''}
+                            onChange={event => setFieldSelections(current => ({ ...current, [targetField]: event.target.value }))}
+                            className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm"
+                          >
+                            <option value="">Not mapped</option>
+                            {parsedCsv.headers.map(header => <option key={header} value={header}>{header}</option>)}
+                          </select>
+                        </Field>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PrimaryAction onClick={runCsvDryRun} disabled={loading === 'csv-dry-run' || !importForm.selectedMappingId || !parsedCsv.rows.length}>
+                    {loading === 'csv-dry-run' ? 'Running...' : 'Run Dry-Run'}
+                  </PrimaryAction>
+                  <PrimaryAction onClick={approveCsvImport} disabled={loading === 'csv-approve-import' || !csvDryRun || numberValue(csvDryRun.validRows) === 0 || dryRunErrors.length > 0}>
+                    {loading === 'csv-approve-import' ? 'Importing...' : 'Approve Import'}
+                  </PrimaryAction>
+                </div>
+
+                <Field label="Import notes">
+                  <textarea
+                    value={importForm.notes}
+                    onChange={event => setImportForm(current => ({ ...current, notes: event.target.value }))}
+                    className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                    placeholder="Example: Imported Formaloo export after event registration campaign review."
+                  />
+                </Field>
+
+                {csvDryRun && (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <MetricCard label="Total rows" value={numberValue(csvDryRun.totalRows)} tone="info" />
+                      <MetricCard label="Valid rows" value={numberValue(csvDryRun.validRows)} tone={numberValue(csvDryRun.validRows) ? 'good' : 'warn'} />
+                      <MetricCard label="Invalid rows" value={numberValue(csvDryRun.invalidRows)} tone={numberValue(csvDryRun.invalidRows) ? 'danger' : 'good'} />
+                    </div>
+                    {dryRunRows.length > 0 && (
+                      <ProductTable
+                        columns={['Date', 'Channel', 'Leads', 'Meetings', 'Purchases', 'Spend']}
+                        rows={dryRunRows.slice(0, 5).map(row => [
+                          formatDate(row.metricDate),
+                          titleCase(text(row.channel)),
+                          numberValue(row.leads).toLocaleString(),
+                          numberValue(row.meetingsBooked).toLocaleString(),
+                          numberValue(row.purchases).toLocaleString(),
+                          money(row.spend),
+                        ])}
+                      />
+                    )}
+                    {dryRunErrors.length > 0 && (
+                      <Notice tone="danger">
+                        {dryRunErrors.length} row issue(s) found. Fix the CSV and run dry-run again before importing.
+                      </Notice>
+                    )}
+                  </div>
+                )}
+              </div>
+            </ProductCard>
           </div>
 
           <div className="space-y-6">
@@ -1158,6 +1501,49 @@ export default function EventDashboard() {
               <ExecutiveKpiCard label="Purchases" value={numberValue(kpis.purchases)} detail={`${money(kpis.actualSpend)} actual spend`} tone={numberValue(kpis.purchases) ? 'good' : 'warn'} series={[numberValue(kpis.meetingsBooked), numberValue(kpis.meetingsAttended), numberValue(kpis.purchases)]} />
               <ExecutiveKpiCard label="Interaction Rate" value={`${numberValue(kpis.interactionRate)}%`} detail={`${numberValue(kpis.reach).toLocaleString()} reach`} tone={numberValue(kpis.interactionRate) ? 'info' : 'warn'} series={[numberValue(kpis.reach), numberValue(kpis.interactions), numberValue(kpis.clicks)]} />
             </div>
+
+            <ProductCard
+              title="Connector Data Status"
+              subtitle="Shows whether this event is using manual records, approved CSV imports, or future live connector records."
+              action={<ProductStatus tone={numberValue(sourceStatus.connectorRecords) ? 'good' : numberValue(sourceStatus.importedRecords) ? 'info' : 'warn'}>{numberValue(sourceStatus.connectorRecords) ? 'Approved Import Active' : numberValue(sourceStatus.importedRecords) ? 'Imported Data Active' : 'Manual Data Active'}</ProductStatus>}
+            >
+              <div className="grid gap-3 md:grid-cols-4">
+                <MetricCard label="Saved mappings" value={eventConnectorMappings.length} detail="Event-scoped import mappings" tone={eventConnectorMappings.length ? 'good' : 'warn'} />
+                <MetricCard label="Manual records" value={numberValue(sourceStatus.manualRecords)} detail="Entered by the team" tone={numberValue(sourceStatus.manualRecords) ? 'info' : 'default'} />
+                <MetricCard label="Imported records" value={numberValue(sourceStatus.importedRecords)} detail="Approved CSV/import jobs" tone={numberValue(sourceStatus.importedRecords) ? 'good' : 'default'} />
+                <MetricCard label="Connector records" value={numberValue(sourceStatus.connectorRecords)} detail="Approved connector or CSV import records" tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'} />
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                {[
+                  {
+                    title: 'Manual KPI Entry',
+                    status: numberValue(sourceStatus.manualRecords) ? 'Recording Data' : 'Available',
+                    detail: 'Fast path for Amro while customer-owned connectors are being configured.',
+                    tone: numberValue(sourceStatus.manualRecords) ? 'info' : 'default',
+                  },
+                  {
+                    title: 'CSV Import',
+                    status: eventConnectorMappings.length ? 'Mapping Ready' : 'Needs Mapping',
+                    detail: 'Use exported rows from Formaloo, Meta, YouTube, GHL, WhatsApp, or sheets.',
+                    tone: eventConnectorMappings.length ? 'good' : 'warn',
+                  },
+                  {
+                    title: 'Live Connectors',
+                    status: 'Customer Credentials Required',
+                    detail: 'Official integrations remain tenant-owned and cannot run without credentials.',
+                    tone: 'warn',
+                  },
+                ].map(item => (
+                  <div key={item.title} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-semibold text-neutral-950">{item.title}</div>
+                      <ProductStatus tone={item.tone as 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted'}>{item.status}</ProductStatus>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-neutral-500">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </ProductCard>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
               <ProductCard title="Event Funnel" subtitle="Where the event is gaining or losing momentum.">
