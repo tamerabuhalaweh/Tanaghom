@@ -182,29 +182,76 @@ describe('Connector Imports', () => {
       await expect(repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-x')).rejects.toThrow(NotFoundError);
     });
 
-    it('writes EventKpiRecord on approved import', async () => {
+    it('rejects when last dry run has no importable rows', async () => {
       prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
-      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'test_passed' }));
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({
+        state: 'test_passed',
+        last_dry_run_result: { wouldImport: { kpiRecords: 0, leadAttributions: 0 }, warnings: [] },
+      }));
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+
+      const { ValidationError } = await import('@shared/errors');
+      await expect(repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1')).rejects.toThrow(ValidationError);
+
+      // Audit record still created for rejected path
+      expect(prismaMocks.auditRecord.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'import_rejected_no_data',
+          result: 'blocked',
+        }),
+      }));
+    });
+
+    it('rejects when no dry run has been performed', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({
+        state: 'test_passed',
+        last_dry_run_result: null,
+      }));
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+
+      const { ValidationError } = await import('@shared/errors');
+      await expect(repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1')).rejects.toThrow(ValidationError);
+    });
+
+    it('writes exactly the rows from last_dry_run_result', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({
+        state: 'test_passed',
+        last_dry_run_result: { wouldImport: { kpiRecords: 3, leadAttributions: 0 }, warnings: [] },
+      }));
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
       prismaMocks.eventKpiRecord.create.mockResolvedValue({ id: 'kpi-1' });
 
       const result = await repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1');
 
-      expect(result.imported.kpiRecords).toBe(1);
-      expect(prismaMocks.eventKpiRecord.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({
-          tenant_key: 'tenant-a',
-          event_id: 'event-1',
-          source_type: 'connector',
-          source_name: 'postiz',
-        }),
+      expect(result.imported.kpiRecords).toBe(3);
+      expect(prismaMocks.eventKpiRecord.create).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not create zero-placeholder connector KPI rows', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({
+        state: 'test_passed',
+        last_dry_run_result: { wouldImport: { kpiRecords: 0, leadAttributions: 5 }, warnings: [] },
       }));
+      prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+
+      const result = await repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1');
+
+      expect(result.imported.kpiRecords).toBe(0);
+      expect(result.imported.leadAttributions).toBe(5);
+      expect(prismaMocks.eventKpiRecord.create).not.toHaveBeenCalled();
     });
 
     it('creates audit record on approved import', async () => {
       prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
-      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'test_passed' }));
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({
+        state: 'test_passed',
+        last_dry_run_result: { wouldImport: { kpiRecords: 1, leadAttributions: 0 }, warnings: [] },
+      }));
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
       prismaMocks.eventKpiRecord.create.mockResolvedValue({ id: 'kpi-1' });

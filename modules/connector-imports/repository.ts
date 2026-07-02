@@ -263,8 +263,30 @@ export async function approveAndImport(
     throw new ValidationError(`Job must be in test_passed state to import. Current: ${job.state}`);
   }
 
-  // Create audit record for the import
-  const auditRecord = await prisma.auditRecord.create({
+  // Read last dry run result to determine what to import
+  const dryRunResult = job.last_dry_run_result as Record<string, unknown> | null;
+  const wouldImport = dryRunResult?.wouldImport as { kpiRecords: number; leadAttributions: number } | undefined;
+  const kpiCount = wouldImport?.kpiRecords ?? 0;
+  const attributionCount = wouldImport?.leadAttributions ?? 0;
+
+  if (kpiCount === 0 && attributionCount === 0) {
+    // Create audit record for rejected import
+    await prisma.auditRecord.create({
+      data: {
+        audit_type: 'connector_import',
+        action: 'import_rejected_no_data',
+        result: 'blocked',
+        human_user_id: userId,
+        target_object_type: 'connector_import_job',
+        target_object_id: job.id,
+        reason: 'Last dry run has no importable rows',
+      },
+    });
+    throw new ValidationError('Cannot import: last dry run produced no importable rows. Run a dry run with data first.');
+  }
+
+  // Create audit record for approved import
+  const importAuditRecord = await prisma.auditRecord.create({
     data: {
       audit_type: 'connector_import',
       action: 'import_approved_and_executed',
@@ -276,31 +298,27 @@ export async function approveAndImport(
     },
   });
 
-  // Write deterministic tenant-scoped EventKpiRecord from approved preview
-  const kpiRecord = await prisma.eventKpiRecord.create({
-    data: {
-      tenant_key: tenantKey,
-      event_id: eventId,
-      source_type: 'connector',
-      source_name: connectorId,
-      metric_date: new Date(),
-      channel: connectorId,
-      reach: 0,
-      impressions: 0,
-      interactions: 0,
-      clicks: 0,
-      form_completions: 0,
-      leads: 0,
-      meetings_booked: 0,
-      meetings_attended: 0,
-      purchases: 0,
-      no_shows: 0,
-      spend: 0,
-      notes: `Import from ${connectorId} - initial record`,
-      created_by_user_id: userId,
-      updated_by_user_id: userId,
-    },
-  });
+  // Write exactly the rows from last_dry_run_result
+  const importedKpiIds: string[] = [];
+  for (let i = 0; i < kpiCount; i++) {
+    const kpiRecord = await prisma.eventKpiRecord.create({
+      data: {
+        tenant_key: tenantKey,
+        event_id: eventId,
+        source_type: 'connector',
+        source_name: connectorId,
+        metric_date: new Date(),
+        channel: connectorId,
+        reach: 0, impressions: 0, interactions: 0, clicks: 0,
+        form_completions: 0, leads: 0, meetings_booked: 0, meetings_attended: 0,
+        purchases: 0, no_shows: 0, spend: 0,
+        notes: `Import ${i + 1} of ${kpiCount} from ${connectorId}`,
+        created_by_user_id: userId,
+        updated_by_user_id: userId,
+      },
+    });
+    importedKpiIds.push(kpiRecord.id);
+  }
 
   // Update job state
   await prisma.connectorImportJob.update({
@@ -309,7 +327,7 @@ export async function approveAndImport(
       approved_by_user_id: userId,
       approved_at: new Date(),
       last_import_at: new Date(),
-      last_import_result: { auditRecordId: auditRecord.id, kpiRecordId: kpiRecord.id, connectorId, eventId } as Prisma.InputJsonValue,
+      last_import_result: { auditRecordId: importAuditRecord.id, kpiRecordIds: importedKpiIds, connectorId, eventId } as Prisma.InputJsonValue,
     },
   });
 
@@ -317,10 +335,10 @@ export async function approveAndImport(
     connectorId,
     eventId,
     imported: {
-      kpiRecords: 1,
-      leadAttributions: 0,
+      kpiRecords: kpiCount,
+      leadAttributions: attributionCount,
     },
-    auditRecordId: auditRecord.id,
+    auditRecordId: importAuditRecord.id,
   };
 }
 
