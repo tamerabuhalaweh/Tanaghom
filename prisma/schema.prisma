@@ -118,6 +118,7 @@ model Tenant {
   event_upsell_plans EventUpsellPlan[]
   event_content_requirements EventContentRequirement[]
   event_sales_tasks EventSalesTask[]
+  lead_lifecycle_events LeadLifecycleEvent[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
 
@@ -273,6 +274,7 @@ model User {
   event_upsell_plans_created EventUpsellPlan[]
   event_content_requirements_created EventContentRequirement[]
   event_sales_tasks_created EventSalesTask[]
+  lead_lifecycle_events LeadLifecycleEvent[]
   tenant_subscription_events TenantSubscriptionEvent[]
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
@@ -2945,11 +2947,42 @@ model KnowledgeRevision {
 enum LeadStatus {
   new_lead
   contacted
+  meeting_booked
+  meeting_attended
+  no_show
+  purchased
+  lost
+  follow_up_needed
   qualified
   nurturing
   converted
-  lost
   archived
+}
+
+enum LeadTemperature {
+  cold
+  warm
+  hot
+  buyer
+}
+
+enum AudienceSource {
+  follower
+  non_follower
+  existing_customer
+  referral
+}
+
+enum ChannelAttribution {
+  meta
+  instagram
+  youtube
+  whatsapp
+  email
+  organic
+  dark_ad
+  referral
+  manual
 }
 
 enum ConsentStatus {
@@ -2973,6 +3006,9 @@ model LeadCaptureRecord {
   id                           String       @id @default(uuid()) @db.Uuid
   tenant_key                   String       @default("default")
   lead_status                  LeadStatus   @default(new_lead)
+  lead_temperature             LeadTemperature @default(cold)
+  audience_source              AudienceSource?
+  channel_attribution          ChannelAttribution?
   lead_source                  String?
   campaign_id                  String?      @db.Uuid
   event_id                     String?      @db.Uuid
@@ -2986,6 +3022,17 @@ model LeadCaptureRecord {
   lead_phone_placeholder       String?
   lead_email_placeholder       String?
   consent_status               ConsentStatus @default(pending)
+
+  sales_notes                  String?      @db.Text
+  next_action                  String?      @db.Text
+  follow_up_date               DateTime?
+  meeting_date                 DateTime?
+  meeting_type                 String?
+  meeting_outcome              String?      @db.Text
+  purchase_date                DateTime?
+  purchase_amount              Decimal?     @db.Decimal(12, 2)
+  purchase_reference           String?
+
   created_by_user_id           String       @db.Uuid
   created_by_agent_rep_id      String       @db.Uuid
   created_at                   DateTime     @default(now())
@@ -2998,14 +3045,43 @@ model LeadCaptureRecord {
   crm_handoffs     CrmHandoffRequest[]
   whatsapp_handoffs WhatsAppHandoffRequest[]
   sequence_plans   ConversionSequencePlan[]
+  lifecycle_events LeadLifecycleEvent[]
 
   @@index([tenant_key])
   @@index([lead_status])
+  @@index([lead_temperature])
+  @@index([audience_source])
+  @@index([channel_attribution])
   @@index([campaign_id])
   @@index([event_id])
   @@index([platform])
   @@index([created_by_user_id])
+  @@index([follow_up_date])
   @@map("lead_capture_records")
+}
+
+model LeadLifecycleEvent {
+  id                  String       @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  lead_id             String       @db.Uuid
+  from_status         LeadStatus?
+  to_status           LeadStatus
+  from_temperature    LeadTemperature?
+  to_temperature      LeadTemperature?
+  actor_user_id       String?      @db.Uuid
+  reason              String?      @db.Text
+  metadata            Json?
+  created_at          DateTime     @default(now())
+
+  tenant     Tenant           @relation(fields: [tenant_key], references: [tenant_key])
+  lead       LeadCaptureRecord @relation(fields: [lead_id], references: [id])
+  actor      User?            @relation(fields: [actor_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([lead_id])
+  @@index([to_status])
+  @@index([created_at])
+  @@map("lead_lifecycle_events")
 }
 
 model LeadSourceAttribution {

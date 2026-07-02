@@ -546,6 +546,112 @@ async function seed() {
       });
       console.log('  Sales Tasks: 2 items');
     }
+
+    // Lead lifecycle demo data
+    const existingLead = await prisma.leadCaptureRecord.findFirst({ where: { event_id: demoEvent.id, tenant_key: demoEvent.tenant_key } });
+    if (!existingLead) {
+      const agentRep = await prisma.agentRep.findFirst({ where: { user_id: adminForEvent.id } });
+      const lead1 = await prisma.leadCaptureRecord.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          lead_status: 'meeting_booked',
+          lead_temperature: 'hot',
+          audience_source: 'follower',
+          channel_attribution: 'instagram',
+          lead_source: 'Instagram comment',
+          lead_name_placeholder: 'Ahmed Al-Rashid',
+          lead_email_placeholder: 'ahmed@example.com',
+          lead_phone_placeholder: '+966501234567',
+          platform: 'instagram',
+          sales_notes: 'Interested in VIP package. Asked about coaching sessions.',
+          next_action: 'Confirm meeting for July 20',
+          follow_up_date: new Date('2026-07-20T10:00:00Z'),
+          meeting_date: new Date('2026-07-22T14:00:00Z'),
+          meeting_type: 'Discovery call',
+          consent_status: 'granted',
+          created_by_user_id: adminForEvent.id,
+          created_by_agent_rep_id: agentRep?.id || adminForEvent.id,
+        },
+      });
+      await prisma.leadLifecycleEvent.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          lead_id: lead1.id,
+          to_status: 'new_lead',
+          actor_user_id: adminForEvent.id,
+          reason: 'Lead captured from Instagram comment',
+        },
+      });
+      await prisma.leadLifecycleEvent.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          lead_id: lead1.id,
+          from_status: 'new_lead',
+          to_status: 'contacted',
+          actor_user_id: adminForEvent.id,
+          reason: 'WhatsApp follow-up sent',
+        },
+      });
+      await prisma.leadLifecycleEvent.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          lead_id: lead1.id,
+          from_status: 'contacted',
+          to_status: 'meeting_booked',
+          actor_user_id: adminForEvent.id,
+          reason: 'Discovery call scheduled',
+        },
+      });
+
+      const lead2 = await prisma.leadCaptureRecord.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          lead_status: 'contacted',
+          lead_temperature: 'warm',
+          audience_source: 'non_follower',
+          channel_attribution: 'whatsapp',
+          lead_source: 'WhatsApp broadcast',
+          lead_name_placeholder: 'Fatima Hassan',
+          lead_email_placeholder: 'fatima@example.com',
+          platform: 'whatsapp',
+          sales_notes: 'Responded to early bird offer. Needs more info about location.',
+          next_action: 'Send venue details',
+          follow_up_date: new Date('2026-07-18T10:00:00Z'),
+          consent_status: 'granted',
+          created_by_user_id: adminForEvent.id,
+          created_by_agent_rep_id: agentRep?.id || adminForEvent.id,
+        },
+      });
+      await prisma.leadLifecycleEvent.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          lead_id: lead2.id,
+          to_status: 'new_lead',
+          actor_user_id: adminForEvent.id,
+          reason: 'Lead captured from WhatsApp broadcast',
+        },
+      });
+
+      const lead3 = await prisma.leadCaptureRecord.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          lead_status: 'new_lead',
+          lead_temperature: 'cold',
+          audience_source: 'referral',
+          channel_attribution: 'referral',
+          lead_source: 'Referral from Ahmed',
+          lead_name_placeholder: 'Omar Khalil',
+          platform: 'email',
+          consent_status: 'pending',
+          created_by_user_id: adminForEvent.id,
+          created_by_agent_rep_id: agentRep?.id || adminForEvent.id,
+        },
+      });
+      console.log('  Lead Lifecycle: 3 demo leads with lifecycle events');
+    }
   }
 
   console.log('Seeding complete.');
