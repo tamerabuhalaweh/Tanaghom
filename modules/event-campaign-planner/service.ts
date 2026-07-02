@@ -11,6 +11,14 @@ import type {
   CreateSalesTaskInput, UpdateSalesTaskInput, SalesTaskSummary,
 } from './types';
 
+const APPROVAL_STATUSES = ['approved', 'rejected', 'changes_requested', 'pending_review'];
+
+function enforceApprovalPermission(role: string, approvalStatus?: string): void {
+  if (approvalStatus && APPROVAL_STATUSES.includes(approvalStatus)) {
+    checkPlannerPermission(role, 'planner:approve');
+  }
+}
+
 // Email Plans
 export async function listEmailPlans(role: string, tenantKey: string, eventId: string): Promise<EmailPlanSummary[]> {
   checkPlannerPermission(role, 'planner:read');
@@ -32,6 +40,7 @@ export async function createEmailPlan(role: string, tenantKey: string, userId: s
 
 export async function updateEmailPlan(role: string, tenantKey: string, userId: string, id: string, input: UpdateEmailPlanInput): Promise<EmailPlanSummary> {
   checkPlannerPermission(role, 'planner:update');
+  enforceApprovalPermission(role, input.approvalStatus);
   const plan = await repo.updateEmailPlan(tenantKey, id, input);
   auditLog({ actor: `user:${userId}`, action: 'email_plan_updated', object_type: 'event_email_plan', object_id: id, result: 'success' }, `Email plan updated: ${plan.sequenceName}`);
   await eventBus.emit(PLANNER_EVENTS.EMAIL_PLAN_UPDATED, { itemId: id, tenantKey, eventId: plan.eventId, itemType: 'email_plan', timestamp: new Date() } as PlannerItemEvent);
@@ -59,6 +68,7 @@ export async function createWhatsappPlan(role: string, tenantKey: string, userId
 
 export async function updateWhatsappPlan(role: string, tenantKey: string, userId: string, id: string, input: UpdateWhatsappPlanInput): Promise<WhatsappPlanSummary> {
   checkPlannerPermission(role, 'planner:update');
+  enforceApprovalPermission(role, input.approvalStatus);
   const plan = await repo.updateWhatsappPlan(tenantKey, id, input);
   auditLog({ actor: `user:${userId}`, action: 'whatsapp_plan_updated', object_type: 'event_whatsapp_plan', object_id: id, result: 'success' }, `WhatsApp plan updated`);
   await eventBus.emit(PLANNER_EVENTS.WHATSAPP_PLAN_UPDATED, { itemId: id, tenantKey, eventId: plan.eventId, itemType: 'whatsapp_plan', timestamp: new Date() } as PlannerItemEvent);
@@ -86,6 +96,7 @@ export async function createUpsellPlan(role: string, tenantKey: string, userId: 
 
 export async function updateUpsellPlan(role: string, tenantKey: string, userId: string, id: string, input: UpdateUpsellPlanInput): Promise<UpsellPlanSummary> {
   checkPlannerPermission(role, 'planner:update');
+  enforceApprovalPermission(role, input.approvalStatus);
   const plan = await repo.updateUpsellPlan(tenantKey, id, input);
   auditLog({ actor: `user:${userId}`, action: 'upsell_plan_updated', object_type: 'event_upsell_plan', object_id: id, result: 'success' }, `Upsell plan updated`);
   await eventBus.emit(PLANNER_EVENTS.UPSELL_PLAN_UPDATED, { itemId: id, tenantKey, eventId: plan.eventId, itemType: 'upsell_plan', timestamp: new Date() } as PlannerItemEvent);
