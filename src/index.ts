@@ -50,6 +50,7 @@ import { learningRecommendationsRouter } from '../modules/learning-recommendatio
 import { connectorFieldMappingRouter } from '../modules/connector-field-mapping/controller';
 import { csvImportRouter } from '../modules/csv-import/controller';
 import { connectorReadinessRouter } from '../modules/connector-readiness/controller';
+import { ghlSetupRouter } from '../modules/ghl-setup/controller';
 import { postizChannelRouter } from '../modules/postiz-channel-selection/controller';
 
 const envValidation = validateEnvironment();
@@ -271,6 +272,7 @@ app.use('/learning-recommendations', learningRecommendationsRouter);
 app.use('/connector-mappings', connectorFieldMappingRouter);
 app.use('/csv-import', csvImportRouter);
 app.use('/connector-readiness', connectorReadinessRouter);
+app.use('/ghl-setup', ghlSetupRouter);
 app.use('/postiz-channels', postizChannelRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
