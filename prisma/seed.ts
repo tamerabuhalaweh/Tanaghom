@@ -652,6 +652,77 @@ async function seed() {
       });
       console.log('  Lead Lifecycle: 3 demo leads with lifecycle events');
     }
+
+    // Event problem/barrier demo data
+    const existingProblem = await prisma.eventProblem.findFirst({ where: { event_id: demoEvent.id, tenant_key: demoEvent.tenant_key } });
+    if (!existingProblem) {
+      await prisma.eventProblem.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          title: 'Ad spend high but form completion rate low',
+          description: 'Instagram ads are generating reach but form completion rate is only 2%. Budget is burning faster than expected without proportional lead capture.',
+          category: 'ads',
+          severity: 'high',
+          status: 'investigating',
+          source: 'kpi_review',
+          impact_summary: 'Cost per lead 3x above target. Budget may run out before event date.',
+          recommended_action: 'A/B test landing page copy. Review form length. Consider lead magnet offer.',
+          owner_role: 'marketing_manager',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      await prisma.eventProblem.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          title: 'WhatsApp follow-up delay exceeding 24 hours',
+          description: 'Multiple leads report waiting 2-3 days for WhatsApp follow-up after registration. Response SLA is 2 hours.',
+          category: 'sales',
+          severity: 'high',
+          status: 'open',
+          source: 'sales_feedback',
+          impact_summary: 'Lead temperature drops from hot to warm when follow-up is delayed. Conversion risk.',
+          recommended_action: 'Assign dedicated sales person for event follow-up. Set up auto-reply template.',
+          owner_role: 'sales_manager',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      await prisma.eventProblem.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          title: 'Creative assets late from content team',
+          description: 'Video testimonials and carousel designs are 5 days behind schedule. Content department needs updated deadline.',
+          category: 'content',
+          severity: 'medium',
+          status: 'open',
+          source: 'campaign_review',
+          impact_summary: 'Campaign launch may be delayed. Missing early bird promotion window.',
+          recommended_action: 'Escalate to department head. Prioritize video testimonials over carousels.',
+          owner_role: 'marketing_manager',
+          due_date: new Date('2026-07-10T23:59:59Z'),
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      await prisma.eventProblem.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          title: 'No-show risk for booked meetings',
+          description: '3 out of 8 booked discovery calls had no-shows last week. Pattern suggests reminder cadence is insufficient.',
+          category: 'funnel',
+          severity: 'medium',
+          status: 'open',
+          source: 'lead_review',
+          impact_summary: 'No-show rate trending toward 37%. Target is under 15%.',
+          recommended_action: 'Add SMS reminder 2 hours before call. Offer reschedule link. Send calendar invite immediately.',
+          owner_role: 'sales_manager',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      console.log('  Event Problems: 4 demo barriers');
+    }
   }
 
   console.log('Seeding complete.');

@@ -43,6 +43,7 @@ import { commercialEventsRouter } from '../modules/commercial-events/controller'
 import { eventCampaignPlannerRouter } from '../modules/event-campaign-planner/controller';
 import { leadLifecycleRouter } from '../modules/lead-lifecycle/controller';
 import { masterEventAggregationRouter } from '../modules/master-event-aggregation/controller';
+import { eventProblemLogRouter } from '../modules/event-problem-log/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -256,6 +257,7 @@ app.use('/commercial-events', commercialEventsRouter);
 app.use('/planner', eventCampaignPlannerRouter);
 app.use('/leads', leadLifecycleRouter);
 app.use('/master-events', masterEventAggregationRouter);
+app.use('/event-problems', eventProblemLogRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
