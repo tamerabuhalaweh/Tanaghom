@@ -301,6 +301,25 @@ export const integrationCredentialsApi = {
     apiFetch<unknown>(`/integration-credentials/${id}`, { method: 'DELETE', token }),
 };
 
+export const connectorImportsApi = {
+  readiness: (token: string) => apiFetch<unknown>('/connector-imports/readiness', { token }),
+  requirements: (token: string) => apiFetch<unknown>('/connector-imports/requirements', { token }),
+  jobs: (token: string, eventId?: string) => {
+    const params = eventId ? `?${new URLSearchParams({ eventId }).toString()}` : '';
+    return apiFetch<unknown>(`/connector-imports/jobs${params}`, { token });
+  },
+  createJob: (data: unknown, token: string) =>
+    apiFetch<unknown>('/connector-imports/jobs', { method: 'POST', body: data, token }),
+  markReady: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/connector-imports/jobs/${id}/mark-ready`, { method: 'POST', body: data, token }),
+  disableJob: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/connector-imports/jobs/${id}/disable`, { method: 'POST', body: data, token }),
+  dryRun: (data: unknown, token: string) =>
+    apiFetch<unknown>('/connector-imports/dry-run', { method: 'POST', body: data, token }),
+  approveImport: (data: unknown, token: string) =>
+    apiFetch<unknown>('/connector-imports/approve-import', { method: 'POST', body: data, token }),
+};
+
 export const socialOAuthApi = {
   connections: (token: string) => apiFetch<unknown>('/social-oauth/connections', { token }),
   start: (data: unknown, token: string) =>
