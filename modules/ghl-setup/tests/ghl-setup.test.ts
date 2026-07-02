@@ -17,7 +17,7 @@ vi.mock('@shared/logging', () => ({ auditLog: vi.fn() }));
 import * as repo from '../repository';
 import { getWizardState, attemptLiveWrite, saveTagMappings, savePipelineMappings, saveLocationMapping } from '../service';
 
-describe('GHL Setup — tenant isolation', () => {
+describe('GHL Setup - tenant isolation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.integrationCredential.findUnique.mockResolvedValue(null);
@@ -102,7 +102,7 @@ describe('GHL Setup — tenant isolation', () => {
   });
 });
 
-describe('GHL Setup — no secret exposure', () => {
+describe('GHL Setup - no secret exposure', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.connectorFieldMapping.findMany.mockResolvedValue([]);
@@ -150,7 +150,7 @@ describe('GHL Setup — no secret exposure', () => {
   });
 });
 
-describe('GHL Setup — mapping validation', () => {
+describe('GHL Setup - mapping validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.integrationCredential.findUnique.mockResolvedValue({
@@ -237,7 +237,7 @@ describe('GHL Setup — mapping validation', () => {
   });
 });
 
-describe('GHL Setup — blocked write path', () => {
+describe('GHL Setup - blocked write path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.integrationCredential.findUnique.mockResolvedValue(null);
@@ -288,7 +288,7 @@ describe('GHL Setup — blocked write path', () => {
   });
 });
 
-describe('GHL Setup — RBAC', () => {
+describe('GHL Setup - RBAC', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.integrationCredential.findUnique.mockResolvedValue(null);

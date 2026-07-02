@@ -116,7 +116,7 @@ ghlSetupRouter.post('/write', async (req: Request, res: Response, next: NextFunc
     res.status(403).json({
       status: 'blocked',
       ...result,
-      _label: 'GHL live write blocked — no CRM writes authorized',
+      _label: 'GHL live write blocked - no CRM writes authorized',
     });
   } catch (err) {
     next(err);

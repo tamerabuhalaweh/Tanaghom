@@ -167,7 +167,7 @@ export async function saveTagMapping(
     data: {
       tenant_key: tenantKey,
       connector_id: 'gohighlevel',
-      display_name: `GHL Tag: ${mapping.ghlTagName} → ${mapping.internalTag}`,
+      display_name: `GHL Tag: ${mapping.ghlTagName} -> ${mapping.internalTag}`,
       field_mappings: {
         mappingType: 'tag',
         ghlTagId: mapping.ghlTagId,
@@ -190,7 +190,7 @@ export async function savePipelineMapping(
     data: {
       tenant_key: tenantKey,
       connector_id: 'gohighlevel',
-      display_name: `GHL Pipeline: ${mapping.ghlPipelineName}/${mapping.ghlStageName} → ${mapping.internalStage}`,
+      display_name: `GHL Pipeline: ${mapping.ghlPipelineName}/${mapping.ghlStageName} -> ${mapping.internalStage}`,
       field_mappings: {
         mappingType: 'pipeline',
         ghlPipelineId: mapping.ghlPipelineId,
