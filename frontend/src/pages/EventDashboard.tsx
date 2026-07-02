@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { eventProblemsApi, eventsApi, leadsApi } from '../api';
+import { eventPlannerApi, eventProblemsApi, eventsApi, leadsApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -27,6 +27,11 @@ type ProblemCategory = 'content' | 'ads' | 'audience' | 'funnel' | 'sales' | 'bu
 type ProblemSeverity = 'low' | 'medium' | 'high' | 'critical';
 type ProblemStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
 type ProblemSource = 'manual' | 'kpi_review' | 'lead_review' | 'sales_feedback' | 'campaign_review' | 'integration_check';
+type PlanApprovalStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'changes_requested';
+type ContentAssetType = 'video' | 'image' | 'caption' | 'landing_page' | 'carousel' | 'story' | 'email_template' | 'whatsapp_template';
+type ContentRequirementStatus = 'pending' | 'in_progress' | 'ready' | 'blocked' | 'delivered';
+type SalesTaskType = 'inquiry_response' | 'follow_up' | 'closing' | 'discovery_call' | 'no_show_recovery' | 'feedback_collection';
+type SalesTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
 
 const LEAD_STATUSES: LeadStatus[] = ['new_lead', 'qualified', 'nurturing', 'contacted', 'meeting_booked', 'meeting_attended', 'no_show', 'purchased', 'follow_up_needed', 'lost', 'archived'];
 const LEAD_TEMPERATURES: LeadTemperature[] = ['cold', 'warm', 'hot', 'buyer'];
@@ -35,6 +40,10 @@ const CHANNEL_ATTRIBUTIONS = ['instagram', 'meta', 'youtube', 'whatsapp', 'email
 const PROBLEM_CATEGORIES: ProblemCategory[] = ['content', 'ads', 'audience', 'funnel', 'sales', 'budget', 'operations', 'integration', 'other'];
 const PROBLEM_SEVERITIES: ProblemSeverity[] = ['low', 'medium', 'high', 'critical'];
 const PROBLEM_SOURCES: ProblemSource[] = ['manual', 'kpi_review', 'lead_review', 'sales_feedback', 'campaign_review', 'integration_check'];
+const CONTENT_ASSET_TYPES: ContentAssetType[] = ['video', 'image', 'caption', 'landing_page', 'carousel', 'story', 'email_template', 'whatsapp_template'];
+const CONTENT_REQUIREMENT_STATUSES: ContentRequirementStatus[] = ['pending', 'in_progress', 'ready', 'blocked', 'delivered'];
+const SALES_TASK_TYPES: SalesTaskType[] = ['inquiry_response', 'follow_up', 'closing', 'discovery_call', 'no_show_recovery', 'feedback_collection'];
+const SALES_TASK_STATUSES: SalesTaskStatus[] = ['pending', 'in_progress', 'completed', 'blocked'];
 
 const LEAD_TRANSITIONS: Record<LeadStatus, LeadStatus[]> = {
   new_lead: ['contacted', 'qualified', 'nurturing', 'lost'],
@@ -120,6 +129,36 @@ function problemSeverityTone(severity: ProblemSeverity): 'default' | 'good' | 'w
   return 'muted';
 }
 
+function approvalStatus(value: unknown): PlanApprovalStatus {
+  const normalized = text(value, 'draft') as PlanApprovalStatus;
+  return ['draft', 'pending_review', 'approved', 'rejected', 'changes_requested'].includes(normalized) ? normalized : 'draft';
+}
+
+function approvalTone(status: PlanApprovalStatus): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  if (status === 'approved') return 'good';
+  if (status === 'pending_review') return 'info';
+  if (status === 'changes_requested') return 'warn';
+  if (status === 'rejected') return 'danger';
+  return 'muted';
+}
+
+function contentRequirementStatus(value: unknown): ContentRequirementStatus {
+  const normalized = text(value, 'pending') as ContentRequirementStatus;
+  return CONTENT_REQUIREMENT_STATUSES.includes(normalized) ? normalized : 'pending';
+}
+
+function salesTaskStatus(value: unknown): SalesTaskStatus {
+  const normalized = text(value, 'pending') as SalesTaskStatus;
+  return SALES_TASK_STATUSES.includes(normalized) ? normalized : 'pending';
+}
+
+function workStatusTone(status: ContentRequirementStatus | SalesTaskStatus): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  if (status === 'ready' || status === 'delivered' || status === 'completed') return 'good';
+  if (status === 'in_progress') return 'info';
+  if (status === 'blocked') return 'danger';
+  return 'warn';
+}
+
 function problemUpdateState(problem: RecordMap | null) {
   return {
     severity: problemSeverity(problem?.severity),
@@ -176,11 +215,21 @@ export default function EventDashboard() {
   const [salesLeads, setSalesLeads] = useState<RecordMap[]>([]);
   const [problemDashboard, setProblemDashboard] = useState<RecordMap | null>(null);
   const [eventProblems, setEventProblems] = useState<RecordMap[]>([]);
+  const [emailPlans, setEmailPlans] = useState<RecordMap[]>([]);
+  const [whatsappPlans, setWhatsappPlans] = useState<RecordMap[]>([]);
+  const [upsellPlans, setUpsellPlans] = useState<RecordMap[]>([]);
+  const [contentRequirements, setContentRequirements] = useState<RecordMap[]>([]);
+  const [salesTasks, setSalesTasks] = useState<RecordMap[]>([]);
   const [loading, setLoading] = useState('');
   const [message, setMessage] = useState('');
   const [pageLoading, setPageLoading] = useState(Boolean(token));
   const [selectedLeadId, setSelectedLeadId] = useState('');
   const [selectedProblemId, setSelectedProblemId] = useState('');
+  const [selectedEmailPlanId, setSelectedEmailPlanId] = useState('');
+  const [selectedWhatsappPlanId, setSelectedWhatsappPlanId] = useState('');
+  const [selectedUpsellPlanId, setSelectedUpsellPlanId] = useState('');
+  const [selectedContentRequirementId, setSelectedContentRequirementId] = useState('');
+  const [selectedSalesTaskId, setSelectedSalesTaskId] = useState('');
   const [leadFilters, setLeadFilters] = useState({
     status: 'all',
     temperature: 'all',
@@ -248,6 +297,39 @@ export default function EventDashboard() {
     recommendedAction: '',
     resolutionNotes: '',
   });
+  const [emailPlanForm, setEmailPlanForm] = useState({
+    sequenceName: '',
+    audienceSegment: '',
+    emailCount: '3',
+    plannedSendDate: '',
+    subjectDraft: '',
+    contentDraft: '',
+    contentType: 'text',
+  });
+  const [whatsappPlanForm, setWhatsappPlanForm] = useState({
+    audienceSegment: '',
+    frequency: '2 reminders before the event',
+    contentType: 'text',
+    messageDraft: '',
+  });
+  const [upsellPlanForm, setUpsellPlanForm] = useState({
+    targetSegment: '',
+    offer: '',
+    fomoAngle: '',
+    plannedChannel: 'whatsapp',
+  });
+  const [contentRequirementForm, setContentRequirementForm] = useState({
+    assetType: 'video' as ContentAssetType,
+    platform: 'Instagram',
+    description: '',
+    dueDate: '',
+  });
+  const [salesTaskForm, setSalesTaskForm] = useState({
+    taskType: 'follow_up' as SalesTaskType,
+    ownerRole: 'sales_manager',
+    description: '',
+    dueDate: '',
+  });
 
   const selectedEventId = eventId || String(events[0]?.id || '');
 
@@ -258,11 +340,16 @@ export default function EventDashboard() {
     setEvents(normalizedEvents);
     const nextEventId = selected || String(normalizedEvents[0]?.id || '');
     if (nextEventId) {
-      const [data, leadData, problemSummary, problems] = await Promise.all([
+      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
         eventProblemsApi.dashboard(nextEventId, token),
         eventProblemsApi.list(token, { eventId: nextEventId }),
+        eventPlannerApi.emailPlans(nextEventId, token),
+        eventPlannerApi.whatsappPlans(nextEventId, token),
+        eventPlannerApi.upsellPlans(nextEventId, token),
+        eventPlannerApi.contentRequirements(nextEventId, token),
+        eventPlannerApi.salesTasks(nextEventId, token),
       ]);
       setDashboard(data as RecordMap);
       setSalesLeads(list(leadData));
@@ -275,12 +362,22 @@ export default function EventDashboard() {
       const nextProblem = normalizedProblems.find(problem => String(problem.id) === nextProblemId) || null;
       setSelectedProblemId(nextProblemId);
       setProblemUpdateForm(problemUpdateState(nextProblem));
+      setEmailPlans(list(emailData));
+      setWhatsappPlans(list(whatsappData));
+      setUpsellPlans(list(upsellData));
+      setContentRequirements(list(contentData));
+      setSalesTasks(list(salesTaskData));
     } else {
       setDashboard(null);
       setSalesLeads([]);
       setProblemDashboard(null);
       setEventProblems([]);
       setSelectedProblemId('');
+      setEmailPlans([]);
+      setWhatsappPlans([]);
+      setUpsellPlans([]);
+      setContentRequirements([]);
+      setSalesTasks([]);
     }
   }
 
@@ -359,6 +456,14 @@ export default function EventDashboard() {
   );
   const openProblemCount = numberValue(problemDashboard?.openProblems);
   const criticalProblemCount = numberValue(problemDashboard?.criticalOpen);
+  const plannerCounts = {
+    emails: emailPlans.length,
+    whatsapp: whatsappPlans.length,
+    upsells: upsellPlans.length,
+    content: contentRequirements.length,
+    tasks: salesTasks.length,
+  };
+  const plannerTotal = plannerCounts.emails + plannerCounts.whatsapp + plannerCounts.upsells + plannerCounts.content + plannerCounts.tasks;
 
   function selectLeadForWork(lead: RecordMap) {
     setSelectedLeadId(String(lead.id || ''));
@@ -385,6 +490,59 @@ export default function EventDashboard() {
   function selectProblemForWork(problem: RecordMap) {
     setSelectedProblemId(String(problem.id || ''));
     setProblemUpdateForm(problemUpdateState(problem));
+  }
+
+  function selectEmailPlan(plan: RecordMap) {
+    setSelectedEmailPlanId(String(plan.id || ''));
+    setEmailPlanForm({
+      sequenceName: text(plan.sequenceName, ''),
+      audienceSegment: text(plan.audienceSegment, ''),
+      emailCount: String(numberValue(plan.emailCount) || 1),
+      plannedSendDate: Array.isArray(plan.plannedSendDates) && plan.plannedSendDates[0] ? dateInputValue(plan.plannedSendDates[0]) : '',
+      subjectDraft: text(plan.subjectDraft, ''),
+      contentDraft: text(plan.contentDraft, ''),
+      contentType: text(plan.contentType, 'text'),
+    });
+  }
+
+  function selectWhatsappPlan(plan: RecordMap) {
+    setSelectedWhatsappPlanId(String(plan.id || ''));
+    setWhatsappPlanForm({
+      audienceSegment: text(plan.audienceSegment, ''),
+      frequency: text(plan.frequency, ''),
+      contentType: text(plan.contentType, 'text'),
+      messageDraft: text(plan.messageDraft, ''),
+    });
+  }
+
+  function selectUpsellPlan(plan: RecordMap) {
+    setSelectedUpsellPlanId(String(plan.id || ''));
+    setUpsellPlanForm({
+      targetSegment: text(plan.targetSegment, ''),
+      offer: text(plan.offer, ''),
+      fomoAngle: text(plan.fomoAngle, ''),
+      plannedChannel: text(plan.plannedChannel, 'whatsapp'),
+    });
+  }
+
+  function selectContentRequirement(item: RecordMap) {
+    setSelectedContentRequirementId(String(item.id || ''));
+    setContentRequirementForm({
+      assetType: (CONTENT_ASSET_TYPES.includes(text(item.assetType, 'video') as ContentAssetType) ? text(item.assetType, 'video') : 'video') as ContentAssetType,
+      platform: text(item.platform, 'Instagram'),
+      description: text(item.description, ''),
+      dueDate: item.dueDate ? dateInputValue(item.dueDate) : '',
+    });
+  }
+
+  function selectSalesTask(task: RecordMap) {
+    setSelectedSalesTaskId(String(task.id || ''));
+    setSalesTaskForm({
+      taskType: (SALES_TASK_TYPES.includes(text(task.taskType, 'follow_up') as SalesTaskType) ? text(task.taskType, 'follow_up') : 'follow_up') as SalesTaskType,
+      ownerRole: text(task.ownerRole, 'sales_manager'),
+      description: text(task.description, ''),
+      dueDate: task.dueDate ? dateInputValue(task.dueDate) : '',
+    });
   }
 
   const eventDetails = useMemo(
@@ -447,6 +605,163 @@ export default function EventDashboard() {
   async function refreshSalesWorkflow(successMessage?: string) {
     await load(selectedEventId);
     if (successMessage) setMessage(successMessage);
+  }
+
+  async function saveEmailPlan() {
+    if (!token || !selectedEventId || !emailPlanForm.sequenceName.trim()) return;
+    setLoading('save-email-plan');
+    setMessage('');
+    try {
+      const payload: RecordMap = {
+        sequenceName: emailPlanForm.sequenceName.trim(),
+        audienceSegment: emailPlanForm.audienceSegment || null,
+        emailCount: Number(emailPlanForm.emailCount || 1),
+        subjectDraft: emailPlanForm.subjectDraft || null,
+        contentDraft: emailPlanForm.contentDraft || null,
+        contentType: emailPlanForm.contentType,
+      };
+      if (emailPlanForm.plannedSendDate) payload.plannedSendDates = [toIsoFromLocalInput(emailPlanForm.plannedSendDate)];
+
+      if (selectedEmailPlanId) {
+        await eventPlannerApi.updateEmailPlan(selectedEmailPlanId, payload, token);
+      } else {
+        const created = await eventPlannerApi.createEmailPlan({ ...payload, eventId: selectedEventId }, token) as RecordMap;
+        setSelectedEmailPlanId(String(created.id || ''));
+      }
+      await refreshSalesWorkflow(selectedEmailPlanId ? 'Email plan updated.' : 'Email plan added to this event.');
+    } catch (error) {
+      setMessage(`Could not save email plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function saveWhatsappPlan() {
+    if (!token || !selectedEventId || !whatsappPlanForm.messageDraft.trim()) return;
+    setLoading('save-whatsapp-plan');
+    setMessage('');
+    try {
+      const payload: RecordMap = {
+        audienceSegment: whatsappPlanForm.audienceSegment || null,
+        frequency: whatsappPlanForm.frequency || null,
+        contentType: whatsappPlanForm.contentType,
+        messageDraft: whatsappPlanForm.messageDraft,
+      };
+      if (selectedWhatsappPlanId) {
+        await eventPlannerApi.updateWhatsappPlan(selectedWhatsappPlanId, payload, token);
+      } else {
+        const created = await eventPlannerApi.createWhatsappPlan({ ...payload, eventId: selectedEventId }, token) as RecordMap;
+        setSelectedWhatsappPlanId(String(created.id || ''));
+      }
+      await refreshSalesWorkflow(selectedWhatsappPlanId ? 'WhatsApp plan updated.' : 'WhatsApp plan added to this event.');
+    } catch (error) {
+      setMessage(`Could not save WhatsApp plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function saveUpsellPlan() {
+    if (!token || !selectedEventId || !upsellPlanForm.offer.trim()) return;
+    setLoading('save-upsell-plan');
+    setMessage('');
+    try {
+      const payload: RecordMap = {
+        targetSegment: upsellPlanForm.targetSegment || null,
+        offer: upsellPlanForm.offer,
+        fomoAngle: upsellPlanForm.fomoAngle || null,
+        plannedChannel: upsellPlanForm.plannedChannel || null,
+      };
+      if (selectedUpsellPlanId) {
+        await eventPlannerApi.updateUpsellPlan(selectedUpsellPlanId, payload, token);
+      } else {
+        const created = await eventPlannerApi.createUpsellPlan({ ...payload, eventId: selectedEventId }, token) as RecordMap;
+        setSelectedUpsellPlanId(String(created.id || ''));
+      }
+      await refreshSalesWorkflow(selectedUpsellPlanId ? 'Upsell plan updated.' : 'Upsell plan added to this event.');
+    } catch (error) {
+      setMessage(`Could not save upsell plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function saveContentRequirement() {
+    if (!token || !selectedEventId || !contentRequirementForm.description.trim()) return;
+    setLoading('save-content-requirement');
+    setMessage('');
+    try {
+      const payload: RecordMap = {
+        assetType: contentRequirementForm.assetType,
+        platform: contentRequirementForm.platform || null,
+        description: contentRequirementForm.description,
+      };
+      if (contentRequirementForm.dueDate) payload.dueDate = toIsoFromLocalInput(contentRequirementForm.dueDate);
+      if (selectedContentRequirementId) {
+        await eventPlannerApi.updateContentRequirement(selectedContentRequirementId, payload, token);
+      } else {
+        const created = await eventPlannerApi.createContentRequirement({ ...payload, eventId: selectedEventId }, token) as RecordMap;
+        setSelectedContentRequirementId(String(created.id || ''));
+      }
+      await refreshSalesWorkflow(selectedContentRequirementId ? 'Content requirement updated.' : 'Content requirement added to this event.');
+    } catch (error) {
+      setMessage(`Could not save content requirement: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function updateContentRequirementStatus(item: RecordMap, status: ContentRequirementStatus) {
+    if (!token || !item.id) return;
+    setLoading(`content-${status}`);
+    setMessage('');
+    try {
+      await eventPlannerApi.updateContentRequirement(String(item.id), { status }, token);
+      await refreshSalesWorkflow(`Content requirement marked ${titleCase(status)}.`);
+    } catch (error) {
+      setMessage(`Could not update content status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function saveSalesTask() {
+    if (!token || !selectedEventId || !salesTaskForm.description.trim()) return;
+    setLoading('save-sales-task');
+    setMessage('');
+    try {
+      const payload: RecordMap = {
+        taskType: salesTaskForm.taskType,
+        ownerRole: salesTaskForm.ownerRole || null,
+        description: salesTaskForm.description,
+      };
+      if (salesTaskForm.dueDate) payload.dueDate = toIsoFromLocalInput(salesTaskForm.dueDate);
+      if (selectedSalesTaskId) {
+        await eventPlannerApi.updateSalesTask(selectedSalesTaskId, payload, token);
+      } else {
+        const created = await eventPlannerApi.createSalesTask({ ...payload, eventId: selectedEventId }, token) as RecordMap;
+        setSelectedSalesTaskId(String(created.id || ''));
+      }
+      await refreshSalesWorkflow(selectedSalesTaskId ? 'Sales task updated.' : 'Sales task added to this event.');
+    } catch (error) {
+      setMessage(`Could not save sales task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function updateSalesTaskStatus(task: RecordMap, status: SalesTaskStatus) {
+    if (!token || !task.id) return;
+    setLoading(`sales-task-${status}`);
+    setMessage('');
+    try {
+      await eventPlannerApi.updateSalesTask(String(task.id), { status }, token);
+      await refreshSalesWorkflow(`Sales task marked ${titleCase(status)}.`);
+    } catch (error) {
+      setMessage(`Could not update sales task status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
   }
 
   async function createProblem() {
@@ -821,6 +1136,437 @@ export default function EventDashboard() {
                 />
               </ProductCard>
             </div>
+
+            <ProductCard
+              title="Event Campaign Planner"
+              subtitle="Plan the email, WhatsApp, upsell, content, and sales work for this event. This screen prepares work only; nothing is sent to customers from here."
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <ProductStatus tone={plannerTotal ? 'good' : 'warn'}>{plannerTotal} planner item(s)</ProductStatus>
+                  <ProductStatus tone="info">Outbound Sending Controlled</ProductStatus>
+                </div>
+              )}
+            >
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <MetricCard label="Email Plans" value={plannerCounts.emails} detail="Upsell and reminder sequences" tone={plannerCounts.emails ? 'good' : 'warn'} />
+                <MetricCard label="WhatsApp Plans" value={plannerCounts.whatsapp} detail="Controlled message planning" tone={plannerCounts.whatsapp ? 'good' : 'warn'} />
+                <MetricCard label="Upsell Offers" value={plannerCounts.upsells} detail="Existing-customer conversion" tone={plannerCounts.upsells ? 'good' : 'warn'} />
+                <MetricCard label="Content Assets" value={plannerCounts.content} detail="Requests for the content team" tone={plannerCounts.content ? 'info' : 'warn'} />
+                <MetricCard label="Sales Tasks" value={plannerCounts.tasks} detail="Follow-up work before the event" tone={plannerCounts.tasks ? 'info' : 'warn'} />
+              </div>
+
+              <Notice tone="info">
+                Planner records are tied to the selected event. Approval status is shown for clarity, but approval changes stay in governed review. Email, WhatsApp, CRM, and ad execution remain outside this screen until customer-owned connectors are configured and authorized.
+              </Notice>
+
+              <div className="grid gap-5 xl:grid-cols-2">
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-950">Email plan</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Define awareness, reminder, and upsell emails for this event.</p>
+                    </div>
+                    <ProductStatus tone="info">{selectedEmailPlanId ? 'Editing' : 'New'}</ProductStatus>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Field label="Sequence name">
+                      <input
+                        value={emailPlanForm.sequenceName}
+                        onChange={event => setEmailPlanForm(current => ({ ...current, sequenceName: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Awareness sequence"
+                      />
+                    </Field>
+                    <Field label="Audience segment">
+                      <input
+                        value={emailPlanForm.audienceSegment}
+                        onChange={event => setEmailPlanForm(current => ({ ...current, audienceSegment: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Existing customers"
+                      />
+                    </Field>
+                    <Field label="Email count">
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={emailPlanForm.emailCount}
+                        onChange={event => setEmailPlanForm(current => ({ ...current, emailCount: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      />
+                    </Field>
+                    <Field label="First send date">
+                      <input
+                        type="datetime-local"
+                        value={emailPlanForm.plannedSendDate}
+                        onChange={event => setEmailPlanForm(current => ({ ...current, plannedSendDate: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      />
+                    </Field>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <Field label="Subject draft">
+                      <input
+                        value={emailPlanForm.subjectDraft}
+                        onChange={event => setEmailPlanForm(current => ({ ...current, subjectDraft: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Last seats before the event"
+                      />
+                    </Field>
+                    <Field label="Email content">
+                      <textarea
+                        value={emailPlanForm.contentDraft}
+                        onChange={event => setEmailPlanForm(current => ({ ...current, contentDraft: event.target.value }))}
+                        className="min-h-24 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Write the draft message Amro's team wants to review."
+                      />
+                    </Field>
+                    <div className="flex flex-wrap gap-2">
+                      <PrimaryAction onClick={saveEmailPlan} disabled={loading === 'save-email-plan' || !emailPlanForm.sequenceName.trim()}>
+                        {loading === 'save-email-plan' ? 'Saving...' : selectedEmailPlanId ? 'Update Email Plan' : 'Add Email Plan'}
+                      </PrimaryAction>
+                      {selectedEmailPlanId && (
+                        <SecondaryAction onClick={() => setSelectedEmailPlanId('')}>New Email Plan</SecondaryAction>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    {emailPlans.length ? (
+                      <ReadableQueue
+                        items={emailPlans.map(plan => ({
+                          title: text(plan.sequenceName, 'Email sequence'),
+                          meta: `${text(plan.audienceSegment, 'Audience not set')} / ${numberValue(plan.emailCount) || 1} email(s)`,
+                          status: titleCase(approvalStatus(plan.approvalStatus)),
+                          tone: approvalTone(approvalStatus(plan.approvalStatus)),
+                        }))}
+                      />
+                    ) : (
+                      <EmptyProductState title="No email plan yet" message="Add the first email sequence for reminders, upsell, or FOMO." />
+                    )}
+                    {emailPlans.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {emailPlans.map(plan => (
+                          <SecondaryAction key={String(plan.id)} onClick={() => selectEmailPlan(plan)}>Edit {text(plan.sequenceName, 'plan')}</SecondaryAction>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-950">WhatsApp plan</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Prepare reminder content and frequency without sending messages.</p>
+                    </div>
+                    <ProductStatus tone="info">{selectedWhatsappPlanId ? 'Editing' : 'New'}</ProductStatus>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Field label="Audience segment">
+                      <input
+                        value={whatsappPlanForm.audienceSegment}
+                        onChange={event => setWhatsappPlanForm(current => ({ ...current, audienceSegment: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Booked but not paid"
+                      />
+                    </Field>
+                    <Field label="Frequency">
+                      <input
+                        value={whatsappPlanForm.frequency}
+                        onChange={event => setWhatsappPlanForm(current => ({ ...current, frequency: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Two reminders before event"
+                      />
+                    </Field>
+                    <Field label="Content type">
+                      <select
+                        value={whatsappPlanForm.contentType}
+                        onChange={event => setWhatsappPlanForm(current => ({ ...current, contentType: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      >
+                        {['text', 'image', 'video'].map(type => <option key={type} value={type}>{titleCase(type)}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <Field label="Message draft">
+                      <textarea
+                        value={whatsappPlanForm.messageDraft}
+                        onChange={event => setWhatsappPlanForm(current => ({ ...current, messageDraft: event.target.value }))}
+                        className="min-h-24 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Short reminder, proof point, or answer to a common objection."
+                      />
+                    </Field>
+                    <div className="flex flex-wrap gap-2">
+                      <PrimaryAction onClick={saveWhatsappPlan} disabled={loading === 'save-whatsapp-plan' || !whatsappPlanForm.messageDraft.trim()}>
+                        {loading === 'save-whatsapp-plan' ? 'Saving...' : selectedWhatsappPlanId ? 'Update WhatsApp Plan' : 'Add WhatsApp Plan'}
+                      </PrimaryAction>
+                      {selectedWhatsappPlanId && (
+                        <SecondaryAction onClick={() => setSelectedWhatsappPlanId('')}>New WhatsApp Plan</SecondaryAction>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    {whatsappPlans.length ? (
+                      <ReadableQueue
+                        items={whatsappPlans.map(plan => ({
+                          title: text(plan.audienceSegment, 'WhatsApp segment'),
+                          meta: `${text(plan.frequency, 'Frequency not set')} / ${titleCase(text(plan.contentType, 'text'))}`,
+                          status: titleCase(approvalStatus(plan.approvalStatus)),
+                          tone: approvalTone(approvalStatus(plan.approvalStatus)),
+                        }))}
+                      />
+                    ) : (
+                      <EmptyProductState title="No WhatsApp plan yet" message="Add the reminder or follow-up sequence before the sales team starts outreach." />
+                    )}
+                    {whatsappPlans.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {whatsappPlans.map(plan => (
+                          <SecondaryAction key={String(plan.id)} onClick={() => selectWhatsappPlan(plan)}>Edit {text(plan.audienceSegment, 'segment')}</SecondaryAction>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-950">Upsell offer</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Plan the offer and urgency angle for existing customers or warm leads.</p>
+                    </div>
+                    <ProductStatus tone="info">{selectedUpsellPlanId ? 'Editing' : 'New'}</ProductStatus>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Field label="Target segment">
+                      <input
+                        value={upsellPlanForm.targetSegment}
+                        onChange={event => setUpsellPlanForm(current => ({ ...current, targetSegment: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Past course buyers"
+                      />
+                    </Field>
+                    <Field label="Channel">
+                      <input
+                        value={upsellPlanForm.plannedChannel}
+                        onChange={event => setUpsellPlanForm(current => ({ ...current, plannedChannel: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="WhatsApp / email / call"
+                      />
+                    </Field>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <Field label="Offer">
+                      <textarea
+                        value={upsellPlanForm.offer}
+                        onChange={event => setUpsellPlanForm(current => ({ ...current, offer: event.target.value }))}
+                        className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Example: VIP seat upgrade with bonus consultation."
+                      />
+                    </Field>
+                    <Field label="FOMO angle">
+                      <textarea
+                        value={upsellPlanForm.fomoAngle}
+                        onChange={event => setUpsellPlanForm(current => ({ ...current, fomoAngle: event.target.value }))}
+                        className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Example: limited seats, registration deadline, location urgency."
+                      />
+                    </Field>
+                    <div className="flex flex-wrap gap-2">
+                      <PrimaryAction onClick={saveUpsellPlan} disabled={loading === 'save-upsell-plan' || !upsellPlanForm.offer.trim()}>
+                        {loading === 'save-upsell-plan' ? 'Saving...' : selectedUpsellPlanId ? 'Update Upsell Plan' : 'Add Upsell Plan'}
+                      </PrimaryAction>
+                      {selectedUpsellPlanId && (
+                        <SecondaryAction onClick={() => setSelectedUpsellPlanId('')}>New Upsell Plan</SecondaryAction>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    {upsellPlans.length ? (
+                      <ReadableQueue
+                        items={upsellPlans.map(plan => ({
+                          title: text(plan.targetSegment, 'Upsell segment'),
+                          meta: `${text(plan.plannedChannel, 'Channel not set')} / ${text(plan.fomoAngle, 'FOMO angle not set')}`,
+                          status: titleCase(approvalStatus(plan.approvalStatus)),
+                          tone: approvalTone(approvalStatus(plan.approvalStatus)),
+                        }))}
+                      />
+                    ) : (
+                      <EmptyProductState title="No upsell plan yet" message="Add one offer for warm leads or existing customers." />
+                    )}
+                    {upsellPlans.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {upsellPlans.map(plan => (
+                          <SecondaryAction key={String(plan.id)} onClick={() => selectUpsellPlan(plan)}>Edit {text(plan.targetSegment, 'offer')}</SecondaryAction>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-950">Content requirement</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Create the assets the content team needs before launch.</p>
+                    </div>
+                    <ProductStatus tone="info">{selectedContentRequirementId ? 'Editing' : 'New'}</ProductStatus>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Field label="Asset type">
+                      <select
+                        value={contentRequirementForm.assetType}
+                        onChange={event => setContentRequirementForm(current => ({ ...current, assetType: event.target.value as ContentAssetType }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      >
+                        {CONTENT_ASSET_TYPES.map(type => <option key={type} value={type}>{titleCase(type)}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Platform">
+                      <input
+                        value={contentRequirementForm.platform}
+                        onChange={event => setContentRequirementForm(current => ({ ...current, platform: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Instagram / YouTube / Email"
+                      />
+                    </Field>
+                    <Field label="Due date">
+                      <input
+                        type="datetime-local"
+                        value={contentRequirementForm.dueDate}
+                        onChange={event => setContentRequirementForm(current => ({ ...current, dueDate: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      />
+                    </Field>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <Field label="Requirement">
+                      <textarea
+                        value={contentRequirementForm.description}
+                        onChange={event => setContentRequirementForm(current => ({ ...current, description: event.target.value }))}
+                        className="min-h-24 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Describe the video, image, caption, carousel, landing page, or template needed."
+                      />
+                    </Field>
+                    <div className="flex flex-wrap gap-2">
+                      <PrimaryAction onClick={saveContentRequirement} disabled={loading === 'save-content-requirement' || !contentRequirementForm.description.trim()}>
+                        {loading === 'save-content-requirement' ? 'Saving...' : selectedContentRequirementId ? 'Update Requirement' : 'Add Requirement'}
+                      </PrimaryAction>
+                      {selectedContentRequirementId && (
+                        <SecondaryAction onClick={() => setSelectedContentRequirementId('')}>New Requirement</SecondaryAction>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {contentRequirements.length ? contentRequirements.map(item => {
+                      const status = contentRequirementStatus(item.status);
+                      return (
+                        <div key={String(item.id)} className="rounded-lg border border-neutral-200 bg-white p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="font-semibold text-neutral-950">{titleCase(text(item.assetType, 'asset'))}</div>
+                              <div className="mt-1 text-sm leading-5 text-neutral-500">{text(item.description, 'No description')}</div>
+                              <div className="mt-2 text-xs text-neutral-500">{text(item.platform, 'Platform not set')} / due {formatDate(item.dueDate)}</div>
+                            </div>
+                            <ProductStatus tone={workStatusTone(status)}>{titleCase(status)}</ProductStatus>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <SecondaryAction onClick={() => selectContentRequirement(item)}>Edit</SecondaryAction>
+                            {status !== 'ready' && <SecondaryAction onClick={() => updateContentRequirementStatus(item, 'ready')}>Mark Ready</SecondaryAction>}
+                            {status !== 'delivered' && <SecondaryAction onClick={() => updateContentRequirementStatus(item, 'delivered')}>Mark Delivered</SecondaryAction>}
+                            {status !== 'blocked' && <SecondaryAction onClick={() => updateContentRequirementStatus(item, 'blocked')}>Mark Blocked</SecondaryAction>}
+                          </div>
+                        </div>
+                      );
+                    }) : (
+                      <EmptyProductState title="No content requirements yet" message="Add the first required asset for the content team." />
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 xl:col-span-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-950">Sales tasks</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Assign follow-up, closing, no-show recovery, and inquiry-response work before the event.</p>
+                    </div>
+                    <ProductStatus tone="info">{selectedSalesTaskId ? 'Editing' : 'New'}</ProductStatus>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-4">
+                    <Field label="Task type">
+                      <select
+                        value={salesTaskForm.taskType}
+                        onChange={event => setSalesTaskForm(current => ({ ...current, taskType: event.target.value as SalesTaskType }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      >
+                        {SALES_TASK_TYPES.map(type => <option key={type} value={type}>{titleCase(type)}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Owner role">
+                      <input
+                        value={salesTaskForm.ownerRole}
+                        onChange={event => setSalesTaskForm(current => ({ ...current, ownerRole: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="sales_manager"
+                      />
+                    </Field>
+                    <Field label="Due date">
+                      <input
+                        type="datetime-local"
+                        value={salesTaskForm.dueDate}
+                        onChange={event => setSalesTaskForm(current => ({ ...current, dueDate: event.target.value }))}
+                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      />
+                    </Field>
+                    <div className="flex items-end gap-2">
+                      <PrimaryAction onClick={saveSalesTask} disabled={loading === 'save-sales-task' || !salesTaskForm.description.trim()}>
+                        {loading === 'save-sales-task' ? 'Saving...' : selectedSalesTaskId ? 'Update Task' : 'Add Task'}
+                      </PrimaryAction>
+                      {selectedSalesTaskId && (
+                        <SecondaryAction onClick={() => setSelectedSalesTaskId('')}>New</SecondaryAction>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <Field label="Task description">
+                      <textarea
+                        value={salesTaskForm.description}
+                        onChange={event => setSalesTaskForm(current => ({ ...current, description: event.target.value }))}
+                        className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Example: Follow up with booked leads who did not complete payment."
+                      />
+                    </Field>
+                  </div>
+                  <div className="mt-4">
+                    {salesTasks.length ? (
+                      <ProductTable
+                        columns={['Task', 'Owner', 'Due', 'Status', 'Actions']}
+                        rows={salesTasks.map(task => {
+                          const status = salesTaskStatus(task.status);
+                          return [
+                            <div key="task">
+                              <div className="font-medium text-neutral-950">{titleCase(text(task.taskType, 'task'))}</div>
+                              <div className="mt-1 max-w-xl text-sm leading-5 text-neutral-500">{text(task.description, 'No description')}</div>
+                            </div>,
+                            text(task.ownerRole, 'Unassigned'),
+                            formatDate(task.dueDate),
+                            <ProductStatus key="status" tone={workStatusTone(status)}>{titleCase(status)}</ProductStatus>,
+                            <div key="actions" className="flex flex-wrap gap-2">
+                              <SecondaryAction onClick={() => selectSalesTask(task)}>Edit</SecondaryAction>
+                              {status !== 'in_progress' && <SecondaryAction onClick={() => updateSalesTaskStatus(task, 'in_progress')}>Start</SecondaryAction>}
+                              {status !== 'completed' && <SecondaryAction onClick={() => updateSalesTaskStatus(task, 'completed')}>Complete</SecondaryAction>}
+                              {status !== 'blocked' && <SecondaryAction onClick={() => updateSalesTaskStatus(task, 'blocked')}>Block</SecondaryAction>}
+                            </div>,
+                          ];
+                        })}
+                      />
+                    ) : (
+                      <EmptyProductState title="No sales tasks yet" message="Add the first follow-up, closing, or no-show recovery task for the sales team." />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ProductCard>
 
             <ProductCard
               title="Barriers & Risks"
