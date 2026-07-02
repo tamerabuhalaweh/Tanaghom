@@ -120,6 +120,7 @@ model Tenant {
   event_sales_tasks EventSalesTask[]
   lead_lifecycle_events LeadLifecycleEvent[]
   event_problems EventProblem[]
+  connector_import_jobs ConnectorImportJob[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
 
@@ -278,6 +279,8 @@ model User {
   lead_lifecycle_events LeadLifecycleEvent[]
   event_problems_created EventProblem[] @relation("EventProblemCreatedBy")
   event_problems_resolved EventProblem[] @relation("EventProblemResolvedBy")
+  connector_imports_created ConnectorImportJob[] @relation("ConnectorImportCreatedBy")
+  connector_imports_approved ConnectorImportJob[] @relation("ConnectorImportApprovedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
@@ -3448,6 +3451,7 @@ model CommercialEvent {
   content_requirements EventContentRequirement[]
   sales_tasks         EventSalesTask[]
   problems            EventProblem[]
+  connector_imports   ConnectorImportJob[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -3746,4 +3750,59 @@ model EventProblem {
   @@index([category])
   @@index([created_by_user_id])
   @@map("event_problems")
+}
+
+// ============================================================
+// Connector Import Jobs — Sprint 64
+// ============================================================
+
+enum ConnectorImportState {
+  draft
+  requires_credentials
+  ready_for_test
+  test_passed
+  blocked
+  disabled
+}
+
+enum ConnectorCredentialState {
+  customer_credential_missing
+  configured
+  test_not_run
+  test_passed
+  blocked_by_provider_approval
+}
+
+model ConnectorImportJob {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  event_id            String?                 @db.Uuid
+  connector_id        String
+  display_name        String
+  state               ConnectorImportState   @default(draft)
+  credential_state    ConnectorCredentialState @default(customer_credential_missing)
+  notes               String?                @db.Text
+  last_dry_run_at     DateTime?
+  last_dry_run_result Json?
+  last_import_at      DateTime?
+  last_import_result  Json?
+  approved_by_user_id String?                @db.Uuid
+  approved_at         DateTime?
+  disabled_at         DateTime?
+  disabled_reason     String?                @db.Text
+  created_by_user_id  String                 @db.Uuid
+  created_at          DateTime               @default(now())
+  updated_at          DateTime               @updatedAt
+
+  tenant       Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  event        CommercialEvent? @relation(fields: [event_id], references: [id])
+  created_by   User            @relation("ConnectorImportCreatedBy", fields: [created_by_user_id], references: [id])
+  approved_by  User?           @relation("ConnectorImportApprovedBy", fields: [approved_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([connector_id])
+  @@index([state])
+  @@index([created_by_user_id])
+  @@map("connector_import_jobs")
 }
