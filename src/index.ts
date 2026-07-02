@@ -29,7 +29,6 @@ import { postizIntegrationRouter } from '../modules/postiz-integration/controlle
 import { integrationStatusRouter } from '../modules/integration-status/controller';
 import { adminUsersRouter } from '../modules/admin-users/controller';
 import { integrationsRouter } from '../modules/integrations/controller';
-import { leadsRouter } from '../modules/leads/controller';
 import { ghlRouter } from '../modules/ghl-connector/controller';
 import { ideasRouter } from '../modules/ideas/controller';
 import { integrationCredentialsRouter } from '../modules/integration-credentials/controller';
@@ -249,7 +248,6 @@ app.use('/ops', operationsRouter);
 app.use('/smartlabs', smartLabsVoiceRouter);
 app.use('/social-growth', socialGrowthRouter);
 app.use('/integrations', integrationsRouter);
-app.use('/leads', leadsRouter);
 app.use('/ghl', ghlRouter);
 app.use('/ideas', ideasRouter);
 app.use('/events', commercialEventsRouter);

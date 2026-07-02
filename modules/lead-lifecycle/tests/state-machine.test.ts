@@ -45,34 +45,34 @@ describe('Lead Lifecycle State Machine', () => {
   });
 
   describe('isValidLeadTransition', () => {
-    it('allows new_lead → contacted', () => {
+    it('allows new_lead -> contacted', () => {
       expect(isValidLeadTransition('new_lead', 'contacted')).toBe(true);
     });
 
-    it('allows contacted → meeting_booked', () => {
+    it('allows contacted -> meeting_booked', () => {
       expect(isValidLeadTransition('contacted', 'meeting_booked')).toBe(true);
     });
 
-    it('allows meeting_booked → meeting_attended', () => {
+    it('allows meeting_booked -> meeting_attended', () => {
       expect(isValidLeadTransition('meeting_booked', 'meeting_attended')).toBe(true);
     });
 
-    it('allows meeting_attended → purchased', () => {
+    it('allows meeting_attended -> purchased', () => {
       expect(isValidLeadTransition('meeting_attended', 'purchased')).toBe(true);
     });
 
-    it('blocks new_lead → purchased', () => {
+    it('blocks new_lead -> purchased', () => {
       expect(isValidLeadTransition('new_lead', 'purchased')).toBe(false);
     });
 
-    it('blocks purchased → non-archived statuses', () => {
+    it('blocks purchased -> non-archived statuses', () => {
       const nonArchivedStatuses = Object.keys(LEAD_TRANSITION_TABLE).filter(s => s !== 'archived') as LeadStatus[];
       for (const status of nonArchivedStatuses) {
         expect(isValidLeadTransition('purchased', status)).toBe(false);
       }
     });
 
-    it('blocks lost → anything', () => {
+    it('blocks lost -> anything', () => {
       const allStatuses = Object.keys(LEAD_TRANSITION_TABLE) as LeadStatus[];
       for (const status of allStatuses) {
         expect(isValidLeadTransition('lost', status)).toBe(false);

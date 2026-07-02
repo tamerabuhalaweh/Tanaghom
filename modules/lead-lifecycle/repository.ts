@@ -5,7 +5,7 @@ import type {
   CreateLeadInput, UpdateLeadInput, LeadSummary,
   UpdateMeetingInput, UpdatePurchaseInput,
   SetTemperatureInput, LeadStatus, LeadTemperature,
-  EventDashboardSummary,
+  EventDashboardSummary, LeadStatsSummary,
 } from './types';
 
 export async function listLeads(
@@ -33,6 +33,14 @@ export async function getLeadById(tenantKey: string, id: string): Promise<LeadSu
 }
 
 export async function createLead(tenantKey: string, userId: string, agentRepId: string, input: CreateLeadInput): Promise<LeadSummary> {
+  if (input.eventId) {
+    const event = await prisma.commercialEvent.findFirst({
+      where: { id: input.eventId, tenant_key: tenantKey },
+      select: { id: true },
+    });
+    if (!event) throw new NotFoundError('CommercialEvent', input.eventId);
+  }
+
   const lead = await prisma.leadCaptureRecord.create({
     data: {
       tenant_key: tenantKey,
@@ -110,7 +118,7 @@ export async function transitionLead(tenantKey: string, id: string, toStatus: Le
   return mapLead(lead);
 }
 
-export async function updateMeeting(tenantKey: string, id: string, input: UpdateMeetingInput): Promise<LeadSummary> {
+export async function updateMeeting(tenantKey: string, id: string, input: UpdateMeetingInput, userId: string): Promise<LeadSummary> {
   const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
@@ -130,6 +138,7 @@ export async function updateMeeting(tenantKey: string, id: string, input: Update
       lead_id: id,
       from_status: existing.lead_status,
       to_status: 'meeting_booked',
+      actor_user_id: userId,
       reason: `Meeting scheduled: ${input.meetingType}`,
       metadata: { meetingDate: input.meetingDate, meetingType: input.meetingType },
     },
@@ -138,7 +147,7 @@ export async function updateMeeting(tenantKey: string, id: string, input: Update
   return mapLead(lead);
 }
 
-export async function updatePurchase(tenantKey: string, id: string, input: UpdatePurchaseInput): Promise<LeadSummary> {
+export async function updatePurchase(tenantKey: string, id: string, input: UpdatePurchaseInput, userId: string): Promise<LeadSummary> {
   const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
@@ -158,6 +167,7 @@ export async function updatePurchase(tenantKey: string, id: string, input: Updat
       lead_id: id,
       from_status: existing.lead_status,
       to_status: 'purchased',
+      actor_user_id: userId,
       reason: 'Purchase recorded',
       metadata: { purchaseDate: input.purchaseDate, purchaseAmount: input.purchaseAmount },
     },
@@ -188,6 +198,42 @@ export async function setTemperature(tenantKey: string, id: string, input: SetTe
   });
 
   return mapLead(lead);
+}
+
+export async function qualifyLead(tenantKey: string, id: string, userId: string, score: number): Promise<LeadSummary> {
+  const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
+  if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
+
+  const toStatus: LeadStatus = score >= 80 ? 'qualified' : score >= 60 ? 'nurturing' : 'lost';
+  const lead = await prisma.leadCaptureRecord.update({
+    where: { id },
+    data: { lead_status: toStatus },
+  });
+
+  await prisma.leadLifecycleEvent.create({
+    data: {
+      tenant_key: tenantKey,
+      lead_id: id,
+      from_status: existing.lead_status,
+      to_status: toStatus,
+      actor_user_id: userId,
+      reason: `Lead qualified with score ${score}`,
+      metadata: { qualificationScore: score },
+    },
+  });
+
+  return mapLead(lead);
+}
+
+export async function getLeadStats(tenantKey: string): Promise<LeadStatsSummary> {
+  const [total, qualified, nurturing, newLeads] = await Promise.all([
+    prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey } }),
+    prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey, lead_status: 'qualified' } }),
+    prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey, lead_status: 'nurturing' } }),
+    prisma.leadCaptureRecord.count({ where: { tenant_key: tenantKey, lead_status: 'new_lead' } }),
+  ]);
+
+  return { total, qualified, nurturing, newLeads };
 }
 
 export async function getEventDashboard(tenantKey: string, eventId: string): Promise<EventDashboardSummary> {

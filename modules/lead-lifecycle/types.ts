@@ -19,7 +19,7 @@ export const CHANNEL_ATTRIBUTIONS = [
 export type ChannelAttribution = (typeof CHANNEL_ATTRIBUTIONS)[number];
 
 export const LEAD_TRANSITION_TABLE: Record<LeadStatus, LeadStatus[]> = {
-  new_lead: ['contacted', 'lost'],
+  new_lead: ['contacted', 'qualified', 'nurturing', 'lost'],
   contacted: ['meeting_booked', 'follow_up_needed', 'lost'],
   meeting_booked: ['meeting_attended', 'no_show', 'lost'],
   meeting_attended: ['purchased', 'follow_up_needed', 'lost'],
@@ -45,7 +45,7 @@ export function validateLeadTransition(from: LeadStatus, to: LeadStatus): void {
 
 export class LeadTransitionError extends Error {
   constructor(public readonly from: LeadStatus, public readonly to: LeadStatus) {
-    super(`Invalid lead transition: ${from} → ${to}`);
+    super(`Invalid lead transition: ${from} -> ${to}`);
     this.name = 'LeadTransitionError';
   }
 }
@@ -143,4 +143,11 @@ export interface EventDashboardSummary {
   meetingsScheduled: number;
   purchases: number;
   totalRevenue: number;
+}
+
+export interface LeadStatsSummary {
+  total: number;
+  qualified: number;
+  nurturing: number;
+  newLeads: number;
 }

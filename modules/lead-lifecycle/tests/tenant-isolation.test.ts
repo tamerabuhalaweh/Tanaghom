@@ -10,6 +10,9 @@ const prismaMocks = vi.hoisted(() => ({
   leadLifecycleEvent: {
     create: vi.fn().mockResolvedValue({}),
   },
+  commercialEvent: {
+    findFirst: vi.fn().mockResolvedValue(null),
+  },
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
@@ -35,6 +38,15 @@ describe('Lead Lifecycle tenant isolation', () => {
     expect(prismaMocks.leadCaptureRecord.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ tenant_key: 'tenant-a', event_id: 'event-1' }),
     }));
+  });
+
+  it('rejects lead creation when the event is not in the tenant', async () => {
+    prismaMocks.commercialEvent.findFirst.mockResolvedValue(null);
+    await expect(repo.createLead('tenant-a', 'user-1', 'agent-1', { eventId: '11111111-1111-4111-8111-111111111111' })).rejects.toThrow();
+    expect(prismaMocks.commercialEvent.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ tenant_key: 'tenant-a', id: '11111111-1111-4111-8111-111111111111' }),
+    }));
+    expect(prismaMocks.leadCaptureRecord.create).not.toHaveBeenCalled();
   });
 
   it('getLeadById scopes to tenant', async () => {

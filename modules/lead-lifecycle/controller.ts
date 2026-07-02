@@ -3,7 +3,7 @@ import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
 import * as service from './service';
 import * as validators from './validators';
-import type { LeadStatus } from './types';
+import type { LeadStatus, LeadTemperature } from './types';
 
 export const leadLifecycleRouter = Router();
 
@@ -20,6 +20,7 @@ leadLifecycleRouter.get('/', async (req: Request, res: Response, next: NextFunct
       payload.role, payload.tenantKey || 'default',
       req.query.eventId as string | undefined,
       req.query.status as LeadStatus | undefined,
+      req.query.temperature as LeadTemperature | undefined,
     );
     res.json(leads);
   } catch (err) { next(err); }
@@ -30,6 +31,30 @@ leadLifecycleRouter.get('/dashboard/:eventId', async (req: Request, res: Respons
     const payload = getPayload(req);
     const dashboard = await service.getEventDashboard(payload.role, payload.tenantKey || 'default', req.params.eventId as string);
     res.json(dashboard);
+  } catch (err) { next(err); }
+});
+
+leadLifecycleRouter.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const stats = await service.getLeadStats(payload.role, payload.tenantKey || 'default');
+    res.json({
+      ...stats,
+      _label: 'Lead statistics from backend',
+    });
+  } catch (err) { next(err); }
+});
+
+leadLifecycleRouter.post('/:id/qualify', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const result = await service.qualifyLead(payload.role, payload.tenantKey || 'default', payload.sub, req.params.id as string);
+    res.json({
+      id: result.lead.id,
+      qualificationScore: result.qualificationScore,
+      leadStatus: result.lead.leadStatus,
+      _label: 'Lead qualified - deterministic rules',
+    });
   } catch (err) { next(err); }
 });
 
@@ -45,7 +70,7 @@ leadLifecycleRouter.post('/', async (req: Request, res: Response, next: NextFunc
   try {
     const payload = getPayload(req);
     const input = validators.validateCreateLead(req.body);
-    const lead = await service.createLead(payload.role, payload.tenantKey || 'default', payload.sub, payload.sub, input);
+    const lead = await service.createLead(payload.role, payload.tenantKey || 'default', payload.sub, payload.agentRepId || payload.sub, input);
     res.status(201).json(lead);
   } catch (err) { next(err); }
 });
