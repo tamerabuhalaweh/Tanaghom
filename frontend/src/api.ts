@@ -400,3 +400,10 @@ export const eventsApi = {
   updateKpi: (eventId: string, kpiId: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/events/${eventId}/kpis/${kpiId}`, { method: 'PUT', body: data, token }),
 };
+
+export const masterEventsApi = {
+  dashboard: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown>(`/master-events/dashboard${params}`, { token });
+  },
+};

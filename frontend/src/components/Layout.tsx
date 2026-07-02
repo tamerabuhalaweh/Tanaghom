@@ -73,7 +73,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     path: '/events',
     label: 'Events',
-    description: 'Event dashboard and sales results',
+    description: 'Portfolio results and event workspaces',
     icon: CalendarDays,
     group: 'Product',
     roles: ['admin', 'cco', 'department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'viewer'],
@@ -275,6 +275,7 @@ export default function Layout() {
   const isActive = (path: string): boolean => {
     if (location.pathname === path) return true;
     if (location.pathname === '/' && path === '/command-center') return true;
+    if (path === '/events' && location.pathname.startsWith('/events')) return true;
     return false;
   };
   const adminNavVisible = adminExpanded || currentItem?.group === 'Admin';
