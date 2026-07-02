@@ -401,6 +401,24 @@ export const eventsApi = {
     apiFetch<unknown>(`/events/${eventId}/kpis/${kpiId}`, { method: 'PUT', body: data, token }),
 };
 
+export const eventPlannerApi = {
+  emailPlans: (eventId: string, token: string) => apiFetch<unknown[]>(`/planner/events/${eventId}/email-plans`, { token }),
+  createEmailPlan: (data: unknown, token: string) => apiFetch<unknown>('/planner/email-plans', { method: 'POST', body: data, token }),
+  updateEmailPlan: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/planner/email-plans/${id}`, { method: 'PUT', body: data, token }),
+  whatsappPlans: (eventId: string, token: string) => apiFetch<unknown[]>(`/planner/events/${eventId}/whatsapp-plans`, { token }),
+  createWhatsappPlan: (data: unknown, token: string) => apiFetch<unknown>('/planner/whatsapp-plans', { method: 'POST', body: data, token }),
+  updateWhatsappPlan: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/planner/whatsapp-plans/${id}`, { method: 'PUT', body: data, token }),
+  upsellPlans: (eventId: string, token: string) => apiFetch<unknown[]>(`/planner/events/${eventId}/upsell-plans`, { token }),
+  createUpsellPlan: (data: unknown, token: string) => apiFetch<unknown>('/planner/upsell-plans', { method: 'POST', body: data, token }),
+  updateUpsellPlan: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/planner/upsell-plans/${id}`, { method: 'PUT', body: data, token }),
+  contentRequirements: (eventId: string, token: string) => apiFetch<unknown[]>(`/planner/events/${eventId}/content-requirements`, { token }),
+  createContentRequirement: (data: unknown, token: string) => apiFetch<unknown>('/planner/content-requirements', { method: 'POST', body: data, token }),
+  updateContentRequirement: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/planner/content-requirements/${id}`, { method: 'PUT', body: data, token }),
+  salesTasks: (eventId: string, token: string) => apiFetch<unknown[]>(`/planner/events/${eventId}/sales-tasks`, { token }),
+  createSalesTask: (data: unknown, token: string) => apiFetch<unknown>('/planner/sales-tasks', { method: 'POST', body: data, token }),
+  updateSalesTask: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/planner/sales-tasks/${id}`, { method: 'PUT', body: data, token }),
+};
+
 export const masterEventsApi = {
   dashboard: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
