@@ -29,7 +29,6 @@ import { postizIntegrationRouter } from '../modules/postiz-integration/controlle
 import { integrationStatusRouter } from '../modules/integration-status/controller';
 import { adminUsersRouter } from '../modules/admin-users/controller';
 import { integrationsRouter } from '../modules/integrations/controller';
-import { leadsRouter } from '../modules/leads/controller';
 import { ghlRouter } from '../modules/ghl-connector/controller';
 import { ideasRouter } from '../modules/ideas/controller';
 import { integrationCredentialsRouter } from '../modules/integration-credentials/controller';
@@ -42,6 +41,7 @@ import { smartLabsVoiceRouter } from '../modules/smartlabs-voice/controller';
 import { socialGrowthRouter } from '../modules/social-growth/controller';
 import { commercialEventsRouter } from '../modules/commercial-events/controller';
 import { eventCampaignPlannerRouter } from '../modules/event-campaign-planner/controller';
+import { leadLifecycleRouter } from '../modules/lead-lifecycle/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -248,12 +248,12 @@ app.use('/ops', operationsRouter);
 app.use('/smartlabs', smartLabsVoiceRouter);
 app.use('/social-growth', socialGrowthRouter);
 app.use('/integrations', integrationsRouter);
-app.use('/leads', leadsRouter);
 app.use('/ghl', ghlRouter);
 app.use('/ideas', ideasRouter);
 app.use('/events', commercialEventsRouter);
 app.use('/commercial-events', commercialEventsRouter);
 app.use('/planner', eventCampaignPlannerRouter);
+app.use('/leads', leadLifecycleRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
