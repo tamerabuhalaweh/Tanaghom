@@ -214,65 +214,12 @@ export async function dryRun(
     throw new ValidationError('Cannot run dry run: customer credentials not configured');
   }
 
-  // Stub: produce sample KPI rows from connector (no external API calls)
-  // In production, this would query the connector API in read-only mode
+  // This endpoint persists a typed preview envelope, but it must not fabricate connector data.
+  // Real kpiRows must come from a future read-only connector adapter.
   const sampleKpiRows: DryRunKpiRow[] = [];
-  const warnings: string[] = [];
-
-  if (credentialState === 'configured') {
-    warnings.push('Credentials configured but not tested - sample data may be incomplete');
-    // Produce 2 sample rows to demonstrate the shape
-    sampleKpiRows.push({
-      metricDate: new Date().toISOString(),
-      channel: connectorId,
-      reach: 1500,
-      impressions: 3200,
-      interactions: 180,
-      clicks: 45,
-      formCompletions: 12,
-      leads: 8,
-      meetingsBooked: 3,
-      meetingsAttended: 2,
-      purchases: 1,
-      noShows: 1,
-      spend: 250,
-      notes: `Sample row 1 from ${connectorId} dry run`,
-    });
-    sampleKpiRows.push({
-      metricDate: new Date(Date.now() - 86400000).toISOString(),
-      channel: connectorId,
-      reach: 1200,
-      impressions: 2800,
-      interactions: 150,
-      clicks: 38,
-      formCompletions: 9,
-      leads: 6,
-      meetingsBooked: 2,
-      meetingsAttended: 2,
-      purchases: 0,
-      noShows: 0,
-      spend: 200,
-      notes: `Sample row 2 from ${connectorId} dry run`,
-    });
-  } else {
-    warnings.push('Test passed but no live data available yet - import will write sample structure');
-    sampleKpiRows.push({
-      metricDate: new Date().toISOString(),
-      channel: connectorId,
-      reach: 0,
-      impressions: 0,
-      interactions: 0,
-      clicks: 0,
-      formCompletions: 0,
-      leads: 0,
-      meetingsBooked: 0,
-      meetingsAttended: 0,
-      purchases: 0,
-      noShows: 0,
-      spend: 0,
-      notes: `Placeholder from ${connectorId} - no live data yet`,
-    });
-  }
+  const warnings = [
+    `No read-only adapter is implemented for ${connectorId} yet - no external API calls made and no rows are importable.`,
+  ];
 
   const dryRunResult: DryRunResult = {
     connectorId,
@@ -298,7 +245,7 @@ export async function dryRun(
       human_user_id: userId,
       target_object_type: 'connector_import_job',
       target_object_id: job.id,
-      reason: `Dry run executed for ${connectorId}: ${sampleKpiRows.length} sample rows`,
+      reason: `Dry run executed for ${connectorId}: ${sampleKpiRows.length} importable rows`,
     },
   });
 
@@ -343,10 +290,9 @@ export async function approveAndImport(
 
   const { kpiRows } = dryRunResult;
 
-  // Validate rows are not malformed
   for (let i = 0; i < kpiRows.length; i++) {
-    const row = kpiRows[i];
-    if (!row.metricDate || !row.channel) {
+    const error = validateKpiRow(kpiRows[i]);
+    if (error) {
       await prisma.auditRecord.create({
         data: {
           audit_type: 'connector_import',
@@ -355,10 +301,10 @@ export async function approveAndImport(
           human_user_id: userId,
           target_object_type: 'connector_import_job',
           target_object_id: job.id,
-          reason: `Row ${i} malformed: missing metricDate or channel`,
+          reason: `Row ${i} malformed: ${error}`,
         },
       });
-      throw new ValidationError(`Row ${i} is malformed: missing required fields (metricDate, channel)`);
+      throw new ValidationError(`Row ${i} is malformed: ${error}`);
     }
   }
 
@@ -425,6 +371,29 @@ export async function approveAndImport(
     },
     auditRecordId: importAuditRecord.id,
   };
+}
+
+function validateKpiRow(row: DryRunKpiRow | null | undefined): string | null {
+  if (!row) return 'missing row';
+  if (!row.metricDate || Number.isNaN(new Date(row.metricDate).getTime())) return 'invalid metricDate';
+  if (!row.channel || row.channel.trim().length === 0) return 'missing channel';
+
+  const numericFields: Array<keyof Omit<DryRunKpiRow, 'metricDate' | 'channel' | 'notes'>> = [
+    'reach', 'impressions', 'interactions', 'clicks', 'formCompletions',
+    'leads', 'meetingsBooked', 'meetingsAttended', 'purchases', 'noShows', 'spend',
+  ];
+
+  for (const field of numericFields) {
+    const value = row[field];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      return `invalid ${field}`;
+    }
+  }
+
+  const hasSignal = numericFields.some(field => row[field] > 0);
+  if (!hasSignal) return 'all metric values are zero';
+
+  return null;
 }
 
 function mapJob(j: Record<string, unknown>): ConnectorImportJobSummary {

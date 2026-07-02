@@ -207,13 +207,3 @@ export interface ImportResult {
   };
   auditRecordId: string;
 }
-
-export interface ImportResult {
-  connectorId: string;
-  eventId: string;
-  imported: {
-    kpiRecords: number;
-    leadAttributions: number;
-  };
-  auditRecordId: string;
-}

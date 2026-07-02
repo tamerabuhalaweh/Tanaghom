@@ -135,17 +135,15 @@ describe('Connector Imports', () => {
       }));
     });
 
-    it('produces sample KPI rows with real metrics', async () => {
+    it('does not fabricate KPI rows without a read-only connector adapter', async () => {
       prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: null });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
       const result = await repo.dryRun('tenant-a', 'user-1', 'postiz', 'event-1');
-      expect(result.kpiRows.length).toBeGreaterThan(0);
-      expect(result.kpiRows[0].channel).toBe('postiz');
-      expect(typeof result.kpiRows[0].reach).toBe('number');
-      expect(typeof result.kpiRows[0].spend).toBe('number');
+      expect(result.kpiRows).toEqual([]);
+      expect(result.warnings[0]).toContain('No read-only adapter is implemented');
     });
 
     it('has no writes to EventKpiRecord', async () => {
@@ -191,6 +189,42 @@ describe('Connector Imports', () => {
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
       const { ValidationError } = await import('@shared/errors');
       await expect(repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1')).rejects.toThrow(ValidationError);
+    });
+
+    it('rejects malformed rows with invalid metricDate', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({
+        state: 'test_passed',
+        last_dry_run_result: sampleDryRunResult({
+          kpiRows: [{ ...sampleDryRunResult().kpiRows[0], metricDate: 'not-a-date' }],
+        }),
+      }));
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+      const { ValidationError } = await import('@shared/errors');
+
+      await expect(repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1')).rejects.toThrow(ValidationError);
+      expect(prismaMocks.eventKpiRecord.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects all-zero placeholder KPI rows', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({
+        state: 'test_passed',
+        last_dry_run_result: sampleDryRunResult({
+          kpiRows: [{
+            metricDate: '2026-07-01T00:00:00Z',
+            channel: 'postiz',
+            reach: 0, impressions: 0, interactions: 0, clicks: 0,
+            formCompletions: 0, leads: 0, meetingsBooked: 0, meetingsAttended: 0,
+            purchases: 0, noShows: 0, spend: 0, notes: 'placeholder',
+          }],
+        }),
+      }));
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+      const { ValidationError } = await import('@shared/errors');
+
+      await expect(repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1')).rejects.toThrow(ValidationError);
+      expect(prismaMocks.eventKpiRecord.create).not.toHaveBeenCalled();
     });
 
     it('writes exact metrics from dry-run payload', async () => {
