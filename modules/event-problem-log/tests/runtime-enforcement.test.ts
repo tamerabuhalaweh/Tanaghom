@@ -131,9 +131,27 @@ describe('Related entity ownership validation', () => {
       ).rejects.toThrow();
     });
 
-    it('accepts valid lead and campaign from same tenant', async () => {
-      prismaMocks.leadCaptureRecord.findFirst.mockResolvedValue({ id: 'lead-1', tenant_key: 'tenant-a' });
-      prismaMocks.contentRequest.findFirst.mockResolvedValue({ id: 'camp-1', tenant_key: 'tenant-a' });
+    it('rejects same-tenant different-event lead', async () => {
+      prismaMocks.leadCaptureRecord.findFirst.mockResolvedValue({ id: 'lead-1', tenant_key: 'tenant-a', event_id: 'event-2' });
+      await expect(
+        service.createProblem('admin', 'tenant-a', 'user-1', {
+          eventId: 'event-1', title: 'Test', category: 'sales', relatedLeadId: 'lead-1',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('rejects same-tenant different-event campaign', async () => {
+      prismaMocks.contentRequest.findFirst.mockResolvedValue({ id: 'camp-1', tenant_key: 'tenant-a', event_id: 'event-2' });
+      await expect(
+        service.createProblem('admin', 'tenant-a', 'user-1', {
+          eventId: 'event-1', title: 'Test', category: 'sales', relatedCampaignId: 'camp-1',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('accepts same-tenant same-event lead and campaign', async () => {
+      prismaMocks.leadCaptureRecord.findFirst.mockResolvedValue({ id: 'lead-1', tenant_key: 'tenant-a', event_id: 'event-1' });
+      prismaMocks.contentRequest.findFirst.mockResolvedValue({ id: 'camp-1', tenant_key: 'tenant-a', event_id: 'event-1' });
       await expect(
         service.createProblem('admin', 'tenant-a', 'user-1', {
           eventId: 'event-1', title: 'Test', category: 'sales',
@@ -162,6 +180,46 @@ describe('Related entity ownership validation', () => {
       await expect(
         service.updateProblem('admin', 'tenant-a', 'user-1', 'p1', { relatedCampaignId: 'camp-other' }),
       ).rejects.toThrow();
+    });
+
+    it('rejects same-tenant different-event lead on update', async () => {
+      prismaMocks.eventProblem.findFirst.mockResolvedValue({
+        id: 'p1', tenant_key: 'tenant-a', event_id: 'event-1', category: 'sales', status: 'open',
+      });
+      prismaMocks.leadCaptureRecord.findFirst.mockResolvedValue({ id: 'lead-1', tenant_key: 'tenant-a', event_id: 'event-2' });
+      await expect(
+        service.updateProblem('admin', 'tenant-a', 'user-1', 'p1', { relatedLeadId: 'lead-1' }),
+      ).rejects.toThrow();
+    });
+
+    it('rejects same-tenant different-event campaign on update', async () => {
+      prismaMocks.eventProblem.findFirst.mockResolvedValue({
+        id: 'p1', tenant_key: 'tenant-a', event_id: 'event-1', category: 'sales', status: 'open',
+      });
+      prismaMocks.contentRequest.findFirst.mockResolvedValue({ id: 'camp-1', tenant_key: 'tenant-a', event_id: 'event-2' });
+      await expect(
+        service.updateProblem('admin', 'tenant-a', 'user-1', 'p1', { relatedCampaignId: 'camp-1' }),
+      ).rejects.toThrow();
+    });
+
+    it('accepts same-tenant same-event lead on update', async () => {
+      prismaMocks.eventProblem.findFirst.mockResolvedValue({
+        id: 'p1', tenant_key: 'tenant-a', event_id: 'event-1', category: 'sales', status: 'open', title: 'Old', created_at: new Date(), updated_at: new Date(),
+      });
+      prismaMocks.leadCaptureRecord.findFirst.mockResolvedValue({ id: 'lead-1', tenant_key: 'tenant-a', event_id: 'event-1' });
+      await expect(
+        service.updateProblem('admin', 'tenant-a', 'user-1', 'p1', { relatedLeadId: 'lead-1' }),
+      ).resolves.toBeDefined();
+    });
+
+    it('accepts same-tenant same-event campaign on update', async () => {
+      prismaMocks.eventProblem.findFirst.mockResolvedValue({
+        id: 'p1', tenant_key: 'tenant-a', event_id: 'event-1', category: 'sales', status: 'open', title: 'Old', created_at: new Date(), updated_at: new Date(),
+      });
+      prismaMocks.contentRequest.findFirst.mockResolvedValue({ id: 'camp-1', tenant_key: 'tenant-a', event_id: 'event-1' });
+      await expect(
+        service.updateProblem('admin', 'tenant-a', 'user-1', 'p1', { relatedCampaignId: 'camp-1' }),
+      ).resolves.toBeDefined();
     });
   });
 });

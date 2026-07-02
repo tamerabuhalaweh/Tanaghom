@@ -42,11 +42,13 @@ export async function createProblem(
   if (input.relatedLeadId) {
     const lead = await prisma.leadCaptureRecord.findFirst({ where: { id: input.relatedLeadId, tenant_key: tenantKey } });
     if (!lead) throw new NotFoundError('Lead', input.relatedLeadId);
+    if (lead.event_id !== input.eventId) throw new ValidationError('Lead does not belong to this event');
   }
 
   if (input.relatedCampaignId) {
     const campaign = await prisma.contentRequest.findFirst({ where: { id: input.relatedCampaignId, tenant_key: tenantKey } });
     if (!campaign) throw new NotFoundError('Campaign', input.relatedCampaignId);
+    if (campaign.event_id !== input.eventId) throw new ValidationError('Campaign does not belong to this event');
   }
 
   const problem = await prisma.eventProblem.create({
@@ -79,11 +81,13 @@ export async function updateProblem(
   if (input.relatedLeadId !== undefined && input.relatedLeadId !== null) {
     const lead = await prisma.leadCaptureRecord.findFirst({ where: { id: input.relatedLeadId, tenant_key: tenantKey } });
     if (!lead) throw new NotFoundError('Lead', input.relatedLeadId);
+    if (lead.event_id !== existing.event_id) throw new ValidationError('Lead does not belong to this event');
   }
 
   if (input.relatedCampaignId !== undefined && input.relatedCampaignId !== null) {
     const campaign = await prisma.contentRequest.findFirst({ where: { id: input.relatedCampaignId, tenant_key: tenantKey } });
     if (!campaign) throw new NotFoundError('Campaign', input.relatedCampaignId);
+    if (campaign.event_id !== existing.event_id) throw new ValidationError('Campaign does not belong to this event');
   }
 
   const data: Prisma.EventProblemUpdateInput = {};
