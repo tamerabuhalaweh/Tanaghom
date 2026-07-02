@@ -9,6 +9,11 @@ Current deployed URL:
 
 Credentials should be provided securely outside this document.
 
+Related customer handoff documents:
+
+- [Customer Onboarding and Operator Guide](CUSTOMER_ONBOARDING_AND_OPERATOR_GUIDE.md)
+- [Customer-Owned Credential Checklist](../integrations/CUSTOMER_OWNED_CREDENTIAL_CHECKLIST.md)
+
 ## Before Testing
 
 Confirm these basics:
