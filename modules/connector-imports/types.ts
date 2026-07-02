@@ -102,6 +102,7 @@ export const CONNECTOR_REQUIREMENTS: Record<ConnectorId, {
 export const createImportJobSchema = z.object({
   connectorId: z.enum(SUPPORTED_CONNECTORS),
   displayName: z.string().trim().min(2).max(200),
+  eventId: z.string().uuid().optional(),
   notes: z.string().trim().max(2000).optional(),
 });
 
@@ -114,22 +115,43 @@ export const disableJobSchema = z.object({
   reason: z.string().trim().min(1).max(1000),
 });
 
+export const dryRunSchema = z.object({
+  connectorId: z.enum(SUPPORTED_CONNECTORS),
+  eventId: z.string().uuid().optional(),
+});
+
+export const approveImportSchema = z.object({
+  connectorId: z.enum(SUPPORTED_CONNECTORS),
+  eventId: z.string().uuid(),
+  notes: z.string().trim().max(2000).optional(),
+});
+
 export type CreateImportJobInput = z.infer<typeof createImportJobSchema>;
 export type MarkReadyInput = z.infer<typeof markReadySchema>;
 export type DisableJobInput = z.infer<typeof disableJobSchema>;
+export type DryRunInput = z.infer<typeof dryRunSchema>;
+export type ApproveImportInput = z.infer<typeof approveImportSchema>;
 
-export interface ConnectorImportJob {
+export interface ConnectorImportJobSummary {
   id: string;
   tenantKey: string;
-  connectorId: ConnectorId;
+  eventId: string | null;
+  connectorId: string;
   displayName: string;
   state: ImportJobState;
   credentialState: CredentialState;
   notes: string | null;
+  lastDryRunAt: Date | null;
+  lastDryRunResult: Record<string, unknown> | null;
+  lastImportAt: Date | null;
+  lastImportResult: Record<string, unknown> | null;
+  approvedByUserId: string | null;
+  approvedAt: Date | null;
+  disabledAt: Date | null;
+  disabledReason: string | null;
   createdByUserId: string;
   createdAt: Date;
   updatedAt: Date;
-  stateChangedAt: Date;
 }
 
 export interface ConnectorReadiness {
@@ -149,4 +171,24 @@ export interface ReadinessSummary {
   totalConfigured: number;
   totalMissing: number;
   totalBlocked: number;
+}
+
+export interface DryRunResult {
+  connectorId: string;
+  wouldImport: {
+    kpiRecords: number;
+    leadAttributions: number;
+  };
+  sampleData: Record<string, unknown>[];
+  warnings: string[];
+}
+
+export interface ImportResult {
+  connectorId: string;
+  eventId: string;
+  imported: {
+    kpiRecords: number;
+    leadAttributions: number;
+  };
+  auditRecordId: string;
 }

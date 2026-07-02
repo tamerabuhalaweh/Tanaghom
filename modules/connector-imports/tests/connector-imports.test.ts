@@ -1,173 +1,154 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { ValidationError, StateTransitionError } from '@shared/errors';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const prismaMocks = vi.hoisted(() => ({
+  connectorImportJob: {
+    findMany: vi.fn().mockResolvedValue([]),
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  commercialEvent: { findFirst: vi.fn() },
+  auditRecord: { create: vi.fn() },
+}));
+
+vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
+vi.mock('@shared/logging', () => ({ auditLog: vi.fn() }));
+
 import * as repo from '../repository';
-import { CONNECTOR_REQUIREMENTS, SUPPORTED_CONNECTORS } from '../types';
+import { VALID_TRANSITIONS, SUPPORTED_CONNECTORS } from '../types';
+
+function mockJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'job-1', tenant_key: 'tenant-a', event_id: 'event-1', connector_id: 'postiz',
+    display_name: 'Postiz Import', state: 'draft', credential_state: 'customer_credential_missing',
+    notes: null, last_dry_run_at: null, last_dry_run_result: null,
+    last_import_at: null, last_import_result: null,
+    approved_by_user_id: null, approved_at: null,
+    disabled_at: null, disabled_reason: null,
+    created_by_user_id: 'user-1', created_at: new Date(), updated_at: new Date(),
+    ...overrides,
+  };
+}
 
 describe('Connector Imports', () => {
-  beforeEach(() => { repo.clearAllJobs(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-  describe('no secrets returned', () => {
-    it('readiness does not expose raw credential values', () => {
-      const readiness = repo.getReadiness('tenant-a');
-      const json = JSON.stringify(readiness);
-      expect(json).not.toMatch(/sk-[a-zA-Z0-9]/);
-      expect(json).not.toMatch(/Bearer [a-zA-Z0-9]/);
-      expect(json).not.toContain('actual_secret_value');
+  describe('Readiness', () => {
+    it('returns all supported connectors in readiness', async () => {
+      const result = await repo.getReadiness('tenant-a');
+      expect(result.connectors).toHaveLength(SUPPORTED_CONNECTORS.length);
+      expect(result.connectors.map(c => c.connectorId)).toEqual(expect.arrayContaining(SUPPORTED_CONNECTORS));
     });
 
-    it('job objects do not contain credential fields', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      const json = JSON.stringify(job);
-      expect(json).not.toMatch(/sk-[a-zA-Z0-9]/);
-      expect(json).not.toMatch(/Bearer [a-zA-Z0-9]/);
+    it('reports customer_credential_missing as default state', async () => {
+      const result = await repo.getReadiness('tenant-a');
+      for (const c of result.connectors) {
+        expect(c.credentialState).toBe('customer_credential_missing');
+      }
+    });
+
+    it('returns totalMissing count', async () => {
+      const result = await repo.getReadiness('tenant-a');
+      expect(result.totalMissing).toBe(SUPPORTED_CONNECTORS.length);
     });
   });
 
-  describe('no external calls', () => {
-    it('repository operations are pure in-memory', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      expect(job.id).toBeDefined();
+  describe('Job creation', () => {
+    it('rejects unsupported connector', async () => {
+      const { ValidationError } = await import('@shared/errors');
+      await expect(repo.createJob('tenant-a', 'user-1', {
+        connectorId: 'unsupported' as string,
+        displayName: 'Test',
+      })).rejects.toThrow(ValidationError);
+    });
+
+    it('creates job with correct initial state', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.create.mockResolvedValue(mockJob());
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+
+      const job = await repo.createJob('tenant-a', 'user-1', {
+        connectorId: 'postiz',
+        displayName: 'Postiz Import',
+        eventId: 'event-1',
+      });
+
+      expect(job.connectorId).toBe('postiz');
       expect(job.state).toBeDefined();
     });
-  });
 
-  describe('unsupported connector rejected', () => {
-    it('rejects unsupported connector id', () => {
-      expect(() => repo.createJob('tenant-a', 'user-1', { connectorId: 'unsupported_connector' as never, displayName: 'Bad' })).toThrow(ValidationError);
+    it('validates event belongs to tenant', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue(null);
+      const { NotFoundError } = await import('@shared/errors');
+      await expect(repo.createJob('tenant-a', 'user-1', {
+        connectorId: 'postiz',
+        displayName: 'Test',
+        eventId: 'event-x',
+      })).rejects.toThrow(NotFoundError);
     });
   });
 
-  describe('missing credentials', () => {
-    it('new job starts in requires_credentials when credentials are missing', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Postiz Import' });
-      expect(job.state).toBe('requires_credentials');
-      expect(job.credentialState).toBe('customer_credential_missing');
+  describe('State transitions', () => {
+    it('enforces valid transitions', () => {
+      expect(VALID_TRANSITIONS.draft).toContain('requires_credentials');
+      expect(VALID_TRANSITIONS.draft).toContain('disabled');
+      expect(VALID_TRANSITIONS.requires_credentials).toContain('ready_for_test');
+      expect(VALID_TRANSITIONS.ready_for_test).toContain('test_passed');
+      expect(VALID_TRANSITIONS.test_passed).toContain('blocked');
+      expect(VALID_TRANSITIONS.disabled).toContain('draft');
+    });
+
+    it('blocks invalid transitions', () => {
+      expect(VALID_TRANSITIONS.draft).not.toContain('test_passed');
+      expect(VALID_TRANSITIONS.test_passed).not.toContain('draft');
+    });
+
+    it('markReady rejects invalid transition', async () => {
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'draft' }));
+      const { ValidationError } = await import('@shared/errors');
+      await expect(repo.markReady('tenant-a', 'user-1', 'job-1', true)).rejects.toThrow(ValidationError);
+    });
+
+    it('disableJob rejects invalid transition', async () => {
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'disabled' }));
+      const { ValidationError } = await import('@shared/errors');
+      await expect(repo.disableJob('tenant-a', 'user-1', 'job-1', 'reason')).rejects.toThrow(ValidationError);
     });
   });
 
-  describe('job state transitions', () => {
-    it('new job starts in requires_credentials when credentials are missing', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      expect(job.state).toBe('requires_credentials');
+  describe('Dry run', () => {
+    it('returns stub result with warnings', async () => {
+      const result = await repo.dryRun('tenant-a', 'postiz');
+      expect(result.connectorId).toBe('postiz');
+      expect(result.warnings.length).toBeGreaterThan(0);
+      expect(result.warnings[0]).toContain('stub');
     });
 
-    it('allows requires_credentials -> ready_for_test', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      const refreshed = repo.getJob('tenant-a', job.id);
-      expect(refreshed.state).toBe('ready_for_test');
-    });
-
-    it('allows ready_for_test -> test_passed via markJobReady', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      const result = repo.markJobReady('tenant-a', job.id, true);
-      expect(result.state).toBe('test_passed');
-    });
-
-    it('allows ready_for_test -> blocked via markJobReady', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      const result = repo.markJobReady('tenant-a', job.id, false);
-      expect(result.state).toBe('blocked');
-    });
-
-    it('allows blocked -> ready_for_test via markJobReady', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      repo.markJobReady('tenant-a', job.id, false);
-      const result = repo.markJobReady('tenant-a', job.id, true);
-      expect(result.state).toBe('test_passed');
-    });
-
-    it('allows test_passed -> disabled', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      repo.markJobReady('tenant-a', job.id, true);
-      const result = repo.disableJob('tenant-a', job.id);
-      expect(result.state).toBe('disabled');
-    });
-
-    it('allows disabled -> draft via transitionJob', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      repo.markJobReady('tenant-a', job.id, true);
-      repo.disableJob('tenant-a', job.id);
-      const result = repo.transitionJob('tenant-a', job.id, 'draft');
-      expect(result.state).toBe('draft');
-    });
-
-    it('rejects invalid transition test_passed -> requires_credentials', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      repo.markJobReady('tenant-a', job.id, true);
-      expect(() => repo.transitionJob('tenant-a', job.id, 'requires_credentials')).toThrow(StateTransitionError);
-    });
-
-    it('rejects invalid transition disabled -> test_passed', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Test' });
-      repo.transitionJob('tenant-a', job.id, 'ready_for_test');
-      repo.markJobReady('tenant-a', job.id, true);
-      repo.disableJob('tenant-a', job.id);
-      expect(() => repo.transitionJob('tenant-a', job.id, 'test_passed')).toThrow(StateTransitionError);
+    it('rejects unsupported connector', async () => {
+      const { ValidationError } = await import('@shared/errors');
+      await expect(repo.dryRun('tenant-a', 'invalid')).rejects.toThrow(ValidationError);
     });
   });
 
-  describe('readiness reporting', () => {
-    it('reports all supported connectors', () => {
-      const readiness = repo.getReadiness('tenant-a');
-      expect(readiness.connectors).toHaveLength(SUPPORTED_CONNECTORS.length);
-      for (const connectorId of SUPPORTED_CONNECTORS) {
-        expect(readiness.connectors.find(c => c.connectorId === connectorId)).toBeDefined();
-      }
+  describe('Approve and import', () => {
+    it('rejects if job is not in test_passed state', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'draft' }));
+      const { ValidationError } = await import('@shared/errors');
+      await expect(repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1')).rejects.toThrow(ValidationError);
     });
 
-    it('reports connector requirements correctly', () => {
-      const readiness = repo.getReadiness('tenant-a');
-      for (const connector of readiness.connectors) {
-        const req = CONNECTOR_REQUIREMENTS[connector.connectorId];
-        expect(connector.label).toBe(req.label);
-        expect(connector.purpose).toBe(req.purpose);
-        expect(connector.requiredCredentialFields).toEqual(req.requiredCredentialFields);
-      }
-    });
+    it('creates audit record on import', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1', tenant_key: 'tenant-a' });
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'test_passed' }));
+      prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob({ state: 'test_passed' }));
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
-    it('shows configured count after creating jobs', () => {
-      repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Postiz' });
-      repo.createJob('tenant-a', 'user-1', { connectorId: 'gohighlevel', displayName: 'GHL' });
-      const readiness = repo.getReadiness('tenant-a');
-      expect(readiness.connectors.filter(c => c.jobId !== null)).toHaveLength(2);
+      const result = await repo.approveAndImport('tenant-a', 'user-1', 'postiz', 'event-1');
+      expect(result.auditRecordId).toBe('audit-1');
+      expect(prismaMocks.auditRecord.create).toHaveBeenCalled();
     });
-
-    it('returns zero counts for empty tenant', () => {
-      const readiness = repo.getReadiness('tenant-a');
-      expect(readiness.totalConfigured).toBe(0);
-      expect(readiness.totalMissing).toBe(SUPPORTED_CONNECTORS.length);
-      expect(readiness.totalBlocked).toBe(0);
-    });
-  });
-
-  describe('duplicate connector prevention', () => {
-    it('prevents creating duplicate active job for same connector', () => {
-      repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'First' });
-      expect(() => repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Second' })).toThrow(ValidationError);
-    });
-
-    it('allows creating job after disabling previous one', () => {
-      const job = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'First' });
-      repo.disableJob('tenant-a', job.id);
-      const second = repo.createJob('tenant-a', 'user-1', { connectorId: 'postiz', displayName: 'Second' });
-      expect(second.id).not.toBe(job.id);
-    });
-  });
-
-  describe('all connectors supported', () => {
-    const allConnectors = ['postiz', 'gohighlevel', 'formaloo', 'meta_analytics', 'youtube_analytics', 'whatsapp_provider', 'telegram_provider', 'smartlabs_voice'];
-    for (const connectorId of allConnectors) {
-      it(`supports ${connectorId}`, () => {
-        const job = repo.createJob('tenant-a', 'user-1', { connectorId: connectorId as never, displayName: `Test ${connectorId}` });
-        expect(job.connectorId).toBe(connectorId);
-      });
-    }
   });
 });

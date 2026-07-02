@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
-import { auditLog } from '@shared/logging';
-import { createImportJobSchema, markReadySchema, disableJobSchema, CONNECTOR_REQUIREMENTS, SUPPORTED_CONNECTORS } from './types';
 import * as service from './service';
+import { validateOrThrow } from '@shared/validation';
+import { createImportJobSchema, markReadySchema, disableJobSchema } from './types';
 
 export const connectorImportsRouter = Router();
 
@@ -16,75 +16,68 @@ function getPayload(req: Request): JwtPayload {
 connectorImportsRouter.get('/readiness', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const tenantKey = payload.tenantKey || 'default';
-    const readiness = service.getReadiness(payload.role, tenantKey);
-    auditLog(
-      { actor: `user:${payload.sub}`, action: 'connector_readiness_viewed', object_type: 'connector_imports', object_id: tenantKey, result: 'success' },
-      'Connector readiness viewed',
-    );
-    res.json({ ...readiness, rawSecretsReturned: false, _label: 'Connector import readiness for this tenant' });
+    const readiness = await service.getReadiness(payload.role, payload.tenantKey || 'default');
+    res.json(readiness);
   } catch (err) { next(err); }
 });
 
 connectorImportsRouter.get('/requirements', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    void payload;
-    const requirements = Object.entries(CONNECTOR_REQUIREMENTS).map(([connectorId, req]) => ({
-      connectorId,
-      ...req,
-    }));
-    res.json({ connectors: requirements, supportedConnectors: SUPPORTED_CONNECTORS, rawSecretsReturned: false, _label: 'Connector import requirements' });
-  } catch (err) { next(err); }
-});
-
-connectorImportsRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const payload = getPayload(req);
-    const tenantKey = payload.tenantKey || 'default';
-    const input = createImportJobSchema.parse(req.body);
-    const job = service.createImportJob(payload.role, tenantKey, payload.sub, input);
-    auditLog(
-      { actor: `user:${payload.sub}`, action: 'connector_import_job_created', object_type: 'connector_import_job', object_id: job.id, result: 'success' },
-      `Connector import job created for ${input.connectorId}`,
-    );
-    res.status(201).json({ job, rawSecretsReturned: false, _label: 'Connector import job created' });
+    const requirements = await service.getRequirements(payload.role);
+    res.json(requirements);
   } catch (err) { next(err); }
 });
 
 connectorImportsRouter.get('/jobs', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const tenantKey = payload.tenantKey || 'default';
-    const jobs = service.listImportJobs(payload.role, tenantKey);
-    res.json({ jobs, rawSecretsReturned: false, _label: 'Connector import jobs for this tenant' });
+    const jobs = await service.listJobs(payload.role, payload.tenantKey || 'default', req.query.eventId as string | undefined);
+    res.json(jobs);
+  } catch (err) { next(err); }
+});
+
+connectorImportsRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const input = validateOrThrow(createImportJobSchema, req.body);
+    const job = await service.createJob(payload.role, payload.tenantKey || 'default', payload.sub, input);
+    res.status(201).json(job);
   } catch (err) { next(err); }
 });
 
 connectorImportsRouter.post('/jobs/:id/mark-ready', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const tenantKey = payload.tenantKey || 'default';
-    const input = markReadySchema.parse(req.body);
-    const job = service.markJobReady(payload.role, tenantKey, req.params.id as string, input);
-    auditLog(
-      { actor: `user:${payload.sub}`, action: 'connector_import_job_marked_ready', object_type: 'connector_import_job', object_id: job.id, result: 'success' },
-      `Connector import job ${job.id} marked ${input.testPassed ? 'test_passed' : 'blocked'}`,
-    );
-    res.json({ job, rawSecretsReturned: false, _label: `Connector import job marked ${job.state}` });
+    const input = validateOrThrow(markReadySchema, req.body);
+    const job = await service.markReady(payload.role, payload.tenantKey || 'default', payload.sub, req.params.id as string, input.testPassed ?? true, input.notes);
+    res.json(job);
   } catch (err) { next(err); }
 });
 
 connectorImportsRouter.post('/jobs/:id/disable', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const tenantKey = payload.tenantKey || 'default';
-    const input = disableJobSchema.parse(req.body);
-    const job = service.disableJob(payload.role, tenantKey, req.params.id as string, input);
-    auditLog(
-      { actor: `user:${payload.sub}`, action: 'connector_import_job_disabled', object_type: 'connector_import_job', object_id: job.id, result: 'success' },
-      `Connector import job ${job.id} disabled: ${input.reason}`,
-    );
-    res.json({ job, rawSecretsReturned: false, _label: 'Connector import job disabled' });
+    const input = validateOrThrow(disableJobSchema, req.body);
+    const job = await service.disableJob(payload.role, payload.tenantKey || 'default', payload.sub, req.params.id as string, input.reason);
+    res.json(job);
+  } catch (err) { next(err); }
+});
+
+connectorImportsRouter.post('/dry-run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const { connectorId, eventId } = req.body;
+    const result = await service.dryRun(payload.role, payload.tenantKey || 'default', connectorId, eventId);
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+connectorImportsRouter.post('/approve-import', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const { connectorId, eventId, notes } = req.body;
+    const result = await service.approveAndImport(payload.role, payload.tenantKey || 'default', payload.sub, connectorId, eventId, notes);
+    res.json(result);
   } catch (err) { next(err); }
 });
