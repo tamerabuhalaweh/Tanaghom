@@ -407,3 +407,16 @@ export const masterEventsApi = {
     return apiFetch<unknown>(`/master-events/dashboard${params}`, { token });
   },
 };
+
+export const eventProblemsApi = {
+  list: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/event-problems${params}`, { token });
+  },
+  dashboard: (eventId: string, token: string) => apiFetch<unknown>(`/event-problems/dashboard/${eventId}`, { token }),
+  create: (data: unknown, token: string) => apiFetch<unknown>('/event-problems', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/event-problems/${id}`, { method: 'PUT', body: data, token }),
+  transition: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/event-problems/${id}/transition`, { method: 'POST', body: data, token }),
+};
