@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, leadsApi } from '../api';
+import { eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, leadsApi, learningRecommendationsApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -137,6 +137,25 @@ function problemSeverityTone(severity: ProblemSeverity): 'default' | 'good' | 'w
   return 'muted';
 }
 
+function recommendationPriorityTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  const priority = text(value, 'medium');
+  if (priority === 'high') return 'danger';
+  if (priority === 'medium') return 'warn';
+  if (priority === 'low') return 'info';
+  return 'default';
+}
+
+function confidenceTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  const confidence = text(value, 'low');
+  if (confidence === 'high') return 'good';
+  if (confidence === 'medium') return 'info';
+  return 'warn';
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(item => text(item, '')).filter(Boolean) : [];
+}
+
 function approvalStatus(value: unknown): PlanApprovalStatus {
   const normalized = text(value, 'draft') as PlanApprovalStatus;
   return ['draft', 'pending_review', 'approved', 'rejected', 'changes_requested'].includes(normalized) ? normalized : 'draft';
@@ -246,6 +265,8 @@ export default function EventDashboard() {
   const [problemDashboard, setProblemDashboard] = useState<RecordMap | null>(null);
   const [eventProblems, setEventProblems] = useState<RecordMap[]>([]);
   const [closeoutReport, setCloseoutReport] = useState<RecordMap | null>(null);
+  const [learningSummary, setLearningSummary] = useState<RecordMap | null>(null);
+  const [learningError, setLearningError] = useState('');
   const [emailPlans, setEmailPlans] = useState<RecordMap[]>([]);
   const [whatsappPlans, setWhatsappPlans] = useState<RecordMap[]>([]);
   const [upsellPlans, setUpsellPlans] = useState<RecordMap[]>([]);
@@ -372,7 +393,8 @@ export default function EventDashboard() {
     const nextEventId = selected || String(normalizedEvents[0]?.id || '');
     if (nextEventId) {
       setCloseoutReport(null);
-      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData] = await Promise.all([
+      setLearningError('');
+      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData, recommendationData] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
         eventProblemsApi.dashboard(nextEventId, token),
@@ -382,6 +404,9 @@ export default function EventDashboard() {
         eventPlannerApi.upsellPlans(nextEventId, token),
         eventPlannerApi.contentRequirements(nextEventId, token),
         eventPlannerApi.salesTasks(nextEventId, token),
+        learningRecommendationsApi.forEvent(nextEventId, token).catch(error => ({
+          __learningError: error instanceof Error ? error.message : 'Learning recommendations failed to load',
+        })),
       ]);
       setDashboard(data as RecordMap);
       setSalesLeads(list(leadData));
@@ -399,12 +424,20 @@ export default function EventDashboard() {
       setUpsellPlans(list(upsellData));
       setContentRequirements(list(contentData));
       setSalesTasks(list(salesTaskData));
+      if (recommendationData && typeof recommendationData === 'object' && '__learningError' in recommendationData) {
+        setLearningSummary(null);
+        setLearningError(text((recommendationData as RecordMap).__learningError, 'Learning recommendations failed to load'));
+      } else {
+        setLearningSummary(recommendationData as RecordMap);
+      }
     } else {
       setDashboard(null);
       setSalesLeads([]);
       setProblemDashboard(null);
       setEventProblems([]);
       setCloseoutReport(null);
+      setLearningSummary(null);
+      setLearningError('');
       setSelectedProblemId('');
       setEmailPlans([]);
       setWhatsappPlans([]);
@@ -510,6 +543,10 @@ export default function EventDashboard() {
   const closeoutMissingSections = Array.isArray(closeoutCompleteness.missingSections) ? closeoutCompleteness.missingSections.map(displayLabel) : [];
   const topCloseoutChannel = strongestChannel(closeoutChannels);
   const topCloseoutSource = strongestChannel(closeoutSources);
+  const learningRecommendations = list(learningSummary?.recommendations);
+  const learningWarnings = stringList(learningSummary?.dataCompletenessWarnings).map(displayLabel);
+  const highPriorityRecommendations = learningRecommendations.filter(item => text(item.priority) === 'high').length;
+  const recommendationGeneratedAt = learningSummary?.generatedAt ? formatDate(learningSummary.generatedAt) : 'Not generated yet';
 
   function selectLeadForWork(lead: RecordMap) {
     setSelectedLeadId(String(lead.id || ''));
@@ -1203,6 +1240,112 @@ export default function EventDashboard() {
                 />
               </ProductCard>
             </div>
+
+            <ProductCard
+              title="What To Improve Next"
+              subtitle="Evidence-backed recommendations from this event's recorded KPIs, leads, planner work, and barrier log. These are advisory and require human decision before any operational change."
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <ProductStatus tone={highPriorityRecommendations ? 'warn' : learningRecommendations.length ? 'info' : 'muted'}>
+                    {learningRecommendations.length} recommendation(s)
+                  </ProductStatus>
+                  <ProductStatus tone={highPriorityRecommendations ? 'danger' : 'good'}>
+                    {highPriorityRecommendations} high priority
+                  </ProductStatus>
+                  <ProductStatus tone="info">Generated {recommendationGeneratedAt}</ProductStatus>
+                </div>
+              )}
+            >
+              <div className="space-y-4">
+                {learningError && (
+                  <Notice tone="warn">
+                    Recommendations could not be loaded right now: {learningError}. The rest of the event dashboard is still usable.
+                  </Notice>
+                )}
+
+                {learningWarnings.length > 0 && (
+                  <Notice tone="warn">
+                    Recommendation confidence is limited because these data sections are missing: {learningWarnings.join(', ')}.
+                  </Notice>
+                )}
+
+                {learningRecommendations.length ? (
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {learningRecommendations.map(item => {
+                      const missingWarnings = stringList(item.missingDataWarnings);
+                      const sourceSections = stringList(item.sourceSections).map(displayLabel);
+                      const ownerRole = text(item.suggestedOwnerRole, '');
+
+                      return (
+                        <article key={text(item.id, text(item.title, 'recommendation'))} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                {displayLabel(item.category)}
+                              </div>
+                              <h3 className="mt-1 text-base font-semibold tracking-tight text-neutral-950">
+                                {text(item.title, 'Event recommendation')}
+                              </h3>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap gap-2">
+                              <ProductStatus tone={recommendationPriorityTone(item.priority)}>
+                                {displayLabel(item.priority)} Priority
+                              </ProductStatus>
+                              <ProductStatus tone={confidenceTone(item.confidence)}>
+                                {displayLabel(item.confidence)} Confidence
+                              </ProductStatus>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 space-y-3 text-sm leading-6">
+                            <div>
+                              <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Recommendation</div>
+                              <p className="mt-1 text-neutral-800">{text(item.recommendation, 'No recommendation text available.')}</p>
+                            </div>
+                            <div>
+                              <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Why it matters</div>
+                              <p className="mt-1 text-neutral-600">{text(item.rationale, 'No rationale available yet.')}</p>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="rounded-md border border-neutral-100 bg-white p-3">
+                                <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Evidence</div>
+                                <p className="mt-1 text-neutral-700">{text(item.evidenceSummary, 'No evidence summary available.')}</p>
+                              </div>
+                              <div className="rounded-md border border-neutral-100 bg-white p-3">
+                                <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Next action</div>
+                                <p className="mt-1 text-neutral-700">{text(item.nextAction, 'Review with the event owner.')}</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {ownerRole && (
+                                <ProductStatus tone="info">Owner: {displayLabel(ownerRole)}</ProductStatus>
+                              )}
+                              {sourceSections.length > 0 && (
+                                <ProductStatus tone="muted">Evidence: {sourceSections.join(', ')}</ProductStatus>
+                              )}
+                            </div>
+                            {missingWarnings.length > 0 && (
+                              <Notice tone="warn">
+                                Limited evidence: {missingWarnings.join(' ')}
+                              </Notice>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : !learningError ? (
+                  <EmptyProductState
+                    title="No recommendations yet"
+                    message="Add KPI records, leads, planner work, and event barriers to generate evidence-backed next-event recommendations."
+                  />
+                ) : null}
+
+                <Notice tone="info">
+                  Recommendations do not change ads, budgets, CRM, WhatsApp, voice, or content workflows automatically. Amro or an authorized manager decides what to apply.
+                </Notice>
+              </div>
+            </ProductCard>
 
             <ProductCard
               title="Event Campaign Planner"
