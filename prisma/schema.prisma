@@ -121,6 +121,7 @@ model Tenant {
   lead_lifecycle_events LeadLifecycleEvent[]
   event_problems EventProblem[]
   connector_import_jobs ConnectorImportJob[]
+  connector_field_mappings ConnectorFieldMapping[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
 
@@ -281,6 +282,7 @@ model User {
   event_problems_resolved EventProblem[] @relation("EventProblemResolvedBy")
   connector_imports_created ConnectorImportJob[] @relation("ConnectorImportCreatedBy")
   connector_imports_approved ConnectorImportJob[] @relation("ConnectorImportApprovedBy")
+  connector_field_mappings ConnectorFieldMapping[] @relation("ConnectorFieldMappingCreatedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
@@ -3452,6 +3454,7 @@ model CommercialEvent {
   sales_tasks         EventSalesTask[]
   problems            EventProblem[]
   connector_imports   ConnectorImportJob[]
+  connector_field_mappings ConnectorFieldMapping[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -3777,6 +3780,7 @@ model ConnectorImportJob {
   id                  String                  @id @default(uuid()) @db.Uuid
   tenant_key          String
   event_id            String?                 @db.Uuid
+  mapping_id          String?                 @db.Uuid
   connector_id        String
   display_name        String
   state               ConnectorImportState   @default(draft)
@@ -3796,13 +3800,55 @@ model ConnectorImportJob {
 
   tenant       Tenant          @relation(fields: [tenant_key], references: [tenant_key])
   event        CommercialEvent? @relation(fields: [event_id], references: [id])
+  field_mapping ConnectorFieldMapping? @relation(fields: [mapping_id], references: [id])
   created_by   User            @relation("ConnectorImportCreatedBy", fields: [created_by_user_id], references: [id])
   approved_by  User?           @relation("ConnectorImportApprovedBy", fields: [approved_by_user_id], references: [id])
 
   @@index([tenant_key])
   @@index([event_id])
+  @@index([mapping_id])
   @@index([connector_id])
   @@index([state])
   @@index([created_by_user_id])
   @@map("connector_import_jobs")
+}
+
+// ============================================================
+// Connector Field Mapping — Sprint 64B
+// ============================================================
+
+enum MappingTargetType {
+  event_kpi_record
+}
+
+enum MappingValidationStatus {
+  valid
+  invalid
+  untested
+}
+
+model ConnectorFieldMapping {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  connector_id        String
+  event_id            String?                 @db.Uuid
+  display_name        String
+  target_type         MappingTargetType       @default(event_kpi_record)
+  field_mappings      Json
+  validation_status   MappingValidationStatus @default(untested)
+  validation_errors   Json?
+  created_by_user_id  String                  @db.Uuid
+  created_at          DateTime                @default(now())
+  updated_at          DateTime                @updatedAt
+
+  tenant      Tenant @relation(fields: [tenant_key], references: [tenant_key])
+  event       CommercialEvent? @relation(fields: [event_id], references: [id])
+  created_by  User   @relation("ConnectorFieldMappingCreatedBy", fields: [created_by_user_id], references: [id])
+  connector_import_jobs ConnectorImportJob[]
+
+  @@index([tenant_key])
+  @@index([connector_id])
+  @@index([event_id])
+  @@index([created_by_user_id])
+  @@map("connector_field_mappings")
 }
