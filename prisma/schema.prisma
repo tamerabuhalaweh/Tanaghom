@@ -119,6 +119,7 @@ model Tenant {
   event_content_requirements EventContentRequirement[]
   event_sales_tasks EventSalesTask[]
   lead_lifecycle_events LeadLifecycleEvent[]
+  event_problems EventProblem[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
 
@@ -275,6 +276,8 @@ model User {
   event_content_requirements_created EventContentRequirement[]
   event_sales_tasks_created EventSalesTask[]
   lead_lifecycle_events LeadLifecycleEvent[]
+  event_problems_created EventProblem[] @relation("EventProblemCreatedBy")
+  event_problems_resolved EventProblem[] @relation("EventProblemResolvedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
@@ -3444,6 +3447,7 @@ model CommercialEvent {
   upsell_plans        EventUpsellPlan[]
   content_requirements EventContentRequirement[]
   sales_tasks         EventSalesTask[]
+  problems            EventProblem[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -3666,4 +3670,80 @@ model EventSalesTask {
   @@index([status])
   @@index([task_type])
   @@map("event_sales_tasks")
+}
+
+// ============================================================
+// Event Problem & Barrier Log — Sprint 63C
+// ============================================================
+
+enum ProblemCategory {
+  content
+  ads
+  audience
+  funnel
+  sales
+  budget
+  operations
+  integration
+  other
+}
+
+enum ProblemSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum ProblemStatus {
+  open
+  investigating
+  resolved
+  dismissed
+}
+
+enum ProblemSource {
+  manual
+  kpi_review
+  lead_review
+  sales_feedback
+  campaign_review
+  integration_check
+}
+
+model EventProblem {
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  event_id            String           @db.Uuid
+  title               String           @db.Text
+  description         String?          @db.Text
+  category            ProblemCategory
+  severity            ProblemSeverity  @default(medium)
+  status              ProblemStatus    @default(open)
+  source              ProblemSource    @default(manual)
+  impact_summary      String?          @db.Text
+  recommended_action  String?          @db.Text
+  owner_role          String?
+  related_lead_id     String?          @db.Uuid
+  related_campaign_id String?          @db.Uuid
+  due_date            DateTime?
+  resolution_notes    String?          @db.Text
+  created_by_user_id  String           @db.Uuid
+  resolved_by_user_id String?          @db.Uuid
+  resolved_at         DateTime?
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @updatedAt
+
+  tenant      Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  event       CommercialEvent @relation(fields: [event_id], references: [id])
+  created_by  User            @relation("EventProblemCreatedBy", fields: [created_by_user_id], references: [id])
+  resolved_by User?           @relation("EventProblemResolvedBy", fields: [resolved_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([status])
+  @@index([severity])
+  @@index([category])
+  @@index([created_by_user_id])
+  @@map("event_problems")
 }
