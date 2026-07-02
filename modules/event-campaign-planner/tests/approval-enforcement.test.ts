@@ -43,6 +43,12 @@ describe('Approval bypass enforcement', () => {
           service.updateEmailPlan(role, 'tenant-a', 'user-1', 'plan-1', { approvalStatus: 'pending_review' }),
         ).resolves.toBeDefined();
       });
+
+      it(`${role} can set approvalStatus to draft`, async () => {
+        await expect(
+          service.updateEmailPlan(role, 'tenant-a', 'user-1', 'plan-1', { approvalStatus: 'draft' }),
+        ).resolves.toBeDefined();
+      });
     }
   });
 
@@ -71,6 +77,12 @@ describe('Approval bypass enforcement', () => {
       it(`${role} cannot set approvalStatus to pending_review`, async () => {
         await expect(
           service.updateEmailPlan(role, 'tenant-a', 'user-1', 'plan-1', { approvalStatus: 'pending_review' }),
+        ).rejects.toThrow(ForbiddenError);
+      });
+
+      it(`${role} cannot set approvalStatus to draft`, async () => {
+        await expect(
+          service.updateEmailPlan(role, 'tenant-a', 'user-1', 'plan-1', { approvalStatus: 'draft' }),
         ).rejects.toThrow(ForbiddenError);
       });
     }

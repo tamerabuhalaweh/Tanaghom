@@ -11,10 +11,8 @@ import type {
   CreateSalesTaskInput, UpdateSalesTaskInput, SalesTaskSummary,
 } from './types';
 
-const APPROVAL_STATUSES = ['approved', 'rejected', 'changes_requested', 'pending_review'];
-
 function enforceApprovalPermission(role: string, approvalStatus?: string): void {
-  if (approvalStatus && APPROVAL_STATUSES.includes(approvalStatus)) {
+  if (approvalStatus !== undefined) {
     checkPlannerPermission(role, 'planner:approve');
   }
 }
