@@ -7,13 +7,15 @@ import * as repo from './repository';
 import type {
   CreateProblemInput, UpdateProblemInput, ProblemSummary,
   TransitionProblemInput, ProblemDashboardSummary,
+  ProblemSeverity, ProblemCategory,
 } from './types';
 
 export async function listProblems(
   role: string, tenantKey: string, eventId?: string, status?: ProblemStatus,
+  severity?: ProblemSeverity, category?: ProblemCategory,
 ): Promise<ProblemSummary[]> {
   checkProblemPermission(role, 'problems:read');
-  return repo.listProblems(tenantKey, eventId, status);
+  return repo.listProblems(tenantKey, eventId, status, severity, category);
 }
 
 export async function getProblem(role: string, tenantKey: string, id: string): Promise<ProblemSummary> {
@@ -36,7 +38,9 @@ export async function updateProblem(
   role: string, tenantKey: string, userId: string, id: string, input: UpdateProblemInput,
 ): Promise<ProblemSummary> {
   checkProblemPermission(role, 'problems:update');
-  if (input.category) checkProblemCategoryPermission(role, input.category);
+  const existing = await repo.getProblemById(tenantKey, id);
+  const effectiveCategory = input.category ?? existing.category;
+  checkProblemCategoryPermission(role, effectiveCategory);
   const problem = await repo.updateProblem(tenantKey, id, input);
   auditLog({ actor: `user:${userId}`, action: 'problem_updated', object_type: 'event_problem', object_id: id, result: 'success' }, `Problem updated: ${problem.title}`);
   await eventBus.emit(EVENT_PROBLEM_EVENTS.PROBLEM_UPDATED, { problemId: id, tenantKey, eventId: problem.eventId, actorUserId: userId, timestamp: new Date() } as ProblemEvent);

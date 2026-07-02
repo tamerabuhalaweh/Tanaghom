@@ -39,6 +39,16 @@ export async function createProblem(
   const event = await prisma.commercialEvent.findFirst({ where: { id: input.eventId, tenant_key: tenantKey } });
   if (!event) throw new NotFoundError('CommercialEvent', input.eventId);
 
+  if (input.relatedLeadId) {
+    const lead = await prisma.leadCaptureRecord.findFirst({ where: { id: input.relatedLeadId, tenant_key: tenantKey } });
+    if (!lead) throw new NotFoundError('Lead', input.relatedLeadId);
+  }
+
+  if (input.relatedCampaignId) {
+    const campaign = await prisma.contentRequest.findFirst({ where: { id: input.relatedCampaignId, tenant_key: tenantKey } });
+    if (!campaign) throw new NotFoundError('Campaign', input.relatedCampaignId);
+  }
+
   const problem = await prisma.eventProblem.create({
     data: {
       tenant_key: tenantKey,
@@ -65,6 +75,16 @@ export async function updateProblem(
 ): Promise<ProblemSummary> {
   const existing = await prisma.eventProblem.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('EventProblem', id);
+
+  if (input.relatedLeadId !== undefined && input.relatedLeadId !== null) {
+    const lead = await prisma.leadCaptureRecord.findFirst({ where: { id: input.relatedLeadId, tenant_key: tenantKey } });
+    if (!lead) throw new NotFoundError('Lead', input.relatedLeadId);
+  }
+
+  if (input.relatedCampaignId !== undefined && input.relatedCampaignId !== null) {
+    const campaign = await prisma.contentRequest.findFirst({ where: { id: input.relatedCampaignId, tenant_key: tenantKey } });
+    if (!campaign) throw new NotFoundError('Campaign', input.relatedCampaignId);
+  }
 
   const data: Prisma.EventProblemUpdateInput = {};
   if (input.title !== undefined) data.title = input.title;

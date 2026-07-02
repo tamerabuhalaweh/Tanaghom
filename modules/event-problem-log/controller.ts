@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError } from '@shared/errors';
+import { UnauthorizedError, ValidationError } from '@shared/errors';
 import * as service from './service';
 import * as validators from './validators';
-import type { ProblemStatus } from './types';
+import { PROBLEM_STATUSES, PROBLEM_SEVERITIES, PROBLEM_CATEGORIES } from './types';
 
 export const eventProblemLogRouter = Router();
 
@@ -13,13 +13,22 @@ function getPayload(req: Request): JwtPayload {
   return verifyToken(authHeader.substring(7));
 }
 
+function parseOptionalEnum<T extends string>(value: string | undefined, allowed: readonly T[], fieldName: string): T | undefined {
+  if (value === undefined) return undefined;
+  if (!allowed.includes(value as T)) throw new ValidationError(`Invalid ${fieldName}: ${value}`);
+  return value as T;
+}
+
 eventProblemLogRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
+    const eventId = req.query.eventId as string | undefined;
+    const status = parseOptionalEnum(req.query.status as string | undefined, PROBLEM_STATUSES, 'status');
+    const severity = parseOptionalEnum(req.query.severity as string | undefined, PROBLEM_SEVERITIES, 'severity');
+    const category = parseOptionalEnum(req.query.category as string | undefined, PROBLEM_CATEGORIES, 'category');
     const problems = await service.listProblems(
       payload.role, payload.tenantKey || 'default',
-      req.query.eventId as string | undefined,
-      req.query.status as ProblemStatus | undefined,
+      eventId, status, severity, category,
     );
     res.json(problems);
   } catch (err) { next(err); }
