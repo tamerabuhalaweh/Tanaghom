@@ -113,6 +113,11 @@ model Tenant {
   commercial_workflow_runs CommercialWorkflowRun[]
   commercial_events CommercialEvent[]
   event_kpi_records EventKpiRecord[]
+  event_email_plans EventEmailPlan[]
+  event_whatsapp_plans EventWhatsappPlan[]
+  event_upsell_plans EventUpsellPlan[]
+  event_content_requirements EventContentRequirement[]
+  event_sales_tasks EventSalesTask[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
 
@@ -263,6 +268,11 @@ model User {
   langgraph_workflows LangGraphWorkflow[]
   commercial_workflow_runs CommercialWorkflowRun[] @relation("CommercialWorkflowRunUser")
   commercial_events_owned CommercialEvent[]
+  event_email_plans_created EventEmailPlan[]
+  event_whatsapp_plans_created EventWhatsappPlan[]
+  event_upsell_plans_created EventUpsellPlan[]
+  event_content_requirements_created EventContentRequirement[]
+  event_sales_tasks_created EventSalesTask[]
   tenant_subscription_events TenantSubscriptionEvent[]
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
@@ -3353,6 +3363,11 @@ model CommercialEvent {
   leads               LeadCaptureRecord[]  @relation("EventLeads")
   publishing_packages PublishingPackage[]  @relation("EventPublishingPackages")
   kpi_records         EventKpiRecord[]
+  email_plans         EventEmailPlan[]
+  whatsapp_plans      EventWhatsappPlan[]
+  upsell_plans        EventUpsellPlan[]
+  content_requirements EventContentRequirement[]
+  sales_tasks         EventSalesTask[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -3396,4 +3411,183 @@ model EventKpiRecord {
   @@index([channel])
   @@index([source_type])
   @@map("event_kpi_records")
+}
+
+// ============================================================
+// Event Campaign Planner — Sprint 61
+// ============================================================
+
+enum PlanApprovalStatus {
+  draft
+  pending_review
+  approved
+  rejected
+  changes_requested
+}
+
+enum EmailContentType {
+  text
+  html
+  template
+}
+
+enum WhatsappContentType {
+  text
+  image
+  video
+}
+
+enum ContentRequirementAssetType {
+  video
+  image
+  caption
+  landing_page
+  carousel
+  story
+  email_template
+  whatsapp_template
+}
+
+enum ContentRequirementStatus {
+  pending
+  in_progress
+  ready
+  blocked
+  delivered
+}
+
+enum SalesTaskType {
+  inquiry_response
+  follow_up
+  closing
+  discovery_call
+  no_show_recovery
+  feedback_collection
+}
+
+enum SalesTaskStatus {
+  pending
+  in_progress
+  completed
+  blocked
+}
+
+model EventEmailPlan {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  event_id        String              @db.Uuid
+  sequence_name   String
+  audience_segment String?
+  email_count     Int                 @default(1)
+  planned_send_dates Json?
+  subject_draft   String?             @db.Text
+  content_draft   String?             @db.Text
+  content_type    EmailContentType    @default(text)
+  approval_status PlanApprovalStatus  @default(draft)
+  created_by_user_id String           @db.Uuid
+  created_at      DateTime            @default(now())
+  updated_at      DateTime            @updatedAt
+
+  tenant     Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  event      CommercialEvent @relation(fields: [event_id], references: [id])
+  created_by User            @relation(fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([approval_status])
+  @@map("event_email_plans")
+}
+
+model EventWhatsappPlan {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  event_id        String              @db.Uuid
+  audience_segment String?
+  frequency       String?
+  content_type    WhatsappContentType @default(text)
+  message_draft   String?             @db.Text
+  approval_status PlanApprovalStatus  @default(draft)
+  created_by_user_id String           @db.Uuid
+  created_at      DateTime            @default(now())
+  updated_at      DateTime            @updatedAt
+
+  tenant     Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  event      CommercialEvent @relation(fields: [event_id], references: [id])
+  created_by User            @relation(fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([approval_status])
+  @@map("event_whatsapp_plans")
+}
+
+model EventUpsellPlan {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  event_id        String              @db.Uuid
+  target_segment  String?
+  offer           String?             @db.Text
+  fomo_angle      String?             @db.Text
+  planned_channel String?
+  approval_status PlanApprovalStatus  @default(draft)
+  created_by_user_id String           @db.Uuid
+  created_at      DateTime            @default(now())
+  updated_at      DateTime            @updatedAt
+
+  tenant     Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  event      CommercialEvent @relation(fields: [event_id], references: [id])
+  created_by User            @relation(fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([approval_status])
+  @@map("event_upsell_plans")
+}
+
+model EventContentRequirement {
+  id              String                      @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  event_id        String                      @db.Uuid
+  asset_type      ContentRequirementAssetType
+  description     String?                     @db.Text
+  platform        String?
+  due_date        DateTime?
+  status          ContentRequirementStatus    @default(pending)
+  created_by_user_id String                   @db.Uuid
+  created_at      DateTime                    @default(now())
+  updated_at      DateTime                    @updatedAt
+
+  tenant     Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  event      CommercialEvent @relation(fields: [event_id], references: [id])
+  created_by User            @relation(fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([status])
+  @@index([asset_type])
+  @@map("event_content_requirements")
+}
+
+model EventSalesTask {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  event_id        String           @db.Uuid
+  task_type       SalesTaskType
+  owner_role      String?
+  description     String?          @db.Text
+  due_date        DateTime?
+  status          SalesTaskStatus  @default(pending)
+  created_by_user_id String        @db.Uuid
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+
+  tenant     Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  event      CommercialEvent @relation(fields: [event_id], references: [id])
+  created_by User            @relation(fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([status])
+  @@index([task_type])
+  @@map("event_sales_tasks")
 }

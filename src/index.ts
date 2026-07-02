@@ -41,6 +41,7 @@ import { operationsRouter } from '../modules/operations/controller';
 import { smartLabsVoiceRouter } from '../modules/smartlabs-voice/controller';
 import { socialGrowthRouter } from '../modules/social-growth/controller';
 import { commercialEventsRouter } from '../modules/commercial-events/controller';
+import { eventCampaignPlannerRouter } from '../modules/event-campaign-planner/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -252,6 +253,7 @@ app.use('/ghl', ghlRouter);
 app.use('/ideas', ideasRouter);
 app.use('/events', commercialEventsRouter);
 app.use('/commercial-events', commercialEventsRouter);
+app.use('/planner', eventCampaignPlannerRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
