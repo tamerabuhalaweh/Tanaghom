@@ -62,9 +62,9 @@ export async function generateRecommendations(tenantKey: string, eventId: string
   ]);
 
   const dataCompletenessWarnings: string[] = [];
-  if (kpiRecords.length === 0) dataCompletenessWarnings.push('No KPI records available — budget and spend analysis limited');
-  if (leads.length === 0) dataCompletenessWarnings.push('No lead records available — funnel and conversion analysis unavailable');
-  if (campaigns.length === 0) dataCompletenessWarnings.push('No campaign records available — channel performance analysis limited');
+  if (kpiRecords.length === 0) dataCompletenessWarnings.push('No KPI records available - budget and spend analysis limited');
+  if (leads.length === 0) dataCompletenessWarnings.push('No lead records available - funnel and conversion analysis unavailable');
+  if (campaigns.length === 0) dataCompletenessWarnings.push('No campaign records available - channel performance analysis limited');
 
   const eventData: EventData = {
     event, kpiRecords, leads, problems, campaigns, packages,
@@ -124,7 +124,7 @@ function evaluateNoShowRate(data: EventData, startId: number): { recommendations
   if (noShowRate > 0.2 && meetingsBooked > 0) {
     const confidence: ConfidenceLevel = meetingsBooked >= 10 ? 'high' : meetingsBooked >= 5 ? 'medium' : 'low';
     const missingWarnings: string[] = [];
-    if (meetingsBooked < 10) missingWarnings.push('Low sample size — no-show rate may not be statistically reliable');
+    if (meetingsBooked < 10) missingWarnings.push('Low sample size - no-show rate may not be statistically reliable');
 
     recommendations.push({
       id: `rec-${id++}`,
@@ -165,7 +165,7 @@ function evaluateBudgetEfficiency(data: EventData, startId: number): { recommend
   if (plannedBudget && plannedBudget > 0) {
     const spendRatio = knownSpend / plannedBudget;
     const missingWarnings: string[] = [];
-    if (data.kpiRecords.length === 0) missingWarnings.push('No KPI spend data — budget analysis based on planned budget only');
+    if (data.kpiRecords.length === 0) missingWarnings.push('No KPI spend data - budget analysis based on planned budget only');
 
     if (spendRatio > 0.5 && purchases < 5) {
       const confidence: ConfidenceLevel = data.kpiRecords.length > 0 && data.leads.length > 0 ? 'high' : data.kpiRecords.length > 0 || data.leads.length > 0 ? 'medium' : 'low';
@@ -211,7 +211,7 @@ function evaluateFollowUpTasks(data: EventData, startId: number): { recommendati
   if (openFollowUps.length > 0) {
     const confidence: ConfidenceLevel = openFollowUps.length >= 5 ? 'high' : openFollowUps.length >= 2 ? 'medium' : 'low';
     const missingWarnings: string[] = [];
-    if (data.leads.length === 0) missingWarnings.push('No lead data — follow-up analysis based on tasks only');
+    if (data.leads.length === 0) missingWarnings.push('No lead data - follow-up analysis based on tasks only');
 
     recommendations.push({
       id: `rec-${id++}`,

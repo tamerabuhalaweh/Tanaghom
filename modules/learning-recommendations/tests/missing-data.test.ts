@@ -48,19 +48,19 @@ describe('Learning Recommendations missing data handling', () => {
   it('returns data completeness warnings when no KPI records', async () => {
     prismaMocks.commercialEvent.findFirst.mockResolvedValue(mockEvent());
     const result = await repo.generateRecommendations('tenant-a', 'event-1');
-    expect(result.dataCompletenessWarnings).toContain('No KPI records available — budget and spend analysis limited');
+    expect(result.dataCompletenessWarnings).toContain('No KPI records available - budget and spend analysis limited');
   });
 
   it('returns data completeness warnings when no leads', async () => {
     prismaMocks.commercialEvent.findFirst.mockResolvedValue(mockEvent());
     const result = await repo.generateRecommendations('tenant-a', 'event-1');
-    expect(result.dataCompletenessWarnings).toContain('No lead records available — funnel and conversion analysis unavailable');
+    expect(result.dataCompletenessWarnings).toContain('No lead records available - funnel and conversion analysis unavailable');
   });
 
   it('returns data completeness warnings when no campaigns', async () => {
     prismaMocks.commercialEvent.findFirst.mockResolvedValue(mockEvent());
     const result = await repo.generateRecommendations('tenant-a', 'event-1');
-    expect(result.dataCompletenessWarnings).toContain('No campaign records available — channel performance analysis limited');
+    expect(result.dataCompletenessWarnings).toContain('No campaign records available - channel performance analysis limited');
   });
 
   it('does not hallucinate confidence when data is missing', async () => {
