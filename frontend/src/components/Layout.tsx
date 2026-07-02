@@ -192,8 +192,8 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     path: '/integration-credentials',
-    label: 'Credentials',
-    description: 'Secret status only',
+    label: 'Connector Setup',
+    description: 'Credentials and readiness',
     icon: KeyRound,
     group: 'Admin',
     roles: ADMIN_ROLES,

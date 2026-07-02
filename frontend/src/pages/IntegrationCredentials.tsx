@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, runtimeBridgesApi, socialOAuthApi } from '../api';
+import { Link } from 'react-router-dom';
+import { connectorImportsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, runtimeBridgesApi, socialOAuthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -37,6 +38,147 @@ function parseRequiredFields(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
+type SetupBlueprint = {
+  id: string;
+  label: string;
+  category: string;
+  businessUse: string;
+  providerKeys: string[];
+  importConnectorId?: string;
+  oauthPlatforms?: string[];
+  bridgeProvider?: string;
+  needsPostizChannel?: boolean;
+  route: string;
+  routeLabel: string;
+  setupSteps: string[];
+};
+
+const SETUP_BLUEPRINTS: SetupBlueprint[] = [
+  {
+    id: 'postiz',
+    label: 'Postiz Scheduling',
+    category: 'Scheduling',
+    businessUse: 'Prepare approved content packages for scheduling after human approval.',
+    providerKeys: ['postiz'],
+    importConnectorId: 'postiz',
+    needsPostizChannel: true,
+    route: '/publishing',
+    routeLabel: 'Open Scheduling',
+    setupSteps: ['Save Postiz API key and base URL', 'Connect/select a Postiz channel', 'Keep live scheduling behind approval flags'],
+  },
+  {
+    id: 'meta_analytics',
+    label: 'Meta / Instagram Analytics',
+    category: 'Analytics',
+    businessUse: 'Bring ad, page, and Instagram performance into event dashboards.',
+    providerKeys: ['social_oauth', 'meta', 'meta_analytics'],
+    importConnectorId: 'meta_analytics',
+    oauthPlatforms: ['meta'],
+    route: '/events',
+    routeLabel: 'Open Event Import',
+    setupSteps: ['Configure Meta OAuth app', 'Complete provider authorization', 'Map imported fields to event KPIs'],
+  },
+  {
+    id: 'youtube_analytics',
+    label: 'YouTube Analytics',
+    category: 'Analytics',
+    businessUse: 'Track video reach and engagement for event campaigns.',
+    providerKeys: ['youtube_analytics', 'youtube'],
+    importConnectorId: 'youtube_analytics',
+    route: '/events',
+    routeLabel: 'Open Event Import',
+    setupSteps: ['Add YouTube API credentials', 'Create a connector import job', 'Approve read-only KPI import'],
+  },
+  {
+    id: 'formaloo',
+    label: 'Formaloo Forms',
+    category: 'Lead Capture',
+    businessUse: 'Import form completions and campaign intake signals.',
+    providerKeys: ['formaloo'],
+    importConnectorId: 'formaloo',
+    route: '/events',
+    routeLabel: 'Open Event Import',
+    setupSteps: ['Save Formaloo API key and form ID', 'Map form fields to KPI records', 'Approve import into the selected event'],
+  },
+  {
+    id: 'gohighlevel',
+    label: 'GoHighLevel CRM',
+    category: 'CRM',
+    businessUse: 'Prepare customer-owned CRM handoff and future lead sync.',
+    providerKeys: ['gohighlevel', 'ghl'],
+    importConnectorId: 'gohighlevel',
+    route: '/events',
+    routeLabel: 'Open Lead Dashboard',
+    setupSteps: ['Save GHL API key and location ID', 'Choose read/write scope with the customer', 'Keep writes approval-gated'],
+  },
+  {
+    id: 'whatsapp_provider',
+    label: 'WhatsApp Provider',
+    category: 'Messaging',
+    businessUse: 'Prepare WhatsApp campaign follow-up evidence and future delivery status import.',
+    providerKeys: ['whatsapp', 'whatsapp_provider'],
+    importConnectorId: 'whatsapp_provider',
+    route: '/events',
+    routeLabel: 'Open Event Import',
+    setupSteps: ['Save WhatsApp provider credentials', 'Verify business account ownership', 'Keep messages disabled until authorized'],
+  },
+  {
+    id: 'telegram_provider',
+    label: 'Telegram Provider',
+    category: 'Messaging',
+    businessUse: 'Prepare Telegram campaign follow-up evidence and future engagement import.',
+    providerKeys: ['telegram', 'telegram_provider'],
+    importConnectorId: 'telegram_provider',
+    route: '/events',
+    routeLabel: 'Open Event Import',
+    setupSteps: ['Save bot token', 'Confirm target chat/channel', 'Keep outbound messages disabled until authorized'],
+  },
+  {
+    id: 'smartlabs_voice',
+    label: 'SmartLabs Voice',
+    category: 'Voice Agent',
+    businessUse: 'Connect lead context to the customer-owned voice/chat agent.',
+    providerKeys: ['smartlabs_voice', 'voice_chat'],
+    importConnectorId: 'smartlabs_voice',
+    route: '/smartlabs-voice',
+    routeLabel: 'Open Voice Setup',
+    setupSteps: ['Save SmartLabs API key', 'Test agents and voices with tenant credentials', 'Trigger real conversations only after authorization'],
+  },
+  {
+    id: 'openclaw',
+    label: 'OpenClaw',
+    category: 'Orchestration',
+    businessUse: 'Optional adjacent orchestration runtime that calls Tanaghum APIs.',
+    providerKeys: ['openclaw'],
+    bridgeProvider: 'openclaw',
+    route: '/mcp-engine',
+    routeLabel: 'Open Integrations',
+    setupSteps: ['Save runtime endpoint', 'Verify bridge health', 'Never let OpenClaw own approvals or customer data'],
+  },
+  {
+    id: 'agentgateway',
+    label: 'agentgateway',
+    category: 'Policy Gateway',
+    businessUse: 'Optional network policy layer for future connector traffic.',
+    providerKeys: ['agentgateway'],
+    bridgeProvider: 'agentgateway',
+    route: '/mcp-engine',
+    routeLabel: 'Open Integrations',
+    setupSteps: ['Save gateway endpoint', 'Verify bridge health', 'Route future connector calls through policy'],
+  },
+  {
+    id: 'agentscope',
+    label: 'AgentScope',
+    category: 'Agent Runtime',
+    businessUse: 'Optional runtime for future isolated agent execution.',
+    providerKeys: ['agentscope'],
+    bridgeProvider: 'agentscope',
+    route: '/mcp-engine',
+    routeLabel: 'Open Integrations',
+    setupSteps: ['Save runtime endpoint', 'Verify bridge health', 'Keep role and tenant authority in Tanaghum'],
+  },
+];
+
 export default function IntegrationCredentials() {
   const { token } = useAuth();
   const [status, setStatus] = useState<RecordMap | null>(null);
@@ -49,6 +191,9 @@ export default function IntegrationCredentials() {
   const [postizChannelStatus, setPostizChannelStatus] = useState<RecordMap | null>(null);
   const [postizDiagnostics, setPostizDiagnostics] = useState<RecordMap | null>(null);
   const [runtimeStatuses, setRuntimeStatuses] = useState<RecordMap[]>([]);
+  const [connectorImportSummary, setConnectorImportSummary] = useState<RecordMap | null>(null);
+  const [connectorImportReadiness, setConnectorImportReadiness] = useState<RecordMap[]>([]);
+  const [connectorImportJobs, setConnectorImportJobs] = useState<RecordMap[]>([]);
   const [selected, setSelected] = useState<RecordMap | null>(null);
   const [oauthPlatform, setOauthPlatform] = useState('linkedin');
   const [postizPlatform, setPostizPlatform] = useState('instagram');
@@ -62,7 +207,7 @@ export default function IntegrationCredentials() {
 
   async function load() {
     if (!token) return;
-    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, runtimeResult, postizChannelResult, postizDiagnosticsResult] = await Promise.all([
+    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, runtimeResult, postizChannelResult, postizDiagnosticsResult, importReadinessResult, importJobsResult] = await Promise.all([
       integrationStatusApi.get(token),
       postizApi.status(token),
       ghlApi.status(token),
@@ -72,6 +217,8 @@ export default function IntegrationCredentials() {
       runtimeBridgesApi.status(token),
       postizApi.channels(token).catch((err) => ({ status: 'requires_credentials', channels: [], _label: err instanceof Error ? err.message : 'Postiz channel status unavailable' })),
       postizApi.diagnostics({ platform: postizPlatform }, token).catch((err) => ({ status: 'not_available', diagnostics: null, _label: err instanceof Error ? err.message : 'Postiz diagnostics unavailable' })),
+      connectorImportsApi.readiness(token).catch((err) => ({ connectors: [], totalConfigured: 0, totalMissing: 0, totalBlocked: 0, _label: err instanceof Error ? err.message : 'Connector import readiness unavailable' })),
+      connectorImportsApi.jobs(token).catch(() => []),
     ]);
     setStatus(integration as RecordMap);
     setPostiz(postizStatus as RecordMap);
@@ -83,6 +230,9 @@ export default function IntegrationCredentials() {
     setPostizChannelStatus(postizChannelResult as RecordMap);
     setPostizChannels(Array.isArray((postizChannelResult as RecordMap).channels) ? (postizChannelResult as RecordMap).channels as RecordMap[] : []);
     setPostizDiagnostics(postizDiagnosticsResult as RecordMap);
+    setConnectorImportSummary(importReadinessResult as RecordMap);
+    setConnectorImportReadiness(Array.isArray((importReadinessResult as RecordMap).connectors) ? (importReadinessResult as RecordMap).connectors as RecordMap[] : []);
+    setConnectorImportJobs(Array.isArray(importJobsResult) ? importJobsResult as RecordMap[] : Array.isArray((importJobsResult as RecordMap).jobs) ? (importJobsResult as RecordMap).jobs as RecordMap[] : []);
   }
 
   useEffect(() => {
@@ -123,6 +273,79 @@ export default function IntegrationCredentials() {
   const postizAuthorizationUrl = text(postizAuthorization.authorizationUrl, '');
   const postizProviderReady = postizAuthorization.providerConfigurationReady === true;
   const postizClientIdStatus = text(postizAuthorization.clientIdStatus, 'not checked');
+  const configuredImportCount = Number(connectorImportSummary?.totalConfigured || 0);
+  const missingImportCount = Number(connectorImportSummary?.totalMissing || 0);
+  const blockedImportCount = Number(connectorImportSummary?.totalBlocked || 0);
+
+  const setupRoadmap = useMemo(() => {
+    return SETUP_BLUEPRINTS.map(blueprint => {
+      const credentialRows = matrix.filter(row => {
+        const provider = text(row.provider, '').toLowerCase();
+        const connectionKey = text(row.connectionKey, '').toLowerCase();
+        return blueprint.providerKeys.some(key => key === provider || key === connectionKey);
+      });
+      const primaryCredential = credentialRows.find(row => text(row.status).toLowerCase() === 'configured') || credentialRows[0] || null;
+      const credentialConfigured = credentialRows.some(row => text(row.status).toLowerCase() === 'configured');
+      const importReadiness = blueprint.importConnectorId
+        ? connectorImportReadiness.find(item => text(item.connectorId, '').toLowerCase() === blueprint.importConnectorId)
+        : null;
+      const importJob = blueprint.importConnectorId
+        ? connectorImportJobs.find(job => text(job.connectorId, '').toLowerCase() === blueprint.importConnectorId)
+        : null;
+      const oauthConnected = blueprint.oauthPlatforms?.some(platform =>
+        socialConnections.some(connection => text(connection.platform, '').toLowerCase() === platform && text(connection.status, 'active').toLowerCase() !== 'disabled'),
+      ) || false;
+      const bridgeStatus = blueprint.bridgeProvider
+        ? runtimeStatuses.find(runtime => text(runtime.provider, '').toLowerCase() === blueprint.bridgeProvider)
+        : null;
+      const postizChannelConnected = blueprint.needsPostizChannel ? postizChannels.length > 0 : false;
+      const jobState = text(importJob?.state || importReadiness?.jobState, '');
+      const importCredentialState = text(importReadiness?.credentialState, '');
+      const bridgeReady = bridgeStatus ? bridgeStatus.configured === true && bridgeStatus.reachable === true : false;
+      const connectionReady = blueprint.needsPostizChannel
+        ? postizChannelConnected
+        : blueprint.oauthPlatforms?.length
+          ? oauthConnected
+          : bridgeStatus
+            ? bridgeReady
+            : credentialConfigured;
+      const importReady = jobState === 'test_passed' || importCredentialState === 'test_passed' || importCredentialState === 'configured';
+      const readinessScore =
+        (credentialConfigured ? 1 : 0) +
+        (connectionReady ? 1 : 0) +
+        (blueprint.importConnectorId ? (importReady ? 1 : 0) : bridgeStatus ? (bridgeReady ? 1 : 0) : 1);
+      const maxScore = blueprint.importConnectorId || bridgeStatus ? 3 : 2;
+      const isReady = readinessScore >= maxScore;
+      const needsCredentials = !credentialConfigured;
+      const needsConnection = credentialConfigured && !connectionReady;
+      const headline = isReady
+        ? 'Ready for governed use'
+        : needsCredentials
+          ? 'Requires customer credentials'
+          : needsConnection
+            ? 'Connect account or runtime'
+            : 'Create test/import job';
+
+      return {
+        ...blueprint,
+        credentialRows,
+        primaryCredential,
+        credentialConfigured,
+        connectionReady,
+        importReady,
+        bridgeReady,
+        postizChannelConnected,
+        oauthConnected,
+        importReadiness,
+        importJob,
+        jobState,
+        importCredentialState,
+        headline,
+        tone: isReady ? 'good' as const : needsCredentials ? 'warn' as const : 'info' as const,
+        scoreText: `${readinessScore}/${maxScore}`,
+      };
+    });
+  }, [connectorImportJobs, connectorImportReadiness, matrix, postizChannels.length, runtimeStatuses, socialConnections]);
 
   function chooseRequirement(row: RecordMap) {
     setSelected(row);
@@ -260,6 +483,101 @@ export default function IntegrationCredentials() {
         <MetricCard label="GoHighLevel" value={text(ghl?._label)} detail={`${text(ghl?.apiKeyStatus)} API key`} tone={statusTone(`${text(ghl?._label)} ${text(ghl?.apiKeyStatus)}`)} />
         <MetricCard label="Tenant Vault" value={`${configuredRows}/${matrix.length}`} detail="Configured credential sets" tone={configuredRows > 0 ? 'good' : 'warn'} />
       </div>
+
+      <ProductCard
+        title="Connector Setup Roadmap"
+        subtitle="Use this as the production setup cockpit. Customers bring their own provider accounts; Tanaghum stores secret status only, guides account connection, and keeps write actions approval-gated."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <ProductStatus tone={configuredImportCount ? 'good' : 'warn'}>{configuredImportCount} import-ready</ProductStatus>
+            <ProductStatus tone={missingImportCount ? 'warn' : 'good'}>{missingImportCount} missing</ProductStatus>
+            <ProductStatus tone={blockedImportCount ? 'danger' : 'muted'}>{blockedImportCount} blocked</ProductStatus>
+          </div>
+        }
+      >
+        <div className="grid gap-3 lg:grid-cols-4">
+          {[
+            ['1', 'Save Credentials', 'Admin saves tenant-owned API/OAuth/runtime credentials. Raw secret values are never shown again.'],
+            ['2', 'Connect Account', 'Provider OAuth, Postiz channels, or runtime endpoints prove the account belongs to the customer.'],
+            ['3', 'Import Evidence', 'Event dashboards use mappings, dry-runs, and approval before connector data becomes KPI evidence.'],
+            ['4', 'Govern Execution', 'Publishing, CRM, messaging, and voice actions stay blocked until explicit customer authorization.'],
+          ].map(([step, title, detail]) => (
+            <div key={step} className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">{step}</span>
+                <div className="text-sm font-semibold text-neutral-950">{title}</div>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-neutral-600">{detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          {setupRoadmap.map(item => (
+            <div key={item.id} className="flex min-h-[360px] flex-col rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{item.category}</div>
+                  <h3 className="mt-1 text-base font-semibold text-neutral-950">{item.label}</h3>
+                  <p className="mt-2 text-sm leading-6 text-neutral-600">{item.businessUse}</p>
+                </div>
+                <ProductStatus tone={item.tone}>{item.scoreText}</ProductStatus>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <ProductStatus tone={item.credentialConfigured ? 'good' : 'warn'}>
+                  {item.credentialConfigured ? 'Credentials configured' : 'Requires credentials'}
+                </ProductStatus>
+                <ProductStatus tone={item.connectionReady ? 'good' : 'warn'}>
+                  {item.needsPostizChannel
+                    ? item.postizChannelConnected ? 'Channel selected' : 'Channel needed'
+                    : item.oauthPlatforms?.length
+                      ? item.oauthConnected ? 'OAuth connected' : 'OAuth needed'
+                      : item.bridgeProvider
+                        ? item.bridgeReady ? 'Runtime reachable' : 'Runtime check needed'
+                        : 'Connection by credential'}
+                </ProductStatus>
+                {item.importConnectorId && (
+                  <ProductStatus tone={item.importReady ? 'good' : 'info'}>
+                    {item.importReady ? 'Import ready' : display(text(item.jobState || item.importCredentialState, 'Import job needed'))}
+                  </ProductStatus>
+                )}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-neutral-100 bg-neutral-50 p-4">
+                <div className="text-sm font-semibold text-neutral-950">{item.headline}</div>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-neutral-600">
+                  {item.setupSteps.map(step => (
+                    <li key={step} className="flex gap-2">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400" />
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-4 grid gap-2 text-xs leading-5 text-neutral-500">
+                <div><span className="font-medium text-neutral-700">Credential row:</span> {item.primaryCredential ? text(item.primaryCredential.label) : 'Not registered in credential matrix'}</div>
+                {item.importConnectorId && <div><span className="font-medium text-neutral-700">Import connector:</span> {display(item.importConnectorId)}</div>}
+                {item.importJob && <div><span className="font-medium text-neutral-700">Last dry-run:</span> {text(item.importJob.lastDryRunAt, 'Not run')}</div>}
+                <div><span className="font-medium text-neutral-700">Secrets:</span> status only, raw values hidden</div>
+              </div>
+
+              <div className="mt-auto flex flex-wrap gap-2 pt-5">
+                <SecondaryAction onClick={() => item.primaryCredential && chooseRequirement(item.primaryCredential)} disabled={!item.primaryCredential}>
+                  Configure
+                </SecondaryAction>
+                <Link
+                  to={item.route}
+                  className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
+                >
+                  {item.routeLabel}
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </ProductCard>
 
       <ProductCard
         title="Postiz Social Channels"
