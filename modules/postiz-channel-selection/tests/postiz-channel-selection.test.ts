@@ -191,6 +191,12 @@ describe('Channel Tag Build/Parse', () => {
     expect(buildChannelTag('instagram', 'ig-123')).toBe('postiz:instagram:ig-123');
   });
 
+  it('encodes separators in channel ids so tags remain parseable', () => {
+    const tag = buildChannelTag('instagram', 'ig:business:123');
+    expect(tag).toBe('postiz:instagram:ig%3Abusiness%3A123');
+    expect(parseChannelTag(tag)).toEqual({ platform: 'instagram', integrationChannelId: 'ig:business:123' });
+  });
+
   it('parses a valid channel tag', () => {
     const result = parseChannelTag('postiz:linkedin:li-456');
     expect(result).toEqual({ platform: 'linkedin', integrationChannelId: 'li-456' });

@@ -1,10 +1,9 @@
 import { ForbiddenError, NotFoundError } from '@shared/errors';
 import { auditLog } from '@shared/logging';
-import { checkChannelSelectionPermission, evaluateChannelReadiness, assertReadyForScheduling } from './policy';
+import { checkChannelSelectionPermission, evaluateChannelReadiness } from './policy';
 import * as repo from './repository';
 import type {
   SelectChannelForEventInput,
-  SelectChannelForPackageInput,
   DeselectChannelInput,
   ChannelSelectionSummary,
   ChannelReadiness,
@@ -74,18 +73,34 @@ export async function selectChannelForEvent(
   if (connector.connectorStatus !== 'active') {
     throw new ForbiddenError(`Postiz connector is ${connector.connectorStatus}, not active`);
   }
+  if (!connector.supportsSchedule) {
+    throw new ForbiddenError('Postiz connector does not support scheduling');
+  }
 
-  const channelTag = repo.buildChannelTag(input.platform, input.postizIntegrationChannelId);
+  const selectedChannel = await repo.getTenantSelectedPostizChannel(tenantKey);
+  if (!selectedChannel) {
+    throw new ForbiddenError('Select and validate a Postiz channel in the tenant Postiz integration settings before assigning it to an event');
+  }
+  if (selectedChannel.integrationChannelId !== input.postizIntegrationChannelId) {
+    throw new ForbiddenError('Selected channel was not returned by the tenant Postiz account. Re-select the channel from the Postiz integration page.');
+  }
+  if (selectedChannel.disabled) {
+    throw new ForbiddenError('Selected Postiz channel is disabled. Re-enable or re-authenticate it in Postiz before assigning it to an event');
+  }
+
+  const platform = selectedChannel.platform || input.platform;
+  const channelDisplayName = selectedChannel.channelDisplayName || input.channelDisplayName || null;
+  const channelTag = repo.buildChannelTag(platform, input.postizIntegrationChannelId);
   await repo.updateEventSelectedChannels(tenantKey, input.eventId, channelTag, 'add');
 
   const readiness = evaluateChannelReadiness({
     connectorExists: true,
     connectorStatus: connector.connectorStatus,
     channelExists: true,
-    channelDisabled: false,
-    channelRefreshNeeded: false,
-    platform: input.platform,
-    channelDisplayName: input.channelDisplayName || null,
+    channelDisabled: selectedChannel.disabled,
+    channelRefreshNeeded: selectedChannel.refreshNeeded,
+    platform,
+    channelDisplayName,
     integrationChannelId: input.postizIntegrationChannelId,
   });
 
@@ -107,8 +122,8 @@ export async function selectChannelForEvent(
     publishingPackageId: null,
     postizConnectorId: input.postizConnectorId,
     postizIntegrationChannelId: input.postizIntegrationChannelId,
-    platform: input.platform,
-    channelDisplayName: input.channelDisplayName || null,
+    platform,
+    channelDisplayName,
     selectionStatus: 'selected',
     selectedByUserId: userId,
     createdAt: new Date(),
@@ -160,15 +175,21 @@ export async function getChannelReadinessForEvent(
   const connectors = await repo.listConnectorsForTenant(tenantKey);
   const postizChannel = event.selectedChannels.find(ch => ch.startsWith('postiz:'));
   const parsed = postizChannel ? repo.parseChannelTag(postizChannel) : null;
+  const selectedChannel = await repo.getTenantSelectedPostizChannel(tenantKey);
+  const selectedChannelMatchesEvent = Boolean(
+    parsed
+      && selectedChannel
+      && selectedChannel.integrationChannelId === parsed.integrationChannelId,
+  );
 
   return evaluateChannelReadiness({
     connectorExists: connectors.length > 0,
     connectorStatus: connectors[0]?.connectorStatus || null,
-    channelExists: Boolean(parsed),
-    channelDisabled: false,
-    channelRefreshNeeded: false,
-    platform: parsed?.platform || null,
-    channelDisplayName: null,
+    channelExists: selectedChannelMatchesEvent,
+    channelDisabled: selectedChannel?.disabled || false,
+    channelRefreshNeeded: selectedChannel?.refreshNeeded || false,
+    platform: selectedChannelMatchesEvent ? selectedChannel?.platform || parsed?.platform || null : parsed?.platform || null,
+    channelDisplayName: selectedChannelMatchesEvent ? selectedChannel?.channelDisplayName || null : null,
     integrationChannelId: parsed?.integrationChannelId || null,
   });
 }
@@ -193,15 +214,21 @@ export async function getChannelReadinessForPackage(
 
   const postizChannel = eventChannels[0] || null;
   const parsed = postizChannel ? repo.parseChannelTag(postizChannel) : null;
+  const selectedChannel = await repo.getTenantSelectedPostizChannel(tenantKey);
+  const selectedChannelMatchesPackage = Boolean(
+    parsed
+      && selectedChannel
+      && selectedChannel.integrationChannelId === parsed.integrationChannelId,
+  );
 
   return evaluateChannelReadiness({
     connectorExists: connectors.length > 0,
     connectorStatus: connectors[0]?.connectorStatus || null,
-    channelExists: Boolean(parsed),
-    channelDisabled: false,
-    channelRefreshNeeded: false,
-    platform: parsed?.platform || null,
-    channelDisplayName: null,
+    channelExists: selectedChannelMatchesPackage,
+    channelDisabled: selectedChannel?.disabled || false,
+    channelRefreshNeeded: selectedChannel?.refreshNeeded || false,
+    platform: selectedChannelMatchesPackage ? selectedChannel?.platform || parsed?.platform || null : parsed?.platform || null,
+    channelDisplayName: selectedChannelMatchesPackage ? selectedChannel?.channelDisplayName || null : null,
     integrationChannelId: parsed?.integrationChannelId || null,
   });
 }
