@@ -401,6 +401,24 @@ export const eventsApi = {
     apiFetch<unknown>(`/events/${eventId}/kpis/${kpiId}`, { method: 'PUT', body: data, token }),
 };
 
+export const connectorMappingsApi = {
+  list: (token: string, connectorId?: string) => {
+    const params = connectorId ? `?${new URLSearchParams({ connectorId }).toString()}` : '';
+    return apiFetch<unknown[]>(`/connector-mappings${params}`, { token });
+  },
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/connector-mappings', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/connector-mappings/${id}`, { method: 'PUT', body: data, token }),
+};
+
+export const csvImportApi = {
+  dryRun: (data: unknown, token: string) =>
+    apiFetch<unknown>('/csv-import/dry-run', { method: 'POST', body: data, token }),
+  approveImport: (data: unknown, token: string) =>
+    apiFetch<unknown>('/csv-import/approve-import', { method: 'POST', body: data, token }),
+};
+
 export const eventPlannerApi = {
   emailPlans: (eventId: string, token: string) => apiFetch<unknown[]>(`/planner/events/${eventId}/email-plans`, { token }),
   createEmailPlan: (data: unknown, token: string) => apiFetch<unknown>('/planner/email-plans', { method: 'POST', body: data, token }),
