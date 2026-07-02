@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "MappingTargetType" AS ENUM ('event_kpi_record', 'lead_attribution');
+CREATE TYPE "MappingTargetType" AS ENUM ('event_kpi_record');
 
 -- CreateEnum
 CREATE TYPE "MappingValidationStatus" AS ENUM ('valid', 'invalid', 'untested');
@@ -30,3 +30,7 @@ CREATE INDEX "connector_field_mappings_created_by_user_id_idx" ON "connector_fie
 ALTER TABLE "connector_field_mappings" ADD CONSTRAINT "connector_field_mappings_tenant_key_fkey" FOREIGN KEY ("tenant_key") REFERENCES "tenants"("tenant_key") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "connector_field_mappings" ADD CONSTRAINT "connector_field_mappings_event_id_fkey" FOREIGN KEY ("event_id") REFERENCES "commercial_events"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "connector_field_mappings" ADD CONSTRAINT "connector_field_mappings_created_by_user_id_fkey" FOREIGN KEY ("created_by_user_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "connector_import_jobs" ADD COLUMN "mapping_id" UUID;
+CREATE INDEX "connector_import_jobs_mapping_id_idx" ON "connector_import_jobs"("mapping_id");
+ALTER TABLE "connector_import_jobs" ADD CONSTRAINT "connector_import_jobs_mapping_id_fkey" FOREIGN KEY ("mapping_id") REFERENCES "connector_field_mappings"("id") ON DELETE SET NULL ON UPDATE CASCADE;

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const MAPPING_TARGET_TYPES = ['event_kpi_record', 'lead_attribution'] as const;
+export const MAPPING_TARGET_TYPES = ['event_kpi_record'] as const;
 export type MappingTargetType = (typeof MAPPING_TARGET_TYPES)[number];
 
 export const MAPPING_VALIDATION_STATUSES = ['valid', 'invalid', 'untested'] as const;

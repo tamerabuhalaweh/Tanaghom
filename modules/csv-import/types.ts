@@ -21,6 +21,7 @@ export type CsvApproveImportInput = z.infer<typeof csvApproveImportSchema>;
 export interface CsvDryRunResult {
   mappingId: string;
   eventId: string;
+  mappingUpdatedAt: string;
   totalRows: number;
   validRows: number;
   invalidRows: number;

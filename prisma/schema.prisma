@@ -3780,6 +3780,7 @@ model ConnectorImportJob {
   id                  String                  @id @default(uuid()) @db.Uuid
   tenant_key          String
   event_id            String?                 @db.Uuid
+  mapping_id          String?                 @db.Uuid
   connector_id        String
   display_name        String
   state               ConnectorImportState   @default(draft)
@@ -3799,11 +3800,13 @@ model ConnectorImportJob {
 
   tenant       Tenant          @relation(fields: [tenant_key], references: [tenant_key])
   event        CommercialEvent? @relation(fields: [event_id], references: [id])
+  field_mapping ConnectorFieldMapping? @relation(fields: [mapping_id], references: [id])
   created_by   User            @relation("ConnectorImportCreatedBy", fields: [created_by_user_id], references: [id])
   approved_by  User?           @relation("ConnectorImportApprovedBy", fields: [approved_by_user_id], references: [id])
 
   @@index([tenant_key])
   @@index([event_id])
+  @@index([mapping_id])
   @@index([connector_id])
   @@index([state])
   @@index([created_by_user_id])
@@ -3816,7 +3819,6 @@ model ConnectorImportJob {
 
 enum MappingTargetType {
   event_kpi_record
-  lead_attribution
 }
 
 enum MappingValidationStatus {
@@ -3842,6 +3844,7 @@ model ConnectorFieldMapping {
   tenant      Tenant @relation(fields: [tenant_key], references: [tenant_key])
   event       CommercialEvent? @relation(fields: [event_id], references: [id])
   created_by  User   @relation("ConnectorFieldMappingCreatedBy", fields: [created_by_user_id], references: [id])
+  connector_import_jobs ConnectorImportJob[]
 
   @@index([tenant_key])
   @@index([connector_id])
