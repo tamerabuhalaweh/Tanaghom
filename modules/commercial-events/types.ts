@@ -19,6 +19,9 @@ export const COMMERCIAL_EVENT_STATUSES = [
 
 export type CommercialEventStatus = (typeof COMMERCIAL_EVENT_STATUSES)[number];
 
+export const EVENT_KPI_SOURCE_TYPES = ['manual', 'imported', 'connector'] as const;
+export type EventKpiSourceType = (typeof EVENT_KPI_SOURCE_TYPES)[number];
+
 export const EVENT_TRANSITION_TABLE: Record<CommercialEventStatus, CommercialEventStatus[]> = {
   draft: ['planning', 'cancelled'],
   planning: ['active', 'cancelled'],
@@ -42,7 +45,7 @@ export class EventTransitionError extends Error {
     public readonly from: CommercialEventStatus,
     public readonly to: CommercialEventStatus,
   ) {
-    super(`Invalid event state transition: ${from} → ${to}`);
+    super(`Invalid event state transition: ${from} -> ${to}`);
     this.name = 'EventTransitionError';
   }
 }
@@ -111,12 +114,40 @@ export const linkLeadSchema = z.object({
   leadId: z.string().uuid('Invalid lead ID'),
 });
 
+const nonNegativeMetric = z.number().int().min(0).optional();
+
+export const createKpiRecordSchema = z.object({
+  sourceType: z.enum(EVENT_KPI_SOURCE_TYPES).default('manual').optional(),
+  sourceName: z.string().min(1).max(200).default('manual').optional(),
+  metricDate: z.string().datetime('Invalid metric date'),
+  channel: z.string().min(1).max(100).default('manual').optional(),
+  reach: nonNegativeMetric,
+  impressions: nonNegativeMetric,
+  interactions: nonNegativeMetric,
+  clicks: nonNegativeMetric,
+  formCompletions: nonNegativeMetric,
+  leads: nonNegativeMetric,
+  meetingsBooked: nonNegativeMetric,
+  meetingsAttended: nonNegativeMetric,
+  purchases: nonNegativeMetric,
+  noShows: nonNegativeMetric,
+  spend: z.number().min(0).optional(),
+  notes: z.string().max(5000).nullable().optional(),
+});
+
+export const updateKpiRecordSchema = createKpiRecordSchema.partial().refine(
+  value => Object.keys(value).length > 0,
+  'At least one KPI field must be provided',
+);
+
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type UpdateStrategyInput = z.infer<typeof updateStrategySchema>;
 export type TransitionEventInput = z.infer<typeof transitionEventSchema>;
 export type LinkCampaignInput = z.infer<typeof linkCampaignSchema>;
 export type LinkLeadInput = z.infer<typeof linkLeadSchema>;
+export type CreateKpiRecordInput = z.infer<typeof createKpiRecordSchema>;
+export type UpdateKpiRecordInput = z.infer<typeof updateKpiRecordSchema>;
 
 export interface CommercialEventSummary {
   id: string;
@@ -145,4 +176,75 @@ export interface CommercialEventSummary {
   leadCount: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface EventKpiRecordSummary {
+  id: string;
+  tenantKey: string;
+  eventId: string;
+  sourceType: EventKpiSourceType;
+  sourceName: string;
+  metricDate: Date;
+  channel: string;
+  reach: number;
+  impressions: number;
+  interactions: number;
+  clicks: number;
+  formCompletions: number;
+  leads: number;
+  meetingsBooked: number;
+  meetingsAttended: number;
+  purchases: number;
+  noShows: number;
+  spend: number;
+  notes: string | null;
+  createdByUserId: string;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EventDashboardSummary {
+  event: CommercialEventSummary;
+  kpis: {
+    newLeads: number;
+    capturedLeads: number;
+    reportedLeads: number;
+    formCompletions: number;
+    meetingsBooked: number;
+    meetingsAttended: number;
+    purchases: number;
+    noShows: number;
+    noShowRate: number;
+    plannedBudget: number;
+    actualSpend: number;
+    budgetVariance: number;
+    reach: number;
+    impressions: number;
+    interactions: number;
+    clicks: number;
+    interactionRate: number;
+    costPerLead: number;
+    costPerPurchase: number;
+  };
+  funnel: Array<{ label: string; value: number }>;
+  channelPerformance: Array<{
+    channel: string;
+    reach: number;
+    interactions: number;
+    leads: number;
+    purchases: number;
+    spend: number;
+    conversionRate: number;
+  }>;
+  leadTemperature: Array<{ label: string; value: number }>;
+  nextActions: Array<{ title: string; detail: string; priority: 'high' | 'medium' | 'low' }>;
+  kpiRecords: EventKpiRecordSummary[];
+  campaigns: Array<{ id: string; title: string; objective: string; status: string; platforms: string[]; createdAt: Date }>;
+  leads: Array<{ id: string; status: string; platform: string; leadName: string | null; leadEmail: string | null; createdAt: Date }>;
+  sourceStatus: {
+    manualRecords: number;
+    importedRecords: number;
+    connectorRecords: number;
+  };
 }

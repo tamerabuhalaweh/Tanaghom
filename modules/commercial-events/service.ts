@@ -16,7 +16,11 @@ import type {
   CreateEventInput,
   UpdateEventInput,
   UpdateStrategyInput,
+  CreateKpiRecordInput,
+  UpdateKpiRecordInput,
   CommercialEventSummary,
+  EventDashboardSummary,
+  EventKpiRecordSummary,
 } from './types';
 
 export async function listEvents(
@@ -161,7 +165,7 @@ export async function transitionEvent(
       object_id: id,
       result: 'success',
     },
-    `Commercial event status: ${fromStatus} → ${toStatus}${reason ? ` (${reason})` : ''}`,
+    `Commercial event status: ${fromStatus} -> ${toStatus}${reason ? ` (${reason})` : ''}`,
   );
 
   const statusEvent: CommercialEventStatusChangedEvent = {
@@ -238,4 +242,80 @@ export async function linkLead(
     timestamp: new Date(),
   };
   await eventBus.emit(COMMERCIAL_EVENT_EVENTS.EVENT_LEAD_LINKED, linkEvent);
+}
+
+export async function getEventDashboard(
+  requesterRole: string,
+  tenantKey: string,
+  eventId: string,
+): Promise<EventDashboardSummary> {
+  checkEventPermission(requesterRole, 'events:read');
+  return repo.getEventDashboard(tenantKey, eventId);
+}
+
+export async function listEventCampaigns(
+  requesterRole: string,
+  tenantKey: string,
+  eventId: string,
+) {
+  checkEventPermission(requesterRole, 'events:read');
+  return repo.listEventCampaigns(tenantKey, eventId);
+}
+
+export async function listEventLeads(
+  requesterRole: string,
+  tenantKey: string,
+  eventId: string,
+) {
+  checkEventPermission(requesterRole, 'events:read');
+  return repo.listEventLeads(tenantKey, eventId);
+}
+
+export async function createEventKpiRecord(
+  requesterRole: string,
+  tenantKey: string,
+  requesterId: string,
+  eventId: string,
+  input: CreateKpiRecordInput,
+): Promise<EventKpiRecordSummary> {
+  checkEventPermission(requesterRole, 'events:update');
+  const record = await repo.createKpiRecord(tenantKey, eventId, requesterId, input);
+
+  auditLog(
+    {
+      actor: `user:${requesterId}`,
+      action: 'commercial_event_kpi_record_created',
+      object_type: 'event_kpi_record',
+      object_id: record.id,
+      result: 'success',
+    },
+    `Event KPI record created for event ${eventId}`,
+  );
+
+  return record;
+}
+
+export async function updateEventKpiRecord(
+  requesterRole: string,
+  tenantKey: string,
+  requesterId: string,
+  eventId: string,
+  kpiId: string,
+  input: UpdateKpiRecordInput,
+): Promise<EventKpiRecordSummary> {
+  checkEventPermission(requesterRole, 'events:update');
+  const record = await repo.updateKpiRecord(tenantKey, eventId, kpiId, requesterId, input);
+
+  auditLog(
+    {
+      actor: `user:${requesterId}`,
+      action: 'commercial_event_kpi_record_updated',
+      object_type: 'event_kpi_record',
+      object_id: kpiId,
+      result: 'success',
+    },
+    `Event KPI record updated for event ${eventId}`,
+  );
+
+  return record;
 }

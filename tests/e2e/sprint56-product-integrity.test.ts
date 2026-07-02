@@ -25,6 +25,7 @@ describe('Sprint 56 production product integrity contracts', () => {
       '/ghl',
       '/leads',
       '/social-growth',
+      '/events',
     ];
 
     for (const prefix of contracts) {
@@ -40,6 +41,7 @@ describe('Sprint 56 production product integrity contracts', () => {
     const navigationContracts = [
       { path: '/command-center', route: 'command-center', label: 'Dashboard' },
       { path: '/growth', route: 'growth', label: 'Growth Engine' },
+      { path: '/events', route: 'events', label: 'Events' },
       { path: '/campaigns', route: 'campaigns', label: 'Campaigns' },
       { path: '/ideas', route: 'ideas', label: 'Content Creator' },
       { path: '/approvals', route: 'approvals', label: 'Review & Approve' },
@@ -191,5 +193,53 @@ describe('Sprint 56 production product integrity contracts', () => {
 
     expect(analytics).toContain('Preview Voice/Chat Handoff');
     expect(analytics).toContain('Voice/Chat Handoff Preview');
+  });
+
+  it('keeps Sprint 60 Events dashboard wired to event APIs and customer-facing navigation', () => {
+    const api = source('frontend', 'src', 'api.ts');
+    const app = source('frontend', 'src', 'App.tsx');
+    const layout = source('frontend', 'src', 'components', 'Layout.tsx');
+    const eventDashboard = source('frontend', 'src', 'pages', 'EventDashboard.tsx');
+    const controller = source('modules', 'commercial-events', 'controller.ts');
+
+    for (const apiFunction of ['list', 'create', 'update', 'transition', 'dashboard', 'campaigns', 'leads', 'createKpi', 'updateKpi']) {
+      expect(api, `eventsApi.${apiFunction} must be exposed`).toContain(`${apiFunction}:`);
+    }
+
+    for (const backendPath of ['/:id/dashboard', '/:id/campaigns', '/:id/leads', '/:id/kpis']) {
+      expect(controller, `${backendPath} must be registered`).toContain(backendPath);
+    }
+
+    expect(app).toContain('path="events"');
+    expect(app).toContain('path="events/new"');
+    expect(app).toContain('path="events/:eventId"');
+    expect(layout).toContain("label: 'Events'");
+
+    for (const customerCue of [
+      'Event Revenue Operations',
+      'Event Queue',
+      'Manual KPI Update',
+      'Event Funnel',
+      'Budget Control',
+      'Channel Performance',
+      'Leads For This Event',
+      'KPI Evidence',
+    ]) {
+      expect(eventDashboard).toContain(customerCue);
+    }
+
+    const eventWizard = source('frontend', 'src', 'pages', 'EventStrategyWizard.tsx');
+    for (const wizardCue of [
+      'Create Event Strategy',
+      'Event Strategy',
+      'Event Type',
+      'Event Basics',
+      'Offer, Audience, and FOMO',
+      'Channels and Team Requirements',
+      'Create Event Workspace',
+      'eventsApi.create',
+    ]) {
+      expect(eventWizard).toContain(wizardCue);
+    }
   });
 });

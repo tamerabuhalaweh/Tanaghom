@@ -5,6 +5,7 @@ import {
   Bot,
   Brain,
   Building2,
+  CalendarDays,
   ClipboardCheck,
   FileClock,
   KeyRound,
@@ -68,6 +69,14 @@ const NAV_ITEMS: NavItem[] = [
     icon: TrendingUp,
     group: 'Product',
     roles: PRODUCT_ROLES,
+  },
+  {
+    path: '/events',
+    label: 'Events',
+    description: 'Event dashboard and sales results',
+    icon: CalendarDays,
+    group: 'Product',
+    roles: ['admin', 'cco', 'department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'viewer'],
   },
   {
     path: '/campaigns',

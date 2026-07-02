@@ -10,6 +10,11 @@ import {
   transitionEvent,
   linkCampaign,
   linkLead,
+  getEventDashboard,
+  listEventCampaigns,
+  listEventLeads,
+  createEventKpiRecord,
+  updateEventKpiRecord,
 } from './service';
 import {
   validateCreateEvent,
@@ -18,6 +23,8 @@ import {
   validateTransitionEvent,
   validateLinkCampaign,
   validateLinkLead,
+  validateCreateKpiRecord,
+  validateUpdateKpiRecord,
 } from './validators';
 import type { CommercialEventStatus } from './types';
 
@@ -39,6 +46,65 @@ commercialEventsRouter.get('/', async (req: Request, res: Response, next: NextFu
       req.query.eventType as string | undefined,
     );
     res.json(events);
+  } catch (err) {
+    next(err);
+  }
+});
+
+commercialEventsRouter.get('/:id/dashboard', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const dashboard = await getEventDashboard(payload.role, payload.tenantKey || 'default', req.params.id as string);
+    res.json(dashboard);
+  } catch (err) {
+    next(err);
+  }
+});
+
+commercialEventsRouter.get('/:id/campaigns', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const campaigns = await listEventCampaigns(payload.role, payload.tenantKey || 'default', req.params.id as string);
+    res.json(campaigns);
+  } catch (err) {
+    next(err);
+  }
+});
+
+commercialEventsRouter.get('/:id/leads', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const leads = await listEventLeads(payload.role, payload.tenantKey || 'default', req.params.id as string);
+    res.json(leads);
+  } catch (err) {
+    next(err);
+  }
+});
+
+commercialEventsRouter.post('/:id/kpis', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const input = validateCreateKpiRecord(req.body);
+    const record = await createEventKpiRecord(payload.role, payload.tenantKey || 'default', payload.sub, req.params.id as string, input);
+    res.status(201).json(record);
+  } catch (err) {
+    next(err);
+  }
+});
+
+commercialEventsRouter.put('/:id/kpis/:kpiId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const input = validateUpdateKpiRecord(req.body);
+    const record = await updateEventKpiRecord(
+      payload.role,
+      payload.tenantKey || 'default',
+      payload.sub,
+      req.params.id as string,
+      req.params.kpiId as string,
+      input,
+    );
+    res.json(record);
   } catch (err) {
     next(err);
   }

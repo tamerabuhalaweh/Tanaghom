@@ -371,3 +371,19 @@ export const socialGrowthApi = {
     apiFetch<unknown>(`/social-growth/templates/${templateId}/campaign`, { method: 'POST', body: data, token }),
   algorithmPack: (token: string) => apiFetch<unknown>('/social-growth/algorithm-pack', { token }),
 };
+
+export const eventsApi = {
+  list: (token: string) => apiFetch<unknown[]>('/events', { token }),
+  get: (id: string, token: string) => apiFetch<unknown>(`/events/${id}`, { token }),
+  create: (data: unknown, token: string) => apiFetch<unknown>('/events', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/events/${id}`, { method: 'PUT', body: data, token }),
+  transition: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/events/${id}/transition`, { method: 'POST', body: data, token }),
+  dashboard: (id: string, token: string) => apiFetch<unknown>(`/events/${id}/dashboard`, { token }),
+  campaigns: (id: string, token: string) => apiFetch<unknown[]>(`/events/${id}/campaigns`, { token }),
+  leads: (id: string, token: string) => apiFetch<unknown[]>(`/events/${id}/leads`, { token }),
+  createKpi: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/events/${id}/kpis`, { method: 'POST', body: data, token }),
+  updateKpi: (eventId: string, kpiId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/events/${eventId}/kpis/${kpiId}`, { method: 'PUT', body: data, token }),
+};

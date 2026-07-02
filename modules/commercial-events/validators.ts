@@ -6,6 +6,8 @@ import {
   transitionEventSchema,
   linkCampaignSchema,
   linkLeadSchema,
+  createKpiRecordSchema,
+  updateKpiRecordSchema,
 } from './types';
 
 export function validateCreateEvent(data: unknown) {
@@ -30,4 +32,12 @@ export function validateLinkCampaign(data: unknown) {
 
 export function validateLinkLead(data: unknown) {
   return validateOrThrow(linkLeadSchema, data);
+}
+
+export function validateCreateKpiRecord(data: unknown) {
+  return validateOrThrow(createKpiRecordSchema, data);
+}
+
+export function validateUpdateKpiRecord(data: unknown) {
+  return validateOrThrow(updateKpiRecordSchema, data);
 }
