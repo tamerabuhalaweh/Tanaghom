@@ -480,6 +480,11 @@ Turn the event-centered product into a customer-acceptable release candidate.
   - monitoring status
   - security checklist
   - remaining customer-owned credential list
+- Customer handoff documentation:
+  - customer/operator guide
+  - customer-owned credential checklist
+  - connector responsibility matrix
+  - blocked-action explanation for missing credentials or authorization
 
 ### Acceptance Criteria
 
@@ -488,6 +493,14 @@ Turn the event-centered product into a customer-acceptable release candidate.
 - No failed API calls in normal path.
 - All blocked external actions explain exactly what credential/authorization is needed.
 - Product status report is ready for client delivery.
+- Customer guide explains admin, Amro, social media manager, reviewer, sales, lead qualification, and viewer workflows.
+- Credential checklist states customer-owned requirements without embedding secrets.
+
+### Sprint 65 Documentation Deliverables
+
+- `docs/product/CUSTOMER_ONBOARDING_AND_OPERATOR_GUIDE.md`
+- `docs/integrations/CUSTOMER_OWNED_CREDENTIAL_CHECKLIST.md`
+- `docs/sprints/SPRINT-65-customer-onboarding-credential-readiness.md`
 
 ## Integration Sequencing Rules
 

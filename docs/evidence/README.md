@@ -10,6 +10,8 @@
 | CI Snapshot | [CI_SNAPSHOT.md](CI_SNAPSHOT.md) | Current CI status |
 | Smoke Test Template | [SMOKE_TEST_OUTPUT.md](SMOKE_TEST_OUTPUT.md) | Fill during demo |
 | Acceptance Checklist | [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md) | Pre-demo verification |
+| Customer Onboarding Guide | [../product/CUSTOMER_ONBOARDING_AND_OPERATOR_GUIDE.md](../product/CUSTOMER_ONBOARDING_AND_OPERATOR_GUIDE.md) | Customer/operator handoff workflow |
+| Customer-Owned Credential Checklist | [../integrations/CUSTOMER_OWNED_CREDENTIAL_CHECKLIST.md](../integrations/CUSTOMER_OWNED_CREDENTIAL_CHECKLIST.md) | Required customer accounts, credentials, scopes, and gated actions |
 
 ## Usage
 
