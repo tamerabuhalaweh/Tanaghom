@@ -52,6 +52,8 @@ export const PROVIDER_METADATA: Record<ProviderId, {
   importSupported: boolean;
   writeBackSupported: boolean;
   writeBackBlocker: string;
+  configurable: boolean;
+  notConfigurableAction?: string;
   missingCredentialAction: string;
 }> = {
   meta_analytics: {
@@ -62,7 +64,8 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: true,
     writeBackSupported: false,
     writeBackBlocker: 'Meta Ads write-back not authorized in this environment',
-    missingCredentialAction: 'Connect Meta Business account with read-only analytics permission',
+    configurable: true,
+    missingCredentialAction: 'Connect Meta Business account via social_oauth with read-only analytics permission',
   },
   youtube_analytics: {
     displayName: 'YouTube Analytics',
@@ -72,7 +75,9 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: true,
     writeBackSupported: false,
     writeBackBlocker: 'YouTube Ads write-back not authorized in this environment',
-    missingCredentialAction: 'Connect YouTube channel with analytics read permission',
+    configurable: false,
+    notConfigurableAction: 'YouTube Analytics credential provider not yet supported. Requires YouTube API key and channel ID configuration.',
+    missingCredentialAction: 'YouTube Analytics not yet configurable',
   },
   formaloo: {
     displayName: 'Formaloo',
@@ -82,6 +87,7 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: true,
     writeBackSupported: false,
     writeBackBlocker: 'Formaloo write-back not supported',
+    configurable: true,
     missingCredentialAction: 'Enter Formaloo API key and form ID',
   },
   gohighlevel: {
@@ -92,6 +98,7 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: true,
     writeBackSupported: false,
     writeBackBlocker: 'GHL live write not authorized in this environment',
+    configurable: true,
     missingCredentialAction: 'Enter GoHighLevel API key and location ID',
   },
   whatsapp_provider: {
@@ -102,6 +109,7 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: false,
     writeBackSupported: false,
     writeBackBlocker: 'WhatsApp live execution not authorized in this environment',
+    configurable: true,
     missingCredentialAction: 'Enter WhatsApp Business API token and phone number ID',
   },
   telegram_provider: {
@@ -112,6 +120,7 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: false,
     writeBackSupported: false,
     writeBackBlocker: 'Telegram live execution not authorized in this environment',
+    configurable: true,
     missingCredentialAction: 'Enter Telegram bot token',
   },
   smartlabs_voice: {
@@ -122,6 +131,7 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: false,
     writeBackSupported: false,
     writeBackBlocker: 'SmartLabs voice execution not authorized in this environment',
+    configurable: true,
     missingCredentialAction: 'Enter SmartLabs API key and agent ID',
   },
   postiz: {
@@ -132,6 +142,7 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: true,
     writeBackSupported: false,
     writeBackBlocker: 'Postiz scheduling requires customer social account OAuth',
+    configurable: true,
     missingCredentialAction: 'Enter Postiz API key and base URL',
   },
 };
