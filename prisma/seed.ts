@@ -425,6 +425,129 @@ async function seed() {
     console.log(`  MCP Connector: ${connector.name}`);
   }
 
+  // Seed demo campaign planner data — Sprint 61
+  console.log('Seeding demo campaign planner data...');
+  const demoEvent = await prisma.commercialEvent.findFirst({ where: { name: 'Tagyeer wa Irtaqi — Summer 2026' } });
+
+  if (demoEvent && adminForEvent) {
+    // Email plan
+    const existingEmailPlan = await prisma.eventEmailPlan.findFirst({ where: { event_id: demoEvent.id, sequence_name: 'Awareness Sequence' } });
+    if (!existingEmailPlan) {
+      await prisma.eventEmailPlan.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          sequence_name: 'Awareness Sequence',
+          audience_segment: 'Young professionals 25-40 in Riyadh',
+          email_count: 3,
+          planned_send_dates: ['2026-07-05T10:00:00Z', '2026-07-12T10:00:00Z', '2026-07-19T10:00:00Z'],
+          subject_draft: 'Your career transformation starts here — Tagyeer wa Irtaqi',
+          content_draft: 'Join 200+ professionals at Riyadh\'s premier personal development event...',
+          content_type: 'html',
+          approval_status: 'draft',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      console.log('  Email Plan: Awareness Sequence');
+    }
+
+    // WhatsApp plan
+    const existingWhatsappPlan = await prisma.eventWhatsappPlan.findFirst({ where: { event_id: demoEvent.id } });
+    if (!existingWhatsappPlan) {
+      await prisma.eventWhatsappPlan.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          audience_segment: 'Registered attendees',
+          frequency: 'Weekly until event',
+          content_type: 'text',
+          message_draft: 'Assalamu alaikum! Only 3 weeks until Tagyeer wa Irtaqi. Have you secured your seat?',
+          approval_status: 'draft',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      console.log('  WhatsApp Plan: Registered attendees');
+    }
+
+    // Upsell plan
+    const existingUpsellPlan = await prisma.eventUpsellPlan.findFirst({ where: { event_id: demoEvent.id } });
+    if (!existingUpsellPlan) {
+      await prisma.eventUpsellPlan.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          target_segment: 'Early bird registrants',
+          offer: 'VIP upgrade: 1-on-1 coaching + front row + signed workbook',
+          fomo_angle: 'Only 20 VIP spots available — 8 already taken',
+          planned_channel: 'email',
+          approval_status: 'draft',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      console.log('  Upsell Plan: VIP upgrade');
+    }
+
+    // Content requirements
+    const existingContentReq = await prisma.eventContentRequirement.findFirst({ where: { event_id: demoEvent.id } });
+    if (!existingContentReq) {
+      await prisma.eventContentRequirement.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          asset_type: 'video',
+          description: '3 testimonial videos from past attendees (60-90 sec each)',
+          platform: 'instagram',
+          due_date: new Date('2026-07-10T23:59:59Z'),
+          status: 'pending',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      await prisma.eventContentRequirement.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          asset_type: 'landing_page',
+          description: 'Registration landing page with early bird pricing',
+          platform: 'website',
+          due_date: new Date('2026-07-01T23:59:59Z'),
+          status: 'in_progress',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      console.log('  Content Requirements: 2 items');
+    }
+
+    // Sales tasks
+    const existingSalesTask = await prisma.eventSalesTask.findFirst({ where: { event_id: demoEvent.id } });
+    if (!existingSalesTask) {
+      await prisma.eventSalesTask.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          task_type: 'follow_up',
+          owner_role: 'sales_manager',
+          description: 'Follow up within 2 hours of registration',
+          due_date: new Date('2026-08-15T23:59:59Z'),
+          status: 'pending',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      await prisma.eventSalesTask.create({
+        data: {
+          tenant_key: demoEvent.tenant_key,
+          event_id: demoEvent.id,
+          task_type: 'discovery_call',
+          owner_role: 'sales_manager',
+          description: 'Discovery call script for VIP upsell',
+          due_date: new Date('2026-08-15T23:59:59Z'),
+          status: 'pending',
+          created_by_user_id: adminForEvent.id,
+        },
+      });
+      console.log('  Sales Tasks: 2 items');
+    }
+  }
+
   console.log('Seeding complete.');
 }
 
