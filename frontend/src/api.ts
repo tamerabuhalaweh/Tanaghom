@@ -442,3 +442,8 @@ export const eventProblemsApi = {
 export const eventCloseoutApi = {
   report: (eventId: string, token: string) => apiFetch<unknown>(`/closeout/events/${eventId}/report`, { token }),
 };
+
+export const learningRecommendationsApi = {
+  forEvent: (eventId: string, token: string) =>
+    apiFetch<unknown>(`/learning-recommendations/events/${eventId}`, { token }),
+};

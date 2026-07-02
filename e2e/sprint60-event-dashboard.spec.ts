@@ -249,6 +249,33 @@ async function installEventApiMocks(page: Page) {
       return;
     }
 
+    if (pathname === `/learning-recommendations/events/${eventRecord.id}` && method === 'GET') {
+      await json({
+        eventId: eventRecord.id,
+        eventName: eventRecord.name,
+        generatedAt: '2026-07-02T12:00:00.000Z',
+        recommendations: [
+          {
+            id: 'rec-1',
+            category: 'no_show',
+            priority: 'high',
+            title: 'High no-show rate detected',
+            recommendation: 'Send meeting reminders and follow up quickly with missed appointments.',
+            rationale: 'No-shows reduce conversion and waste sales capacity.',
+            evidenceSummary: '3 no-shows from 16 booked meetings.',
+            sourceMetrics: { meetingsBooked: 16, noShows: 3 },
+            sourceSections: ['leadFunnel', 'salesOutcomes'],
+            confidence: 'medium',
+            missingDataWarnings: ['Low sample size - no-show rate may change after more meetings'],
+            suggestedOwnerRole: 'sales_manager',
+            nextAction: 'Prepare a no-show recovery workflow before the next event.',
+          },
+        ],
+        dataCompletenessWarnings: ['No campaign records available - channel performance analysis limited'],
+      });
+      return;
+    }
+
     await json({});
   });
 }
@@ -291,7 +318,10 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
   await expect(page.getByText(/Event KPI update saved/i)).toBeVisible();
   await expect(page.getByText(/80 forms completed/i)).toBeVisible();
   await expect(page.getByText(/2,800 SAR actual spend/i)).toBeVisible();
-  await expect(page.getByText(/Channel Performance/i)).toBeVisible();
-  await expect(page.getByText(/KPI Evidence/i)).toBeVisible();
+  await expect(page.getByText(/What To Improve Next/i)).toBeVisible();
+  await expect(page.locator('main')).toContainText('High no-show rate detected');
+  await expect(page.locator('main')).toContainText('Prepare a no-show recovery workflow before the next event.');
+  await expect(page.getByRole('heading', { name: /^Channel Performance$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^KPI Evidence$/i })).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });
