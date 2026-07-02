@@ -42,10 +42,10 @@ export async function disableJob(
 }
 
 export async function dryRun(
-  role: string, tenantKey: string, connectorId: string, eventId?: string,
+  role: string, tenantKey: string, userId: string, connectorId: string, eventId?: string,
 ): Promise<DryRunResult> {
   checkConnectorPermission(role, 'connector:dry_run');
-  return repo.dryRun(tenantKey, connectorId, eventId);
+  return repo.dryRun(tenantKey, userId, connectorId, eventId);
 }
 
 export async function approveAndImport(

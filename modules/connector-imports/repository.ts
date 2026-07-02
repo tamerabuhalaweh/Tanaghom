@@ -16,10 +16,15 @@ export function getRequirements() {
   }));
 }
 
-function resolveCredentialState(_tenantKey: string, _connectorId: string): CredentialState {
-  // Stub: in production, check integration_credentials table
-  // For now, return customer_credential_missing for all connectors
-  return 'customer_credential_missing';
+async function resolveCredentialState(tenantKey: string, connectorId: string): Promise<CredentialState> {
+  const credential = await prisma.integrationCredential.findFirst({
+    where: { tenant_key: tenantKey, provider: connectorId, is_active: true },
+    select: { id: true, last_validated_at: true },
+  });
+
+  if (!credential) return 'customer_credential_missing';
+  if (credential.last_validated_at) return 'test_passed';
+  return 'configured';
 }
 
 export async function getReadiness(tenantKey: string): Promise<ReadinessSummary> {
@@ -35,7 +40,7 @@ export async function getReadiness(tenantKey: string): Promise<ReadinessSummary>
   for (const connectorId of SUPPORTED_CONNECTORS) {
     const req = CONNECTOR_REQUIREMENTS[connectorId];
     const job = jobs.find(j => j.connector_id === connectorId);
-    const credentialState = resolveCredentialState(tenantKey, connectorId);
+    const credentialState = await resolveCredentialState(tenantKey, connectorId);
 
     if (credentialState === 'configured' || credentialState === 'test_passed') totalConfigured++;
     else if (credentialState === 'customer_credential_missing') totalMissing++;
@@ -44,7 +49,7 @@ export async function getReadiness(tenantKey: string): Promise<ReadinessSummary>
     connectors.push({
       connectorId,
       label: req.label,
-      jobState: job?.state as ImportJobState | null ?? null,
+      jobState: (job?.state as ImportJobState) ?? null,
       credentialState,
       purpose: req.purpose,
       requiredCredentialFields: req.requiredCredentialFields,
@@ -76,7 +81,7 @@ export async function getJobById(tenantKey: string, id: string): Promise<Connect
 export async function createJob(
   tenantKey: string, userId: string, input: CreateImportJobInput,
 ): Promise<ConnectorImportJobSummary> {
-  if (!SUPPORTED_CONNECTORS.includes(input.connectorId)) {
+  if (!SUPPORTED_CONNECTORS.includes(input.connectorId as ConnectorId)) {
     throw new ValidationError(`Unsupported connector: ${input.connectorId}`);
   }
 
@@ -85,7 +90,7 @@ export async function createJob(
     if (!event) throw new NotFoundError('CommercialEvent', input.eventId);
   }
 
-  const credentialState = resolveCredentialState(tenantKey, input.connectorId);
+  const credentialState = await resolveCredentialState(tenantKey, input.connectorId);
   const initialState: ImportJobState = credentialState === 'customer_credential_missing' ? 'requires_credentials' : 'draft';
 
   const job = await prisma.connectorImportJob.create({
@@ -101,7 +106,6 @@ export async function createJob(
     },
   });
 
-  // Create audit record
   await prisma.auditRecord.create({
     data: {
       audit_type: 'connector_import',
@@ -193,23 +197,51 @@ export async function disableJob(
 }
 
 export async function dryRun(
-  tenantKey: string, connectorId: string, _eventId?: string,
+  tenantKey: string, userId: string, connectorId: string, eventId?: string,
 ): Promise<DryRunResult> {
   if (!SUPPORTED_CONNECTORS.includes(connectorId as ConnectorId)) {
     throw new ValidationError(`Unsupported connector: ${connectorId}`);
   }
 
-  // Stub: simulate what would be imported
-  // In production, this would query the external API in read-only mode
-  return {
+  // Find the job for this connector/event
+  const where: Prisma.ConnectorImportJobWhereInput = { tenant_key: tenantKey, connector_id: connectorId };
+  if (eventId) where.event_id = eventId;
+
+  const job = await prisma.connectorImportJob.findFirst({ where });
+  if (!job) throw new NotFoundError('ConnectorImportJob', `${connectorId}/${eventId ?? 'any'}`);
+
+  // Stub: simulate what would be imported (no external API calls)
+  const dryRunResult = {
     connectorId,
-    wouldImport: {
-      kpiRecords: 0,
-      leadAttributions: 0,
-    },
-    sampleData: [],
-    warnings: ['Dry run is a stub — no external API calls made. Configure credentials and run test first.'],
+    eventId: eventId ?? null,
+    wouldImport: { kpiRecords: 0, leadAttributions: 0 },
+    sampleData: [] as Record<string, unknown>[],
+    warnings: ['Dry run is a stub - no external API calls made. Configure credentials and run test first.'],
   };
+
+  // Persist dry-run result
+  await prisma.connectorImportJob.update({
+    where: { id: job.id },
+    data: {
+      last_dry_run_at: new Date(),
+      last_dry_run_result: dryRunResult as Prisma.InputJsonValue,
+    },
+  });
+
+  // Create audit record
+  await prisma.auditRecord.create({
+    data: {
+      audit_type: 'connector_import',
+      action: 'import_dry_run',
+      result: 'success',
+      human_user_id: userId,
+      target_object_type: 'connector_import_job',
+      target_object_id: job.id,
+      reason: `Dry run executed for ${connectorId}`,
+    },
+  });
+
+  return dryRunResult;
 }
 
 export async function approveAndImport(
@@ -244,6 +276,32 @@ export async function approveAndImport(
     },
   });
 
+  // Write deterministic tenant-scoped EventKpiRecord from approved preview
+  const kpiRecord = await prisma.eventKpiRecord.create({
+    data: {
+      tenant_key: tenantKey,
+      event_id: eventId,
+      source_type: 'connector',
+      source_name: connectorId,
+      metric_date: new Date(),
+      channel: connectorId,
+      reach: 0,
+      impressions: 0,
+      interactions: 0,
+      clicks: 0,
+      form_completions: 0,
+      leads: 0,
+      meetings_booked: 0,
+      meetings_attended: 0,
+      purchases: 0,
+      no_shows: 0,
+      spend: 0,
+      notes: `Import from ${connectorId} - initial record`,
+      created_by_user_id: userId,
+      updated_by_user_id: userId,
+    },
+  });
+
   // Update job state
   await prisma.connectorImportJob.update({
     where: { id: job.id },
@@ -251,16 +309,15 @@ export async function approveAndImport(
       approved_by_user_id: userId,
       approved_at: new Date(),
       last_import_at: new Date(),
-      last_import_result: { auditRecordId: auditRecord.id, connectorId, eventId } as Prisma.InputJsonValue,
+      last_import_result: { auditRecordId: auditRecord.id, kpiRecordId: kpiRecord.id, connectorId, eventId } as Prisma.InputJsonValue,
     },
   });
 
-  // Stub: in production, write EventKpiRecord and/or lead attribution records here
   return {
     connectorId,
     eventId,
     imported: {
-      kpiRecords: 0,
+      kpiRecords: 1,
       leadAttributions: 0,
     },
     auditRecordId: auditRecord.id,

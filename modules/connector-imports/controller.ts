@@ -3,7 +3,7 @@ import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
 import * as service from './service';
 import { validateOrThrow } from '@shared/validation';
-import { createImportJobSchema, markReadySchema, disableJobSchema } from './types';
+import { createImportJobSchema, markReadySchema, disableJobSchema, dryRunSchema, approveImportSchema } from './types';
 
 export const connectorImportsRouter = Router();
 
@@ -67,8 +67,8 @@ connectorImportsRouter.post('/jobs/:id/disable', async (req: Request, res: Respo
 connectorImportsRouter.post('/dry-run', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const { connectorId, eventId } = req.body;
-    const result = await service.dryRun(payload.role, payload.tenantKey || 'default', connectorId, eventId);
+    const input = validateOrThrow(dryRunSchema, req.body);
+    const result = await service.dryRun(payload.role, payload.tenantKey || 'default', payload.sub, input.connectorId, input.eventId);
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -76,8 +76,8 @@ connectorImportsRouter.post('/dry-run', async (req: Request, res: Response, next
 connectorImportsRouter.post('/approve-import', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
-    const { connectorId, eventId, notes } = req.body;
-    const result = await service.approveAndImport(payload.role, payload.tenantKey || 'default', payload.sub, connectorId, eventId, notes);
+    const input = validateOrThrow(approveImportSchema, req.body);
+    const result = await service.approveAndImport(payload.role, payload.tenantKey || 'default', payload.sub, input.connectorId, input.eventId, input.notes);
     res.json(result);
   } catch (err) { next(err); }
 });

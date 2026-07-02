@@ -9,6 +9,7 @@ const prismaMocks = vi.hoisted(() => ({
     count: vi.fn().mockResolvedValue(0),
   },
   commercialEvent: { findFirst: vi.fn() },
+  integrationCredential: { findFirst: vi.fn().mockResolvedValue(null) },
   auditRecord: { create: vi.fn() },
 }));
 
