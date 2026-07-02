@@ -36,7 +36,11 @@ describe('Connector Readiness', () => {
       return Promise.resolve(null);
     });
     prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({ id: 'm1' });
-    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({ id: 'j1', last_dry_run_at: new Date(), state: 'test_passed' });
+    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({
+      id: 'j1',
+      last_dry_run_result: { kpiRows: [{ metricDate: '2026-07-01', channel: 'meta' }] },
+      state: 'test_passed',
+    });
 
     const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
     const meta = result.providers.find(p => p.providerId === 'meta_analytics');
@@ -87,6 +91,49 @@ describe('Connector Readiness', () => {
     expect(postiz?.nextAction).toBe('Run connector dry-run for this event');
   });
 
+  it('ready_for_test with a dry-run timestamp is not Ready for use', async () => {
+    prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'c1', last_validated_at: new Date() });
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({ id: 'm1' });
+    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({
+      id: 'j1',
+      last_dry_run_at: new Date(),
+      last_dry_run_result: { kpiRows: [{ metricDate: '2026-07-01', channel: 'meta' }] },
+      state: 'ready_for_test',
+    });
+
+    const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
+    const postiz = result.providers.find(p => p.providerId === 'postiz');
+    expect(postiz?.nextAction).toBe('Run connector dry-run for this event');
+  });
+
+  it('test_passed with no importable rows is not Ready for use', async () => {
+    prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'c1', last_validated_at: new Date() });
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({ id: 'm1' });
+    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({
+      id: 'j1',
+      last_dry_run_result: { kpiRows: [] },
+      state: 'test_passed',
+    });
+
+    const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
+    const postiz = result.providers.find(p => p.providerId === 'postiz');
+    expect(postiz?.nextAction).toBe('Run connector dry-run for this event');
+  });
+
+  it('test_passed with importable rows is Ready for use', async () => {
+    prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'c1', last_validated_at: new Date() });
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({ id: 'm1' });
+    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({
+      id: 'j1',
+      last_dry_run_result: { kpiRows: [{ metricDate: '2026-07-01', channel: 'meta' }] },
+      state: 'test_passed',
+    });
+
+    const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
+    const postiz = result.providers.find(p => p.providerId === 'postiz');
+    expect(postiz?.nextAction).toBe('Ready for use');
+  });
+
   it('event readiness does not become ready from unrelated event mapping', async () => {
     prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'c1', last_validated_at: new Date() });
     prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue(null);
@@ -108,7 +155,11 @@ describe('Connector Readiness', () => {
   it('no secrets in API response', async () => {
     prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'c1', last_validated_at: new Date() });
     prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({ id: 'm1' });
-    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({ id: 'j1', last_dry_run_at: new Date(), state: 'test_passed' });
+    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({
+      id: 'j1',
+      last_dry_run_result: { kpiRows: [{ metricDate: '2026-07-01', channel: 'meta' }] },
+      state: 'test_passed',
+    });
 
     const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
     const json = JSON.stringify(result);

@@ -67,14 +67,17 @@ async function hasEventDryRunOrTest(tenantKey: string, providerId: string, event
       tenant_key: tenantKey,
       connector_id: providerId,
       event_id: eventId,
-      state: { in: ['test_passed', 'ready_for_test'] },
     },
-    select: { id: true, last_dry_run_at: true, state: true },
+    select: { id: true, last_dry_run_result: true, state: true },
   });
   if (!job) return false;
-  if (job.state === 'test_passed') return true;
-  if (job.last_dry_run_at) return true;
-  return false;
+  if (job.state !== 'test_passed') return false;
+
+  const dryRunResult = job.last_dry_run_result;
+  if (!dryRunResult || typeof dryRunResult !== 'object' || Array.isArray(dryRunResult)) return false;
+
+  const result = dryRunResult as { kpiRows?: unknown };
+  return Array.isArray(result.kpiRows) && result.kpiRows.length > 0;
 }
 
 export async function getEventConnectorReadiness(
