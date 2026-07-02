@@ -237,30 +237,55 @@ function evaluateContentDelays(data: EventData, startId: number): { recommendati
   const recommendations: LearningRecommendation[] = [];
   let id = startId;
 
-  const delayedContent = data.contentReqs.filter(c => c.status !== 'delivered' && c.status !== 'ready');
-  const delayedPackages = data.packages.filter(p => p.package_status !== 'delivered' && p.package_status !== 'approved');
+  // ContentRequest active states (not yet completed)
+  const contentActiveStates = ['idea', 'drafting', 'pending_review', 'needs_edits', 'recycle_candidate'];
 
-  if (delayedContent.length > 0 || delayedPackages.length > 0) {
-    const totalDelayed = delayedContent.length + delayedPackages.length;
-    const confidence: ConfidenceLevel = totalDelayed >= 3 ? 'high' : totalDelayed >= 1 ? 'medium' : 'low';
-    const missingWarnings: string[] = [];
-    if (data.contentReqs.length === 0 && data.packages.length === 0) missingWarnings.push('No content requirements or packages recorded');
+  // PublishingPackage active states
+  const packageActiveStates = ['draft', 'validating', 'blocked'];
 
-    recommendations.push({
-      id: `rec-${id++}`,
-      category: 'content',
-      priority: totalDelayed >= 3 ? 'high' : 'medium',
-      title: `${totalDelayed} content items not yet delivered`,
-      recommendation: 'Set earlier content deadlines with buffer time. Content should be ready at least 1 week before campaign launch to allow for review and revisions.',
-      rationale: `${delayedContent.length} content requirements and ${delayedPackages.length} publishing packages are not in delivered/approved status. Content delays directly impact campaign launch timing.`,
-      evidenceSummary: `${delayedContent.length} pending content requirements, ${delayedPackages.length} pending packages`,
-      sourceMetrics: { delayedContent: delayedContent.length, delayedPackages: delayedPackages.length, totalDelayed },
-      sourceSections: ['contentRequirements', 'publishingPackages'],
-      confidence,
-      missingDataWarnings: missingWarnings,
-      suggestedOwnerRole: 'social_media_manager',
-      nextAction: 'Review content pipeline and set earlier deadlines with buffer for next event',
+  const activeContent = data.contentReqs.filter(c => contentActiveStates.includes(c.status as string));
+  const activePackages = data.packages.filter(p => packageActiveStates.includes(p.package_status as string));
+
+  // Only recommend if there are active items (not done, not terminal)
+  if (activeContent.length > 0 || activePackages.length > 0) {
+    const totalActive = activeContent.length + activePackages.length;
+
+    // Check if due dates prove actual delay
+    const now = new Date();
+    const overdueContent = activeContent.filter(c => {
+      if (!c.due_date) return false;
+      const due = c.due_date instanceof Date ? c.due_date : new Date(c.due_date as string);
+      return due < now;
     });
+    const overduePackages = activePackages.filter(p => {
+      if (!p.due_date) return false;
+      const due = p.due_date instanceof Date ? p.due_date : new Date(p.due_date as string);
+      return due < now;
+    });
+    const totalOverdue = overdueContent.length + overduePackages.length;
+
+    // Only recommend if there are overdue items
+    if (totalOverdue > 0) {
+      const confidence: ConfidenceLevel = totalOverdue >= 3 ? 'high' : totalOverdue >= 1 ? 'medium' : 'low';
+      const missingWarnings: string[] = [];
+      if (data.contentReqs.length === 0 && data.packages.length === 0) missingWarnings.push('No content requirements or packages recorded');
+
+      recommendations.push({
+        id: `rec-${id++}`,
+        category: 'content',
+        priority: totalOverdue >= 3 ? 'high' : 'medium',
+        title: `${totalOverdue} content items past due date`,
+        recommendation: 'Set earlier content deadlines with buffer time. Content should be ready at least 1 week before campaign launch to allow for review and revisions.',
+        rationale: `${overdueContent.length} content requirements and ${overduePackages.length} publishing packages have passed their due dates without being delivered. Content delays directly impact campaign launch timing.`,
+        evidenceSummary: `${overdueContent.length} overdue content requirements, ${overduePackages.length} overdue packages, ${activeContent.length - overdueContent.length + activePackages.length - overduePackages.length} active but not yet overdue`,
+        sourceMetrics: { overdueContent: overdueContent.length, overduePackages: overduePackages.length, totalOverdue, totalActive },
+        sourceSections: ['contentRequirements', 'publishingPackages'],
+        confidence,
+        missingDataWarnings: missingWarnings,
+        suggestedOwnerRole: 'social_media_manager',
+        nextAction: 'Review overdue content pipeline and set earlier deadlines with buffer for next event',
+      });
+    }
   }
 
   return { recommendations, nextId: id };

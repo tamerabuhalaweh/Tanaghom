@@ -264,6 +264,7 @@ app.use('/event-problems', eventProblemLogRouter);
 app.use('/closeout', eventCloseoutRouter);
 app.use('/connector-imports', connectorImportsRouter);
 app.use('/learning-recommendations', learningRecommendationsRouter);
+app.use('/learning-recommendations', learningRecommendationsRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
