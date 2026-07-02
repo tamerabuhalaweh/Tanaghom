@@ -40,6 +40,7 @@ import { tenantAdminRouter } from '../modules/tenant-admin/controller';
 import { operationsRouter } from '../modules/operations/controller';
 import { smartLabsVoiceRouter } from '../modules/smartlabs-voice/controller';
 import { socialGrowthRouter } from '../modules/social-growth/controller';
+import { commercialEventsRouter } from '../modules/commercial-events/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -249,6 +250,8 @@ app.use('/integrations', integrationsRouter);
 app.use('/leads', leadsRouter);
 app.use('/ghl', ghlRouter);
 app.use('/ideas', ideasRouter);
+app.use('/events', commercialEventsRouter);
+app.use('/commercial-events', commercialEventsRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {

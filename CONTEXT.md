@@ -5,66 +5,57 @@
 
 ## Current Sprint
 
-**Sprint**: 26 — Taxonomy Decision + Capability/Topology Registry Foundation
-**Status**: Complete
-**PR**: See PR #27
-**Branch**: feature/sprint-26-taxonomy-capability-topology-registry
+**Sprint**: 59 — Event Foundation + Strategy Wizard
+**Status**: Backend foundation in review (merge blockers fixed, awaiting re-review)
+**PR**: Pending creation
+**Branch**: feature/sprint-59-event-foundation-strategy-wizard
 
 ## Active Module
 
-- `modules/capability-registry/` — Extended with enterprise taxonomy tests
-- `prisma/seed.ts` — Extended with enterprise capability seeds
-- `docs/enterprise/taxonomy/` — New taxonomy documents
-- `docs/adr/011-*.md` — New ADR for taxonomy decisions
-- No new business code — taxonomy/registry foundation only
+- `modules/commercial-events/` — New module for Commercial Event management
+- `prisma/schema.prisma` — Extended with CommercialEvent model, enums, and relations
+- `prisma/seed.ts` — Extended with realistic Amro event seed data
+- `src/index.ts` — Registered `/events` route
 
 ## Sprint Acceptance Criteria
 
-- [x] Registry audit completed
-- [x] ADR-011 canonical taxonomy created
-- [x] Canonical taxonomy document created
-- [x] Legacy taxonomy mapping created
-- [x] Capability registry extension plan created
-- [x] Enterprise capability seeds added
-- [x] Enterprise taxonomy tests added (16 new tests)
-- [x] Commercial/Content mapped as reference implementation
-- [x] Future enterprise capabilities registered as planned
-- [x] QC marked as Evaluator, not Authority
-- [x] ERP requires MCP and separate scope
-- [x] No M5 capability enabled
-- [x] No direct external access capability enabled
-- [x] Deprecated terms mapped or rejected
-- [x] Documentation updates complete
-- [x] 871 tests pass (16 new)
-- [x] CI 4/4 green
-- [x] No business feature implementation
-- [x] No Financial Agent implementation
-- [x] No ERP connector
-- [x] No external APIs
-- [x] No M5
+- [x] CommercialEvent Prisma model with all required fields
+- [x] Event types: tagyeer_wa_irtaqi, moaaskar_al_tamayoz, business_camp, virtual_event
+- [x] Event status state machine: draft → planning → active → completed/cancelled
+- [x] Strategy fields: offer, audience, geography, fomo_angle, upsell_plan, selected_channels, content/sales requirements
+- [x] Tenant isolation (tenant_key on all queries)
+- [x] Campaign linkage (event_id on ContentRequest)
+- [x] Lead linkage (event_id on LeadCaptureRecord)
+- [x] Publishing package linkage (event_id on PublishingPackage)
+- [x] Backend API: create, list, get, update, update strategy, transition, link campaign, link lead
+- [x] RBAC permissions: events:read/create/update/transition/link (includes Amro roles)
+- [x] Audit logging on all mutations
+- [x] Domain events emitted on all mutations
+- [x] Seed data: Tagyeer wa Irtaqi — Summer 2026 (realistic Amro event)
+- [x] Tests: 104 new tests (state machine, validators, permissions, tenant isolation, date derivation)
+- [x] Prisma migration: 20260702_commercial_events
+- [x] Auto-derive campaignStartDate from eventDate (30 days before)
+- [x] API routes: /events and /commercial-events (both registered)
+- [x] Backend lint: 0 errors
+- [x] Backend typecheck: 0 errors
+- [x] Backend tests: 1089 pass (104 new)
+- [x] Backend build: success
+- [x] Frontend lint: 0 errors
+- [x] Frontend build: success
 
-## Taxonomy Decision Status
+## Out Of Scope (Sprint 59)
 
-**5-Pillar Business Taxonomy: ACCEPTED**
-
-The customer has confirmed that Tanaghum will use a 5-pillar business/content taxonomy.
-
-**Important**: STITCH architecture concepts are NOT business pillars.
-
-| Item | Status |
-|---|---|
-| 5-pillar business taxonomy | ✅ Confirmed |
-| Exact pillar names | ⏳ Pending customer confirmation |
-| Exact pillar definitions | ⏳ Pending customer confirmation |
-| Content/course/analytics mapping | ⏳ Pending pillar definitions |
-
-Until pillar names are confirmed, use neutral placeholders: `tanaghum.pillar.1` through `tanaghum.pillar.5`.
-
-ADR-011 status: Accepted.
+- Live Meta Ads integration
+- Live YouTube Ads integration
+- Live GHL write
+- Live WhatsApp execution
+- Event list/detail UI (Lane B — Codex handles)
+- Strategy wizard UI (Lane B — Codex handles)
+- Playwright walkthrough (Lane E)
 
 ## Next Sprint (Planned)
 
-**Sprint 27**: TBD — Awaiting Codex review of Sprint 26 before proceeding.
+**Sprint 60**: Per-Event Dashboard and Manual KPI Tracking
 
 ## Enterprise Control Plane
 

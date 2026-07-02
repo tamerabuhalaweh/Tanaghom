@@ -111,6 +111,7 @@ model Tenant {
   campaign_performance_reports CampaignPerformanceReport[]
   lead_capture_records LeadCaptureRecord[]
   commercial_workflow_runs CommercialWorkflowRun[]
+  commercial_events CommercialEvent[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
 
@@ -260,6 +261,7 @@ model User {
   oauth_connection_states OAuthConnectionState[]
   langgraph_workflows LangGraphWorkflow[]
   commercial_workflow_runs CommercialWorkflowRun[] @relation("CommercialWorkflowRunUser")
+  commercial_events_owned CommercialEvent[]
   tenant_subscription_events TenantSubscriptionEvent[]
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
@@ -578,6 +580,7 @@ model ContentRequest {
   objective           String
   audience            String?
   campaign_id         String?       @db.Uuid
+  event_id            String?       @db.Uuid
   owner_department_id String?       @db.Uuid
   content_type        ContentType   @default(campaign)
   risk_category       RiskCategory  @default(low)
@@ -591,10 +594,12 @@ model ContentRequest {
 
   tenant        Tenant         @relation(fields: [tenant_key], references: [tenant_key])
   requester     User           @relation(fields: [requester_id], references: [id])
+  event         CommercialEvent? @relation("EventCampaigns", fields: [event_id], references: [id])
   content_items ContentItem[]
   commercial_workflow_runs CommercialWorkflowRun[]
 
   @@index([tenant_key])
+  @@index([event_id])
   @@map("content_requests")
 }
 
@@ -2391,6 +2396,7 @@ model PublishingPackage {
   package_status           PackageStatus @default(draft)
   package_type             PackageType   @default(single_post)
   campaign_id              String?       @db.Uuid
+  event_id                 String?       @db.Uuid
   content_item_id          String?       @db.Uuid
   draft_version_id         String?       @db.Uuid
   saif_decision_record_id  String?       @db.Uuid
@@ -2408,6 +2414,7 @@ model PublishingPackage {
   updated_at               DateTime      @updatedAt
 
   tenant         Tenant                  @relation(fields: [tenant_key], references: [tenant_key])
+  event          CommercialEvent?        @relation("EventPublishingPackages", fields: [event_id], references: [id])
   items           PublishingPackageItem[]
   targets         PublishingTarget[]
   readiness_checks PublishingReadinessCheck[]
@@ -2416,6 +2423,7 @@ model PublishingPackage {
   @@index([tenant_key])
   @@index([package_status])
   @@index([campaign_id])
+  @@index([event_id])
   @@index([content_item_id])
   @@index([created_by_user_id])
   @@map("publishing_packages")
@@ -2956,6 +2964,7 @@ model LeadCaptureRecord {
   lead_status                  LeadStatus   @default(new_lead)
   lead_source                  String?
   campaign_id                  String?      @db.Uuid
+  event_id                     String?      @db.Uuid
   content_item_id              String?      @db.Uuid
   publishing_package_id        String?      @db.Uuid
   analytics_snapshot_id        String?      @db.Uuid
@@ -2972,6 +2981,7 @@ model LeadCaptureRecord {
   updated_at                   DateTime     @updatedAt
 
   tenant           Tenant @relation(fields: [tenant_key], references: [tenant_key])
+  event            CommercialEvent? @relation("EventLeads", fields: [event_id], references: [id])
   attributions     LeadSourceAttribution[]
   intents          ConversionIntent[]
   crm_handoffs     CrmHandoffRequest[]
@@ -2981,6 +2991,7 @@ model LeadCaptureRecord {
   @@index([tenant_key])
   @@index([lead_status])
   @@index([campaign_id])
+  @@index([event_id])
   @@index([platform])
   @@index([created_by_user_id])
   @@map("lead_capture_records")
@@ -3281,4 +3292,64 @@ model ProductionReviewChecklist {
   @@index([check_type])
   @@index([check_status])
   @@map("production_review_checklists")
+}
+
+// ============================================================
+// Commercial Events — Sprint 59
+// ============================================================
+
+enum CommercialEventType {
+  tagyeer_wa_irtaqi
+  moaaskar_al_tamayoz
+  business_camp
+  virtual_event
+}
+
+enum CommercialEventStatus {
+  draft
+  planning
+  active
+  completed
+  cancelled
+}
+
+model CommercialEvent {
+  id                  String               @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  name                String
+  event_type          CommercialEventType
+  event_date          DateTime
+  location            String?
+  campaign_start_date DateTime?
+  campaign_end_date   DateTime?
+  expected_attendance Int?
+  revenue_target      Decimal?             @db.Decimal(12, 2)
+  planned_budget      Decimal?             @db.Decimal(12, 2)
+  owner_user_id       String               @db.Uuid
+  status              CommercialEventStatus @default(draft)
+
+  offer               String?              @db.Text
+  audience            String?              @db.Text
+  geography           String?              @db.Text
+  fomo_angle           String?              @db.Text
+  upsell_plan         String?              @db.Text
+  selected_channels   String[]
+  content_department_requirements String?  @db.Text
+  sales_team_requirements        String?   @db.Text
+
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+
+  tenant              Tenant               @relation(fields: [tenant_key], references: [tenant_key])
+  owner               User                 @relation(fields: [owner_user_id], references: [id])
+  campaigns           ContentRequest[]     @relation("EventCampaigns")
+  leads               LeadCaptureRecord[]  @relation("EventLeads")
+  publishing_packages PublishingPackage[]  @relation("EventPublishingPackages")
+
+  @@index([tenant_key])
+  @@index([event_type])
+  @@index([status])
+  @@index([owner_user_id])
+  @@index([event_date])
+  @@map("commercial_events")
 }
