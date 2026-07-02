@@ -227,3 +227,35 @@ body {
     background: #e5e5e5;
   }
 }
+
+@media print {
+  body.printing-closeout {
+    background: #ffffff !important;
+  }
+
+  body.printing-closeout aside,
+  body.printing-closeout header,
+  body.printing-closeout .skip-to-content,
+  body.printing-closeout button {
+    display: none !important;
+  }
+
+  body.printing-closeout main,
+  body.printing-closeout main > div {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  body.printing-closeout #closeout-report {
+    display: block !important;
+    width: 100% !important;
+    color: #111827 !important;
+    background: #ffffff !important;
+  }
+
+  body.printing-closeout #closeout-report * {
+    box-shadow: none !important;
+  }
+}

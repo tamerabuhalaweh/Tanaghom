@@ -438,3 +438,7 @@ export const eventProblemsApi = {
   transition: (id: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/event-problems/${id}/transition`, { method: 'POST', body: data, token }),
 };
+
+export const eventCloseoutApi = {
+  report: (eventId: string, token: string) => apiFetch<unknown>(`/closeout/events/${eventId}/report`, { token }),
+};

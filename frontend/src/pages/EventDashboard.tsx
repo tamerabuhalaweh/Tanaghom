@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { eventPlannerApi, eventProblemsApi, eventsApi, leadsApi } from '../api';
+import { eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, leadsApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -79,6 +79,14 @@ function numberValue(value: unknown): number {
 
 function titleCase(value: string): string {
   return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function displayLabel(value: unknown): string {
+  const raw = text(value, 'Not available');
+  if (raw === 'kpi_records') return 'KPI Records';
+  if (raw === 'content_packages') return 'Content Packages';
+  if (raw === 'lead_follow_up') return 'Lead Follow-Up';
+  return titleCase(raw);
 }
 
 function leadStatus(value: unknown): LeadStatus {
@@ -195,6 +203,28 @@ function money(value: unknown): string {
   return `${numberValue(value).toLocaleString()} SAR`;
 }
 
+function percent(value: unknown): string {
+  const normalized = numberValue(value);
+  return `${Math.round(normalized * 1000) / 10}%`;
+}
+
+function countEntries(value: unknown): { label: string; value: number }[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>)
+    .map(([label, entryValue]) => ({ label: titleCase(label), value: numberValue(entryValue) }))
+    .filter(item => item.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+function strongestChannel(rows: RecordMap[]): RecordMap | null {
+  if (!rows.length) return null;
+  return [...rows].sort((a, b) => {
+    const purchaseDelta = numberValue(b.purchases) - numberValue(a.purchases);
+    if (purchaseDelta !== 0) return purchaseDelta;
+    return numberValue(b.leads) - numberValue(a.leads);
+  })[0] || null;
+}
+
 function todayInput(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -215,6 +245,7 @@ export default function EventDashboard() {
   const [salesLeads, setSalesLeads] = useState<RecordMap[]>([]);
   const [problemDashboard, setProblemDashboard] = useState<RecordMap | null>(null);
   const [eventProblems, setEventProblems] = useState<RecordMap[]>([]);
+  const [closeoutReport, setCloseoutReport] = useState<RecordMap | null>(null);
   const [emailPlans, setEmailPlans] = useState<RecordMap[]>([]);
   const [whatsappPlans, setWhatsappPlans] = useState<RecordMap[]>([]);
   const [upsellPlans, setUpsellPlans] = useState<RecordMap[]>([]);
@@ -340,6 +371,7 @@ export default function EventDashboard() {
     setEvents(normalizedEvents);
     const nextEventId = selected || String(normalizedEvents[0]?.id || '');
     if (nextEventId) {
+      setCloseoutReport(null);
       const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
@@ -372,6 +404,7 @@ export default function EventDashboard() {
       setSalesLeads([]);
       setProblemDashboard(null);
       setEventProblems([]);
+      setCloseoutReport(null);
       setSelectedProblemId('');
       setEmailPlans([]);
       setWhatsappPlans([]);
@@ -464,6 +497,19 @@ export default function EventDashboard() {
     tasks: salesTasks.length,
   };
   const plannerTotal = plannerCounts.emails + plannerCounts.whatsapp + plannerCounts.upsells + plannerCounts.content + plannerCounts.tasks;
+  const closeoutBudget = (closeoutReport?.budget || {}) as RecordMap;
+  const closeoutLeadFunnel = (closeoutReport?.leadFunnel || {}) as RecordMap;
+  const closeoutSalesOutcomes = (closeoutReport?.salesOutcomes || {}) as RecordMap;
+  const closeoutPlannerSummary = (closeoutReport?.plannerSummary || {}) as RecordMap;
+  const closeoutCompleteness = (closeoutReport?.dataCompleteness || {}) as RecordMap;
+  const closeoutTimeline = list(closeoutReport?.timeline);
+  const closeoutChannels = list(closeoutReport?.channelPerformance);
+  const closeoutSources = list(closeoutReport?.sourcePerformance);
+  const closeoutBarriers = list(closeoutReport?.topBarriers);
+  const closeoutFollowUps = list(closeoutReport?.openFollowUps);
+  const closeoutMissingSections = Array.isArray(closeoutCompleteness.missingSections) ? closeoutCompleteness.missingSections.map(displayLabel) : [];
+  const topCloseoutChannel = strongestChannel(closeoutChannels);
+  const topCloseoutSource = strongestChannel(closeoutSources);
 
   function selectLeadForWork(lead: RecordMap) {
     setSelectedLeadId(String(lead.id || ''));
@@ -605,6 +651,27 @@ export default function EventDashboard() {
   async function refreshSalesWorkflow(successMessage?: string) {
     await load(selectedEventId);
     if (successMessage) setMessage(successMessage);
+  }
+
+  async function generateCloseoutReport() {
+    if (!token || !selectedEventId) return;
+    setLoading('generate-closeout');
+    setMessage('');
+    try {
+      const report = await eventCloseoutApi.report(selectedEventId, token);
+      setCloseoutReport(report as RecordMap);
+      setMessage('Closeout report generated from current event data.');
+    } catch (error) {
+      setMessage(`Could not generate closeout report: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  function printCloseoutReport() {
+    document.body.classList.add('printing-closeout');
+    window.addEventListener('afterprint', () => document.body.classList.remove('printing-closeout'), { once: true });
+    window.print();
   }
 
   async function saveEmailPlan() {
@@ -2214,6 +2281,278 @@ export default function EventDashboard() {
                   )}
                 </div>
               </div>
+            </ProductCard>
+
+            <ProductCard
+              title="Post-Event Closeout Report"
+              subtitle="Generate a readable management report from this event's recorded data. Missing sections are labeled honestly; the report does not invent performance claims."
+              action={(
+                <div className="flex flex-wrap gap-2">
+                  <PrimaryAction onClick={generateCloseoutReport} disabled={loading === 'generate-closeout' || !selectedEventId}>
+                    {loading === 'generate-closeout' ? 'Generating...' : closeoutReport ? 'Refresh Report' : 'Generate Report'}
+                  </PrimaryAction>
+                  {closeoutReport && <SecondaryAction onClick={printCloseoutReport}>Print / Save PDF</SecondaryAction>}
+                </div>
+              )}
+            >
+              {closeoutReport ? (
+                <div id="closeout-report" className="space-y-5 print:space-y-4">
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-neutral-950">Executive closeout</div>
+                        <p className="mt-1 max-w-3xl text-sm leading-6 text-neutral-500">
+                          This report summarizes what happened for {text((closeoutReport.event as RecordMap | undefined)?.eventName, text(event.name, 'this event'))}: spend, lead funnel, sales outcomes, channel/source performance, barriers, open work, and missing evidence.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <ProductStatus tone={closeoutMissingSections.length ? 'warn' : 'good'}>
+                          {closeoutMissingSections.length ? `${closeoutMissingSections.length} missing data section(s)` : 'Complete Evidence'}
+                        </ProductStatus>
+                        <ProductStatus tone="info">Traceable To Event Data</ProductStatus>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      ['Known Spend', money(closeoutBudget.knownSpend), displayLabel(closeoutBudget.spendSource || 'No spend source')],
+                      ['Lead Funnel', numberValue(closeoutLeadFunnel.totalLeads).toLocaleString(), 'Total event leads'],
+                      ['Purchases', numberValue(closeoutSalesOutcomes.purchases).toLocaleString(), `${money(closeoutSalesOutcomes.revenue)} revenue`],
+                      ['No-show Rate', percent(closeoutSalesOutcomes.noShowRate), `${numberValue(closeoutSalesOutcomes.noShows)} no-show(s)`],
+                    ].map(([label, value, detail]) => (
+                      <div key={label} className="rounded-lg border border-neutral-200 bg-white p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</div>
+                        <div className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{value}</div>
+                        <div className="mt-1 text-sm leading-5 text-neutral-500">{detail}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Timeline</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Key event and campaign moments in chronological order.</p>
+                      <div className="mt-4">
+                        {closeoutTimeline.length ? (
+                          <ReadableQueue
+                            items={closeoutTimeline.map(item => ({
+                              title: text(item.label, 'Timeline item'),
+                              meta: formatDate(item.date),
+                              status: titleCase(text(item.category, 'event')),
+                              tone: text(item.category, 'event') === 'lead' ? 'good' : 'info',
+                            }))}
+                          />
+                        ) : (
+                          <EmptyProductState message="No timeline evidence is available yet." />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Budget</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Planned budget compared with known recorded spend.</p>
+                      <div className="mt-4 space-y-3 text-sm">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-neutral-500">Planned budget</span>
+                          <span className="font-medium text-neutral-950">{closeoutBudget.plannedBudget == null ? 'Not set' : money(closeoutBudget.plannedBudget)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-neutral-500">Known spend</span>
+                          <span className="font-medium text-neutral-950">{money(closeoutBudget.knownSpend)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-neutral-500">Variance</span>
+                          <span className="font-medium text-neutral-950">{closeoutBudget.budgetVariance == null ? 'Not available' : money(closeoutBudget.budgetVariance)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Lead Funnel</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Lead status and temperature from event-linked records.</p>
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        {countEntries(closeoutLeadFunnel.byStatus).length ? (
+                          <BarList items={countEntries(closeoutLeadFunnel.byStatus).map(item => ({ ...item, tone: item.label.includes('Purchased') ? 'good' : 'info' }))} />
+                        ) : (
+                          <EmptyProductState message="No lead status data is available." />
+                        )}
+                        {countEntries(closeoutLeadFunnel.byTemperature).length ? (
+                          <BarList items={countEntries(closeoutLeadFunnel.byTemperature).map(item => ({ ...item, tone: item.label.includes('Buyer') ? 'good' : 'warn' }))} />
+                        ) : (
+                          <EmptyProductState message="No lead temperature data is available." />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Sales Outcomes</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Meetings, no-shows, purchases, and known revenue.</p>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {[
+                          ['Meetings Booked', numberValue(closeoutSalesOutcomes.meetingsBooked)],
+                          ['Meetings Attended', numberValue(closeoutSalesOutcomes.meetingsAttended)],
+                          ['No-shows', numberValue(closeoutSalesOutcomes.noShows)],
+                          ['Purchases', numberValue(closeoutSalesOutcomes.purchases)],
+                        ].map(([label, value]) => (
+                          <div key={String(label)} className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
+                            <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</div>
+                            <div className="mt-1 text-xl font-semibold text-neutral-950">{String(value)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-neutral-950">Channel Performance</div>
+                          <p className="mt-1 text-sm leading-6 text-neutral-500">Lead, purchase, and spend signals by channel.</p>
+                        </div>
+                        {topCloseoutChannel && <ProductStatus tone="good">Top recorded signal: {titleCase(text(topCloseoutChannel.channel, 'Channel'))}</ProductStatus>}
+                      </div>
+                      <div className="mt-4">
+                        {closeoutChannels.length ? (
+                          <ProductTable
+                            columns={['Channel', 'Leads', 'Purchases', 'Spend']}
+                            rows={closeoutChannels.map(channel => [
+                              titleCase(text(channel.channel, 'Unknown')),
+                              numberValue(channel.leads),
+                              numberValue(channel.purchases),
+                              money(channel.spend),
+                            ])}
+                          />
+                        ) : (
+                          <EmptyProductState message="No channel performance data is available yet." />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-neutral-950">Audience Source Performance</div>
+                          <p className="mt-1 text-sm leading-6 text-neutral-500">Which audience sources produced the strongest sales signals.</p>
+                        </div>
+                        {topCloseoutSource && <ProductStatus tone="good">Top recorded signal: {titleCase(text(topCloseoutSource.source, 'Source'))}</ProductStatus>}
+                      </div>
+                      <div className="mt-4">
+                        {closeoutSources.length ? (
+                          <ProductTable
+                            columns={['Source', 'Leads', 'Purchases']}
+                            rows={closeoutSources.map(source => [
+                              titleCase(text(source.source, 'Unknown')),
+                              numberValue(source.leads),
+                              numberValue(source.purchases),
+                            ])}
+                          />
+                        ) : (
+                          <EmptyProductState message="No source performance data is available yet." />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Top Barriers</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Problems and blockers that explain weak outcomes or operational risk.</p>
+                      <div className="mt-4">
+                        {closeoutBarriers.length ? (
+                          <ReadableQueue
+                            items={closeoutBarriers.map(barrier => ({
+                              title: text(barrier.title, 'Barrier'),
+                              meta: `${titleCase(text(barrier.category, 'Other'))} / owned by ${text(barrier.ownerRole, 'unassigned')}`,
+                              status: titleCase(text(barrier.severity, 'medium')),
+                              tone: problemSeverityTone(problemSeverity(barrier.severity)),
+                            }))}
+                          />
+                        ) : (
+                          <EmptyProductState message="No barriers were recorded for this event." />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Planner Summary</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Prepared campaign work linked to this event.</p>
+                      <div className="mt-4 space-y-3 text-sm">
+                        {[
+                          ['Email plans', closeoutPlannerSummary.emailPlans],
+                          ['WhatsApp plans', closeoutPlannerSummary.whatsappPlans],
+                          ['Upsell plans', closeoutPlannerSummary.upsellPlans],
+                          ['Content requirements', closeoutPlannerSummary.contentRequirements],
+                          ['Sales tasks', closeoutPlannerSummary.salesTasks],
+                        ].map(([label, value]) => (
+                          <div key={String(label)} className="flex items-center justify-between gap-4 border-b border-neutral-100 pb-2 last:border-b-0 last:pb-0">
+                            <span className="text-neutral-500">{String(label)}</span>
+                            <span className="font-medium text-neutral-950">{numberValue(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Open Follow-Ups</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Remaining lead, sales, content, or problem items that need attention after the event.</p>
+                      <div className="mt-4">
+                        {closeoutFollowUps.length ? (
+                          <ReadableQueue
+                            items={closeoutFollowUps.slice(0, 10).map(item => ({
+                              title: text(item.title, 'Open follow-up'),
+                              meta: `${titleCase(text(item.type, 'follow_up'))} / due ${formatDate(item.dueDate)}`,
+                              status: item.severity ? titleCase(text(item.severity)) : text(item.ownerRole, 'Owner not set'),
+                              tone: item.severity ? problemSeverityTone(problemSeverity(item.severity)) : 'info',
+                            }))}
+                          />
+                        ) : (
+                          <EmptyProductState message="No open follow-up items are currently recorded." />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Data Completeness</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">The report labels missing evidence instead of guessing.</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {[
+                          ['KPI records', closeoutCompleteness.hasKpiRecords],
+                          ['Leads', closeoutCompleteness.hasLeads],
+                          ['Campaigns', closeoutCompleteness.hasCampaigns],
+                          ['Barriers', closeoutCompleteness.hasProblems],
+                          ['Content packages', closeoutCompleteness.hasContentPackages],
+                          ['Planner data', closeoutCompleteness.hasPlannerData],
+                        ].map(([label, available]) => (
+                          <ProductStatus key={String(label)} tone={available ? 'good' : 'warn'}>{String(label)}: {available ? 'Available' : 'Missing'}</ProductStatus>
+                        ))}
+                      </div>
+                      <div className="mt-4">
+                        {closeoutMissingSections.length ? (
+                          <Notice tone="warn">Missing evidence: {closeoutMissingSections.join(', ')}. These sections should be completed before using this closeout as final management evidence.</Notice>
+                        ) : (
+                          <Notice tone="good">All required evidence sections are available for this closeout report.</Notice>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Notice tone="info">
+                    This report is a snapshot of stored event data. It does not perform ad optimization, CRM updates, message sending, or autonomous strategy changes.
+                  </Notice>
+                </div>
+              ) : (
+                <EmptyProductState
+                  title="No closeout report generated yet"
+                  message="Generate the closeout after the event or during review to see the event summary, funnel, spend, outcomes, barriers, open follow-ups, and missing evidence."
+                  action={<PrimaryAction onClick={generateCloseoutReport} disabled={loading === 'generate-closeout' || !selectedEventId}>Generate Closeout Report</PrimaryAction>}
+                />
+              )}
             </ProductCard>
 
             <ProductCard title="Channel Performance" subtitle="Compare where event attention and sales signals are coming from.">
