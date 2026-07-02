@@ -113,6 +113,10 @@ describe('Master Event Aggregation', () => {
     expect(result.totals.actualSpend).toBe(5000);
     expect(result.totals.noShowRate).toBeCloseTo(0.5); // 2/4
     expect(result.totals.costPerLead).toBeCloseTo(625); // 5000/8
+    expect(result.byChannel.instagram).toEqual({ leads: 6, purchases: 1, spend: 5000 });
+    expect(result.byChannel.email).toEqual({ leads: 1, purchases: 1, spend: 0 });
+    expect(result.byChannel.whatsapp).toEqual({ leads: 1, purchases: 0, spend: 0 });
+    expect(result.byAudienceSource.referral).toEqual({ leads: 1, purchases: 1 });
   });
 
   it('populates event comparison rows correctly', async () => {

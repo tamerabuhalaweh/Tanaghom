@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { COMMERCIAL_EVENT_STATUSES, COMMERCIAL_EVENT_TYPES } from '../commercial-events/types';
 
 export const MASTER_DASHBOARD_FILTER_SCHEMA = z.object({
-  eventType: z.string().optional(),
-  eventStatus: z.string().optional(),
+  eventType: z.enum(COMMERCIAL_EVENT_TYPES).optional(),
+  eventStatus: z.enum(COMMERCIAL_EVENT_STATUSES).optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
   geography: z.string().optional(),

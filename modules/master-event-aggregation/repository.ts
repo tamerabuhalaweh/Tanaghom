@@ -84,6 +84,8 @@ export async function getMasterDashboard(
   for (const event of events) {
     const kpiAgg = aggregateKpis(event.kpi_records);
     const leadAgg = aggregateLeads(event.leads);
+    const eventChannelStats = mergeStats(leadAgg.channelStats, kpiAgg.channelStats);
+    const eventAudienceStats = leadAgg.audienceStats;
 
     const eventLeads = leadAgg.totalLeads + kpiAgg.leads;
     const eventFormCompletions = kpiAgg.formCompletions;
@@ -121,8 +123,8 @@ export async function getMasterDashboard(
       plannedBudget: plannedBudget || null,
       actualSpend: eventSpend,
       costPerLead,
-      bestChannel: findBest(leadAgg.channelCounts),
-      bestAudienceSource: findBest(leadAgg.audienceCounts),
+      bestChannel: findBestByLeads(eventChannelStats),
+      bestAudienceSource: findBestByLeads(eventAudienceStats),
     });
 
     totalLeads += eventLeads;
@@ -150,13 +152,16 @@ export async function getMasterDashboard(
     byGeo[geoKey].leads += eventLeads;
     byGeo[geoKey].revenue += eventRevenue;
 
-    for (const [ch, count] of Object.entries(leadAgg.channelCounts)) {
+    for (const [ch, stats] of Object.entries(eventChannelStats)) {
       byChannel[ch] = byChannel[ch] || { leads: 0, purchases: 0, spend: 0 };
-      byChannel[ch].leads += count;
+      byChannel[ch].leads += stats.leads;
+      byChannel[ch].purchases += stats.purchases;
+      byChannel[ch].spend += stats.spend;
     }
-    for (const [src, count] of Object.entries(leadAgg.audienceCounts)) {
+    for (const [src, stats] of Object.entries(eventAudienceStats)) {
       byAudience[src] = byAudience[src] || { leads: 0, purchases: 0 };
-      byAudience[src].leads += count;
+      byAudience[src].leads += stats.leads;
+      byAudience[src].purchases += stats.purchases;
     }
 
     if (eventRevenue > 0 && (!highestRevenueEvent || eventRevenue > highestRevenueEvent.revenue)) {
@@ -230,6 +235,12 @@ interface KpiRecord {
   channel: string;
 }
 
+interface AggregationStats {
+  leads: number;
+  purchases: number;
+  spend: number;
+}
+
 interface LeadRecord {
   lead_status: string;
   lead_temperature: string;
@@ -247,18 +258,29 @@ function aggregateKpis(records: KpiRecord[]) {
   let purchases = 0;
   let noShows = 0;
   let spend = 0;
+  const channelStats: Record<string, AggregationStats> = {};
 
   for (const r of records) {
+    const recordLeads = r.leads || 0;
+    const recordPurchases = r.purchases || 0;
+    const recordSpend = r.spend ? (typeof r.spend === 'number' ? r.spend : r.spend.toNumber()) : 0;
+
     formCompletions += r.form_completions || 0;
-    leads += r.leads || 0;
+    leads += recordLeads;
     meetingsBooked += r.meetings_booked || 0;
     meetingsAttended += r.meetings_attended || 0;
-    purchases += r.purchases || 0;
+    purchases += recordPurchases;
     noShows += r.no_shows || 0;
-    spend += r.spend ? (typeof r.spend === 'number' ? r.spend : r.spend.toNumber()) : 0;
+    spend += recordSpend;
+
+    const channel = r.channel || 'unknown';
+    channelStats[channel] = channelStats[channel] || { leads: 0, purchases: 0, spend: 0 };
+    channelStats[channel].leads += recordLeads;
+    channelStats[channel].purchases += recordPurchases;
+    channelStats[channel].spend += recordSpend;
   }
 
-  return { formCompletions, leads, meetingsBooked, meetingsAttended, purchases, noShows, spend };
+  return { formCompletions, leads, meetingsBooked, meetingsAttended, purchases, noShows, spend, channelStats };
 }
 
 function aggregateLeads(records: LeadRecord[]) {
@@ -268,34 +290,52 @@ function aggregateLeads(records: LeadRecord[]) {
   let noShows = 0;
   let purchases = 0;
   let revenue = 0;
-  const channelCounts: Record<string, number> = {};
-  const audienceCounts: Record<string, number> = {};
+  const channelStats: Record<string, AggregationStats> = {};
+  const audienceStats: Record<string, AggregationStats> = {};
 
   for (const r of records) {
+    const isPurchase = r.lead_status === 'purchased' || Boolean(r.purchase_date);
     if (r.lead_status === 'meeting_booked') meetingsBooked++;
     if (r.lead_status === 'meeting_attended') meetingsAttended++;
     if (r.lead_status === 'no_show') noShows++;
-    if (r.lead_status === 'purchased' || r.purchase_date) {
+    if (isPurchase) {
       purchases++;
       revenue += r.purchase_amount ? (typeof r.purchase_amount === 'number' ? r.purchase_amount : r.purchase_amount.toNumber()) : 0;
     }
     if (r.channel_attribution) {
-      channelCounts[r.channel_attribution] = (channelCounts[r.channel_attribution] || 0) + 1;
+      channelStats[r.channel_attribution] = channelStats[r.channel_attribution] || { leads: 0, purchases: 0, spend: 0 };
+      channelStats[r.channel_attribution].leads++;
+      if (isPurchase) channelStats[r.channel_attribution].purchases++;
     }
     if (r.audience_source) {
-      audienceCounts[r.audience_source] = (audienceCounts[r.audience_source] || 0) + 1;
+      audienceStats[r.audience_source] = audienceStats[r.audience_source] || { leads: 0, purchases: 0, spend: 0 };
+      audienceStats[r.audience_source].leads++;
+      if (isPurchase) audienceStats[r.audience_source].purchases++;
     }
   }
 
-  return { totalLeads, meetingsBooked, meetingsAttended, noShows, purchases, revenue, channelCounts, audienceCounts };
+  return { totalLeads, meetingsBooked, meetingsAttended, noShows, purchases, revenue, channelStats, audienceStats };
 }
 
-function findBest(counts: Record<string, number>): string | null {
+function mergeStats(...sources: Array<Record<string, AggregationStats>>): Record<string, AggregationStats> {
+  const result: Record<string, AggregationStats> = {};
+  for (const source of sources) {
+    for (const [key, stats] of Object.entries(source)) {
+      result[key] = result[key] || { leads: 0, purchases: 0, spend: 0 };
+      result[key].leads += stats.leads;
+      result[key].purchases += stats.purchases;
+      result[key].spend += stats.spend;
+    }
+  }
+  return result;
+}
+
+function findBestByLeads(statsByKey: Record<string, AggregationStats>): string | null {
   let best: string | null = null;
   let bestCount = 0;
-  for (const [key, count] of Object.entries(counts)) {
-    if (count > bestCount) {
-      bestCount = count;
+  for (const [key, stats] of Object.entries(statsByKey)) {
+    if (stats.leads > bestCount) {
+      bestCount = stats.leads;
       best = key;
     }
   }
