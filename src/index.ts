@@ -49,6 +49,7 @@ import { connectorImportsRouter } from '../modules/connector-imports/controller'
 import { learningRecommendationsRouter } from '../modules/learning-recommendations/controller';
 import { connectorFieldMappingRouter } from '../modules/connector-field-mapping/controller';
 import { csvImportRouter } from '../modules/csv-import/controller';
+import { connectorReadinessRouter } from '../modules/connector-readiness/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -268,6 +269,7 @@ app.use('/connector-imports', connectorImportsRouter);
 app.use('/learning-recommendations', learningRecommendationsRouter);
 app.use('/connector-mappings', connectorFieldMappingRouter);
 app.use('/csv-import', csvImportRouter);
+app.use('/connector-readiness', connectorReadinessRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
