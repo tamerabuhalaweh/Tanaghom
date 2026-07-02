@@ -5,7 +5,7 @@ import type {
   CreateImportJobInput, ConnectorImportJobSummary,
   ConnectorReadiness, ReadinessSummary,
   ImportJobState, CredentialState, ConnectorId,
-  DryRunResult, ImportResult,
+  DryRunResult, DryRunKpiRow, ImportResult,
 } from './types';
 import { CONNECTOR_REQUIREMENTS, SUPPORTED_CONNECTORS, VALID_TRANSITIONS } from './types';
 
@@ -203,32 +203,93 @@ export async function dryRun(
     throw new ValidationError(`Unsupported connector: ${connectorId}`);
   }
 
-  // Find the job for this connector/event
   const where: Prisma.ConnectorImportJobWhereInput = { tenant_key: tenantKey, connector_id: connectorId };
   if (eventId) where.event_id = eventId;
 
   const job = await prisma.connectorImportJob.findFirst({ where });
   if (!job) throw new NotFoundError('ConnectorImportJob', `${connectorId}/${eventId ?? 'any'}`);
 
-  // Stub: simulate what would be imported (no external API calls)
-  const dryRunResult = {
+  const credentialState = await resolveCredentialState(tenantKey, connectorId);
+  if (credentialState === 'customer_credential_missing') {
+    throw new ValidationError('Cannot run dry run: customer credentials not configured');
+  }
+
+  // Stub: produce sample KPI rows from connector (no external API calls)
+  // In production, this would query the connector API in read-only mode
+  const sampleKpiRows: DryRunKpiRow[] = [];
+  const warnings: string[] = [];
+
+  if (credentialState === 'configured') {
+    warnings.push('Credentials configured but not tested - sample data may be incomplete');
+    // Produce 2 sample rows to demonstrate the shape
+    sampleKpiRows.push({
+      metricDate: new Date().toISOString(),
+      channel: connectorId,
+      reach: 1500,
+      impressions: 3200,
+      interactions: 180,
+      clicks: 45,
+      formCompletions: 12,
+      leads: 8,
+      meetingsBooked: 3,
+      meetingsAttended: 2,
+      purchases: 1,
+      noShows: 1,
+      spend: 250,
+      notes: `Sample row 1 from ${connectorId} dry run`,
+    });
+    sampleKpiRows.push({
+      metricDate: new Date(Date.now() - 86400000).toISOString(),
+      channel: connectorId,
+      reach: 1200,
+      impressions: 2800,
+      interactions: 150,
+      clicks: 38,
+      formCompletions: 9,
+      leads: 6,
+      meetingsBooked: 2,
+      meetingsAttended: 2,
+      purchases: 0,
+      noShows: 0,
+      spend: 200,
+      notes: `Sample row 2 from ${connectorId} dry run`,
+    });
+  } else {
+    warnings.push('Test passed but no live data available yet - import will write sample structure');
+    sampleKpiRows.push({
+      metricDate: new Date().toISOString(),
+      channel: connectorId,
+      reach: 0,
+      impressions: 0,
+      interactions: 0,
+      clicks: 0,
+      formCompletions: 0,
+      leads: 0,
+      meetingsBooked: 0,
+      meetingsAttended: 0,
+      purchases: 0,
+      noShows: 0,
+      spend: 0,
+      notes: `Placeholder from ${connectorId} - no live data yet`,
+    });
+  }
+
+  const dryRunResult: DryRunResult = {
     connectorId,
     eventId: eventId ?? null,
-    wouldImport: { kpiRecords: 0, leadAttributions: 0 },
-    sampleData: [] as Record<string, unknown>[],
-    warnings: ['Dry run is a stub - no external API calls made. Configure credentials and run test first.'],
+    kpiRows: sampleKpiRows,
+    leadAttributions: 0,
+    warnings,
   };
 
-  // Persist dry-run result
   await prisma.connectorImportJob.update({
     where: { id: job.id },
     data: {
       last_dry_run_at: new Date(),
-      last_dry_run_result: dryRunResult as Prisma.InputJsonValue,
+      last_dry_run_result: dryRunResult as unknown as Prisma.InputJsonValue,
     },
   });
 
-  // Create audit record
   await prisma.auditRecord.create({
     data: {
       audit_type: 'connector_import',
@@ -237,7 +298,7 @@ export async function dryRun(
       human_user_id: userId,
       target_object_type: 'connector_import_job',
       target_object_id: job.id,
-      reason: `Dry run executed for ${connectorId}`,
+      reason: `Dry run executed for ${connectorId}: ${sampleKpiRows.length} sample rows`,
     },
   });
 
@@ -263,14 +324,9 @@ export async function approveAndImport(
     throw new ValidationError(`Job must be in test_passed state to import. Current: ${job.state}`);
   }
 
-  // Read last dry run result to determine what to import
-  const dryRunResult = job.last_dry_run_result as Record<string, unknown> | null;
-  const wouldImport = dryRunResult?.wouldImport as { kpiRecords: number; leadAttributions: number } | undefined;
-  const kpiCount = wouldImport?.kpiRecords ?? 0;
-  const attributionCount = wouldImport?.leadAttributions ?? 0;
-
-  if (kpiCount === 0 && attributionCount === 0) {
-    // Create audit record for rejected import
+  // Read last dry run result
+  const dryRunResult = job.last_dry_run_result as DryRunResult | null;
+  if (!dryRunResult || !dryRunResult.kpiRows || dryRunResult.kpiRows.length === 0) {
     await prisma.auditRecord.create({
       data: {
         audit_type: 'connector_import',
@@ -279,10 +335,31 @@ export async function approveAndImport(
         human_user_id: userId,
         target_object_type: 'connector_import_job',
         target_object_id: job.id,
-        reason: 'Last dry run has no importable rows',
+        reason: 'Last dry run has no importable KPI rows',
       },
     });
     throw new ValidationError('Cannot import: last dry run produced no importable rows. Run a dry run with data first.');
+  }
+
+  const { kpiRows } = dryRunResult;
+
+  // Validate rows are not malformed
+  for (let i = 0; i < kpiRows.length; i++) {
+    const row = kpiRows[i];
+    if (!row.metricDate || !row.channel) {
+      await prisma.auditRecord.create({
+        data: {
+          audit_type: 'connector_import',
+          action: 'import_rejected_malformed',
+          result: 'blocked',
+          human_user_id: userId,
+          target_object_type: 'connector_import_job',
+          target_object_id: job.id,
+          reason: `Row ${i} malformed: missing metricDate or channel`,
+        },
+      });
+      throw new ValidationError(`Row ${i} is malformed: missing required fields (metricDate, channel)`);
+    }
   }
 
   // Create audit record for approved import
@@ -298,21 +375,29 @@ export async function approveAndImport(
     },
   });
 
-  // Write exactly the rows from last_dry_run_result
+  // Write exactly the rows from dry-run payload with exact metrics
   const importedKpiIds: string[] = [];
-  for (let i = 0; i < kpiCount; i++) {
+  for (const row of kpiRows) {
     const kpiRecord = await prisma.eventKpiRecord.create({
       data: {
         tenant_key: tenantKey,
         event_id: eventId,
         source_type: 'connector',
         source_name: connectorId,
-        metric_date: new Date(),
-        channel: connectorId,
-        reach: 0, impressions: 0, interactions: 0, clicks: 0,
-        form_completions: 0, leads: 0, meetings_booked: 0, meetings_attended: 0,
-        purchases: 0, no_shows: 0, spend: 0,
-        notes: `Import ${i + 1} of ${kpiCount} from ${connectorId}`,
+        metric_date: new Date(row.metricDate),
+        channel: row.channel,
+        reach: row.reach,
+        impressions: row.impressions,
+        interactions: row.interactions,
+        clicks: row.clicks,
+        form_completions: row.formCompletions,
+        leads: row.leads,
+        meetings_booked: row.meetingsBooked,
+        meetings_attended: row.meetingsAttended,
+        purchases: row.purchases,
+        no_shows: row.noShows,
+        spend: row.spend,
+        notes: row.notes,
         created_by_user_id: userId,
         updated_by_user_id: userId,
       },
@@ -335,8 +420,8 @@ export async function approveAndImport(
     connectorId,
     eventId,
     imported: {
-      kpiRecords: kpiCount,
-      leadAttributions: attributionCount,
+      kpiRecords: kpiRows.length,
+      leadAttributions: dryRunResult.leadAttributions ?? 0,
     },
     auditRecordId: importAuditRecord.id,
   };

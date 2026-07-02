@@ -173,14 +173,39 @@ export interface ReadinessSummary {
   totalBlocked: number;
 }
 
+export interface DryRunKpiRow {
+  metricDate: string;
+  channel: string;
+  reach: number;
+  impressions: number;
+  interactions: number;
+  clicks: number;
+  formCompletions: number;
+  leads: number;
+  meetingsBooked: number;
+  meetingsAttended: number;
+  purchases: number;
+  noShows: number;
+  spend: number;
+  notes: string | null;
+}
+
 export interface DryRunResult {
   connectorId: string;
-  wouldImport: {
+  eventId: string | null;
+  kpiRows: DryRunKpiRow[];
+  leadAttributions: number;
+  warnings: string[];
+}
+
+export interface ImportResult {
+  connectorId: string;
+  eventId: string;
+  imported: {
     kpiRecords: number;
     leadAttributions: number;
   };
-  sampleData: Record<string, unknown>[];
-  warnings: string[];
+  auditRecordId: string;
 }
 
 export interface ImportResult {
