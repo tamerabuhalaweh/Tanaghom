@@ -46,6 +46,7 @@ import { masterEventAggregationRouter } from '../modules/master-event-aggregatio
 import { eventProblemLogRouter } from '../modules/event-problem-log/controller';
 import { eventCloseoutRouter } from '../modules/event-closeout/controller';
 import { connectorImportsRouter } from '../modules/connector-imports/controller';
+import { learningRecommendationsRouter } from '../modules/learning-recommendations/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -262,6 +263,7 @@ app.use('/master-events', masterEventAggregationRouter);
 app.use('/event-problems', eventProblemLogRouter);
 app.use('/closeout', eventCloseoutRouter);
 app.use('/connector-imports', connectorImportsRouter);
+app.use('/learning-recommendations', learningRecommendationsRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
