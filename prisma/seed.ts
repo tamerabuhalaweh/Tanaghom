@@ -276,6 +276,46 @@ async function seed() {
     }
   }
 
+  // Seed demo commercial event — Sprint 59
+  console.log('Seeding demo commercial event...');
+  const adminForEvent = await prisma.user.findUnique({ where: { email: 'admin@tanaghum.com' } });
+
+  if (adminForEvent) {
+    const existingEvent = await prisma.commercialEvent.findFirst({
+      where: { name: 'Tagyeer wa Irtaqi — Summer 2026', tenant_key: adminForEvent.tenant_key },
+    });
+
+    const eventData = {
+      tenant_key: adminForEvent.tenant_key,
+      name: 'Tagyeer wa Irtaqi — Summer 2026',
+      event_type: 'tagyeer_wa_irtaqi' as const,
+      event_date: new Date('2026-08-15T18:00:00Z'),
+      location: 'Riyadh Convention Center, Saudi Arabia',
+      campaign_start_date: new Date('2026-07-01T00:00:00Z'),
+      campaign_end_date: new Date('2026-08-15T17:00:00Z'),
+      expected_attendance: 200,
+      revenue_target: 120000,
+      planned_budget: 35000,
+      owner_user_id: adminForEvent.id,
+      status: 'planning' as const,
+      offer: 'Early bird 25% off for first 80 registrants — regular price 600 SAR, early bird 450 SAR',
+      audience: 'Young professionals aged 25-40 in Riyadh and Jeddah, interested in personal development, career growth, and life coaching',
+      geography: 'Riyadh (primary), Jeddah (secondary), Dammam (tertiary)',
+      fomo_angle: 'Only 200 seats available — last Tagyeer wa Irtaqi event sold out in 5 days. Early bird pricing ends July 20.',
+      upsell_plan: 'VIP package at 1200 SAR includes: front-row seating, 1-on-1 30-min coaching session with Amro, signed workbook, and private WhatsApp group access for 3 months',
+      selected_channels: ['instagram', 'whatsapp', 'email', 'linkedin'],
+      content_department_requirements: '3 video testimonials from past attendees (60-90 sec each), 12 Instagram posts (mix of carousels and reels), 4 LinkedIn thought-leadership posts, 1 landing page with registration form, 3 email sequences (awareness, urgency, last-chance), WhatsApp broadcast message templates',
+      sales_team_requirements: 'Follow up within 2 hours of registration, discovery call script for VIP upsell, no-show recovery call script, post-event feedback collection script, CRM handoff for qualified leads within 24 hours of event',
+    };
+
+    if (existingEvent) {
+      await prisma.commercialEvent.update({ where: { id: existingEvent.id }, data: eventData });
+    } else {
+      await prisma.commercialEvent.create({ data: eventData });
+    }
+    console.log('  Commercial Event: Tagyeer wa Irtaqi — Summer 2026');
+  }
+
   // Seed mock MCP connectors (future/planned only)
   console.log('Seeding mock MCP connectors...');
   const MOCK_CONNECTORS = [
