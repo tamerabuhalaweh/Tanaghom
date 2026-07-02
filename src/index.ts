@@ -45,7 +45,6 @@ import { leadLifecycleRouter } from '../modules/lead-lifecycle/controller';
 import { masterEventAggregationRouter } from '../modules/master-event-aggregation/controller';
 import { eventProblemLogRouter } from '../modules/event-problem-log/controller';
 import { eventCloseoutRouter } from '../modules/event-closeout/controller';
-import { learningRecommendationsRouter } from '../modules/learning-recommendations/controller';
 import { connectorImportsRouter } from '../modules/connector-imports/controller';
 
 const envValidation = validateEnvironment();
@@ -262,7 +261,6 @@ app.use('/leads', leadLifecycleRouter);
 app.use('/master-events', masterEventAggregationRouter);
 app.use('/event-problems', eventProblemLogRouter);
 app.use('/closeout', eventCloseoutRouter);
-app.use('/learning-recommendations', learningRecommendationsRouter);
 app.use('/connector-imports', connectorImportsRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
