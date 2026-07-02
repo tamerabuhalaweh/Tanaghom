@@ -133,30 +133,24 @@ describe('Learning Recommendations rules', () => {
   });
 
   describe('Content delay rule', () => {
-    it('recommends earlier deadlines when content is overdue', async () => {
+    it('recommends earlier deadlines when content requirements are overdue', async () => {
       prismaMocks.commercialEvent.findFirst.mockResolvedValue(mockEvent());
-      prismaMocks.contentRequest.findMany.mockResolvedValue([
-        { id: 'c1', raw_message: 'Video ad', status: 'drafting', target_platforms: ['instagram'], due_date: new Date('2026-06-01T00:00:00Z'), created_at: new Date() },
-      ]);
-      prismaMocks.publishingPackage.findMany.mockResolvedValue([
-        { id: 'p1', package_status: 'blocked', package_type: 'social_post', due_date: new Date('2026-06-01T00:00:00Z'), created_at: new Date() },
+      prismaMocks.eventContentRequirement.findMany.mockResolvedValue([
+        { id: 'cr1', asset_type: 'video', status: 'pending', due_date: new Date('2026-06-01T00:00:00Z'), created_at: new Date() },
+        { id: 'cr2', asset_type: 'landing_page', status: 'in_progress', due_date: new Date('2026-06-01T00:00:00Z'), created_at: new Date() },
       ]);
       const result = await repo.generateRecommendations('tenant-a', 'event-1');
       const contentRec = result.recommendations.find(r => r.category === 'content');
       expect(contentRec).toBeDefined();
       expect(contentRec!.suggestedOwnerRole).toBe('social_media_manager');
-      expect(contentRec!.sourceMetrics.totalOverdue).toBeGreaterThanOrEqual(1);
+      expect(contentRec!.sourceMetrics.overdueContent).toBe(2);
     });
 
-    it('does not recommend when content is completed (approved/scheduled/published)', async () => {
+    it('does not recommend when content requirements are delivered or ready', async () => {
       prismaMocks.commercialEvent.findFirst.mockResolvedValue(mockEvent());
-      prismaMocks.contentRequest.findMany.mockResolvedValue([
-        { id: 'c1', raw_message: 'Video ad', status: 'approved', target_platforms: ['instagram'], created_at: new Date() },
-        { id: 'c2', raw_message: 'Carousel', status: 'scheduled', target_platforms: ['instagram'], created_at: new Date() },
-        { id: 'c3', raw_message: 'Post', status: 'published', target_platforms: ['instagram'], created_at: new Date() },
-      ]);
-      prismaMocks.publishingPackage.findMany.mockResolvedValue([
-        { id: 'p1', package_status: 'ready_for_future_execution', package_type: 'social_post', created_at: new Date() },
+      prismaMocks.eventContentRequirement.findMany.mockResolvedValue([
+        { id: 'cr1', asset_type: 'video', status: 'delivered', due_date: new Date('2026-06-01T00:00:00Z'), created_at: new Date() },
+        { id: 'cr2', asset_type: 'landing_page', status: 'ready', due_date: new Date('2026-06-01T00:00:00Z'), created_at: new Date() },
       ]);
       const result = await repo.generateRecommendations('tenant-a', 'event-1');
       const contentRec = result.recommendations.find(r => r.category === 'content');
@@ -166,23 +160,18 @@ describe('Learning Recommendations rules', () => {
     it('does not recommend when active content is not yet overdue', async () => {
       const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       prismaMocks.commercialEvent.findFirst.mockResolvedValue(mockEvent());
-      prismaMocks.contentRequest.findMany.mockResolvedValue([
-        { id: 'c1', raw_message: 'Video ad', status: 'drafting', target_platforms: ['instagram'], due_date: futureDate, created_at: new Date() },
+      prismaMocks.eventContentRequirement.findMany.mockResolvedValue([
+        { id: 'cr1', asset_type: 'video', status: 'pending', due_date: new Date(futureDate), created_at: new Date() },
       ]);
-      prismaMocks.publishingPackage.findMany.mockResolvedValue([]);
       const result = await repo.generateRecommendations('tenant-a', 'event-1');
       const contentRec = result.recommendations.find(r => r.category === 'content');
       expect(contentRec).toBeUndefined();
     });
 
-    it('ignores terminal states (rejected, cancelled, superseded)', async () => {
+    it('ignores content requirements without due dates', async () => {
       prismaMocks.commercialEvent.findFirst.mockResolvedValue(mockEvent());
-      prismaMocks.contentRequest.findMany.mockResolvedValue([
-        { id: 'c1', raw_message: 'Video ad', status: 'rejected', target_platforms: ['instagram'], created_at: new Date() },
-        { id: 'c2', raw_message: 'Carousel', status: 'cancelled', target_platforms: ['instagram'], created_at: new Date() },
-      ]);
-      prismaMocks.publishingPackage.findMany.mockResolvedValue([
-        { id: 'p1', package_status: 'superseded', package_type: 'social_post', created_at: new Date() },
+      prismaMocks.eventContentRequirement.findMany.mockResolvedValue([
+        { id: 'cr1', asset_type: 'video', status: 'pending', due_date: null, created_at: new Date() },
       ]);
       const result = await repo.generateRecommendations('tenant-a', 'event-1');
       const contentRec = result.recommendations.find(r => r.category === 'content');

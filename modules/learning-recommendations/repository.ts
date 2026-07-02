@@ -237,49 +237,37 @@ function evaluateContentDelays(data: EventData, startId: number): { recommendati
   const recommendations: LearningRecommendation[] = [];
   let id = startId;
 
-  // ContentRequest active states (not yet completed)
-  const contentActiveStates = ['idea', 'drafting', 'pending_review', 'needs_edits', 'recycle_candidate'];
+  // EventContentRequirement active statuses (not yet delivered)
+  // pending, in_progress, blocked are active; ready and delivered are done
+  const activeStatuses = ['pending', 'in_progress', 'blocked'];
 
-  // PublishingPackage active states
-  const packageActiveStates = ['draft', 'validating', 'blocked'];
+  const activeReqs = data.contentReqs.filter(c => activeStatuses.includes(c.status as string));
 
-  const activeContent = data.contentReqs.filter(c => contentActiveStates.includes(c.status as string));
-  const activePackages = data.packages.filter(p => packageActiveStates.includes(p.package_status as string));
-
-  // Only recommend if there are active items (not done, not terminal)
-  if (activeContent.length > 0 || activePackages.length > 0) {
-    const totalActive = activeContent.length + activePackages.length;
-
-    // Check if due dates prove actual delay
+  // Only recommend if there are active items with overdue due dates
+  if (activeReqs.length > 0) {
     const now = new Date();
-    const overdueContent = activeContent.filter(c => {
+    const overdueReqs = activeReqs.filter(c => {
       if (!c.due_date) return false;
       const due = c.due_date instanceof Date ? c.due_date : new Date(c.due_date as string);
       return due < now;
     });
-    const overduePackages = activePackages.filter(p => {
-      if (!p.due_date) return false;
-      const due = p.due_date instanceof Date ? p.due_date : new Date(p.due_date as string);
-      return due < now;
-    });
-    const totalOverdue = overdueContent.length + overduePackages.length;
 
     // Only recommend if there are overdue items
-    if (totalOverdue > 0) {
-      const confidence: ConfidenceLevel = totalOverdue >= 3 ? 'high' : totalOverdue >= 1 ? 'medium' : 'low';
+    if (overdueReqs.length > 0) {
+      const confidence: ConfidenceLevel = overdueReqs.length >= 3 ? 'high' : overdueReqs.length >= 1 ? 'medium' : 'low';
       const missingWarnings: string[] = [];
-      if (data.contentReqs.length === 0 && data.packages.length === 0) missingWarnings.push('No content requirements or packages recorded');
+      if (data.contentReqs.length === 0) missingWarnings.push('No content requirements recorded');
 
       recommendations.push({
         id: `rec-${id++}`,
         category: 'content',
-        priority: totalOverdue >= 3 ? 'high' : 'medium',
-        title: `${totalOverdue} content items past due date`,
+        priority: overdueReqs.length >= 3 ? 'high' : 'medium',
+        title: `${overdueReqs.length} content requirements past due date`,
         recommendation: 'Set earlier content deadlines with buffer time. Content should be ready at least 1 week before campaign launch to allow for review and revisions.',
-        rationale: `${overdueContent.length} content requirements and ${overduePackages.length} publishing packages have passed their due dates without being delivered. Content delays directly impact campaign launch timing.`,
-        evidenceSummary: `${overdueContent.length} overdue content requirements, ${overduePackages.length} overdue packages, ${activeContent.length - overdueContent.length + activePackages.length - overduePackages.length} active but not yet overdue`,
-        sourceMetrics: { overdueContent: overdueContent.length, overduePackages: overduePackages.length, totalOverdue, totalActive },
-        sourceSections: ['contentRequirements', 'publishingPackages'],
+        rationale: `${overdueReqs.length} content requirements have passed their due dates without being delivered. Content delays directly impact campaign launch timing.`,
+        evidenceSummary: `${overdueReqs.length} overdue content requirements, ${activeReqs.length - overdueReqs.length} active but not yet overdue`,
+        sourceMetrics: { overdueContent: overdueReqs.length, totalActive: activeReqs.length },
+        sourceSections: ['contentRequirements'],
         confidence,
         missingDataWarnings: missingWarnings,
         suggestedOwnerRole: 'social_media_manager',
