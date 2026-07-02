@@ -44,6 +44,7 @@ import { eventCampaignPlannerRouter } from '../modules/event-campaign-planner/co
 import { leadLifecycleRouter } from '../modules/lead-lifecycle/controller';
 import { masterEventAggregationRouter } from '../modules/master-event-aggregation/controller';
 import { eventProblemLogRouter } from '../modules/event-problem-log/controller';
+import { eventCloseoutRouter } from '../modules/event-closeout/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -258,6 +259,7 @@ app.use('/planner', eventCampaignPlannerRouter);
 app.use('/leads', leadLifecycleRouter);
 app.use('/master-events', masterEventAggregationRouter);
 app.use('/event-problems', eventProblemLogRouter);
+app.use('/closeout', eventCloseoutRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {
