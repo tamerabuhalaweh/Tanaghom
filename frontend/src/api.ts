@@ -330,8 +330,21 @@ export const mcpRuntimeApi = {
 };
 
 export const leadsApi = {
-  list: (token: string) => apiFetch<unknown[]>('/leads', { token }),
+  list: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/leads${params}`, { token });
+  },
+  get: (id: string, token: string) => apiFetch<unknown>(`/leads/${id}`, { token }),
   create: (data: unknown, token: string) => apiFetch<unknown>('/leads', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/leads/${id}`, { method: 'PUT', body: data, token }),
+  transition: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/leads/${id}/transition`, { method: 'POST', body: data, token }),
+  recordMeeting: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/leads/${id}/meeting`, { method: 'POST', body: data, token }),
+  recordPurchase: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/leads/${id}/purchase`, { method: 'POST', body: data, token }),
+  setTemperature: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/leads/${id}/temperature`, { method: 'POST', body: data, token }),
   qualify: (id: string, token: string) => apiFetch<unknown>(`/leads/${id}/qualify`, { method: 'POST', token }),
   stats: (token: string) => apiFetch<unknown>('/leads/stats', { token }),
   sandboxExecution: (id: string, data: unknown, token: string) =>
