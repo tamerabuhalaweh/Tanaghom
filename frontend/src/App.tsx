@@ -39,20 +39,47 @@ import EventDashboard from './pages/EventDashboard'
 import EventStrategyWizard from './pages/EventStrategyWizard'
 import MasterEventsDashboard from './pages/MasterEventsDashboard'
 
+const ADMIN_ROLES = ['admin', 'cco']
+
+function LoadingWorkspace() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-b-blue-600" />
+        <span className="text-sm text-gray-500">Loading workspace...</span>
+      </div>
+    </div>
+  )
+}
+
+function normalizeRole(role: string): string {
+  return role.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_')
+}
+
+function getUserRole(user: unknown): string {
+  if (!user || typeof user !== 'object') return 'unknown'
+  const role = (user as Record<string, unknown>).role
+  return typeof role === 'string' && role.trim() ? normalizeRole(role) : 'unknown'
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-b-blue-600" />
-          <span className="text-sm text-gray-500">Loading workspace...</span>
-        </div>
-      </div>
-    )
+    return <LoadingWorkspace />
   }
   if (!token) return <Navigate to="/login" />
   return <ErrorBoundary>{children}</ErrorBoundary>
+}
+
+function RequireRole({ children, roles }: { children: React.ReactNode; roles: string[] }) {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingWorkspace />
+  if (!roles.includes(getUserRole(user))) return <Navigate to="/events" replace />
+  return <>{children}</>
+}
+
+function adminOnly(element: React.ReactNode) {
+  return <RequireRole roles={ADMIN_ROLES}>{element}</RequireRole>
 }
 
 function App() {
@@ -71,30 +98,30 @@ function App() {
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
             <Route path="approvals" element={<ApprovalQueue />} />
-            <Route path="saif" element={<SaifDecisions />} />
-            <Route path="capabilities" element={<CapabilityResolution />} />
-            <Route path="mcp" element={<McpMediation />} />
+            <Route path="saif" element={adminOnly(<SaifDecisions />)} />
+            <Route path="capabilities" element={adminOnly(<CapabilityResolution />)} />
+            <Route path="mcp" element={adminOnly(<McpMediation />)} />
             <Route path="publishing" element={<PublishingPrep />} />
-            <Route path="spine" element={<SpineTimeline />} />
-            <Route path="observability" element={<Observability />} />
-            <Route path="assets" element={<AssetCognition />} />
+            <Route path="spine" element={adminOnly(<SpineTimeline />)} />
+            <Route path="observability" element={adminOnly(<Observability />)} />
+            <Route path="assets" element={adminOnly(<AssetCognition />)} />
             <Route path="analytics" element={<Analytics />} />
-            <Route path="learning" element={<LearningSignals />} />
-            <Route path="crm" element={<CrmConversion />} />
-            <Route path="production" element={<ProductionRendering />} />
-            <Route path="safety" element={<SafetyStatus />} />
+            <Route path="learning" element={adminOnly(<LearningSignals />)} />
+            <Route path="crm" element={adminOnly(<CrmConversion />)} />
+            <Route path="production" element={adminOnly(<ProductionRendering />)} />
+            <Route path="safety" element={adminOnly(<SafetyStatus />)} />
             <Route path="ai-settings" element={<AIProviderSettings />} />
             <Route path="my-agent-rep" element={<MyAgentRep />} />
             <Route path="account-security" element={<AccountSecurity />} />
-            <Route path="integration-credentials" element={<IntegrationCredentials />} />
-            <Route path="admin-users" element={<AdminUsers />} />
-            <Route path="tenant-admin" element={<TenantAdmin />} />
-            <Route path="operations" element={<OperationsReadiness />} />
-            <Route path="smartlabs-voice" element={<SmartLabsVoice />} />
-            <Route path="mcp-engine" element={<McpEngine />} />
-            <Route path="agent-skills" element={<AgentSkills />} />
-            <Route path="ghl-readiness" element={<GhlReadiness />} />
-            <Route path="ghl-wizard" element={<GhlWizard />} />
+            <Route path="integration-credentials" element={adminOnly(<IntegrationCredentials />)} />
+            <Route path="admin-users" element={adminOnly(<AdminUsers />)} />
+            <Route path="tenant-admin" element={adminOnly(<TenantAdmin />)} />
+            <Route path="operations" element={adminOnly(<OperationsReadiness />)} />
+            <Route path="smartlabs-voice" element={adminOnly(<SmartLabsVoice />)} />
+            <Route path="mcp-engine" element={adminOnly(<McpEngine />)} />
+            <Route path="agent-skills" element={adminOnly(<AgentSkills />)} />
+            <Route path="ghl-readiness" element={adminOnly(<GhlReadiness />)} />
+            <Route path="ghl-wizard" element={adminOnly(<GhlWizard />)} />
             <Route path="dashboard" element={<DemoCommandCenter />} />
             <Route path="command-center" element={<DemoCommandCenter />} />
             <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />

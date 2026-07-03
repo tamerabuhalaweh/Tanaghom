@@ -19,7 +19,7 @@ export default defineConfig({
       '/ai-provider': 'http://localhost:4000',
       '/demo': 'http://localhost:4000',
       '/publishing-package': 'http://localhost:4000',
-      '/admin': 'http://localhost:4000',
+      '^/admin(/|$)': 'http://localhost:4000',
       '/integrations': 'http://localhost:4000',
       '/leads': 'http://localhost:4000',
       '/ghl': 'http://localhost:4000',

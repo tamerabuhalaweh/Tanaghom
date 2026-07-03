@@ -51,7 +51,7 @@ const PRODUCT_ROLES = [
   'specialist',
 ];
 
-const ADMIN_ROLES = ['admin', 'cco', 'department_head'];
+const ADMIN_ROLES = ['admin', 'cco'];
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -234,7 +234,7 @@ function normalizeRole(role: string): string {
 
 function isVisibleForRole(item: NavItem, role: string): boolean {
   if (!item.roles || item.roles.length === 0) return true;
-  if (!role || role === 'unknown') return true;
+  if (!role || role === 'unknown') return item.group !== 'Admin';
   return item.roles.includes(role);
 }
 
