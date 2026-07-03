@@ -10,9 +10,9 @@ Do not mark the release as approved until the required checks below pass against
 
 | Field | Value |
 |---|---|
-| Date/time | 2026-07-03 07:09 -04:00 |
+| Date/time | 2026-07-03 07:24 -04:00 |
 | Tester | Codex |
-| Git commit SHA | `8097a89` |
+| Git commit SHA | `2d49cc5` |
 | Frontend URL | `https://tanaghum.163-123-180-104.sslip.io` |
 | Backend API URL | `https://tanaghum.163-123-180-104.sslip.io/api` |
 | VPS host | `163.123.180.104` |
@@ -91,6 +91,7 @@ These do not block the release if they are clearly shown as missing/blocked in t
 |---|---|---|---|---|
 | 1 | 2026-07-03 07:04 -04:00 | Codex | Passed | `npx playwright test e2e/sprint65-customer-acceptance.spec.ts --workers=1`, with deployed URL/API and sandbox writes enabled |
 | 2 | 2026-07-03 07:07 -04:00 | Codex | Passed | Same deployed acceptance command; 3/3 tests passed |
+| 3 | 2026-07-03 07:25 -04:00 | Codex | Passed | Same deployed acceptance command after PR #100 deployment; 3/3 tests passed |
 
 ## Decision
 
@@ -104,7 +105,7 @@ These do not block the release if they are clearly shown as missing/blocked in t
 
 PR #109 was merged into `main`, the VPS was updated from the old sprint branch to `main`, backend/frontend images were rebuilt, the stale migrate image was rebuilt, and the missing Sprint 59-64 migrations were applied.
 
-Two deployed Playwright acceptance runs passed against:
+Three deployed Playwright acceptance runs passed against:
 
 ```text
 Frontend: https://tanaghum.163-123-180-104.sslip.io
@@ -114,6 +115,10 @@ Env:      E2E_SPRINT65_ACCEPTANCE=true, E2E_ALLOW_ACCEPTANCE_WRITES=true
 ```
 
 The release remains dependent on customer-owned credentials for real external connector execution, as listed above.
+
+## Learning UI Deployment - 2026-07-03
+
+PR #100 was merged into `main` as `2d49cc5`, the VPS frontend image was rebuilt, and the deployed acceptance gate passed again. The event dashboard now includes evidence-backed learning recommendations while keeping customer-owned connector execution gated.
 
 ## Initial VPS Probe - 2026-07-02
 
