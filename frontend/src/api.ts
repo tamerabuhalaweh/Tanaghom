@@ -206,6 +206,7 @@ export const publishingPackageApi = {
 export const postizApi = {
   status: (token: string) => apiFetch<unknown>('/postiz/status', { token }),
   channels: (token: string) => apiFetch<unknown>('/postiz/channels', { token }),
+  connectors: (token: string) => apiFetch<unknown[]>('/postiz/connectors', { token }),
   diagnostics: (params: { platform?: string; refresh?: string }, token: string) => {
     const search = new URLSearchParams();
     if (params.platform) search.set('platform', params.platform);
@@ -225,6 +226,16 @@ export const postizApi = {
     apiFetch<unknown>('/postiz/sandbox-schedule', { method: 'POST', body: data, token }),
   packageSandboxSchedule: (data: unknown, token: string) =>
     apiFetch<unknown>('/postiz/package-sandbox-schedule', { method: 'POST', body: data, token }),
+};
+
+export const postizChannelApi = {
+  eventChannels: (eventId: string, token: string) => apiFetch<unknown>(`/postiz-channels/events/${eventId}/channels`, { token }),
+  eventReadiness: (eventId: string, token: string) => apiFetch<unknown>(`/postiz-channels/events/${eventId}/readiness`, { token }),
+  packageReadiness: (packageId: string, token: string) => apiFetch<unknown>(`/postiz-channels/packages/${packageId}/readiness`, { token }),
+  selectEventChannel: (eventId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/postiz-channels/events/${eventId}/channels`, { method: 'POST', body: data, token }),
+  deselectEventChannel: (eventId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/postiz-channels/events/${eventId}/channels`, { method: 'DELETE', body: data, token }),
 };
 
 export const adminUsersApi = {
@@ -380,12 +391,29 @@ export const smartLabsApi = {
     apiFetch<unknown>('/smartlabs/text-to-speech', { method: 'POST', body: data, token }),
 };
 
+export const smartLabsValidationApi = {
+  summary: (token: string) => apiFetch<unknown>('/smartlabs-validation', { token }),
+};
+
 export const ghlApi = {
   status: (token: string) => apiFetch<unknown>('/ghl/status', { token }),
   wizardOptions: (token: string) => apiFetch<unknown>('/ghl/wizard-options', { token }),
   handoff: (leadId: string, token: string) => apiFetch<unknown>('/ghl/handoff', { method: 'POST', body: { leadId }, token }),
   sandboxContact: (data: unknown, token: string) => apiFetch<unknown>('/ghl/sandbox-contact', { method: 'POST', body: data, token }),
   push: (token: string) => apiFetch<unknown>('/ghl/push', { method: 'POST', token }),
+};
+
+export const ghlSetupApi = {
+  wizard: (token: string) => apiFetch<unknown>('/ghl-setup/wizard', { token }),
+  credentialStatus: (token: string) => apiFetch<unknown>('/ghl-setup/credential-status', { token }),
+  mappingReadiness: (token: string) => apiFetch<unknown>('/ghl-setup/mapping-readiness', { token }),
+  saveTags: (mappings: unknown[], token: string) =>
+    apiFetch<unknown>('/ghl-setup/tags', { method: 'POST', body: { mappings }, token }),
+  savePipelines: (mappings: unknown[], token: string) =>
+    apiFetch<unknown>('/ghl-setup/pipelines', { method: 'POST', body: { mappings }, token }),
+  saveLocation: (data: unknown, token: string) =>
+    apiFetch<unknown>('/ghl-setup/location', { method: 'POST', body: data, token }),
+  blockedWrite: (token: string) => apiFetch<unknown>('/ghl-setup/write', { method: 'POST', token }),
 };
 
 export const ideasApi = {

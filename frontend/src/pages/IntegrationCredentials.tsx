@@ -107,9 +107,9 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     businessUse: 'Prepare customer-owned CRM handoff and future lead sync.',
     providerKeys: ['gohighlevel', 'ghl'],
     importConnectorId: 'gohighlevel',
-    route: '/events',
-    routeLabel: 'Open Lead Dashboard',
-    setupSteps: ['Save GHL API key and location ID', 'Choose read/write scope with the customer', 'Keep writes approval-gated'],
+    route: '/ghl-wizard',
+    routeLabel: 'Open GHL Setup',
+    setupSteps: ['Save GHL API key and location ID', 'Map tags and pipeline stages', 'Keep writes approval-gated'],
   },
   {
     id: 'whatsapp_provider',
