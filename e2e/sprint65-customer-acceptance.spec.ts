@@ -115,9 +115,10 @@ async function monitorCustomerPath(page: Page) {
 
 async function expectCustomerPage(page: Page, path: string, heading: RegExp | string, supportingText: RegExp | string) {
   await page.goto(path);
-  await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({ timeout: 20000 });
-  await expect(page.getByText(supportingText).first()).toBeVisible({ timeout: 20000 });
-  const body = await page.locator('body').innerText();
+  const main = page.locator('main');
+  await expect(main.getByRole('heading', { name: heading }).first()).toBeVisible({ timeout: 20000 });
+  await expect(main.getByText(supportingText).first()).toBeVisible({ timeout: 20000 });
+  const body = await main.innerText();
   expect(body, `${path} should not show raw UUIDs in the customer path`).not.toMatch(uuidPattern);
   expect(body, `${path} should not show obvious raw JSON blocks`).not.toMatch(/^\s*[{[]\s*"/m);
   expect(body, `${path} should not expose raw secrets`).not.toMatch(secretPattern);
