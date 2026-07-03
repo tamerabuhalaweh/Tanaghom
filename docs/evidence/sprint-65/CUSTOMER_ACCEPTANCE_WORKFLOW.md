@@ -76,4 +76,17 @@ Only use write-path mode on an approved sandbox/test tenant.
 
 ## Current Evidence Status
 
-Pending. This document defines the workflow and automated test. Final acceptance still requires two recorded rehearsal runs against the deployed environment.
+Passed for customer acceptance on 2026-07-03.
+
+Two deployed acceptance runs passed against:
+
+```text
+Frontend: https://tanaghum.163-123-180-104.sslip.io
+API:      https://tanaghum.163-123-180-104.sslip.io/api
+Command:  npx playwright test e2e/sprint65-customer-acceptance.spec.ts --workers=1
+Env:      E2E_SPRINT65_ACCEPTANCE=true, E2E_ALLOW_ACCEPTANCE_WRITES=true
+```
+
+The second run completed 3/3 tests in 16 seconds and covered login, Events, strategy wizard, event dashboard, content creator, approval, scheduling, analytics, master dashboard, connector setup, backend release-gate endpoints, and an approved sandbox lead lifecycle write.
+
+Customer-owned credentials are still required before real Postiz scheduling, GHL writes, Meta/YouTube/Formaloo imports, WhatsApp/Telegram, and SmartLabs execution can be validated.

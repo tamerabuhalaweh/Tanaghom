@@ -10,14 +10,14 @@ Do not mark the release as approved until the required checks below pass against
 
 | Field | Value |
 |---|---|
-| Date/time | |
-| Tester | |
-| Git commit SHA | |
-| Frontend URL | |
-| Backend API URL | |
-| VPS host | |
-| Tenant/workspace | |
-| Test user role | |
+| Date/time | 2026-07-03 07:09 -04:00 |
+| Tester | Codex |
+| Git commit SHA | `8097a89` |
+| Frontend URL | `https://tanaghum.163-123-180-104.sslip.io` |
+| Backend API URL | `https://tanaghum.163-123-180-104.sslip.io/api` |
+| VPS host | `163.123.180.104` |
+| Tenant/workspace | Default acceptance tenant |
+| Test user role | Admin |
 
 ## Automated Checks
 
@@ -34,30 +34,30 @@ npm run test:e2e:sprint65
 
 | Check | Required Result | Actual | Pass |
 |---|---|---|---|
-| Frontend loads | 200 OK and app shell renders | | |
-| Login works | User reaches Dashboard | | |
-| Events page loads | Event list or empty state renders | | |
-| Event dashboard loads | KPIs, planner, sales workflow, closeout sections render | | |
-| Strategy wizard loads | Event strategy wizard renders | | |
-| Planner API path works | Planner endpoints return OK for selected event | | |
-| Lead lifecycle path works | Lead dashboard returns OK for selected event | | |
-| Master dashboard loads | Master events dashboard renders | | |
-| Connector status loads | Connector setup/readiness renders accurate missing/configured/validated states | | |
-| Secrets are not exposed | No raw API keys/tokens in UI or API responses | | |
-| No console errors | Playwright console capture is empty | | |
-| No unexpected failed API responses | Playwright network capture is empty except approved blocked connector states | | |
+| Frontend loads | 200 OK and app shell renders | 200 OK, app shell renders | Yes |
+| Login works | User reaches Dashboard | Login reached Dashboard | Yes |
+| Events page loads | Event list or empty state renders | Events page loaded | Yes |
+| Event dashboard loads | KPIs, planner, sales workflow, closeout sections render | Event workspace loaded with required sections | Yes |
+| Strategy wizard loads | Event strategy wizard renders | Strategy wizard loaded | Yes |
+| Planner API path works | Planner endpoints return OK for selected event | Email, WhatsApp, and content planner endpoints returned OK | Yes |
+| Lead lifecycle path works | Lead dashboard returns OK for selected event | Lead dashboard returned OK; write-path lead transition passed | Yes |
+| Master dashboard loads | Master events dashboard renders | Master Events Dashboard loaded | Yes |
+| Connector status loads | Connector setup/readiness renders accurate missing/configured/validated states | Connector Setup loaded; readiness endpoints returned OK | Yes |
+| Secrets are not exposed | No raw API keys/tokens in UI or API responses | No raw secrets detected by Playwright checks | Yes |
+| No console errors | Playwright console capture is empty | Empty | Yes |
+| No unexpected failed API responses | Playwright network capture is empty except approved blocked connector states | Empty | Yes |
 
 ## Operational Checks
 
 | Check | Required Result | Actual | Pass |
 |---|---|---|---|
-| Docker services | Required services healthy/running | | |
-| Database migrations | Latest migrations applied | | |
-| Backend health | `/health` returns OK | | |
-| Operations readiness | `/ops/readiness` returns OK for authenticated admin | | |
-| Backup status | Backup status endpoint reports latest local backup or precise blocker | | |
-| Monitoring status | Monitoring status endpoint reports latest uptime evidence or precise blocker | | |
-| Logs | No repeated runtime errors during smoke window | | |
+| Docker services | Required services healthy/running | `app`, `frontend`, `postgres`, `redis`, `prometheus`, and `grafana` running; database and Redis healthy | Yes |
+| Database migrations | Latest migrations applied | 22 migrations detected; missing Sprint 59-64 migrations applied on VPS | Yes |
+| Backend health | `/health` returns OK | `200 {"status":"healthy"}` | Yes |
+| Operations readiness | `/ops/readiness` returns OK for authenticated admin | Returned OK in deployed acceptance test | Yes |
+| Backup status | Backup status endpoint reports latest local backup or precise blocker | Returned OK or precise blocker in deployed acceptance test | Yes |
+| Monitoring status | Monitoring status endpoint reports latest uptime evidence or precise blocker | Returned OK or precise blocker in deployed acceptance test | Yes |
+| Logs | No repeated runtime errors during smoke window | Initial missing-table error fixed by rebuilding stale migrate image and applying migrations; no repeated errors during final passing runs | Yes |
 
 ## Release Blockers
 
@@ -89,16 +89,31 @@ These do not block the release if they are clearly shown as missing/blocked in t
 
 | Run | Date/time | Tester | Result | Notes |
 |---|---|---|---|---|
-| 1 | | | | |
-| 2 | | | | |
+| 1 | 2026-07-03 07:04 -04:00 | Codex | Passed | `npx playwright test e2e/sprint65-customer-acceptance.spec.ts --workers=1`, with deployed URL/API and sandbox writes enabled |
+| 2 | 2026-07-03 07:07 -04:00 | Codex | Passed | Same deployed acceptance command; 3/3 tests passed |
 
 ## Decision
 
 | Decision | Choose One |
 |---|---|
-| Approved for customer acceptance | |
+| Approved for customer acceptance | Yes |
 | Blocked - fixes required | |
-| Approved with documented customer-owned blockers | |
+| Approved with documented customer-owned blockers | Yes |
+
+## Passed VPS Gate - 2026-07-03
+
+PR #109 was merged into `main`, the VPS was updated from the old sprint branch to `main`, backend/frontend images were rebuilt, the stale migrate image was rebuilt, and the missing Sprint 59-64 migrations were applied.
+
+Two deployed Playwright acceptance runs passed against:
+
+```text
+Frontend: https://tanaghum.163-123-180-104.sslip.io
+API:      https://tanaghum.163-123-180-104.sslip.io/api
+Command:  npx playwright test e2e/sprint65-customer-acceptance.spec.ts --workers=1
+Env:      E2E_SPRINT65_ACCEPTANCE=true, E2E_ALLOW_ACCEPTANCE_WRITES=true
+```
+
+The release remains dependent on customer-owned credentials for real external connector execution, as listed above.
 
 ## Initial VPS Probe - 2026-07-02
 
