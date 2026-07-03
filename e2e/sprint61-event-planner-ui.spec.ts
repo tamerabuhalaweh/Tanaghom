@@ -185,6 +185,21 @@ async function installPlannerMocks(page: Page) {
       return;
     }
 
+    if (pathname === '/connector-mappings' && method === 'GET') {
+      await json([]);
+      return;
+    }
+
+    if (pathname === `/learning-recommendations/events/${eventRecord.id}` && method === 'GET') {
+      await json({
+        eventId: eventRecord.id,
+        generatedAt: '2026-07-02T12:00:00.000Z',
+        recommendations: [],
+        dataCompletenessWarnings: [],
+      });
+      return;
+    }
+
     if (pathname === `/planner/events/${eventRecord.id}/email-plans` && method === 'GET') {
       await json(emailPlans);
       return;
@@ -348,8 +363,8 @@ test('Sprint 61 event planner creates and updates event-scoped campaign plans', 
   await page.getByRole('button', { name: /Complete/i }).click();
   await expect(page.getByText(/Sales task marked Completed/i)).toBeVisible();
 
-  await expect(page.getByRole('button', { name: /Approve/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Reject/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Approve$/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Reject$/i })).toHaveCount(0);
 
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).not.toContain(eventRecord.id);

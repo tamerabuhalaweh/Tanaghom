@@ -226,6 +226,21 @@ async function installCloseoutMocks(page: Page, report: unknown) {
       return;
     }
 
+    if (pathname === '/connector-mappings' && method === 'GET') {
+      await json([]);
+      return;
+    }
+
+    if (pathname === `/learning-recommendations/events/${eventRecord.id}` && method === 'GET') {
+      await json({
+        eventId: eventRecord.id,
+        generatedAt: '2026-07-02T12:00:00.000Z',
+        recommendations: [],
+        dataCompletenessWarnings: [],
+      });
+      return;
+    }
+
     if (pathname.startsWith(`/planner/events/${eventRecord.id}/`) && method === 'GET') {
       await json([]);
       return;
