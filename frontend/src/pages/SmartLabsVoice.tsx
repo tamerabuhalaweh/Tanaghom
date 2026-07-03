@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { smartLabsApi } from '../api';
+import { smartLabsApi, smartLabsValidationApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -26,26 +26,31 @@ function stringArray(value: unknown): string[] {
 
 function tone(value: string): 'good' | 'warn' | 'danger' | 'info' {
   const lower = value.toLowerCase();
-  if (lower.includes('enabled') || lower.includes('configured') || lower.includes('executed') || lower.includes('ok')) return 'good';
-  if (lower.includes('blocked') || lower.includes('missing')) return 'warn';
+  if (lower.includes('enabled') || lower.includes('configured') || lower.includes('executed') || lower.includes('ok') || lower.includes('ready')) return 'good';
+  if (lower.includes('blocked') || lower.includes('missing') || lower.includes('not_ready') || lower.includes('degraded')) return 'warn';
   if (lower.includes('failed') || lower.includes('error')) return 'danger';
   return 'info';
+}
+
+function titleCase(value: string): string {
+  return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
 export default function SmartLabsVoice() {
   const { token } = useAuth();
   const [status, setStatus] = useState<RecordMap | null>(null);
+  const [validation, setValidation] = useState<RecordMap | null>(null);
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<RecordMap | null>(null);
   const [loadingAction, setLoadingAction] = useState('');
   const [conversationForm, setConversationForm] = useState({
     agentId: '',
-    message: 'السلام عليكم',
+    message: 'Hello, I am interested in the upcoming course. Can you help me choose the right option?',
     confirmExternalExecution: false,
   });
   const [ttsForm, setTtsForm] = useState({
     agentId: '',
-    text: 'وعليكم السلام، كيف أقدر أساعدك؟',
+    text: 'Hello, thanks for reaching out. I can help you choose the right course and book the next step.',
     voiceId: '',
     ttsBackend: '',
     confirmExternalExecution: false,
@@ -53,8 +58,12 @@ export default function SmartLabsVoice() {
 
   async function load() {
     if (!token) return;
-    const response = await smartLabsApi.status(token);
-    setStatus(response as RecordMap);
+    const [statusResponse, validationResponse] = await Promise.all([
+      smartLabsApi.status(token),
+      smartLabsValidationApi.summary(token).catch((err) => ({ _label: err instanceof Error ? err.message : 'SmartLabs validation unavailable' })),
+    ]);
+    setStatus(statusResponse as RecordMap);
+    setValidation(validationResponse as RecordMap);
   }
 
   useEffect(() => {
@@ -62,8 +71,14 @@ export default function SmartLabsVoice() {
     let cancelled = false;
     async function run() {
       try {
-        const response = await smartLabsApi.status(token as string);
-        if (!cancelled) setStatus(response as RecordMap);
+        const [statusResponse, validationResponse] = await Promise.all([
+          smartLabsApi.status(token as string),
+          smartLabsValidationApi.summary(token as string).catch((err) => ({ _label: err instanceof Error ? err.message : 'SmartLabs validation unavailable' })),
+        ]);
+        if (!cancelled) {
+          setStatus(statusResponse as RecordMap);
+          setValidation(validationResponse as RecordMap);
+        }
       } catch (err) {
         if (!cancelled) setMessage(err instanceof Error ? err.message : 'Failed to load SmartLabs status');
       }
@@ -90,10 +105,13 @@ export default function SmartLabsVoice() {
   }
 
   const configured = status?.configured === true;
+  const credential = (validation?.credential || {}) as RecordMap;
+  const credentialFields = (credential.fields || {}) as RecordMap;
   const readAccess = text(status?.readAccess, 'blocked');
   const executionAccess = text(status?.executionAccess, 'blocked');
   const readBlockers = stringArray(status?.readBlockers);
   const executionBlockers = stringArray(status?.executionBlockers);
+  const validationBlockers = stringArray(validation?.blockers);
   const resultAudio = typeof result?.audioBase64 === 'string'
     ? `data:${text(result.contentType, 'audio/wav')};base64,${result.audioBase64}`
     : '';
@@ -109,8 +127,8 @@ export default function SmartLabsVoice() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Credential" value={configured ? 'Saved' : 'Missing'} detail="Tenant-owned SmartLabs API key" tone={configured ? 'good' : 'warn'} />
-        <MetricCard label="Read Access" value={readAccess} detail="Agents and voices endpoints" tone={tone(readAccess)} />
-        <MetricCard label="Execution" value={executionAccess} detail="Conversation and TTS calls" tone={tone(executionAccess)} />
+        <MetricCard label="Tenant Validation" value={titleCase(text(validation?.apiReady, 'not_ready'))} detail="API key plus required agent ID" tone={tone(text(validation?.apiReady, 'not_ready'))} />
+        <MetricCard label="Voice Ready" value={titleCase(text(validation?.voiceReady, 'not_ready'))} detail="Agent and voice readiness" tone={tone(text(validation?.voiceReady, 'not_ready'))} />
         <MetricCard label="Raw Secrets" value="Never Shown" detail="Credential vault returns status only" tone="info" />
       </div>
 
@@ -122,11 +140,43 @@ export default function SmartLabsVoice() {
         <DetailGrid items={[
           { label: 'Provider', value: 'smartlabs_voice' },
           { label: 'Credential Type', value: 'api_key' },
-          { label: 'Required Field', value: 'apiKey' },
-          { label: 'Optional Fields', value: 'baseUrl, agentId, voiceId, ttsBackend' },
+          { label: 'Required Fields', value: 'apiKey, agentId' },
+          { label: 'Optional Fields', value: 'baseUrl, voiceId, ttsBackend' },
           { label: 'Default Base URL', value: 'https://api.thesmartlabs.net' },
           { label: 'Default Voice', value: 'smarttts2-xms-default' },
         ]} />
+      </ProductCard>
+
+      <ProductCard title="Tenant Validation" subtitle="Backend validation of the credential fields needed before lead voice/chat handoff can work.">
+        {validation ? (
+          <div className="space-y-4">
+            <DetailGrid items={[
+              { label: 'API Ready', value: titleCase(text(validation.apiReady, 'not_ready')) },
+              { label: 'Agent ID', value: titleCase(text(validation.agentIdReady, 'not_ready')) },
+              { label: 'Voice', value: titleCase(text(validation.voiceReady, 'not_ready')) },
+              { label: 'Text To Speech', value: titleCase(text(validation.ttsReady, 'not_ready')) },
+              { label: 'Credential Source', value: titleCase(text(credential.source, 'missing')) },
+              { label: 'Raw Secrets Returned', value: String((validation.safety as RecordMap | undefined)?.rawSecretsReturned ?? false) },
+            ]} />
+            <div className="grid gap-3 md:grid-cols-5">
+              {['apiKey', 'baseUrl', 'agentId', 'voiceId', 'ttsBackend'].map(field => (
+                <div key={field} className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{field}</div>
+                  <div className="mt-2">
+                    <ProductStatus tone={tone(text(credentialFields[field], 'not_ready'))}>{titleCase(text(credentialFields[field], 'not_ready'))}</ProductStatus>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {validationBlockers.length > 0 ? (
+              <Notice tone="warn">{validationBlockers.join('; ')}</Notice>
+            ) : (
+              <Notice tone="good">SmartLabs tenant setup has the required fields for governed voice/chat handoff.</Notice>
+            )}
+          </div>
+        ) : (
+          <Notice tone="warn">SmartLabs validation is not available for this role or environment.</Notice>
+        )}
       </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -146,6 +196,10 @@ export default function SmartLabsVoice() {
 
         <ProductCard title="Execution Gates" subtitle="External execution needs tenant credentials, runtime flags, approval policy, and explicit confirmation.">
           <div className="space-y-3">
+            <DetailGrid items={[
+              { label: 'Read Access', value: titleCase(readAccess) },
+              { label: 'Execution Access', value: titleCase(executionAccess) },
+            ]} />
             {executionBlockers.length > 0 ? executionBlockers.map(blocker => (
               <div key={blocker} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{blocker}</div>
             )) : (

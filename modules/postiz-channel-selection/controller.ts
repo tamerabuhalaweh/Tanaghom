@@ -28,7 +28,7 @@ postizChannelRouter.get('/events/:eventId/channels', async (req: Request, res: R
     );
     res.json({
       ...result,
-      _label: 'Postiz channel selection state for event — no secrets returned',
+      _label: 'Postiz channel selection state for event - no secrets returned',
     });
   } catch (err) {
     next(err);
@@ -50,7 +50,7 @@ postizChannelRouter.post('/events/:eventId/channels', async (req: Request, res: 
     );
     res.status(201).json({
       ...result,
-      _label: 'Postiz channel selected for event — scheduling still requires approval and readiness gates',
+      _label: 'Postiz channel selected for event - scheduling still requires approval and readiness gates',
     });
   } catch (err) {
     next(err);

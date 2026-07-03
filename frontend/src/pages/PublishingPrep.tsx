@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { commercialWorkflowApi, postizApi, publishingPackageApi } from '../api';
+import { commercialWorkflowApi, eventsApi, postizApi, postizChannelApi, publishingPackageApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -67,7 +67,7 @@ function localScheduleToIso(value: string): string {
 }
 
 async function fetchPublishingReadiness(token: string) {
-  const [packageData, statusData, channelData, evidenceData] = await Promise.all([
+  const [packageData, statusData, channelData, evidenceData, eventData, connectorData] = await Promise.all([
     publishingPackageApi.list(token),
     postizApi.status(token),
     postizApi.channels(token).catch((err) => ({
@@ -76,6 +76,8 @@ async function fetchPublishingReadiness(token: string) {
       _label: err instanceof Error ? err.message : 'Postiz channel status unavailable',
     })),
     commercialWorkflowApi.evidence(token).catch(() => null),
+    eventsApi.list(token).catch(() => []),
+    postizApi.connectors(token).catch(() => []),
   ]);
 
   return {
@@ -83,6 +85,8 @@ async function fetchPublishingReadiness(token: string) {
     postizStatus: asRecord(statusData),
     postizChannels: asList(asRecord(channelData).channels),
     evidence: evidenceData ? asRecord(evidenceData) : null,
+    events: asList(eventData),
+    postizConnectors: asList(connectorData),
   };
 }
 
@@ -92,6 +96,12 @@ export default function PublishingPrep() {
   const [packages, setPackages] = useState<RecordMap[]>([]);
   const [postizStatus, setPostizStatus] = useState<RecordMap | null>(null);
   const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
+  const [postizConnectors, setPostizConnectors] = useState<RecordMap[]>([]);
+  const [events, setEvents] = useState<RecordMap[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [eventChannelState, setEventChannelState] = useState<RecordMap | null>(null);
+  const [eventChannelMessage, setEventChannelMessage] = useState('');
+  const [assigningChannel, setAssigningChannel] = useState('');
   const [evidence, setEvidence] = useState<RecordMap | null>(null);
   const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput);
   const [postizPayload, setPostizPayload] = useState<RecordMap | null>(null);
@@ -110,6 +120,9 @@ export default function PublishingPrep() {
       setPackages(result.packages);
       setPostizStatus(result.postizStatus);
       setPostizChannels(result.postizChannels);
+      setPostizConnectors(result.postizConnectors);
+      setEvents(result.events);
+      if (!selectedEventId && result.events[0]?.id) setSelectedEventId(text(result.events[0].id, ''));
       setEvidence(result.evidence);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Publishing readiness failed to load');
@@ -127,6 +140,9 @@ export default function PublishingPrep() {
         setPackages(result.packages);
         setPostizStatus(result.postizStatus);
         setPostizChannels(result.postizChannels);
+        setPostizConnectors(result.postizConnectors);
+        setEvents(result.events);
+        if (!selectedEventId && result.events[0]?.id) setSelectedEventId(text(result.events[0].id, ''));
         setEvidence(result.evidence);
         setError('');
       })
@@ -140,9 +156,43 @@ export default function PublishingPrep() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, selectedEventId]);
+
+  async function loadEventChannelState(eventId: string) {
+    if (!token || !eventId) {
+      setEventChannelState(null);
+      return;
+    }
+    try {
+      const response = await postizChannelApi.eventChannels(eventId, token);
+      setEventChannelState(response as RecordMap);
+      setEventChannelMessage('');
+    } catch (err) {
+      setEventChannelState(null);
+      setEventChannelMessage(err instanceof Error ? err.message : 'Event channel readiness failed to load');
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+    async function run() {
+      await loadEventChannelState(selectedEventId);
+    }
+    void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEventId, token]);
 
   const selectedPackage = packages[0] || null;
+  const selectedEvent = events.find(event => text(event.id, '') === selectedEventId) || null;
+  const activePostizConnector = postizConnectors.find(connector =>
+    text(connector.connectorStatus, '').toLowerCase() === 'active'
+      && connector.supportsSchedule === true,
+  ) || postizConnectors.find(connector => connector.supportsSchedule === true) || null;
+  const eventChannelReadiness = asRecord(eventChannelState?.readiness);
+  const eventSelections = asList(eventChannelState?.selections);
+  const eventSelectedIntegrationIds = new Set(eventSelections.map(item => text(item.postizIntegrationChannelId, '')).filter(Boolean));
+  const eventReadinessState = text(eventChannelReadiness.state, 'not checked');
+  const eventReadinessChecks = asList(eventChannelReadiness.checks);
   const health = asRecord(postizStatus?.health);
   const credentialStatus = text(health.credentialStatus, 'missing');
   const integrationIdStatus = text(health.integrationIdStatus, 'missing');
@@ -194,6 +244,47 @@ export default function PublishingPrep() {
       setSchedulingMessage(err instanceof Error ? err.message : 'Postiz sandbox scheduling failed');
     } finally {
       setSchedulingLoading('');
+    }
+  }
+
+  async function assignChannelToEvent(channel: RecordMap) {
+    if (!token || !selectedEventId) return;
+    const channelId = text(channel.id, '');
+    const connectorId = text(activePostizConnector?.id, '');
+    if (!channelId || !connectorId) {
+      setEventChannelMessage('Select a connected Postiz channel and confirm an active scheduling connector exists.');
+      return;
+    }
+    setAssigningChannel(channelId);
+    setEventChannelMessage('');
+    try {
+      await postizChannelApi.selectEventChannel(selectedEventId, {
+        postizConnectorId: connectorId,
+        postizIntegrationChannelId: channelId,
+        platform: text(channel.type || channel.providerIdentifier, 'postiz'),
+        channelDisplayName: text(channel.name || channel.profile, 'Postiz channel'),
+      }, token);
+      setEventChannelMessage('Postiz channel assigned to this event. Scheduling still requires approval and execution gates.');
+      await loadEventChannelState(selectedEventId);
+    } catch (err) {
+      setEventChannelMessage(err instanceof Error ? err.message : 'Failed to assign channel to event');
+    } finally {
+      setAssigningChannel('');
+    }
+  }
+
+  async function clearEventChannel() {
+    if (!token || !selectedEventId) return;
+    setAssigningChannel('deselect');
+    setEventChannelMessage('');
+    try {
+      await postizChannelApi.deselectEventChannel(selectedEventId, { reason: 'Changed from Tanaghum Scheduling page' }, token);
+      setEventChannelMessage('Event channel assignment cleared.');
+      await loadEventChannelState(selectedEventId);
+    } catch (err) {
+      setEventChannelMessage(err instanceof Error ? err.message : 'Failed to clear event channel assignment');
+    } finally {
+      setAssigningChannel('');
     }
   }
 
@@ -323,6 +414,93 @@ export default function PublishingPrep() {
           </div>
         </ProductCard>
       </div>
+
+      <ProductCard
+        title="Event Scheduling Channel"
+        subtitle="Assign one connected Postiz channel to the event. This does not schedule or publish anything; it only makes the event ready for governed scheduling."
+        action={<ProductStatus tone={toneForState(eventReadinessState)}>{titleCase(eventReadinessState)}</ProductStatus>}
+      >
+        <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <Field label="Event">
+              <select
+                value={selectedEventId}
+                onChange={(event) => setSelectedEventId(event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
+              >
+                {events.length ? events.map(event => (
+                  <option key={text(event.id)} value={text(event.id, '')}>{text(event.name, 'Untitled event')}</option>
+                )) : (
+                  <option value="">No events available</option>
+                )}
+              </select>
+            </Field>
+            <DetailGrid items={[
+              { label: 'Selected Event', value: text(selectedEvent?.name, 'Choose an event') },
+              { label: 'Postiz Connector', value: activePostizConnector ? text(activePostizConnector.connectorName, 'Active scheduling connector') : 'No active scheduling connector' },
+              { label: 'Connected Channels', value: String(postizChannels.length) },
+              { label: 'Assigned Channels', value: String(eventSelections.length) },
+            ]} />
+            {eventChannelMessage && (
+              <Notice tone={eventChannelMessage.toLowerCase().includes('failed') || eventChannelMessage.toLowerCase().includes('select') ? 'warn' : 'good'}>
+                {eventChannelMessage}
+              </Notice>
+            )}
+            {eventSelections.length > 0 && (
+              <SecondaryAction onClick={clearEventChannel} disabled={assigningChannel === 'deselect'}>
+                {assigningChannel === 'deselect' ? 'Clearing...' : 'Clear Event Channel'}
+              </SecondaryAction>
+            )}
+          </div>
+
+          <div className="space-y-5">
+            {postizChannels.length ? (
+              <ProductTable
+                columns={['Channel', 'Platform', 'State', 'Action']}
+                rows={postizChannels.map(channel => {
+                  const channelId = text(channel.id, '');
+                  const selected = eventSelectedIntegrationIds.has(channelId);
+                  const disabled = Boolean(channel.disabled);
+                  const refreshNeeded = Boolean(channel.refreshNeeded);
+                  return [
+                    <div>
+                      <div className="font-medium text-neutral-950">{text(channel.name, text(channel.profile, 'Unnamed channel'))}</div>
+                      <div className="mt-1 max-w-xs truncate text-xs text-neutral-500">{channelId}</div>
+                    </div>,
+                    titleCase(text(channel.type || channel.providerIdentifier, 'postiz')),
+                    <ProductStatus tone={selected ? 'good' : disabled || refreshNeeded ? 'warn' : 'info'}>
+                      {selected ? 'Assigned To Event' : disabled ? 'Disabled' : refreshNeeded ? 'Reconnect Needed' : 'Available'}
+                    </ProductStatus>,
+                    <SecondaryAction
+                      onClick={() => void assignChannelToEvent(channel)}
+                      disabled={!selectedEventId || !activePostizConnector || disabled || selected || assigningChannel === channelId}
+                    >
+                      {selected ? 'Assigned' : assigningChannel === channelId ? 'Assigning...' : 'Assign To Event'}
+                    </SecondaryAction>,
+                  ];
+                })}
+              />
+            ) : (
+              <EmptyProductState
+                title="No Postiz channels visible"
+                message="Save the Postiz API key and connect a social account inside Postiz, then refresh this page."
+                action={<SecondaryAction onClick={() => navigate('/integration-credentials')}>Open Connector Setup</SecondaryAction>}
+              />
+            )}
+
+            {eventReadinessChecks.length > 0 && (
+              <ProductTable
+                columns={['Check', 'Status', 'Detail']}
+                rows={eventReadinessChecks.map(check => [
+                  text(check.label, 'Readiness check'),
+                  <ProductStatus tone={toneForState(text(check.status, 'waiting'))}>{titleCase(text(check.status, 'waiting'))}</ProductStatus>,
+                  text(check.detail, 'Recorded by backend readiness policy'),
+                ])}
+              />
+            )}
+          </div>
+        </div>
+      </ProductCard>
 
       <ProductCard title="Content Package Details" subtitle="Plain-language status for your most recent prepared content.">
         {selectedPackage ? (
