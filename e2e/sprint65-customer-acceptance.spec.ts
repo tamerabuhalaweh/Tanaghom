@@ -115,8 +115,8 @@ async function monitorCustomerPath(page: Page) {
 
 async function expectCustomerPage(page: Page, path: string, heading: RegExp | string, supportingText: RegExp | string) {
   await page.goto(path);
-  await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 20000 });
-  await expect(page.getByText(supportingText)).toBeVisible({ timeout: 20000 });
+  await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(supportingText).first()).toBeVisible({ timeout: 20000 });
   const body = await page.locator('body').innerText();
   expect(body, `${path} should not show raw UUIDs in the customer path`).not.toMatch(uuidPattern);
   expect(body, `${path} should not show obvious raw JSON blocks`).not.toMatch(/^\s*[{[]\s*"/m);
@@ -124,6 +124,8 @@ async function expectCustomerPage(page: Page, path: string, heading: RegExp | st
 }
 
 test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test.skip(!acceptanceEnabled, 'Set E2E_SPRINT65_ACCEPTANCE=true or E2E_ACCEPTANCE=true with E2E_BASE_URL and E2E_API_BASE_URL to run Sprint 65 acceptance.');
 
   test('15-minute customer path loads without console errors or unexpected failed API responses', async ({ page, request }) => {
@@ -137,21 +139,25 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
     await page.getByRole('textbox', { name: 'Email' }).fill(email);
     await page.getByRole('textbox', { name: 'Password' }).fill(password);
     await page.getByRole('button', { name: 'Open Command Center' }).click();
-    await page.waitForURL(/command-center|dashboard|\/$/);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('token')), {
+      message: 'frontend login should store a session token before protected navigation',
+      timeout: 20000,
+    }).toBeTruthy();
+    await page.waitForURL(/\/(command-center|dashboard)(?:$|[?#])/);
     await expect(page.getByRole('heading', { name: /^Dashboard$/i })).toBeVisible({ timeout: 20000 });
 
     await expectCustomerPage(page, '/events', /^Events$/i, /Event Queue|No events yet/i);
     await expectCustomerPage(page, '/events/new', /Create Event Strategy/i, /What Happens After Saving/i);
     await expectCustomerPage(page, `/events/${eventId}`, /^Events$/i, /Event Campaign Planner/i);
-    await expect(page.getByText(/Sales Workflow/i)).toBeVisible();
-    await expect(page.getByText(/Post-Event Closeout Report/i)).toBeVisible();
-    await expect(page.getByText(/Connector Data Status/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Sales Workflow/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Post-Event Closeout Report/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Connector Data Status/i })).toBeVisible();
 
     await expectCustomerPage(page, '/ideas', /Content Creator/i, /Campaign Brief/i);
     if (requireRealAi) {
       await expect(page.getByRole('button', { name: /Generate Campaign Ideas/i })).toBeEnabled();
     } else {
-      await expect(page.getByText(/Connect AI Model|Generate Campaign Ideas/i)).toBeVisible();
+      await expect(page.getByText(/Connect AI Model|Generate Campaign Ideas/i).first()).toBeVisible();
     }
 
     await expectCustomerPage(page, '/approvals', /Review & Approve/i, /Human Review|Review Queue|Nothing to show yet/i);

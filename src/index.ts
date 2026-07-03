@@ -69,7 +69,7 @@ const PORT = parseInt(process.env.PORT || '4000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || '1mb';
 const RATE_LIMIT_WINDOW_SECONDS = parseInt(process.env.RATE_LIMIT_WINDOW_SECONDS || '60', 10);
-const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10);
+const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '300', 10);
 const allowedCorsOrigins = CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
 
 const app = express();
