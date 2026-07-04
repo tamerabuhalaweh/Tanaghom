@@ -156,7 +156,13 @@ describe('integration credential vault', () => {
     expect(result.rawSecretsReturned).toBe(false);
   });
 
-  it('requires admin or CCO access', async () => {
-    await expect(listIntegrationCredentials('specialist')).rejects.toThrow(/Admin or CCO/);
+  it('allows connector setup roles and still blocks unrelated roles', async () => {
+    prismaMocks.integrationCredential.findMany.mockResolvedValue([]);
+
+    await expect(listIntegrationCredentials('admin')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('cco')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('department_head')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('marketing_manager')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('specialist')).rejects.toThrow(/Connector setup access/);
   });
 });

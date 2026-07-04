@@ -22,8 +22,8 @@ function getPayload(req: Request): JwtPayload {
 }
 
 function requireConnectorAdmin(role: string): void {
-  if (role !== 'admin' && role !== 'cco') {
-    throw new ForbiddenError('Admin or CCO access required for social account connections');
+  if (!['admin', 'cco', 'department_head', 'marketing_manager'].includes(role)) {
+    throw new ForbiddenError('Connector setup access required for social account connections');
   }
 }
 

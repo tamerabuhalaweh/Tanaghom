@@ -195,6 +195,7 @@ export default function IntegrationCredentials() {
   const [connectorImportReadiness, setConnectorImportReadiness] = useState<RecordMap[]>([]);
   const [connectorImportJobs, setConnectorImportJobs] = useState<RecordMap[]>([]);
   const [selected, setSelected] = useState<RecordMap | null>(null);
+  const [hasAutoSelectedConnector, setHasAutoSelectedConnector] = useState(false);
   const [oauthPlatform, setOauthPlatform] = useState('linkedin');
   const [postizPlatform, setPostizPlatform] = useState('instagram');
   const [displayName, setDisplayName] = useState('');
@@ -223,7 +224,19 @@ export default function IntegrationCredentials() {
     setStatus(integration as RecordMap);
     setPostiz(postizStatus as RecordMap);
     setGhl(ghlStatus as RecordMap);
-    setMatrix(Array.isArray((matrixResult as RecordMap).rows) ? (matrixResult as RecordMap).rows as RecordMap[] : []);
+    const matrixRows = Array.isArray((matrixResult as RecordMap).rows) ? (matrixResult as RecordMap).rows as RecordMap[] : [];
+    setMatrix(matrixRows);
+    if (!hasAutoSelectedConnector && !selected && matrixRows.length > 0) {
+      const firstUsableConnector =
+        matrixRows.find(row => text(row.provider, '').toLowerCase() === 'postiz')
+        || matrixRows.find(row => text(row.status, '').toLowerCase() !== 'configured')
+        || matrixRows[0];
+
+      if (firstUsableConnector) {
+        chooseRequirement(firstUsableConnector);
+        setHasAutoSelectedConnector(true);
+      }
+    }
     setCredentials(Array.isArray((credentialResult as RecordMap).credentials) ? (credentialResult as RecordMap).credentials as RecordMap[] : []);
     setSocialConnections(Array.isArray((socialResult as RecordMap).connections) ? (socialResult as RecordMap).connections as RecordMap[] : []);
     setRuntimeStatuses(Array.isArray((runtimeResult as RecordMap).statuses) ? (runtimeResult as RecordMap).statuses as RecordMap[] : []);
@@ -491,6 +504,131 @@ export default function IntegrationCredentials() {
       </div>
 
       <ProductCard
+        title="Start Here: Choose a Connector"
+        subtitle="Pick the system you want to connect. The setup form opens directly below and only saves encrypted tenant-owned credentials."
+        action={selected ? <ProductStatus tone="info">Selected: {text(selected.label)}</ProductStatus> : <ProductStatus tone="warn">Choose Connector</ProductStatus>}
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {setupRoadmap.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => item.primaryCredential && chooseRequirement(item.primaryCredential)}
+              disabled={!item.primaryCredential}
+              className="flex min-h-[220px] flex-col rounded-xl border border-neutral-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{item.category}</div>
+                  <div className="mt-1 text-base font-semibold text-neutral-950">{item.label}</div>
+                </div>
+                <ProductStatus tone={item.tone}>{item.scoreText}</ProductStatus>
+              </div>
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-neutral-600">{item.businessUse}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <ProductStatus tone={item.credentialConfigured ? 'good' : 'warn'}>
+                  {item.credentialConfigured ? 'Credentials saved' : 'Needs credentials'}
+                </ProductStatus>
+                <ProductStatus tone={item.connectionReady ? 'good' : 'info'}>
+                  {item.needsPostizChannel
+                    ? item.postizChannelConnected ? 'Channel selected' : 'Channel next'
+                    : item.oauthPlatforms?.length
+                      ? item.oauthConnected ? 'OAuth connected' : 'OAuth next'
+                      : item.bridgeProvider
+                        ? item.bridgeReady ? 'Runtime reachable' : 'Runtime next'
+                        : 'Credential step'}
+                </ProductStatus>
+              </div>
+              <div className="mt-auto pt-4 text-sm font-semibold text-neutral-950">
+                {item.primaryCredential ? 'Configure now' : 'Not available yet'}
+              </div>
+            </button>
+          ))}
+        </div>
+      </ProductCard>
+
+      <ProductCard
+        title={selected ? `Secure Setup: ${text(selected.label)}` : 'Secure Setup Wizard'}
+        subtitle={selected ? 'Enter the required fields for this connector. Raw secrets are encrypted and never shown again.' : 'Choose a connector above to open the exact fields required for setup.'}
+        action={selected ? <SecondaryAction onClick={() => setSelected(null)}>Clear Selection</SecondaryAction> : undefined}
+      >
+        {selected ? (
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="space-y-4">
+              <DetailGrid items={[
+                { label: 'Integration', value: text(selected.label) },
+                { label: 'Provider', value: text(selected.provider) },
+                { label: 'Credential Type', value: text(selected.credentialType) },
+                { label: 'Connection Key', value: text(selected.connectionKey, 'default') },
+              ]} />
+              <Field label="Display Name">
+                <input
+                  value={displayName}
+                  onChange={event => setDisplayName(event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                />
+              </Field>
+              <div className="grid gap-4 md:grid-cols-2">
+                {selectedFields.map(field => (
+                  <Field key={field} label={display(field)} helper="Secret value is encrypted and never returned after save.">
+                    <input
+                      type={field.toLowerCase().includes('url') || field.toLowerCase().includes('uri') ? 'url' : 'password'}
+                      value={secretValues[field] || ''}
+                      onChange={event => setSecretValues(current => ({ ...current, [field]: event.target.value }))}
+                      placeholder={`Enter ${field}`}
+                      className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                    />
+                  </Field>
+                ))}
+                {optionalFields.map(field => (
+                  <Field key={field} label={`${display(field)} (Optional)`} helper="Add this later after the provider creates it.">
+                    <input
+                      type={field.toLowerCase().includes('url') || field.toLowerCase().includes('uri') ? 'url' : 'password'}
+                      value={secretValues[field] || ''}
+                      onChange={event => setSecretValues(current => ({ ...current, [field]: event.target.value }))}
+                      placeholder={`Enter ${field} when available`}
+                      className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                    />
+                  </Field>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <PrimaryAction onClick={saveCredential} disabled={saving}>{saving ? 'Saving...' : 'Save Encrypted Credential'}</PrimaryAction>
+                <SecondaryAction onClick={() => setSecretValues(Object.fromEntries([...selectedFields, ...optionalFields].map(field => [field, ''])))}>Clear Fields</SecondaryAction>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <Notice tone="info">
+                Saving credentials only prepares the connector. Publishing, CRM writes, messages, voice calls, and imports still require approval,
+                runtime flags, and connector evidence before execution.
+              </Notice>
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-sm font-semibold text-neutral-950">After saving</div>
+                <ol className="mt-3 space-y-2 text-sm leading-6 text-neutral-600">
+                  {[
+                    'Run diagnostics or validate the provider connection.',
+                    'Connect OAuth/channel when the provider requires consent.',
+                    'Create a dry-run import before KPI data appears in dashboards.',
+                    'Keep external execution blocked until the customer authorizes it.',
+                  ].map((step, index) => (
+                    <li key={step} className="flex gap-3">
+                      <span className="font-semibold text-neutral-950">{index + 1}.</span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <EmptyProductState
+            title="Choose a connector to begin"
+            message="Select Postiz, GoHighLevel, Meta/Instagram, YouTube, Formaloo, WhatsApp, Telegram, SmartLabs, or a runtime connector from the cards above."
+          />
+        )}
+      </ProductCard>
+
+      <ProductCard
         title="Real API Connection Roadmap"
         subtitle="Use this as the production setup cockpit. Customers bring their own provider accounts; Tanaghum stores secret status only, guides account connection, and keeps write actions approval-gated."
         action={
@@ -717,85 +855,6 @@ export default function IntegrationCredentials() {
           )}
         </div>
       </ProductCard>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]">
-        <ProductCard title="Credential Requirements" subtitle="Choose an integration and save this tenant's required credentials.">
-          {matrix.length ? (
-            <ProductTable
-              columns={['Integration', 'Status', 'Fields', 'Action']}
-              rows={matrix.map(row => [
-                <div>
-                <div className="font-medium text-neutral-950">{text(row.label)}</div>
-                  <div className="mt-1 text-xs leading-5 text-neutral-500">{text(row.purpose)}</div>
-                  <div className="mt-1 text-[11px] uppercase tracking-[0.08em] text-neutral-400">{text(row.connectionKey, 'default')}</div>
-                </div>,
-                <ProductStatus tone={statusTone(text(row.status))}>{display(text(row.status))}</ProductStatus>,
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    {parseRequiredFields(row.requiredFields).map(field => <ProductStatus key={field} tone="muted">{field}</ProductStatus>)}
-                  </div>
-                  {parseRequiredFields(row.optionalFields).length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {parseRequiredFields(row.optionalFields).map(field => <ProductStatus key={field} tone="info">Optional: {field}</ProductStatus>)}
-                    </div>
-                  )}
-                </div>,
-                <SecondaryAction onClick={() => chooseRequirement(row)}>Configure</SecondaryAction>,
-              ])}
-            />
-          ) : (
-            <EmptyProductState message="Credential requirements were not returned by the backend." />
-          )}
-        </ProductCard>
-
-        <ProductCard title="Secure Setup Wizard" subtitle="Values entered here are sent once and stored encrypted.">
-          {selected ? (
-            <div className="space-y-4">
-              <DetailGrid items={[
-                { label: 'Integration', value: text(selected.label) },
-                { label: 'Provider', value: text(selected.provider) },
-                { label: 'Credential Type', value: text(selected.credentialType) },
-                { label: 'Connection Key', value: text(selected.connectionKey, 'default') },
-              ]} />
-              <Field label="Display Name">
-                <input
-                  value={displayName}
-                  onChange={event => setDisplayName(event.target.value)}
-                  className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                />
-              </Field>
-              {selectedFields.map(field => (
-                <Field key={field} label={display(field)} helper="Secret value is encrypted and never returned after save.">
-                  <input
-                    type={field.toLowerCase().includes('url') || field.toLowerCase().includes('uri') ? 'url' : 'password'}
-                    value={secretValues[field] || ''}
-                    onChange={event => setSecretValues(current => ({ ...current, [field]: event.target.value }))}
-                    placeholder={`Enter ${field}`}
-                    className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                  />
-                </Field>
-              ))}
-              {optionalFields.map(field => (
-                <Field key={field} label={`${display(field)} (Optional)`} helper="Add this later after the provider creates it.">
-                  <input
-                    type={field.toLowerCase().includes('url') || field.toLowerCase().includes('uri') ? 'url' : 'password'}
-                    value={secretValues[field] || ''}
-                    onChange={event => setSecretValues(current => ({ ...current, [field]: event.target.value }))}
-                    placeholder={`Enter ${field} when available`}
-                    className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                  />
-                </Field>
-              ))}
-              <Notice tone="info">
-                Saving credentials does not enable external execution. Postiz, CRM, messaging, and voice actions still require explicit runtime flags, approval, MCP mediation, and policy gates.
-              </Notice>
-              <PrimaryAction onClick={saveCredential} disabled={saving}>{saving ? 'Saving...' : 'Save Encrypted Credential'}</PrimaryAction>
-            </div>
-          ) : (
-            <EmptyProductState title="Select an integration" message="Choose Configure next to Postiz, GoHighLevel, WhatsApp, Telegram, voice/chat, social OAuth, OpenClaw, agentgateway, or AgentScope." />
-          )}
-        </ProductCard>
-      </div>
 
       <ProductCard title="Saved Credentials" subtitle="Only status, field names, and fingerprints are shown. Raw values are never returned.">
         {credentials.length ? (
