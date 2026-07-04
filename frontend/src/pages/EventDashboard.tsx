@@ -1341,6 +1341,23 @@ export default function EventDashboard() {
     >
       {message && <Notice tone={message.toLowerCase().includes('could not') || message.toLowerCase().includes('failed') ? 'danger' : 'good'}>{message}</Notice>}
 
+      {primarySource !== 'connector' && (
+        <Notice tone="warn">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold">Verified metrics pending</div>
+              <div className="mt-1">
+                To read real campaign data, connect the customer-owned provider in Data Sources, map the fields,
+                run a dry-run preview, then approve the import into this event.
+              </div>
+            </div>
+            <SecondaryAction onClick={() => navigate('/integration-credentials')}>
+              Open Data Sources
+            </SecondaryAction>
+          </div>
+        </Notice>
+      )}
+
       {events.length === 0 ? (
         <EmptyProductState
           title="No events yet"

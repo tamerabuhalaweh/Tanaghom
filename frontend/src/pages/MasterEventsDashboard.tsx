@@ -285,6 +285,23 @@ export default function MasterEventsDashboard() {
         </div>
       </ProductCard>
 
+      {!numberValue(dataSourceSummary.connectorRecords) && (
+        <Notice tone="warn">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold">Verified metrics pending</div>
+              <div className="mt-1">
+                Connect Meta/Instagram, YouTube, Formaloo, GoHighLevel, Postiz, WhatsApp, or SmartLabs from Data Sources.
+                After credentials, mapping, dry-run, and approval, connector data will populate these dashboards.
+              </div>
+            </div>
+            <SecondaryAction onClick={() => navigate('/integration-credentials')}>
+              Open Data Sources
+            </SecondaryAction>
+          </div>
+        </Notice>
+      )}
+
       <ProductCard title="Filters" subtitle="Narrow the dashboard without changing or importing external data.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Field label="Event type">

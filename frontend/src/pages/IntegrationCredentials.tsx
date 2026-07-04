@@ -470,12 +470,18 @@ export default function IntegrationCredentials() {
 
   return (
     <ProductPage
-      eyebrow="Admin"
-      title="Credentials & Integration Setup"
-      subtitle="Configure tenant integration credentials securely. Secrets are encrypted by the backend and never displayed after save."
-      action={<ProductStatus tone="good">Tenant Vault</ProductStatus>}
+      eyebrow="Data Sources"
+      title="Connect Real Campaign Data"
+      subtitle="Connect the customer-owned APIs that feed event dashboards: Meta and Instagram ads, YouTube, Formaloo forms, GoHighLevel CRM, Postiz scheduling, WhatsApp, Telegram, and SmartLabs voice."
+      action={<ProductStatus tone="good">Tenant-Owned Credentials</ProductStatus>}
     >
       {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
+
+      <Notice tone="info">
+        Production metric flow: save the customer credential here, complete OAuth/channel connection where the provider requires it,
+        map provider fields to Tanaghum event KPIs, run a dry-run preview, then approve the import. Event dashboards only show connector
+        data after this evidence path succeeds.
+      </Notice>
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="AI Provider" value={text(aiProvider?.provider, 'Requires LLM')} detail={text(aiProvider?.label, 'Status loaded from backend')} tone={statusTone(text(aiProvider?.label))} />
@@ -485,7 +491,7 @@ export default function IntegrationCredentials() {
       </div>
 
       <ProductCard
-        title="Connector Setup Roadmap"
+        title="Real API Connection Roadmap"
         subtitle="Use this as the production setup cockpit. Customers bring their own provider accounts; Tanaghum stores secret status only, guides account connection, and keeps write actions approval-gated."
         action={
           <div className="flex flex-wrap gap-2">
@@ -497,7 +503,7 @@ export default function IntegrationCredentials() {
       >
         <div className="grid gap-3 lg:grid-cols-4">
           {[
-            ['1', 'Save Credentials', 'Admin saves tenant-owned API/OAuth/runtime credentials. Raw secret values are never shown again.'],
+            ['1', 'Save Credentials', 'Admin or marketing manager saves tenant-owned API/OAuth/runtime credentials. Raw secret values are never shown again.'],
             ['2', 'Connect Account', 'Provider OAuth, Postiz channels, or runtime endpoints prove the account belongs to the customer.'],
             ['3', 'Import Evidence', 'Event dashboards use mappings, dry-runs, and approval before connector data becomes KPI evidence.'],
             ['4', 'Govern Execution', 'Publishing, CRM, messaging, and voice actions stay blocked until explicit customer authorization.'],

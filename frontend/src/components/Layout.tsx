@@ -52,12 +52,13 @@ const PRODUCT_ROLES = [
 ];
 
 const ADMIN_ROLES = ['admin', 'cco'];
+const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager'];
 
 const NAV_ITEMS: NavItem[] = [
   {
     path: '/command-center',
     label: 'Dashboard',
-    description: 'Your content overview',
+    description: 'Events, leads, spend and sales',
     icon: LayoutDashboard,
     group: 'Product',
     roles: PRODUCT_ROLES,
@@ -73,10 +74,18 @@ const NAV_ITEMS: NavItem[] = [
   {
     path: '/events',
     label: 'Events',
-    description: 'Portfolio results and event workspaces',
+    description: 'Plan and operate each event',
     icon: CalendarDays,
     group: 'Product',
     roles: ['admin', 'cco', 'department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'viewer'],
+  },
+  {
+    path: '/integration-credentials',
+    label: 'Connector Setup',
+    description: 'Data sources and imports',
+    icon: KeyRound,
+    group: 'Product',
+    roles: CONNECTOR_SETUP_ROLES,
   },
   {
     path: '/campaigns',
@@ -180,21 +189,13 @@ const NAV_ITEMS: NavItem[] = [
     description: 'Voice agent connector',
     icon: PhoneCall,
     group: 'Admin',
-    roles: ADMIN_ROLES,
+    roles: CONNECTOR_SETUP_ROLES,
   },
   {
     path: '/mcp-engine',
     label: 'Integrations',
     description: 'Connector registry',
     icon: Network,
-    group: 'Admin',
-    roles: ADMIN_ROLES,
-  },
-  {
-    path: '/integration-credentials',
-    label: 'Connector Setup',
-    description: 'Credentials and readiness',
-    icon: KeyRound,
     group: 'Admin',
     roles: ADMIN_ROLES,
   },
@@ -275,7 +276,7 @@ export default function Layout() {
   const isActive = (path: string): boolean => {
     if (location.pathname === path) return true;
     if (location.pathname === '/' && path === '/command-center') return true;
-    if (path === '/events' && location.pathname.startsWith('/events')) return true;
+    if (path === '/events' && location.pathname.startsWith('/events') && location.pathname !== '/events/master') return true;
     return false;
   };
   const adminNavVisible = adminExpanded || currentItem?.group === 'Admin';

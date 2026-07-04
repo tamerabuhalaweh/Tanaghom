@@ -40,6 +40,7 @@ import EventStrategyWizard from './pages/EventStrategyWizard'
 import MasterEventsDashboard from './pages/MasterEventsDashboard'
 
 const ADMIN_ROLES = ['admin', 'cco']
+const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
 
 function LoadingWorkspace() {
   return (
@@ -82,6 +83,10 @@ function adminOnly(element: React.ReactNode) {
   return <RequireRole roles={ADMIN_ROLES}>{element}</RequireRole>
 }
 
+function connectorSetup(element: React.ReactNode) {
+  return <RequireRole roles={CONNECTOR_SETUP_ROLES}>{element}</RequireRole>
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -90,7 +95,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/accept-onboarding" element={<AcceptOnboarding />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<DemoCommandCenter />} />
+            <Route index element={<MasterEventsDashboard />} />
             <Route path="events/master" element={<MasterEventsDashboard />} />
             <Route path="events" element={<EventDashboard />} />
             <Route path="events/new" element={<EventStrategyWizard />} />
@@ -113,17 +118,18 @@ function App() {
             <Route path="ai-settings" element={<AIProviderSettings />} />
             <Route path="my-agent-rep" element={<MyAgentRep />} />
             <Route path="account-security" element={<AccountSecurity />} />
-            <Route path="integration-credentials" element={adminOnly(<IntegrationCredentials />)} />
+            <Route path="integration-credentials" element={connectorSetup(<IntegrationCredentials />)} />
             <Route path="admin-users" element={adminOnly(<AdminUsers />)} />
             <Route path="tenant-admin" element={adminOnly(<TenantAdmin />)} />
             <Route path="operations" element={adminOnly(<OperationsReadiness />)} />
-            <Route path="smartlabs-voice" element={adminOnly(<SmartLabsVoice />)} />
+            <Route path="smartlabs-voice" element={connectorSetup(<SmartLabsVoice />)} />
             <Route path="mcp-engine" element={adminOnly(<McpEngine />)} />
             <Route path="agent-skills" element={adminOnly(<AgentSkills />)} />
             <Route path="ghl-readiness" element={adminOnly(<GhlReadiness />)} />
-            <Route path="ghl-wizard" element={adminOnly(<GhlWizard />)} />
-            <Route path="dashboard" element={<DemoCommandCenter />} />
-            <Route path="command-center" element={<DemoCommandCenter />} />
+            <Route path="ghl-wizard" element={connectorSetup(<GhlWizard />)} />
+            <Route path="dashboard" element={<MasterEventsDashboard />} />
+            <Route path="command-center" element={<MasterEventsDashboard />} />
+            <Route path="content-workflow" element={<DemoCommandCenter />} />
             <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />
             <Route path="content" element={<PostIdeas />} />
             <Route path="ideas" element={<PostIdeas />} />
