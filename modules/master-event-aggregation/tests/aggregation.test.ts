@@ -94,7 +94,10 @@ describe('Master Event Aggregation', () => {
           { lead_status: 'no_show', lead_temperature: 'cold', audience_source: 'non_follower', channel_attribution: 'whatsapp', purchase_amount: null, purchase_date: null },
         ],
         kpi_records: [
-          { form_completions: 10, leads: 5, meetings_booked: 3, meetings_attended: 2, purchases: 1, no_shows: 1, spend: 5000, reach: 10000, impressions: 20000, interactions: 500, clicks: 200, channel: 'instagram' },
+          { source_type: 'connector', source_name: 'meta_analytics', form_completions: 10, leads: 5, meetings_booked: 3, meetings_attended: 2, purchases: 1, no_shows: 1, spend: 5000, reach: 10000, impressions: 20000, interactions: 500, clicks: 200, channel: 'instagram' },
+        ],
+        connector_imports: [
+          { sync_status: 'synced', last_sync_at: new Date('2026-07-02T10:00:00Z'), last_sync_rows: 1, last_sync_error: null },
         ],
       },
     ]);
@@ -117,6 +120,10 @@ describe('Master Event Aggregation', () => {
     expect(result.byChannel.email).toEqual({ leads: 1, purchases: 1, spend: 0 });
     expect(result.byChannel.whatsapp).toEqual({ leads: 1, purchases: 0, spend: 0 });
     expect(result.byAudienceSource.referral).toEqual({ leads: 1, purchases: 1 });
+    expect(result.dataSourceSummary.connectorRecords).toBe(1);
+    expect(result.dataSourceSummary.eventsUsingConnectorData).toBe(1);
+    expect(result.dataSourceSummary.syncedConnectorJobs).toBe(1);
+    expect(result.events[0].primaryDataSource).toBe('connector');
   });
 
   it('populates event comparison rows correctly', async () => {

@@ -319,6 +319,10 @@ export const connectorImportsApi = {
     const params = eventId ? `?${new URLSearchParams({ eventId }).toString()}` : '';
     return apiFetch<unknown>(`/connector-imports/jobs${params}`, { token });
   },
+  syncStatus: (token: string, eventId?: string) => {
+    const params = eventId ? `?${new URLSearchParams({ eventId }).toString()}` : '';
+    return apiFetch<unknown>(`/connector-imports/sync-status${params}`, { token });
+  },
   createJob: (data: unknown, token: string) =>
     apiFetch<unknown>('/connector-imports/jobs', { method: 'POST', body: data, token }),
   markReady: (id: string, data: unknown, token: string) =>

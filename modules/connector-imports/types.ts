@@ -34,6 +34,17 @@ export const CREDENTIAL_STATES = [
 
 export type CredentialState = (typeof CREDENTIAL_STATES)[number];
 
+export const CONNECTOR_SYNC_STATUSES = [
+  'not_started',
+  'requires_credentials',
+  'ready_for_sync',
+  'synced',
+  'failed',
+  'blocked',
+] as const;
+
+export type ConnectorSyncStatus = (typeof CONNECTOR_SYNC_STATUSES)[number];
+
 export const VALID_TRANSITIONS: Record<ImportJobState, ImportJobState[]> = {
   draft: ['requires_credentials', 'ready_for_test', 'disabled'],
   requires_credentials: ['ready_for_test', 'disabled'],
@@ -143,6 +154,11 @@ export interface ConnectorImportJobSummary {
   notes: string | null;
   lastDryRunAt: Date | null;
   lastDryRunResult: Record<string, unknown> | null;
+  syncStatus: ConnectorSyncStatus;
+  lastSyncAt: Date | null;
+  lastSyncRows: number;
+  lastSyncError: string | null;
+  lastSyncAuditRecordId: string | null;
   lastImportAt: Date | null;
   lastImportResult: Record<string, unknown> | null;
   approvedByUserId: string | null;
@@ -171,6 +187,45 @@ export interface ReadinessSummary {
   totalConfigured: number;
   totalMissing: number;
   totalBlocked: number;
+}
+
+export interface ConnectorSyncJobSummary {
+  id: string;
+  connectorId: string;
+  displayName: string;
+  eventId: string | null;
+  state: ImportJobState;
+  credentialState: CredentialState;
+  syncStatus: ConnectorSyncStatus;
+  lastDryRunAt: Date | null;
+  lastSyncAt: Date | null;
+  lastSyncRows: number;
+  lastSyncError: string | null;
+  lastSyncAuditRecordId: string | null;
+}
+
+export interface ConnectorSyncStatusSummary {
+  tenantKey: string;
+  eventId: string | null;
+  primarySource: 'connector' | 'imported' | 'manual' | 'none';
+  manualFallbackActive: boolean;
+  sourceTotals: {
+    manualRecords: number;
+    importedRecords: number;
+    connectorRecords: number;
+  };
+  jobTotals: {
+    totalJobs: number;
+    readyForSync: number;
+    synced: number;
+    failed: number;
+    blocked: number;
+    requiresCredentials: number;
+  };
+  lastConnectorSyncAt: Date | null;
+  connectorRowsImported: number;
+  connectorErrors: string[];
+  jobs: ConnectorSyncJobSummary[];
 }
 
 export interface DryRunKpiRow {

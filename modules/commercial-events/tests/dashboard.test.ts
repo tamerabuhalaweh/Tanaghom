@@ -16,6 +16,9 @@ const prismaMocks = vi.hoisted(() => ({
   leadCaptureRecord: {
     findMany: vi.fn(),
   },
+  connectorImportJob: {
+    findMany: vi.fn(),
+  },
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
@@ -112,6 +115,7 @@ describe('Commercial Events dashboard and KPI records', () => {
         created_at: new Date('2026-07-02T13:00:00Z'),
       },
     ]);
+    prismaMocks.connectorImportJob.findMany.mockResolvedValue([]);
   });
 
   it('creates tenant-scoped KPI records tied to the event', async () => {
@@ -156,6 +160,40 @@ describe('Commercial Events dashboard and KPI records', () => {
     expect(dashboard.kpis.interactionRate).toBe(6.4);
     expect(dashboard.channelPerformance).toHaveLength(2);
     expect(dashboard.leadTemperature.find(item => item.label === 'Hot')?.value).toBe(1);
+    expect(dashboard.sourceStatus.primarySource).toBe('manual');
+    expect(dashboard.sourceStatus.manualFallbackActive).toBe(true);
+  });
+
+  it('classifies connector, imported, and manual KPI sources honestly', async () => {
+    prismaMocks.eventKpiRecord.findMany.mockResolvedValue([
+      kpi({ id: 'kpi-manual', source_type: 'manual', source_name: 'manual' }),
+      kpi({ id: 'kpi-import', source_type: 'imported', source_name: 'csv_manual' }),
+      kpi({ id: 'kpi-connector', source_type: 'connector', source_name: 'meta_analytics' }),
+    ]);
+    prismaMocks.connectorImportJob.findMany.mockResolvedValue([
+      {
+        id: 'job-1',
+        connector_id: 'meta_analytics',
+        display_name: 'Meta Ads Sync',
+        state: 'test_passed',
+        credential_state: 'test_passed',
+        sync_status: 'synced',
+        last_dry_run_at: new Date('2026-07-02T00:00:00Z'),
+        last_sync_at: new Date('2026-07-02T01:00:00Z'),
+        last_sync_rows: 1,
+        last_sync_error: null,
+      },
+    ]);
+
+    const dashboard = await eventRepo.getEventDashboard('tenant-a', baseEvent.id);
+
+    expect(dashboard.sourceStatus.manualRecords).toBe(1);
+    expect(dashboard.sourceStatus.importedRecords).toBe(1);
+    expect(dashboard.sourceStatus.connectorRecords).toBe(1);
+    expect(dashboard.sourceStatus.primarySource).toBe('connector');
+    expect(dashboard.sourceStatus.connectorFirstReady).toBe(true);
+    expect(dashboard.sourceStatus.connectorRowsImported).toBe(1);
+    expect(dashboard.sourceStatus.connectorJobs[0].syncStatus).toBe('synced');
   });
 
   it('keeps event dashboard queries scoped to tenant and event', async () => {
@@ -170,6 +208,9 @@ describe('Commercial Events dashboard and KPI records', () => {
       where: { tenant_key: 'tenant-a', event_id: baseEvent.id },
     }));
     expect(prismaMocks.leadCaptureRecord.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { tenant_key: 'tenant-a', event_id: baseEvent.id },
+    }));
+    expect(prismaMocks.connectorImportJob.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { tenant_key: 'tenant-a', event_id: baseEvent.id },
     }));
   });

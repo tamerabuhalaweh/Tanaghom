@@ -2,7 +2,7 @@ import { checkConnectorPermission } from './policy';
 import * as repo from './repository';
 import type {
   CreateImportJobInput, ConnectorImportJobSummary,
-  ReadinessSummary, DryRunResult, ImportResult,
+  ReadinessSummary, DryRunResult, ImportResult, ConnectorSyncStatusSummary,
 } from './types';
 
 export async function getReadiness(role: string, tenantKey: string): Promise<ReadinessSummary> {
@@ -18,6 +18,11 @@ export async function getRequirements(role: string) {
 export async function listJobs(role: string, tenantKey: string, eventId?: string): Promise<ConnectorImportJobSummary[]> {
   checkConnectorPermission(role, 'connector:read');
   return repo.listJobs(tenantKey, eventId);
+}
+
+export async function getSyncStatus(role: string, tenantKey: string, eventId?: string): Promise<ConnectorSyncStatusSummary> {
+  checkConnectorPermission(role, 'connector:read');
+  return repo.getSyncStatus(tenantKey, eventId);
 }
 
 export async function createJob(

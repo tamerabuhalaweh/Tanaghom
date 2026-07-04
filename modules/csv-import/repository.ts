@@ -247,12 +247,16 @@ export async function dryRunCsv(
     throw new ValidationError('Cannot run CSV dry run because this import job is disabled.');
   }
   const nextState = kpiRows.length > 0 ? 'test_passed' : 'blocked';
+  const nextSyncStatus = kpiRows.length > 0 ? 'ready_for_sync' : 'failed';
+  const syncError = kpiRows.length > 0 ? null : validationErrors.join('; ') || 'CSV dry run produced no importable KPI rows';
   if (job) {
     await prisma.connectorImportJob.update({
       where: { id: job.id },
       data: {
         state: nextState,
         credential_state: 'test_passed',
+        sync_status: nextSyncStatus,
+        last_sync_error: syncError,
         last_dry_run_at: new Date(),
         last_dry_run_result: result as unknown as Prisma.InputJsonValue,
         notes: `CSV dry run: ${kpiRows.length}/${rows.length} valid rows`,
@@ -268,6 +272,8 @@ export async function dryRunCsv(
         display_name: `CSV import - ${mapping.display_name}`,
         state: nextState,
         credential_state: 'test_passed',
+        sync_status: nextSyncStatus,
+        last_sync_error: syncError,
         notes: `CSV dry run: ${kpiRows.length}/${rows.length} valid rows`,
         last_dry_run_at: new Date(),
         last_dry_run_result: result as unknown as Prisma.InputJsonValue,
@@ -360,7 +366,7 @@ export async function approveCsvImport(
       data: {
         tenant_key: tenantKey,
         event_id: eventId,
-        source_type: 'connector',
+        source_type: 'imported',
         source_name: CSV_MANUAL_CONNECTOR_ID,
         metric_date: new Date(row.metricDate),
         channel: row.channel,
@@ -392,6 +398,11 @@ export async function approveCsvImport(
         approved_at: new Date(),
         last_import_at: new Date(),
         last_import_result: { auditRecordId: auditRecord.id, kpiRecordIds: importedIds } as Prisma.InputJsonValue,
+        sync_status: 'synced',
+        last_sync_at: new Date(),
+        last_sync_rows: importedIds.length,
+        last_sync_error: null,
+        last_sync_audit_record_id: auditRecord.id,
       },
     });
   }

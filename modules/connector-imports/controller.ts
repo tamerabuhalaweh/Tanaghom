@@ -37,6 +37,14 @@ connectorImportsRouter.get('/jobs', async (req: Request, res: Response, next: Ne
   } catch (err) { next(err); }
 });
 
+connectorImportsRouter.get('/sync-status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const status = await service.getSyncStatus(payload.role, payload.tenantKey || 'default', req.query.eventId as string | undefined);
+    res.json(status);
+  } catch (err) { next(err); }
+});
+
 connectorImportsRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);

@@ -80,6 +80,29 @@ function formatDate(value: unknown): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function formatDateTime(value: unknown): string {
+  if (!value) return 'Not synced';
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return 'Not synced';
+  return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function sourceLabel(value: unknown): string {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'Connector';
+  if (source === 'imported') return 'Import';
+  if (source === 'manual') return 'Manual fallback';
+  return 'No KPI';
+}
+
+function sourceTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'good';
+  if (source === 'imported') return 'info';
+  if (source === 'manual') return 'warn';
+  return 'default';
+}
+
 function filterPayload(filters: Record<string, string>): Record<string, string> {
   const payload: Record<string, string> = {};
   for (const [key, value] of Object.entries(filters)) {
@@ -153,6 +176,7 @@ export default function MasterEventsDashboard() {
   }, [token]);
 
   const totals = useMemo(() => (dashboard?.totals || {}) as RecordMap, [dashboard]);
+  const dataSourceSummary = useMemo(() => (dashboard?.dataSourceSummary || {}) as RecordMap, [dashboard]);
   const events = list(dashboard?.events);
   const bestPerforming = (dashboard?.bestPerforming || {}) as RecordMap;
   const byChannel = mapEntries(dashboard?.byChannel);
@@ -246,6 +270,20 @@ export default function MasterEventsDashboard() {
           series={[numberValue(totals.plannedBudget), numberValue(totals.actualSpend), numberValue(totals.totalLeads)]}
         />
       </div>
+
+      <ProductCard
+        title="Production Data Backbone"
+        subtitle="Portfolio-level source control for KPI records. Connector data is the production target; approved imports are a bridge; manual entries are fallback corrections."
+        action={<ProductStatus tone={numberValue(dataSourceSummary.connectorRecords) ? 'good' : numberValue(dataSourceSummary.importedRecords) ? 'info' : 'warn'}>{numberValue(dataSourceSummary.connectorRecords) ? 'Connector Data Active' : numberValue(dataSourceSummary.importedRecords) ? 'Import Bridge Active' : 'Manual Fallback Active'}</ProductStatus>}
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <MetricCard label="Connector Records" value={numberValue(dataSourceSummary.connectorRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingConnectorData)} event(s) connected`} tone={numberValue(dataSourceSummary.connectorRecords) ? 'good' : 'warn'} />
+          <MetricCard label="Approved Imports" value={numberValue(dataSourceSummary.importedRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingImportedData)} event(s) using imports`} tone={numberValue(dataSourceSummary.importedRecords) ? 'info' : 'default'} />
+          <MetricCard label="Manual Fallback" value={numberValue(dataSourceSummary.manualRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingManualFallback)} event(s) fallback`} tone={numberValue(dataSourceSummary.eventsUsingManualFallback) ? 'warn' : 'default'} />
+          <MetricCard label="Synced Jobs" value={numberValue(dataSourceSummary.syncedConnectorJobs)} detail={`${numberValue(dataSourceSummary.readyConnectorJobs)} ready / ${numberValue(dataSourceSummary.failedConnectorJobs)} failed`} tone={numberValue(dataSourceSummary.syncedConnectorJobs) ? 'good' : 'warn'} />
+          <MetricCard label="Last Sync" value={formatDateTime(dataSourceSummary.lastConnectorSyncAt)} detail={`${numberValue(dataSourceSummary.connectorRowsImported)} row(s) imported`} tone={dataSourceSummary.lastConnectorSyncAt ? 'good' : 'default'} />
+        </div>
+      </ProductCard>
 
       <ProductCard title="Filters" subtitle="Narrow the dashboard without changing or importing external data.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -419,15 +457,15 @@ export default function MasterEventsDashboard() {
             </ProductCard>
           </div>
 
-          <ProductCard title="Event Comparison" subtitle="Drill into one event to operate the campaign, sales workflow, KPI entry, and closeout evidence.">
+          <ProductCard title="Event Comparison" subtitle="Drill into one event to operate the campaign, sales workflow, KPI source, and closeout evidence.">
             <ProductTable
-              columns={['Event', 'Type', 'Status', 'Date', 'Location', 'Leads', 'Meetings', 'Purchases', 'Revenue', 'Action']}
+              columns={['Event', 'Type', 'Status', 'Data Source', 'Date', 'Leads', 'Meetings', 'Purchases', 'Revenue', 'Action']}
               rows={events.map(row => [
                 getEventName(row),
                 titleCase(text(row.eventType, 'Unknown')),
                 titleCase(text(row.status, 'Unknown')),
+                <ProductStatus key={`${String(row.eventId)}-source`} tone={sourceTone(row.primaryDataSource)}>{sourceLabel(row.primaryDataSource)}</ProductStatus>,
                 formatDate(row.eventDate),
-                text(row.geography, 'Not set'),
                 numberValue(row.totalLeads).toLocaleString(),
                 numberValue(row.meetingsBooked).toLocaleString(),
                 numberValue(row.purchases).toLocaleString(),
@@ -438,7 +476,7 @@ export default function MasterEventsDashboard() {
           </ProductCard>
 
           <Notice tone="info">
-            This page reads Tanaghum event, KPI, and lead lifecycle records only. Live Meta, YouTube, Formaloo, GHL, WhatsApp, and SmartLabs ingestion remains customer-configured and separately authorized.
+            Production target: connector-synced KPI data. Approved imports are a transition bridge. Manual entries are fallback corrections and should not be the long-term source of truth for Amro's reporting.
           </Notice>
         </>
       )}

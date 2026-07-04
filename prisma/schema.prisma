@@ -3776,6 +3776,15 @@ enum ConnectorCredentialState {
   blocked_by_provider_approval
 }
 
+enum ConnectorSyncStatus {
+  not_started
+  requires_credentials
+  ready_for_sync
+  synced
+  failed
+  blocked
+}
+
 model ConnectorImportJob {
   id                  String                  @id @default(uuid()) @db.Uuid
   tenant_key          String
@@ -3788,6 +3797,11 @@ model ConnectorImportJob {
   notes               String?                @db.Text
   last_dry_run_at     DateTime?
   last_dry_run_result Json?
+  sync_status         ConnectorSyncStatus    @default(not_started)
+  last_sync_at        DateTime?
+  last_sync_rows      Int                    @default(0)
+  last_sync_error     String?                @db.Text
+  last_sync_audit_record_id String?          @db.Uuid
   last_import_at      DateTime?
   last_import_result  Json?
   approved_by_user_id String?                @db.Uuid
@@ -3809,6 +3823,8 @@ model ConnectorImportJob {
   @@index([mapping_id])
   @@index([connector_id])
   @@index([state])
+  @@index([sync_status])
+  @@index([last_sync_at])
   @@index([created_by_user_id])
   @@map("connector_import_jobs")
 }

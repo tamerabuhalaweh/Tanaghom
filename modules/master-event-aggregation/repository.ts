@@ -36,6 +36,8 @@ export async function getMasterDashboard(
       },
       kpi_records: {
         select: {
+          source_type: true,
+          source_name: true,
           reach: true,
           impressions: true,
           interactions: true,
@@ -48,6 +50,14 @@ export async function getMasterDashboard(
           no_shows: true,
           spend: true,
           channel: true,
+        },
+      },
+      connector_imports: {
+        select: {
+          sync_status: true,
+          last_sync_at: true,
+          last_sync_rows: true,
+          last_sync_error: true,
         },
       },
     },
@@ -80,10 +90,25 @@ export async function getMasterDashboard(
   let bestAudienceLeads = 0;
   let highestRevenueEvent: { eventId: string; eventName: string; revenue: number } | null = null;
   let lowestCplEvent: { eventId: string; eventName: string; costPerLead: number } | null = null;
+  const dataSourceSummary = {
+    manualRecords: 0,
+    importedRecords: 0,
+    connectorRecords: 0,
+    eventsUsingConnectorData: 0,
+    eventsUsingImportedData: 0,
+    eventsUsingManualFallback: 0,
+    readyConnectorJobs: 0,
+    syncedConnectorJobs: 0,
+    failedConnectorJobs: 0,
+    blockedConnectorJobs: 0,
+    connectorRowsImported: 0,
+    lastConnectorSyncAt: null as Date | null,
+  };
 
   for (const event of events) {
     const kpiAgg = aggregateKpis(event.kpi_records);
     const leadAgg = aggregateLeads(event.leads);
+    const eventSourceSummary = summarizeEventSources(event.kpi_records, event.connector_imports || []);
     const eventChannelStats = mergeStats(leadAgg.channelStats, kpiAgg.channelStats);
     const eventAudienceStats = leadAgg.audienceStats;
 
@@ -125,7 +150,26 @@ export async function getMasterDashboard(
       costPerLead,
       bestChannel: findBestByLeads(eventChannelStats),
       bestAudienceSource: findBestByLeads(eventAudienceStats),
+      primaryDataSource: eventSourceSummary.primarySource,
+      manualFallbackActive: eventSourceSummary.manualFallbackActive,
+      lastConnectorSyncAt: eventSourceSummary.lastConnectorSyncAt,
+      connectorRowsImported: eventSourceSummary.connectorRowsImported,
     });
+
+    dataSourceSummary.manualRecords += eventSourceSummary.manualRecords;
+    dataSourceSummary.importedRecords += eventSourceSummary.importedRecords;
+    dataSourceSummary.connectorRecords += eventSourceSummary.connectorRecords;
+    dataSourceSummary.readyConnectorJobs += eventSourceSummary.readyConnectorJobs;
+    dataSourceSummary.syncedConnectorJobs += eventSourceSummary.syncedConnectorJobs;
+    dataSourceSummary.failedConnectorJobs += eventSourceSummary.failedConnectorJobs;
+    dataSourceSummary.blockedConnectorJobs += eventSourceSummary.blockedConnectorJobs;
+    dataSourceSummary.connectorRowsImported += eventSourceSummary.connectorRowsImported;
+    if (eventSourceSummary.primarySource === 'connector') dataSourceSummary.eventsUsingConnectorData++;
+    else if (eventSourceSummary.primarySource === 'imported') dataSourceSummary.eventsUsingImportedData++;
+    if (eventSourceSummary.manualFallbackActive) dataSourceSummary.eventsUsingManualFallback++;
+    if (eventSourceSummary.lastConnectorSyncAt && (!dataSourceSummary.lastConnectorSyncAt || eventSourceSummary.lastConnectorSyncAt > dataSourceSummary.lastConnectorSyncAt)) {
+      dataSourceSummary.lastConnectorSyncAt = eventSourceSummary.lastConnectorSyncAt;
+    }
 
     totalLeads += eventLeads;
     totalFormCompletions += eventFormCompletions;
@@ -216,11 +260,14 @@ export async function getMasterDashboard(
       highestRevenueEvent,
       lowestCostPerLeadEvent: lowestCplEvent,
     },
+    dataSourceSummary,
     events: eventRows,
   };
 }
 
 interface KpiRecord {
+  source_type?: string | null;
+  source_name?: string | null;
   reach: number | null;
   impressions: number | null;
   interactions: number | null;
@@ -233,6 +280,13 @@ interface KpiRecord {
   no_shows: number | null;
   spend: number | { toNumber(): number } | null;
   channel: string;
+}
+
+interface ConnectorJobRecord {
+  sync_status: string | null;
+  last_sync_at: Date | null;
+  last_sync_rows: number | null;
+  last_sync_error: string | null;
 }
 
 interface AggregationStats {
@@ -315,6 +369,38 @@ function aggregateLeads(records: LeadRecord[]) {
   }
 
   return { totalLeads, meetingsBooked, meetingsAttended, noShows, purchases, revenue, channelStats, audienceStats };
+}
+
+function summarizeEventSources(kpiRecords: KpiRecord[], connectorJobs: ConnectorJobRecord[]) {
+  const manualRecords = kpiRecords.filter(record => (record.source_type || 'manual') === 'manual').length;
+  const importedRecords = kpiRecords.filter(record => record.source_type === 'imported' || record.source_name === 'csv_manual').length;
+  const connectorRecords = kpiRecords.filter(record => record.source_type === 'connector' && record.source_name !== 'csv_manual').length;
+  const primarySource: 'connector' | 'imported' | 'manual' | 'none' = connectorRecords > 0
+    ? 'connector'
+    : importedRecords > 0
+      ? 'imported'
+      : manualRecords > 0
+        ? 'manual'
+        : 'none';
+  const lastConnectorSyncAt = connectorJobs.reduce<Date | null>((latest, job) => {
+    if (!job.last_sync_at) return latest;
+    if (!latest || job.last_sync_at > latest) return job.last_sync_at;
+    return latest;
+  }, null);
+
+  return {
+    manualRecords,
+    importedRecords,
+    connectorRecords,
+    primarySource,
+    manualFallbackActive: primarySource === 'manual' || (manualRecords > 0 && connectorRecords === 0),
+    readyConnectorJobs: connectorJobs.filter(job => job.sync_status === 'ready_for_sync').length,
+    syncedConnectorJobs: connectorJobs.filter(job => job.sync_status === 'synced').length,
+    failedConnectorJobs: connectorJobs.filter(job => job.sync_status === 'failed').length,
+    blockedConnectorJobs: connectorJobs.filter(job => job.sync_status === 'blocked').length,
+    connectorRowsImported: connectorJobs.reduce((sum, job) => sum + Number(job.last_sync_rows || 0), 0),
+    lastConnectorSyncAt,
+  };
 }
 
 function mergeStats(...sources: Array<Record<string, AggregationStats>>): Record<string, AggregationStats> {

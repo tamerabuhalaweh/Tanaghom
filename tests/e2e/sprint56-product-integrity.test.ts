@@ -218,7 +218,7 @@ describe('Sprint 56 production product integrity contracts', () => {
     for (const customerCue of [
       'Event Revenue Operations',
       'Event Queue',
-      'Manual KPI Update',
+      'Fallback KPI Correction',
       'Event Funnel',
       'Budget Control',
       'Channel Performance',

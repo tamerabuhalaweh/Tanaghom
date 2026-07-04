@@ -246,5 +246,23 @@ export interface EventDashboardSummary {
     manualRecords: number;
     importedRecords: number;
     connectorRecords: number;
+    primarySource: 'connector' | 'imported' | 'manual' | 'none';
+    manualFallbackActive: boolean;
+    connectorFirstReady: boolean;
+    lastConnectorSyncAt: Date | null;
+    connectorRowsImported: number;
+    connectorErrors: string[];
+    connectorJobs: Array<{
+      id: string;
+      connectorId: string;
+      displayName: string;
+      state: string;
+      credentialState: string;
+      syncStatus: string;
+      lastDryRunAt: Date | null;
+      lastSyncAt: Date | null;
+      lastSyncRows: number;
+      lastSyncError: string | null;
+    }>;
   };
 }

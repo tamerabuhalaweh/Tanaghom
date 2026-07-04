@@ -226,6 +226,29 @@ function formatDate(value: unknown): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function formatDateTime(value: unknown): string {
+  if (!value) return 'Not synced';
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return 'Not synced';
+  return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function sourceLabel(value: unknown): string {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'Connector Data';
+  if (source === 'imported') return 'Approved Import';
+  if (source === 'manual') return 'Fallback Manual';
+  return 'No KPI Data';
+}
+
+function sourceTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'good';
+  if (source === 'imported') return 'info';
+  if (source === 'manual') return 'warn';
+  return 'default';
+}
+
 function money(value: unknown): string {
   return `${numberValue(value).toLocaleString()} SAR`;
 }
@@ -551,6 +574,9 @@ export default function EventDashboard() {
   const event = useMemo(() => (dashboard?.event || {}) as RecordMap, [dashboard]);
   const kpis = (dashboard?.kpis || {}) as RecordMap;
   const sourceStatus = (dashboard?.sourceStatus || {}) as RecordMap;
+  const connectorJobs = list(sourceStatus.connectorJobs);
+  const connectorErrors = list(sourceStatus.connectorErrors);
+  const primarySource = text(sourceStatus.primarySource, 'none');
   const funnel = list(dashboard?.funnel);
   const channelPerformance = list(dashboard?.channelPerformance);
   const leadTemperatureBreakdown = list(dashboard?.leadTemperature);
@@ -1299,7 +1325,7 @@ export default function EventDashboard() {
               </div>
             </ProductCard>
 
-            <ProductCard title="Manual KPI Update" subtitle="Use this until official Meta, YouTube, Formaloo, GHL, and WhatsApp connectors are enabled.">
+            <ProductCard title="Fallback KPI Correction" subtitle="Use only for corrections or temporary provider outages. Production data should come from approved connectors or imports.">
               <div className="space-y-4">
                 <Field label="Date">
                   <input
@@ -1351,7 +1377,7 @@ export default function EventDashboard() {
                   />
                 </Field>
                 <PrimaryAction onClick={saveKpi} disabled={loading === 'save-kpi'}>
-                  {loading === 'save-kpi' ? 'Saving...' : 'Save KPI Update'}
+                  {loading === 'save-kpi' ? 'Saving...' : 'Save Fallback Correction'}
                 </PrimaryAction>
               </div>
             </ProductCard>
@@ -1540,35 +1566,35 @@ export default function EventDashboard() {
             </div>
 
             <ProductCard
-              title="Connector Data Status"
-              subtitle="Shows whether this event is using manual records, approved CSV imports, or future live connector records."
-              action={<ProductStatus tone={numberValue(sourceStatus.connectorRecords) ? 'good' : numberValue(sourceStatus.importedRecords) ? 'info' : 'warn'}>{numberValue(sourceStatus.connectorRecords) ? 'Approved Import Active' : numberValue(sourceStatus.importedRecords) ? 'Imported Data Active' : 'Manual Data Active'}</ProductStatus>}
+              title="Production KPI Backbone"
+              subtitle="Shows whether this event is powered by automated connector records, approved customer imports, or fallback manual corrections."
+              action={<ProductStatus tone={sourceTone(primarySource)}>{sourceLabel(primarySource)}</ProductStatus>}
             >
               <div className="grid gap-3 md:grid-cols-4">
                 <MetricCard label="Saved mappings" value={eventConnectorMappings.length} detail="Event-scoped import mappings" tone={eventConnectorMappings.length ? 'good' : 'warn'} />
-                <MetricCard label="Manual records" value={numberValue(sourceStatus.manualRecords)} detail="Entered by the team" tone={numberValue(sourceStatus.manualRecords) ? 'info' : 'default'} />
-                <MetricCard label="Imported records" value={numberValue(sourceStatus.importedRecords)} detail="Approved CSV/import jobs" tone={numberValue(sourceStatus.importedRecords) ? 'good' : 'default'} />
-                <MetricCard label="Connector records" value={numberValue(sourceStatus.connectorRecords)} detail="Approved connector or CSV import records" tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'} />
+                <MetricCard label="Connector records" value={numberValue(sourceStatus.connectorRecords)} detail={`${numberValue(sourceStatus.connectorRowsImported)} row(s) imported`} tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'} />
+                <MetricCard label="Approved imports" value={numberValue(sourceStatus.importedRecords)} detail="CSV or customer export bridge" tone={numberValue(sourceStatus.importedRecords) ? 'info' : 'default'} />
+                <MetricCard label="Fallback manual" value={numberValue(sourceStatus.manualRecords)} detail={sourceStatus.manualFallbackActive ? 'Fallback is active' : 'Correction path only'} tone={sourceStatus.manualFallbackActive ? 'warn' : 'default'} />
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
                 {[
                   {
-                    title: 'Manual KPI Entry',
-                    status: numberValue(sourceStatus.manualRecords) ? 'Recording Data' : 'Available',
-                    detail: 'Fast path for Amro while customer-owned connectors are being configured.',
-                    tone: numberValue(sourceStatus.manualRecords) ? 'info' : 'default',
+                    title: 'Connector Sync',
+                    status: sourceStatus.connectorFirstReady ? 'Active or Synced' : 'Not Active Yet',
+                    detail: `Last sync: ${formatDateTime(sourceStatus.lastConnectorSyncAt)}.`,
+                    tone: sourceStatus.connectorFirstReady ? 'good' : 'warn',
                   },
                   {
-                    title: 'CSV Import',
+                    title: 'Approved Import Bridge',
                     status: eventConnectorMappings.length ? 'Mapping Ready' : 'Needs Mapping',
-                    detail: 'Use exported rows from Formaloo, Meta, YouTube, GHL, WhatsApp, or sheets.',
+                    detail: 'Use exported rows only while provider API sync is being configured.',
                     tone: eventConnectorMappings.length ? 'good' : 'warn',
                   },
                   {
-                    title: 'Live Connectors',
-                    status: 'Customer Credentials Required',
-                    detail: 'Official integrations remain tenant-owned and cannot run without credentials.',
-                    tone: 'warn',
+                    title: 'Manual Correction',
+                    status: sourceStatus.manualFallbackActive ? 'Fallback Active' : 'Fallback Only',
+                    detail: 'Allowed for corrections and emergencies, not the production source of truth.',
+                    tone: sourceStatus.manualFallbackActive ? 'warn' : 'default',
                   },
                 ].map(item => (
                   <div key={item.title} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
@@ -1580,6 +1606,23 @@ export default function EventDashboard() {
                   </div>
                 ))}
               </div>
+              {connectorErrors.length > 0 && (
+                <Notice tone="warn">Connector issues: {connectorErrors.map(error => text(error)).join('; ')}</Notice>
+              )}
+              {connectorJobs.length > 0 && (
+                <div className="mt-4">
+                  <ProductTable
+                    columns={['Connector', 'State', 'Sync', 'Rows', 'Last Sync']}
+                    rows={connectorJobs.slice(0, 6).map(job => [
+                      text(job.displayName, text(job.connectorId)),
+                      titleCase(text(job.state, 'not_started')),
+                      titleCase(text(job.syncStatus, 'not_started')),
+                      numberValue(job.lastSyncRows).toLocaleString(),
+                      formatDateTime(job.lastSyncAt),
+                    ])}
+                  />
+                </div>
+              )}
             </ProductCard>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -3124,9 +3167,10 @@ export default function EventDashboard() {
 
             <ProductCard title="KPI Evidence" subtitle="Every dashboard number comes from manual/imported/connector records.">
               <div className="mb-4 flex flex-wrap gap-2">
-                <ProductStatus tone="info">{numberValue(sourceStatus.manualRecords)} manual</ProductStatus>
-                <ProductStatus tone="info">{numberValue(sourceStatus.importedRecords)} imported</ProductStatus>
+                <ProductStatus tone={sourceTone(primarySource)}>{sourceLabel(primarySource)}</ProductStatus>
                 <ProductStatus tone="info">{numberValue(sourceStatus.connectorRecords)} connector</ProductStatus>
+                <ProductStatus tone="info">{numberValue(sourceStatus.importedRecords)} imported</ProductStatus>
+                <ProductStatus tone={sourceStatus.manualFallbackActive ? 'warn' : 'info'}>{numberValue(sourceStatus.manualRecords)} fallback manual</ProductStatus>
               </div>
               {kpiRecords.length ? (
                 <ProductTable

@@ -6,6 +6,7 @@ import type {
   ConnectorReadiness, ReadinessSummary,
   ImportJobState, CredentialState, ConnectorId,
   DryRunResult, DryRunKpiRow, ImportResult,
+  ConnectorSyncStatus, ConnectorSyncStatusSummary,
 } from './types';
 import { CONNECTOR_REQUIREMENTS, SUPPORTED_CONNECTORS, VALID_TRANSITIONS } from './types';
 
@@ -72,6 +73,78 @@ export async function listJobs(tenantKey: string, eventId?: string): Promise<Con
   return jobs.map(mapJob);
 }
 
+export async function getSyncStatus(tenantKey: string, eventId?: string): Promise<ConnectorSyncStatusSummary> {
+  if (eventId) {
+    const event = await prisma.commercialEvent.findFirst({
+      where: { id: eventId, tenant_key: tenantKey },
+      select: { id: true },
+    });
+    if (!event) throw new NotFoundError('CommercialEvent', eventId);
+  }
+
+  const [jobs, kpiRecords] = await Promise.all([
+    prisma.connectorImportJob.findMany({
+      where: eventId ? { tenant_key: tenantKey, event_id: eventId } : { tenant_key: tenantKey },
+      orderBy: [{ last_sync_at: 'desc' }, { updated_at: 'desc' }],
+    }),
+    prisma.eventKpiRecord.findMany({
+      where: eventId ? { tenant_key: tenantKey, event_id: eventId } : { tenant_key: tenantKey },
+      select: { source_type: true, source_name: true },
+    }),
+  ]);
+
+  const sourceTotals = summarizeSourceTotals(kpiRecords);
+  const mappedJobs = jobs.map(mapJob);
+  const connectorErrors = mappedJobs
+    .filter(job => job.lastSyncError)
+    .map(job => `${CONNECTOR_REQUIREMENTS[job.connectorId as ConnectorId]?.label || job.connectorId}: ${job.lastSyncError}`);
+  const lastConnectorSyncAt = mappedJobs.reduce<Date | null>((latest, job) => {
+    if (!job.lastSyncAt) return latest;
+    if (!latest || job.lastSyncAt > latest) return job.lastSyncAt;
+    return latest;
+  }, null);
+  const primarySource = sourceTotals.connectorRecords > 0
+    ? 'connector'
+    : sourceTotals.importedRecords > 0
+      ? 'imported'
+      : sourceTotals.manualRecords > 0
+        ? 'manual'
+        : 'none';
+
+  return {
+    tenantKey,
+    eventId: eventId ?? null,
+    primarySource,
+    manualFallbackActive: primarySource === 'manual' || (sourceTotals.manualRecords > 0 && sourceTotals.connectorRecords === 0),
+    sourceTotals,
+    jobTotals: {
+      totalJobs: mappedJobs.length,
+      readyForSync: mappedJobs.filter(job => job.syncStatus === 'ready_for_sync').length,
+      synced: mappedJobs.filter(job => job.syncStatus === 'synced').length,
+      failed: mappedJobs.filter(job => job.syncStatus === 'failed').length,
+      blocked: mappedJobs.filter(job => job.syncStatus === 'blocked').length,
+      requiresCredentials: mappedJobs.filter(job => job.syncStatus === 'requires_credentials').length,
+    },
+    lastConnectorSyncAt,
+    connectorRowsImported: mappedJobs.reduce((sum, job) => sum + job.lastSyncRows, 0),
+    connectorErrors,
+    jobs: mappedJobs.map(job => ({
+      id: job.id,
+      connectorId: job.connectorId,
+      displayName: job.displayName,
+      eventId: job.eventId,
+      state: job.state,
+      credentialState: job.credentialState,
+      syncStatus: job.syncStatus,
+      lastDryRunAt: job.lastDryRunAt,
+      lastSyncAt: job.lastSyncAt,
+      lastSyncRows: job.lastSyncRows,
+      lastSyncError: job.lastSyncError,
+      lastSyncAuditRecordId: job.lastSyncAuditRecordId,
+    })),
+  };
+}
+
 export async function getJobById(tenantKey: string, id: string): Promise<ConnectorImportJobSummary> {
   const job = await prisma.connectorImportJob.findFirst({ where: { id, tenant_key: tenantKey } });
   if (!job) throw new NotFoundError('ConnectorImportJob', id);
@@ -92,6 +165,7 @@ export async function createJob(
 
   const credentialState = await resolveCredentialState(tenantKey, input.connectorId);
   const initialState: ImportJobState = credentialState === 'customer_credential_missing' ? 'requires_credentials' : 'draft';
+  const initialSyncStatus: ConnectorSyncStatus = credentialState === 'customer_credential_missing' ? 'requires_credentials' : 'not_started';
 
   const job = await prisma.connectorImportJob.create({
     data: {
@@ -101,6 +175,7 @@ export async function createJob(
       display_name: input.displayName,
       state: initialState,
       credential_state: credentialState,
+      sync_status: initialSyncStatus,
       notes: input.notes,
       created_by_user_id: userId,
     },
@@ -138,6 +213,8 @@ export async function markReady(
     data: {
       state: toState,
       credential_state: testPassed ? 'test_passed' : 'blocked_by_provider_approval',
+      sync_status: testPassed ? 'ready_for_sync' : 'failed',
+      last_sync_error: testPassed ? null : notes ?? 'Connector test failed',
       notes: notes ?? existing.notes,
     },
   });
@@ -174,6 +251,8 @@ export async function disableJob(
     where: { id },
     data: {
       state: 'disabled',
+      sync_status: 'blocked',
+      last_sync_error: reason,
       disabled_at: new Date(),
       disabled_reason: reason,
     },
@@ -228,12 +307,15 @@ export async function dryRun(
     leadAttributions: 0,
     warnings,
   };
+  const dryRunSyncStatus: ConnectorSyncStatus = sampleKpiRows.length > 0 ? 'ready_for_sync' : 'blocked';
 
   await prisma.connectorImportJob.update({
     where: { id: job.id },
     data: {
       last_dry_run_at: new Date(),
       last_dry_run_result: dryRunResult as unknown as Prisma.InputJsonValue,
+      sync_status: dryRunSyncStatus,
+      last_sync_error: sampleKpiRows.length > 0 ? null : warnings[0],
     },
   });
 
@@ -274,6 +356,7 @@ export async function approveAndImport(
   // Read last dry run result
   const dryRunResult = job.last_dry_run_result as DryRunResult | null;
   if (!dryRunResult || !dryRunResult.kpiRows || dryRunResult.kpiRows.length === 0) {
+    const reason = 'Last dry run has no importable KPI rows';
     await prisma.auditRecord.create({
       data: {
         audit_type: 'connector_import',
@@ -282,7 +365,14 @@ export async function approveAndImport(
         human_user_id: userId,
         target_object_type: 'connector_import_job',
         target_object_id: job.id,
-        reason: 'Last dry run has no importable KPI rows',
+        reason,
+      },
+    });
+    await prisma.connectorImportJob.update({
+      where: { id: job.id },
+      data: {
+        sync_status: 'failed',
+        last_sync_error: reason,
       },
     });
     throw new ValidationError('Cannot import: last dry run produced no importable rows. Run a dry run with data first.');
@@ -293,6 +383,7 @@ export async function approveAndImport(
   for (let i = 0; i < kpiRows.length; i++) {
     const error = validateKpiRow(kpiRows[i]);
     if (error) {
+      const reason = `Row ${i} malformed: ${error}`;
       await prisma.auditRecord.create({
         data: {
           audit_type: 'connector_import',
@@ -301,7 +392,14 @@ export async function approveAndImport(
           human_user_id: userId,
           target_object_type: 'connector_import_job',
           target_object_id: job.id,
-          reason: `Row ${i} malformed: ${error}`,
+          reason,
+        },
+      });
+      await prisma.connectorImportJob.update({
+        where: { id: job.id },
+        data: {
+          sync_status: 'failed',
+          last_sync_error: reason,
         },
       });
       throw new ValidationError(`Row ${i} is malformed: ${error}`);
@@ -359,6 +457,11 @@ export async function approveAndImport(
       approved_at: new Date(),
       last_import_at: new Date(),
       last_import_result: { auditRecordId: importAuditRecord.id, kpiRecordIds: importedKpiIds, connectorId, eventId } as Prisma.InputJsonValue,
+      sync_status: 'synced',
+      last_sync_at: new Date(),
+      last_sync_rows: kpiRows.length,
+      last_sync_error: null,
+      last_sync_audit_record_id: importAuditRecord.id,
     },
   });
 
@@ -396,6 +499,20 @@ function validateKpiRow(row: DryRunKpiRow | null | undefined): string | null {
   return null;
 }
 
+function summarizeSourceTotals(records: Array<{ source_type: unknown; source_name: unknown }>) {
+  return records.reduce(
+    (totals, record) => {
+      const sourceType = String(record.source_type || 'manual');
+      const sourceName = String(record.source_name || '');
+      if (sourceType === 'manual') totals.manualRecords++;
+      else if (sourceType === 'imported' || sourceName === 'csv_manual') totals.importedRecords++;
+      else if (sourceType === 'connector') totals.connectorRecords++;
+      return totals;
+    },
+    { manualRecords: 0, importedRecords: 0, connectorRecords: 0 },
+  );
+}
+
 function mapJob(j: Record<string, unknown>): ConnectorImportJobSummary {
   return {
     id: j.id as string,
@@ -408,6 +525,11 @@ function mapJob(j: Record<string, unknown>): ConnectorImportJobSummary {
     notes: j.notes as string | null,
     lastDryRunAt: j.last_dry_run_at as Date | null,
     lastDryRunResult: j.last_dry_run_result as Record<string, unknown> | null,
+    syncStatus: (j.sync_status as ConnectorSyncStatus | undefined) ?? 'not_started',
+    lastSyncAt: (j.last_sync_at as Date | null) ?? null,
+    lastSyncRows: Number(j.last_sync_rows || 0),
+    lastSyncError: (j.last_sync_error as string | null) ?? null,
+    lastSyncAuditRecordId: (j.last_sync_audit_record_id as string | null) ?? null,
     lastImportAt: j.last_import_at as Date | null,
     lastImportResult: j.last_import_result as Record<string, unknown> | null,
     approvedByUserId: j.approved_by_user_id as string | null,
