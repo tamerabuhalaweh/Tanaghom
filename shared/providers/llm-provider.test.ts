@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaudeLLMProvider, DeepSeekLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
+import { ClaudeLLMProvider, DeepSeekLLMProvider, GemmaLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -97,6 +97,32 @@ describe('LLM provider adapter', () => {
     expect(response.text).toBe('DeepSeek live generated draft');
     expect(response.provider).toBe('deepseek');
     expect(response.usage).toEqual({ promptTokens: 14, completionTokens: 9 });
+  });
+
+  it('calls Gemma OpenAI-compatible Chat Completions API when configured', async () => {
+    process.env.GEMMA_API_KEY = 'test-gemma-key';
+    process.env.GEMMA_BASE_URL = 'https://api.thesmartlabs.net/gemma4/v1';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Gemma live generated draft' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 6 },
+      }),
+    } as Response);
+
+    const provider = new GemmaLLMProvider();
+    const response = await provider.generate('Campaign brief', { model: 'gemma4-26b-a4b-canary', timeoutMs: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.thesmartlabs.net/gemma4/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-gemma-key' }),
+      }),
+    );
+    expect(response.text).toBe('Gemma live generated draft');
+    expect(response.provider).toBe('gemma');
+    expect(response.usage).toEqual({ promptTokens: 10, completionTokens: 6 });
   });
 
   it('does not call external providers when credentials are missing', async () => {

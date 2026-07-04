@@ -9,11 +9,11 @@ import { createConfiguredLLMProvider, type LLMProvider } from '@shared/providers
 
 export const aiProviderRouter = Router();
 
-type LLMProviderType = 'openai' | 'claude' | 'deepseek';
+type LLMProviderType = 'openai' | 'claude' | 'deepseek' | 'gemma';
 type SelectableProviderType = 'mock' | LLMProviderType;
 
-const providerSchema = z.enum(['mock', 'openai', 'claude', 'deepseek']);
-const credentialProviderSchema = z.enum(['openai', 'claude', 'deepseek']);
+const providerSchema = z.enum(['mock', 'openai', 'claude', 'deepseek', 'gemma']);
+const credentialProviderSchema = z.enum(['openai', 'claude', 'deepseek', 'gemma']);
 
 const upsertCredentialSchema = z.object({
   provider: credentialProviderSchema,
@@ -40,6 +40,7 @@ aiProviderRouter.get('/status', async (req: Request, res: Response, next: NextFu
       providerStatus('OpenAI', 'openai', userCredentials, process.env.OPENAI_API_KEY, process.env.OPENAI_MODEL || 'gpt-4o'),
       providerStatus('Claude', 'claude', userCredentials, process.env.CLAUDE_API_KEY, process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514'),
       providerStatus('DeepSeek', 'deepseek', userCredentials, process.env.DEEPSEEK_API_KEY, process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'),
+      providerStatus('Gemma', 'gemma', userCredentials, process.env.GEMMA_API_KEY, process.env.GEMMA_MODEL || 'gemma4-26b-a4b-canary'),
     ];
 
     res.json({
@@ -130,7 +131,7 @@ aiProviderRouter.post('/select', async (req: Request, res: Response, next: NextF
     const provider = providerSchema.parse(req.body.provider);
 
     if (provider === 'mock' && !isMockLLMAllowed()) {
-      res.status(400).json({ error: 'Mock LLM is disabled for production use. Configure DeepSeek, OpenAI, or Claude.' });
+      res.status(400).json({ error: 'Mock LLM is disabled for production use. Configure Gemma, DeepSeek, OpenAI, or Claude.' });
       return;
     }
 
@@ -143,7 +144,7 @@ aiProviderRouter.post('/select', async (req: Request, res: Response, next: NextF
           },
         },
       });
-      if (!credential?.is_active) {
+      if (!credential?.is_active && !isEnvProviderConfigured(provider)) {
         res.status(400).json({ error: `${provider} credential is missing for this user` });
         return;
       }
@@ -169,28 +170,28 @@ aiProviderRouter.post('/test', async (req: Request, res: Response, next: NextFun
       },
     });
 
-    if (!credential?.is_active) {
+    if (!credential?.is_active && !isEnvProviderConfigured(provider)) {
       res.status(400).json({ status: 'missing', _label: 'No active credential for this user/provider' });
       return;
     }
 
     const llm = createConfiguredLLMProvider({
-      provider: credential.provider,
-      model: credential.model,
-      apiKey: decryptSecret(credential.encrypted_api_key),
+      provider,
+      model: credential?.model,
+      apiKey: credential?.encrypted_api_key ? decryptSecret(credential.encrypted_api_key) : undefined,
     });
     let result;
     try {
       result = await llm.generate('Return the single word OK.', { maxTokens: 16, temperature: 0, timeoutMs: 15000 });
     } catch (providerError) {
       auditLog(
-        { actor: `user:${payload.sub}`, action: 'llm_provider_test_failed', object_type: 'llm_provider_credential', object_id: credential.id, result: 'failure' },
+        { actor: `user:${payload.sub}`, action: 'llm_provider_test_failed', object_type: 'llm_provider_credential', object_id: credential?.id || provider, result: 'failure' },
         `LLM provider test failed for ${provider}`,
       );
       res.status(502).json({
         status: 'failed',
         provider,
-        model: credential.model,
+        model: credential?.model || provider,
         apiKeyStatus: 'configured',
         rawKeyReturned: false,
         code: 'LLM_PROVIDER_TEST_FAILED',
@@ -198,10 +199,12 @@ aiProviderRouter.post('/test', async (req: Request, res: Response, next: NextFun
       });
       return;
     }
-    await prisma.llmProviderCredential.update({
-      where: { id: credential.id },
-      data: { last_used_at: new Date() },
-    });
+    if (credential) {
+      await prisma.llmProviderCredential.update({
+        where: { id: credential.id },
+        data: { last_used_at: new Date() },
+      });
+    }
 
     res.json({
       status: 'connected',
@@ -249,7 +252,7 @@ export async function resolveUserLLMProvider(userId: string): Promise<LLMProvide
   const selected = await getUserSelectedProvider(userId);
   if (selected === 'mock') {
     if (isMockLLMAllowed()) return createConfiguredLLMProvider({ provider: 'mock' });
-    throw new AppError('No production LLM provider is configured for this user. Configure DeepSeek, OpenAI, or Claude in AI Provider settings.', 424, 'LLM_PROVIDER_REQUIRED');
+    throw new AppError('No production LLM provider is configured for this user. Configure Gemma, DeepSeek, OpenAI, or Claude in AI Provider settings.', 424, 'LLM_PROVIDER_REQUIRED');
   }
   const credential = await prisma.llmProviderCredential.findUnique({
     where: {
@@ -260,6 +263,9 @@ export async function resolveUserLLMProvider(userId: string): Promise<LLMProvide
     },
   });
   if (!credential?.is_active) {
+    if (isEnvProviderConfigured(selected)) {
+      return createConfiguredLLMProvider({ provider: selected });
+    }
     throw new AppError(`Selected LLM provider ${selected} is missing credentials for this user.`, 424, 'LLM_PROVIDER_REQUIRED');
   }
   return createConfiguredLLMProvider({
@@ -297,7 +303,8 @@ function credentialModel(credentials: Awaited<ReturnType<typeof listSafeCredenti
 async function getUserSelectedProvider(userId: string): Promise<SelectableProviderType> {
   const agentRep = await prisma.agentRep.findUnique({ where: { user_id: userId } });
   const selected = (agentRep?.metadata as { llmProvider?: string } | null)?.llmProvider;
-  return selected === 'openai' || selected === 'claude' || selected === 'deepseek' ? selected : 'mock';
+  if (selected === 'mock' && !isMockLLMAllowed()) return getEnvironmentDefaultProvider() || 'mock';
+  return selected === 'openai' || selected === 'claude' || selected === 'deepseek' || selected === 'gemma' ? selected : 'mock';
 }
 
 async function setUserSelectedProvider(userId: string, provider: SelectableProviderType): Promise<void> {
@@ -316,6 +323,22 @@ function isMockLLMAllowed(): boolean {
 
 function isCredentialVaultConfigured(): boolean {
   return Boolean(process.env.SECRET_VAULT_ENCRYPTION_KEY || process.env.LLM_CREDENTIAL_ENCRYPTION_KEY);
+}
+
+function isEnvProviderConfigured(provider: LLMProviderType): boolean {
+  if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
+  if (provider === 'claude') return Boolean(process.env.CLAUDE_API_KEY);
+  if (provider === 'deepseek') return Boolean(process.env.DEEPSEEK_API_KEY);
+  if (provider === 'gemma') return Boolean(process.env.GEMMA_API_KEY);
+  return false;
+}
+
+function getEnvironmentDefaultProvider(): LLMProviderType | null {
+  const provider = process.env.LLM_PROVIDER;
+  if (provider === 'openai' || provider === 'claude' || provider === 'deepseek' || provider === 'gemma') {
+    return isEnvProviderConfigured(provider) ? provider : null;
+  }
+  return null;
 }
 
 function providerStatus(

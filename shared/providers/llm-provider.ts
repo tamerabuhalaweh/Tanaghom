@@ -1,6 +1,6 @@
 export interface LLMProvider {
   name: string;
-  type: 'mock' | 'openai' | 'claude' | 'deepseek';
+  type: 'mock' | 'openai' | 'claude' | 'deepseek' | 'gemma';
   generate(prompt: string, options?: GenerateOptions): Promise<LLMResponse>;
   isConfigured(): boolean;
   getStatus(): LLMProviderStatus;
@@ -275,6 +275,79 @@ export class DeepSeekLLMProvider implements LLMProvider {
   }
 }
 
+export class GemmaLLMProvider implements LLMProvider {
+  name = 'Gemma';
+  type = 'gemma' as const;
+  private apiKey: string;
+  private model: string;
+  private baseUrl: string;
+
+  constructor(config?: { apiKey?: string; model?: string; baseUrl?: string }) {
+    this.apiKey = config?.apiKey || process.env.GEMMA_API_KEY || '';
+    this.model = config?.model || process.env.GEMMA_MODEL || 'gemma4-26b-a4b-canary';
+    this.baseUrl = (config?.baseUrl || process.env.GEMMA_BASE_URL || 'https://api.thesmartlabs.net/gemma4/v1').replace(/\/$/, '');
+  }
+
+  async generate(prompt: string, options?: GenerateOptions): Promise<LLMResponse> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemma provider not configured: missing GEMMA_API_KEY');
+    }
+    const model = options?.model || this.model;
+    const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          ...(options?.systemPrompt ? [{ role: 'system', content: options.systemPrompt }] : []),
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: options?.maxTokens || 700,
+        temperature: options?.temperature ?? 0.7,
+        top_p: 0.9,
+        stream: false,
+      }),
+    }, options?.timeoutMs);
+
+    if (!response.ok) {
+      throw new Error(`Gemma API returned ${response.status}`);
+    }
+
+    const data = await response.json() as ChatCompletionResponsePayload;
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (!text) {
+      throw new Error('Gemma API returned no text output');
+    }
+
+    return {
+      text,
+      model,
+      provider: 'gemma',
+      usage: data.usage ? {
+        promptTokens: data.usage.prompt_tokens || 0,
+        completionTokens: data.usage.completion_tokens || 0,
+      } : undefined,
+    };
+  }
+
+  isConfigured(): boolean {
+    return this.apiKey.length > 0;
+  }
+
+  getStatus(): LLMProviderStatus {
+    return {
+      name: this.name,
+      type: this.type,
+      configured: this.isConfigured(),
+      model: this.model,
+      apiKeyStatus: this.apiKey.length > 0 ? 'configured' : 'missing',
+    };
+  }
+}
+
 export function createLLMProvider(): LLMProvider {
   const providerType = process.env.LLM_PROVIDER || 'mock';
   switch (providerType) {
@@ -284,6 +357,8 @@ export function createLLMProvider(): LLMProvider {
       return new ClaudeLLMProvider();
     case 'deepseek':
       return new DeepSeekLLMProvider();
+    case 'gemma':
+      return new GemmaLLMProvider();
     default:
       return new MockLLMProvider();
   }
@@ -301,6 +376,8 @@ export function createConfiguredLLMProvider(config: {
       return new ClaudeLLMProvider({ apiKey: config.apiKey || undefined, model: config.model || undefined });
     case 'deepseek':
       return new DeepSeekLLMProvider({ apiKey: config.apiKey || undefined, model: config.model || undefined });
+    case 'gemma':
+      return new GemmaLLMProvider({ apiKey: config.apiKey || undefined, model: config.model || undefined });
     default:
       return createLLMProvider();
   }

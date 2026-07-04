@@ -6,6 +6,8 @@ import {
   Brain,
   Building2,
   CalendarDays,
+  CheckCircle2,
+  CircleHelp,
   ClipboardCheck,
   FileClock,
   KeyRound,
@@ -218,6 +220,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const GROUPS: NavGroup[] = ['Product', 'Admin'];
+const GUIDE_STORAGE_KEY = 'tanaghum-setup-guide-dismissed';
 
 function getStringField(source: unknown, keys: string[], fallback = ''): string {
   if (!source || typeof source !== 'object') return fallback;
@@ -245,6 +248,10 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [adminExpanded, setAdminExpanded] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(GUIDE_STORAGE_KEY) !== 'true';
+  });
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -409,9 +416,21 @@ export default function Layout() {
               <div className="truncate text-xs text-neutral-500">{currentItem?.description || 'Product workspace'}</div>
             </div>
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
-            <ProductStatus tone="warn">Publishing Controlled</ProductStatus>
-            <ProductStatus tone="info">Review Required</ProductStatus>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="inline-flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs font-medium text-neutral-800 hover:bg-neutral-50"
+            >
+              <CircleHelp className="h-4 w-4" />
+              <span className="hidden sm:inline">Setup Guide</span>
+            </button>
+            <span className="hidden sm:inline-flex">
+              <ProductStatus tone="warn">Publishing Controlled</ProductStatus>
+            </span>
+            <span className="hidden sm:inline-flex">
+              <ProductStatus tone="info">Review Required</ProductStatus>
+            </span>
           </div>
         </header>
 
@@ -420,6 +439,145 @@ export default function Layout() {
             <Outlet />
           </div>
         </main>
+      </div>
+      <SetupGuide
+        open={guideOpen}
+        navItems={visibleNav}
+        onClose={(dismiss = false) => {
+          if (dismiss && typeof window !== 'undefined') {
+            window.localStorage.setItem(GUIDE_STORAGE_KEY, 'true');
+          }
+          setGuideOpen(false);
+        }}
+      />
+    </div>
+  );
+}
+
+function SetupGuide({
+  open,
+  navItems,
+  onClose,
+}: {
+  open: boolean;
+  navItems: NavItem[];
+  onClose: (dismiss?: boolean) => void;
+}) {
+  if (!open) return null;
+
+  const canOpen = (path: string) => navItems.some(item => item.path === path);
+  const steps = [
+    {
+      number: '1',
+      title: 'Confirm your profile',
+      body: 'Start with My Profile. Confirm your role, AgentRep, display currency, and the permissions attached to your account.',
+      path: '/my-agent-rep',
+      action: 'Open Profile',
+    },
+    {
+      number: '2',
+      title: 'Connect an AI model',
+      body: 'Open AI Settings. Use the platform Gemma connection when available, or add your own provider key. Keys are encrypted and never shown again.',
+      path: '/ai-settings',
+      action: 'Open AI Settings',
+    },
+    {
+      number: '3',
+      title: 'Plan the event',
+      body: 'Open Events. Select or create the event, then add the offer, audience, budget, channels, email, WhatsApp, upsell, and sales tasks.',
+      path: '/events',
+      action: 'Open Events',
+    },
+    {
+      number: '4',
+      title: 'Connect data sources',
+      body: 'Use Connector Setup to add customer-owned credentials and validate imports. Normal users may need an admin or manager to do this step.',
+      path: '/integration-credentials',
+      action: 'Open Connectors',
+    },
+    {
+      number: '5',
+      title: 'Create campaign content',
+      body: 'Use Content Creator to generate ideas, then Campaigns to produce platform-specific drafts for review.',
+      path: '/ideas',
+      action: 'Create Content',
+    },
+    {
+      number: '6',
+      title: 'Review, schedule, and measure',
+      body: 'Use Review & Approve before Scheduling. Performance then shows leads, spend, forms, meetings, purchases, and lessons learned.',
+      path: '/analytics',
+      action: 'View Performance',
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-6 backdrop-blur-sm">
+      <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-neutral-100 px-6 py-5">
+          <div className="min-w-0">
+            <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Getting Started</div>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-950">How to use Tanaghum</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
+              Follow this path to set up your account, run an event workflow, generate content, approve safely, and read performance.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onClose(false)}
+            className="rounded-md p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950"
+            aria-label="Close setup guide"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
+          {steps.map(step => {
+            const available = canOpen(step.path);
+            return (
+              <div key={step.number} className="flex min-h-[220px] flex-col rounded-lg border border-neutral-200 bg-neutral-50 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
+                    {step.number}
+                  </div>
+                  <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${available ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {available ? 'Available' : 'Ask manager'}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-neutral-950">{step.title}</h3>
+                <p className="mt-2 flex-1 text-sm leading-6 text-neutral-600">{step.body}</p>
+                {available ? (
+                  <Link
+                    to={step.path}
+                    onClick={() => onClose(false)}
+                    className="mt-5 inline-flex min-h-10 items-center justify-center rounded-md bg-neutral-950 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                  >
+                    {step.action}
+                  </Link>
+                ) : (
+                  <div className="mt-5 rounded-md border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900">
+                    This page is controlled by your role.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-neutral-100 bg-neutral-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-neutral-600">
+            You can reopen this guide anytime from the top bar.
+          </p>
+          <button
+            type="button"
+            onClick={() => onClose(true)}
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-100"
+          >
+            Got it, hide next time
+          </button>
+        </div>
       </div>
     </div>
   );
