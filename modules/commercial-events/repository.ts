@@ -344,6 +344,9 @@ export async function listEventLeads(tenantKey: string, eventId: string) {
       platform: true,
       lead_name_placeholder: true,
       lead_email_placeholder: true,
+      source_of_truth: true,
+      external_source_provider: true,
+      external_last_synced_at: true,
       created_at: true,
     },
     orderBy: { created_at: 'desc' },
@@ -356,6 +359,9 @@ export async function listEventLeads(tenantKey: string, eventId: string) {
     platform: lead.platform || 'manual',
     leadName: lead.lead_name_placeholder,
     leadEmail: lead.lead_email_placeholder,
+    sourceOfTruth: lead.source_of_truth,
+    externalSourceProvider: lead.external_source_provider,
+    externalLastSyncedAt: lead.external_last_synced_at,
     createdAt: lead.created_at,
   }));
 }

@@ -420,6 +420,14 @@ export const ghlSetupApi = {
   blockedWrite: (token: string) => apiFetch<unknown>('/ghl-setup/write', { method: 'POST', token }),
 };
 
+export const ghlSyncApi = {
+  status: (token: string, eventId?: string) => apiFetch<unknown>(`/ghl-sync/status${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`, { token }),
+  pullPreview: (token: string, data: { eventId?: string; limit?: number }) => apiFetch<unknown>('/ghl-sync/pull-preview', { method: 'POST', body: data, token }),
+  pullSync: (token: string, data: { eventId?: string; limit?: number }) => apiFetch<unknown>('/ghl-sync/pull-sync', { method: 'POST', body: data, token }),
+  writeBackPreview: (token: string, data: { leadId: string }) => apiFetch<unknown>('/ghl-sync/write-back-preview', { method: 'POST', body: data, token }),
+  writeBack: (token: string, data: { leadId: string }) => apiFetch<unknown>('/ghl-sync/write-back', { method: 'POST', body: data, token }),
+};
+
 export const ideasApi = {
   generate: (data: unknown, token: string) => apiFetch<unknown>('/ideas/generate', { method: 'POST', body: data, token }),
   resumeWorkflow: (threadId: string, data: unknown, token: string) =>

@@ -51,6 +51,7 @@ import { connectorFieldMappingRouter } from '../modules/connector-field-mapping/
 import { csvImportRouter } from '../modules/csv-import/controller';
 import { connectorReadinessRouter } from '../modules/connector-readiness/controller';
 import { ghlSetupRouter } from '../modules/ghl-setup/controller';
+import { ghlSyncRouter } from '../modules/ghl-sync/controller';
 import { postizChannelRouter } from '../modules/postiz-channel-selection/controller';
 import { smartlabsValidationRouter } from '../modules/smartlabs-validation/controller';
 
@@ -274,6 +275,7 @@ app.use('/connector-mappings', connectorFieldMappingRouter);
 app.use('/csv-import', csvImportRouter);
 app.use('/connector-readiness', connectorReadinessRouter);
 app.use('/ghl-setup', ghlSetupRouter);
+app.use('/ghl-sync', ghlSyncRouter);
 app.use('/postiz-channels', postizChannelRouter);
 app.use('/smartlabs-validation', smartlabsValidationRouter);
 

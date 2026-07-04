@@ -128,6 +128,14 @@ export interface LeadSummary {
   purchaseDate: Date | null;
   purchaseAmount: number | null;
   purchaseReference: string | null;
+  sourceOfTruth: 'tanaghum' | 'gohighlevel';
+  externalSourceProvider: string | null;
+  externalSourceId: string | null;
+  externalOpportunityId: string | null;
+  externalPipelineId: string | null;
+  externalStageId: string | null;
+  externalTags: string[];
+  externalLastSyncedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

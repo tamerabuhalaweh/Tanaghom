@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { connectorMappingsApi, csvImportApi, eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, leadsApi, learningRecommendationsApi } from '../api';
+import { connectorMappingsApi, csvImportApi, eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, ghlSyncApi, leadsApi, learningRecommendationsApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -249,6 +249,14 @@ function sourceTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'i
   return 'default';
 }
 
+function crmSourceLabel(lead: RecordMap): string {
+  return text(lead.sourceOfTruth) === 'gohighlevel' ? 'GHL CRM' : 'Tanaghum Local';
+}
+
+function crmSourceTone(lead: RecordMap): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  return text(lead.sourceOfTruth) === 'gohighlevel' ? 'good' : 'info';
+}
+
 function money(value: unknown): string {
   return `${numberValue(value).toLocaleString()} SAR`;
 }
@@ -356,6 +364,7 @@ export default function EventDashboard() {
   const [closeoutReport, setCloseoutReport] = useState<RecordMap | null>(null);
   const [learningSummary, setLearningSummary] = useState<RecordMap | null>(null);
   const [learningError, setLearningError] = useState('');
+  const [ghlSyncStatus, setGhlSyncStatus] = useState<RecordMap | null>(null);
   const [emailPlans, setEmailPlans] = useState<RecordMap[]>([]);
   const [whatsappPlans, setWhatsappPlans] = useState<RecordMap[]>([]);
   const [upsellPlans, setUpsellPlans] = useState<RecordMap[]>([]);
@@ -494,7 +503,7 @@ export default function EventDashboard() {
     if (nextEventId) {
       setCloseoutReport(null);
       setLearningError('');
-      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData, mappingData, recommendationData] = await Promise.all([
+      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData, mappingData, recommendationData, ghlSyncData] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
         eventProblemsApi.dashboard(nextEventId, token),
@@ -508,6 +517,7 @@ export default function EventDashboard() {
         learningRecommendationsApi.forEvent(nextEventId, token).catch(error => ({
           __learningError: error instanceof Error ? error.message : 'Learning recommendations failed to load',
         })),
+        ghlSyncApi.status(token, nextEventId),
       ]);
       setDashboard(data as RecordMap);
       setSalesLeads(list(leadData));
@@ -526,6 +536,7 @@ export default function EventDashboard() {
       setContentRequirements(list(contentData));
       setSalesTasks(list(salesTaskData));
       setConnectorMappings(list(mappingData).filter(mapping => !mapping.eventId || String(mapping.eventId) === nextEventId));
+      setGhlSyncStatus(ghlSyncData as RecordMap);
       if (recommendationData && typeof recommendationData === 'object' && '__learningError' in recommendationData) {
         setLearningSummary(null);
         setLearningError(text((recommendationData as RecordMap).__learningError, 'Learning recommendations failed to load'));
@@ -577,6 +588,12 @@ export default function EventDashboard() {
   const connectorJobs = list(sourceStatus.connectorJobs);
   const connectorErrors = list(sourceStatus.connectorErrors);
   const primarySource = text(sourceStatus.primarySource, 'none');
+  const ghlLastRun = (ghlSyncStatus?.lastRun || {}) as RecordMap;
+  const ghlRequiredActions = Array.isArray(ghlSyncStatus?.requiredActions) ? ghlSyncStatus.requiredActions as string[] : [];
+  const ghlLeadCount = numberValue(ghlSyncStatus?.ghlLeadCount);
+  const ghlReady = text(ghlSyncStatus?.credentialStatus) === 'configured'
+    && text(ghlSyncStatus?.mappingStatus) === 'ready'
+    && Boolean(ghlSyncStatus?.readSyncEnabled);
   const funnel = list(dashboard?.funnel);
   const channelPerformance = list(dashboard?.channelPerformance);
   const leadTemperatureBreakdown = list(dashboard?.leadTemperature);
@@ -1217,6 +1234,38 @@ export default function EventDashboard() {
     }
   }
 
+  async function previewGhlPull() {
+    if (!token || !selectedEventId) return;
+    setLoading('ghl-preview');
+    setMessage('');
+    try {
+      const result = await ghlSyncApi.pullPreview(token, { eventId: selectedEventId, limit: 50 }) as RecordMap;
+      const run = result.run as RecordMap | undefined;
+      setMessage(`GHL preview ${text(run?.status, 'completed')}: ${numberValue(run?.contactsPulled)} contacts and ${numberValue(run?.opportunitiesPulled)} opportunities checked.`);
+      await load(selectedEventId);
+    } catch (error) {
+      setMessage(`Could not preview GHL sync: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function runGhlPullSync() {
+    if (!token || !selectedEventId) return;
+    setLoading('ghl-sync');
+    setMessage('');
+    try {
+      const result = await ghlSyncApi.pullSync(token, { eventId: selectedEventId, limit: 100 }) as RecordMap;
+      const run = result.run as RecordMap | undefined;
+      setMessage(`GHL sync ${text(run?.status, 'completed')}: ${numberValue(run?.leadsUpserted)} lead mirrors updated from CRM source of truth.`);
+      await load(selectedEventId);
+    } catch (error) {
+      setMessage(`Could not sync GHL leads: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
   async function transitionSelectedLead(toStatus: LeadStatus, reason: string) {
     if (!token || !selectedLead) return;
     setLoading(`transition-${toStatus}`);
@@ -1622,6 +1671,46 @@ export default function EventDashboard() {
                     ])}
                   />
                 </div>
+              )}
+            </ProductCard>
+
+            <ProductCard
+              title="GoHighLevel Lead Source"
+              subtitle="GoHighLevel is the CRM source of truth. Tanaghum mirrors the lead state for campaign operations and reporting."
+              action={<ProductStatus tone={ghlReady ? 'good' : 'warn'}>{ghlReady ? 'Ready To Sync' : 'Setup Required'}</ProductStatus>}
+            >
+              <div className="grid gap-3 md:grid-cols-4">
+                <MetricCard label="CRM Leads Mirrored" value={ghlLeadCount} detail="GHL-owned leads in this event" tone={ghlLeadCount ? 'good' : 'default'} />
+                <MetricCard label="Credential" value={titleCase(text(ghlSyncStatus?.credentialStatus, 'missing'))} detail="Tenant-owned API key only" tone={text(ghlSyncStatus?.credentialStatus) === 'configured' ? 'good' : 'warn'} />
+                <MetricCard label="Mapping" value={titleCase(text(ghlSyncStatus?.mappingStatus, 'missing'))} detail="Tags and stages to lead status" tone={text(ghlSyncStatus?.mappingStatus) === 'ready' ? 'good' : 'warn'} />
+                <MetricCard label="Last Sync" value={formatDateTime(ghlSyncStatus?.lastSyncAt)} detail={`${numberValue(ghlLastRun.contactsPulled)} contact(s) checked`} tone={ghlSyncStatus?.lastSyncAt ? 'good' : 'default'} />
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="font-semibold text-neutral-950">CRM Sync Contract</div>
+                  <p className="mt-2 text-sm leading-6 text-neutral-500">
+                    Pull contacts, opportunities, tags, stages, meeting status, and purchases from the customer's GHL location. Tanaghum uses the mirrored data for dashboards, tasks, and reporting.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <ProductStatus tone="good">GHL source of truth</ProductStatus>
+                    <ProductStatus tone="info">Tanaghum reporting layer</ProductStatus>
+                    <ProductStatus tone={ghlSyncStatus?.writeBackEnabled ? 'warn' : 'default'}>{ghlSyncStatus?.writeBackEnabled ? 'Write-back gated' : 'Write-back off'}</ProductStatus>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                  <div className="font-semibold text-neutral-950">Actions</div>
+                  <div className="mt-4 grid gap-2">
+                    <SecondaryAction onClick={previewGhlPull} disabled={loading === 'ghl-preview'}>
+                      {loading === 'ghl-preview' ? 'Checking...' : 'Preview GHL Pull'}
+                    </SecondaryAction>
+                    <PrimaryAction onClick={runGhlPullSync} disabled={loading === 'ghl-sync'}>
+                      {loading === 'ghl-sync' ? 'Syncing...' : 'Sync From GHL'}
+                    </PrimaryAction>
+                  </div>
+                </div>
+              </div>
+              {ghlRequiredActions.length > 0 && (
+                <Notice tone="warn">{ghlRequiredActions.join(' ')}</Notice>
               )}
             </ProductCard>
 
@@ -3149,15 +3238,16 @@ export default function EventDashboard() {
             <ProductCard title="Leads For This Event" subtitle="Only leads linked to this event are shown. No other event data is mixed in.">
               {(salesLeads.length || leads.length) ? (
                 <ProductTable
-                  columns={['Lead', 'Channel', 'Temperature', 'Status', 'Next Action', 'Email', 'Created']}
+                  columns={['Lead', 'CRM Source', 'Channel', 'Temperature', 'Status', 'Next Action', 'Email', 'Synced']}
                   rows={(salesLeads.length ? salesLeads : leads).map(lead => [
                     leadName(lead),
+                    <ProductStatus key={`${String(lead.id)}-crm-source`} tone={crmSourceTone(lead)}>{crmSourceLabel(lead)}</ProductStatus>,
                     titleCase(text(lead.channelAttribution || lead.platform, 'manual')),
                     titleCase(leadTemp(lead.leadTemperature)),
                     titleCase(leadStatus(lead.leadStatus || lead.status)),
                     text(lead.nextAction, 'Not set'),
                     text(lead.leadEmail, 'Not provided'),
-                    formatDate(lead.createdAt),
+                    text(lead.sourceOfTruth) === 'gohighlevel' ? formatDateTime(lead.externalLastSyncedAt) : formatDate(lead.createdAt),
                   ])}
                 />
               ) : (

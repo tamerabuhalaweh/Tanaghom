@@ -241,7 +241,17 @@ export interface EventDashboardSummary {
   nextActions: Array<{ title: string; detail: string; priority: 'high' | 'medium' | 'low' }>;
   kpiRecords: EventKpiRecordSummary[];
   campaigns: Array<{ id: string; title: string; objective: string; status: string; platforms: string[]; createdAt: Date }>;
-  leads: Array<{ id: string; status: string; platform: string; leadName: string | null; leadEmail: string | null; createdAt: Date }>;
+  leads: Array<{
+    id: string;
+    status: string;
+    platform: string;
+    leadName: string | null;
+    leadEmail: string | null;
+    sourceOfTruth: 'tanaghum' | 'gohighlevel';
+    externalSourceProvider: string | null;
+    externalLastSyncedAt: Date | null;
+    createdAt: Date;
+  }>;
   sourceStatus: {
     manualRecords: number;
     importedRecords: number;
