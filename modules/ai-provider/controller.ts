@@ -303,8 +303,14 @@ function credentialModel(credentials: Awaited<ReturnType<typeof listSafeCredenti
 async function getUserSelectedProvider(userId: string): Promise<SelectableProviderType> {
   const agentRep = await prisma.agentRep.findUnique({ where: { user_id: userId } });
   const selected = (agentRep?.metadata as { llmProvider?: string } | null)?.llmProvider;
-  if (selected === 'mock' && !isMockLLMAllowed()) return getEnvironmentDefaultProvider() || 'mock';
-  return selected === 'openai' || selected === 'claude' || selected === 'deepseek' || selected === 'gemma' ? selected : 'mock';
+  const environmentDefault = getEnvironmentDefaultProvider();
+  if (selected === 'mock') {
+    if (isMockLLMAllowed()) return 'mock';
+    return environmentDefault || 'mock';
+  }
+  if (selected === 'openai' || selected === 'claude' || selected === 'deepseek' || selected === 'gemma') return selected;
+  if (!isMockLLMAllowed() && environmentDefault) return environmentDefault;
+  return 'mock';
 }
 
 async function setUserSelectedProvider(userId: string, provider: SelectableProviderType): Promise<void> {

@@ -29,6 +29,19 @@ export interface LLMProviderStatus {
   apiKeyStatus: 'configured' | 'missing';
 }
 
+export class LLMProviderError extends Error {
+  public readonly isOperational = true;
+
+  constructor(
+    message: string,
+    public readonly statusCode = 502,
+    public readonly code = 'LLM_PROVIDER_ERROR',
+  ) {
+    super(message);
+    this.name = 'LLMProviderError';
+  }
+}
+
 export class MockLLMProvider implements LLMProvider {
   name = 'Fallback Content Provider';
   type = 'mock' as const;
@@ -293,7 +306,7 @@ export class GemmaLLMProvider implements LLMProvider {
       throw new Error('Gemma provider not configured: missing GEMMA_API_KEY');
     }
     const model = options?.model || this.model;
-    const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
+    const response = await fetchWithRetry(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -310,10 +323,19 @@ export class GemmaLLMProvider implements LLMProvider {
         top_p: 0.9,
         stream: false,
       }),
-    }, options?.timeoutMs);
+    }, {
+      timeoutMs: options?.timeoutMs,
+      retryStatuses: [429, 502, 503, 504],
+      maxAttempts: 3,
+      retryDelayMs: 350,
+    });
 
     if (!response.ok) {
-      throw new Error(`Gemma API returned ${response.status}`);
+      throw new LLMProviderError(
+        `Gemma API returned ${response.status}. The provider may be busy; please try again.`,
+        response.status >= 500 || response.status === 429 ? 502 : 400,
+        'LLM_PROVIDER_UNAVAILABLE',
+      );
     }
 
     const data = await response.json() as ChatCompletionResponsePayload;
@@ -426,6 +448,43 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 3000
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  options: {
+    timeoutMs?: number;
+    retryStatuses?: number[];
+    maxAttempts?: number;
+    retryDelayMs?: number;
+  } = {},
+): Promise<Response> {
+  const maxAttempts = Math.max(1, options.maxAttempts || 1);
+  const retryStatuses = new Set(options.retryStatuses || []);
+  let lastResponse: Response | null = null;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(url, init, options.timeoutMs);
+      if (!retryStatuses.has(response.status) || attempt === maxAttempts) {
+        return response;
+      }
+      lastResponse = response;
+    } catch (err) {
+      lastError = err;
+      if (attempt === maxAttempts) throw err;
+    }
+    await delay((options.retryDelayMs || 250) * attempt);
+  }
+
+  if (lastResponse) return lastResponse;
+  throw lastError instanceof Error ? lastError : new Error('Provider request failed');
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function extractOpenAIText(data: OpenAIResponsePayload): string {

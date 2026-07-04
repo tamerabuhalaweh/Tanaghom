@@ -125,6 +125,31 @@ describe('LLM provider adapter', () => {
     expect(response.usage).toEqual({ promptTokens: 10, completionTokens: 6 });
   });
 
+  it('retries transient Gemma provider failures before returning content', async () => {
+    process.env.GEMMA_API_KEY = 'test-gemma-key';
+    process.env.GEMMA_BASE_URL = 'https://api.thesmartlabs.net/gemma4/v1';
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: { message: 'temporary upstream error' } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: 'Gemma retry generated draft' } }],
+        }),
+      } as Response);
+
+    const provider = new GemmaLLMProvider();
+    const response = await provider.generate('Campaign brief', { timeoutMs: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.text).toBe('Gemma retry generated draft');
+    expect(response.provider).toBe('gemma');
+  });
+
   it('does not call external providers when credentials are missing', async () => {
     delete process.env.OPENAI_API_KEY;
     const fetchMock = vi.spyOn(globalThis, 'fetch');
