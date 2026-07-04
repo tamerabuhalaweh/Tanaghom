@@ -38,6 +38,7 @@ import SocialGrowthIntelligence from './pages/SocialGrowthIntelligence'
 import EventDashboard from './pages/EventDashboard'
 import EventStrategyWizard from './pages/EventStrategyWizard'
 import MasterEventsDashboard from './pages/MasterEventsDashboard'
+import HybridEventWorkspace from './pages/HybridEventWorkspace'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
@@ -97,9 +98,11 @@ function App() {
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<MasterEventsDashboard />} />
             <Route path="events/master" element={<MasterEventsDashboard />} />
-            <Route path="events" element={<EventDashboard />} />
+            <Route path="events" element={<HybridEventWorkspace />} />
             <Route path="events/new" element={<EventStrategyWizard />} />
-            <Route path="events/:eventId" element={<EventDashboard />} />
+            <Route path="events/advanced" element={<EventDashboard />} />
+            <Route path="events/advanced/:eventId" element={<EventDashboard />} />
+            <Route path="events/:eventId" element={<HybridEventWorkspace />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
             <Route path="approvals" element={<ApprovalQueue />} />
