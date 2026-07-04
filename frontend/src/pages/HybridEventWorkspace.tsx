@@ -361,7 +361,7 @@ function OverviewTab({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-4 2xl:grid-cols-[1.2fr_0.8fr]">
         <div className="overflow-hidden rounded-2xl bg-[#151426] p-6 text-white shadow-[0_18px_54px_rgba(15,15,22,0.24)]">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
