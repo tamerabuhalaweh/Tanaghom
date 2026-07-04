@@ -165,7 +165,7 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
     await expectCustomerPage(page, '/publishing', /Scheduling/i, /Scheduling Service|Scheduling & Review|Postiz/i);
     await expectCustomerPage(page, '/analytics', /Performance/i, /Lead|Customer Interest|Waiting for Data/i);
     await expectCustomerPage(page, '/events/master', /Master Events Dashboard/i, /Event Comparison|No event results yet/i);
-    await expectCustomerPage(page, '/integration-credentials', /Connector Setup/i, /Connector Setup Roadmap/i);
+    await expectCustomerPage(page, '/integration-credentials', /Connect Business Systems/i, /Start Here: Choose What You Want To Connect/i);
 
     monitor.assertClean();
   });

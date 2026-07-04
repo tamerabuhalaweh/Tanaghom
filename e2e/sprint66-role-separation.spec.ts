@@ -180,7 +180,7 @@ test.describe('Sprint 66 role-specific workspace separation', () => {
     await expect(page.getByText('Admin & Settings')).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Users & Roles/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Tenant Admin/i })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /Connector Setup/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Integrations/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Operations/i })).toHaveCount(0);
 
     await page.goto('/tenant-admin');
@@ -202,6 +202,6 @@ test.describe('Sprint 66 role-specific workspace separation', () => {
     await page.getByRole('button', { name: /Admin & Settings/i }).click();
     await expect(page.getByRole('link', { name: /Users & Roles/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /Tenant Admin/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Connector Setup/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Integrations/i })).toBeVisible();
   });
 });

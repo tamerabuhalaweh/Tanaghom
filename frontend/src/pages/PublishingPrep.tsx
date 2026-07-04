@@ -484,7 +484,7 @@ export default function PublishingPrep() {
               <EmptyProductState
                 title="No Postiz channels visible"
                 message="Save the Postiz API key and connect a social account inside Postiz, then refresh this page."
-                action={<SecondaryAction onClick={() => navigate('/integration-credentials')}>Open Connector Setup</SecondaryAction>}
+                action={<SecondaryAction onClick={() => navigate('/integration-credentials')}>Open Integrations</SecondaryAction>}
               />
             )}
 

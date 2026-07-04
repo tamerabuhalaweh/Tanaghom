@@ -209,7 +209,7 @@ export default function GhlWizard() {
 
   return (
     <ProductPage
-      eyebrow="Connector Setup"
+      eyebrow="Integrations"
       title="GoHighLevel CRM Setup"
       subtitle="Configure tenant-owned GoHighLevel credentials, location, tags, and pipeline mapping. This prepares lead handoff without enabling uncontrolled CRM writes."
       action={<ProductStatus tone={liveWriteBlocked ? 'warn' : 'good'}>{liveWriteBlocked ? 'CRM Writes Controlled' : 'CRM Writes Enabled'}</ProductStatus>}
@@ -219,7 +219,7 @@ export default function GhlWizard() {
       <WorkflowRail steps={railSteps} />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Credential" value={titleCase(credentialStatus)} detail={hasApiKey ? 'API key saved in tenant vault' : 'Add customer API key in Connector Setup'} tone={tone(credentialStatus)} />
+        <MetricCard label="Credential" value={titleCase(credentialStatus)} detail={hasApiKey ? 'API key saved in tenant vault' : 'Add customer API key in Integrations'} tone={tone(credentialStatus)} />
         <MetricCard label="Location" value={hasLocationId ? 'Saved' : titleCase(text(locationReadiness.state, 'not_started'))} detail="GHL location controls contact ownership" tone={hasLocationId ? 'good' : tone(text(locationReadiness.state, 'not_started'))} />
         <MetricCard label="Tags" value={`${tagReadiness.mappedCount || 0}/${tagReadiness.totalCount || 0}`} detail="Lead and buyer category mapping" tone={tone(text(tagReadiness.state, 'not_started'))} />
         <MetricCard label="Pipeline" value={`${pipelineReadiness.mappedCount || 0}/${pipelineReadiness.totalCount || 0}`} detail="Sales stage mapping" tone={tone(text(pipelineReadiness.state, 'not_started'))} />
@@ -227,8 +227,8 @@ export default function GhlWizard() {
 
       <ProductCard
         title="Credential Status"
-        subtitle="Raw API keys are never shown after save. If credentials are missing, add them from Connector Setup first."
-        action={<Link to="/integration-credentials" className="inline-flex min-h-10 items-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50">Open Connector Setup</Link>}
+        subtitle="Raw API keys are never shown after save. If credentials are missing, add them from Integrations first."
+        action={<Link to="/integration-credentials" className="inline-flex min-h-10 items-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50">Open Integrations</Link>}
       >
         <DetailGrid items={[
           { label: 'Provider', value: 'gohighlevel' },

@@ -279,7 +279,7 @@ test('Sprint 64E connector setup readiness UI is usable and secret-safe', async 
   await page.goto('/integration-credentials');
 
   await expect(page.getByRole('heading', { name: /Credentials & Integration Setup/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Connector Setup Roadmap/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Start Here: Choose What You Want To Connect/i })).toBeVisible();
   await expect(page.getByText(/Customers bring their own provider accounts/i)).toBeVisible();
 
   await expect(page.getByRole('heading', { name: /Postiz Scheduling/i })).toBeVisible();

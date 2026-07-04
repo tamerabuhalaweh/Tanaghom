@@ -27,7 +27,7 @@ Build a secure, agent-assisted social media operations platform that helps Smart
 | Marketing Owner | Content strategy, campaign priorities, brand voice, final approval | Approve/reject drafts, schedule content |
 | Content Reviewer | Tone, accuracy, formatting, platform fit | Edit drafts, recommend approval |
 | Security/Admin Owner | Infrastructure, secrets, skills, access, incidents | Configure integrations, rotate keys |
-| Agent Operator | OpenClaw configuration, memory, prompts, heartbeat | Update agent instructions |
+| Runtime Operator | Internal runtime evidence for optional OpenClaw, agentgateway, and AgentScope adoption | Review runtime health and gated pilot results |
 | Analyst | Performance review, improvement recommendations | Read analytics, export reports |
 | AI Agent | Draft, validate, schedule, pull analytics, propose insights | Execute scoped tool calls |
 
@@ -45,7 +45,7 @@ Build a secure, agent-assisted social media operations platform that helps Smart
 ## 5. In Scope (MVP)
 
 - Self-hosted Postiz deployment via Docker Compose
-- OpenClaw as sandboxed agent runtime
+- Optional Admin/Ops runtime bridge scaffolds for OpenClaw, agentgateway, and AgentScope; not active production runtime infrastructure
 - Postiz CLI/API integration for draft creation, scheduling, analytics
 - One primary messaging interface for intake and approvals
 - Content calendar, draft queue, approval workflow, audit trail

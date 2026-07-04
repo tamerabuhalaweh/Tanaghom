@@ -18,6 +18,9 @@ function getPayload(req: Request): JwtPayload {
   return verifyToken(authHeader.substring(7));
 }
 
+// Customer/business integration requirements only. Internal runtime endpoints
+// (OpenClaw, agentgateway, AgentScope) are handled through Admin/Ops runtime
+// evidence, not the customer connector setup matrix.
 const REQUIRED_CREDENTIALS = [
   {
     provider: 'postiz',
@@ -92,30 +95,6 @@ const REQUIRED_CREDENTIALS = [
     label: 'X OAuth Client',
     requiredFields: ['clientId', 'clientSecret', 'redirectUri', 'authorizationUrl', 'tokenUrl', 'accountInfoUrl', 'scope'],
     purpose: 'Connect official X/Twitter accounts through OAuth authorization code flow.',
-  },
-  {
-    provider: 'openclaw',
-    credentialType: 'runtime_endpoint',
-    connectionKey: 'default',
-    label: 'OpenClaw Runtime',
-    requiredFields: ['baseUrl', 'apiKey'],
-    purpose: 'Call OpenClaw as an adjacent orchestration/channel layer while STITCH remains authority.',
-  },
-  {
-    provider: 'agentgateway',
-    credentialType: 'runtime_endpoint',
-    connectionKey: 'default',
-    label: 'agentgateway Endpoint',
-    requiredFields: ['baseUrl'],
-    purpose: 'Route MCP traffic through an external gateway/proxy once deployed.',
-  },
-  {
-    provider: 'agentscope',
-    credentialType: 'runtime_endpoint',
-    connectionKey: 'default',
-    label: 'AgentScope Runtime',
-    requiredFields: ['baseUrl', 'apiKey'],
-    purpose: 'Use external sandboxed agent runtime endpoints once deployed.',
   },
 ] as const;
 

@@ -535,7 +535,7 @@ function KpisTab({
   return (
     <div className="space-y-5">
       <Notice tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'}>
-        KPI data source: {sourceLabel(sourceStatus.primarySource)}. Use Connector Setup to connect/import Meta, YouTube, Formaloo, GHL, Postiz, or CSV data for this event.
+        KPI data source: {sourceLabel(sourceStatus.primarySource)}. Use Integrations to connect/import Meta, YouTube, Formaloo, GHL, Postiz, or CSV data for this event.
       </Notice>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -549,7 +549,7 @@ function KpisTab({
         <ProductCard
           title="Best Performing Channels"
           subtitle="Shows where reach and leads are coming from."
-          action={<SecondaryAction onClick={() => navigate('/integration-credentials')}>Connector Setup</SecondaryAction>}
+          action={<SecondaryAction onClick={() => navigate('/integration-credentials')}>Open Integrations</SecondaryAction>}
         >
           {channelPerformance.length ? (
             <BarList
@@ -579,7 +579,7 @@ function KpisTab({
               ])}
             />
           ) : (
-            <EmptyProductState message="No KPI record is saved yet. Use Connector Setup or the advanced workspace to add the first record." />
+            <EmptyProductState message="No KPI record is saved yet. Use Integrations or the advanced workspace to add the first record." />
           )}
         </ProductCard>
       </div>

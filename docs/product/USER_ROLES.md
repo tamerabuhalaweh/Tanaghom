@@ -20,10 +20,10 @@
 - **Can**: Configure integrations, rotate keys, approve skills, view all logs, trigger kill switch
 - **Cannot**: Approve content (unless also assigned as approver)
 
-### Agent Operator
-- **Owns**: OpenClaw configuration, memory files, prompt templates, heartbeat tasks
-- **Can**: Update agent instructions, configure heartbeat, manage memory files
-- **Cannot**: Change secrets without admin, approve content, schedule posts
+### Runtime Operator
+- **Owns**: Internal Admin/Ops runtime evidence for optional OpenClaw, agentgateway, and AgentScope adoption
+- **Can**: Review runtime health, inspect gated pilot evidence, document runtime readiness
+- **Cannot**: Configure customer business connectors, change secrets without admin, approve content, schedule posts, claim runtime is production-ready without an accepted pilot
 
 ### Analyst
 - **Owns**: Performance review, improvement recommendations

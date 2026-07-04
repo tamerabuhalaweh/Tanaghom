@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; later phases pending  
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; runtime integration phases pending  
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -293,6 +293,12 @@ Use internally or as channel infrastructure when it adds:
 Do not show as a customer connector unless the customer is explicitly managing channels through OpenClaw.
 
 ## Implementation Phases
+
+### Sprint R0 - Runtime Truth Cleanup
+
+Status: Implemented.
+
+Customer-facing setup no longer treats OpenClaw, agentgateway, or AgentScope as customer-owned connectors. Legacy dashboard wording no longer presents OpenClaw as ready/checking. Product docs now describe these services as optional Admin/Ops runtime infrastructure with production pilots still pending.
 
 ### Sprint I1 - Integration UX Simplification
 

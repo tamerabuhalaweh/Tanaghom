@@ -56,7 +56,7 @@ describe('Sprint 56 production product integrity contracts', () => {
       { path: '/operations', route: 'operations', label: 'Operations' },
       { path: '/smartlabs-voice', route: 'smartlabs-voice', label: 'SmartLabs Voice' },
       { path: '/mcp-engine', route: 'mcp-engine', label: 'Integrations' },
-      { path: '/integration-credentials', route: 'integration-credentials', label: 'Connector Setup' },
+      { path: '/integration-credentials', route: 'integration-credentials', label: 'Integrations' },
       { path: '/safety', route: 'safety', label: 'Security' },
       { path: '/observability', route: 'observability', label: 'Activity Log' },
     ];

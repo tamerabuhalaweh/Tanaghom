@@ -25,7 +25,6 @@ export default function Dashboard() {
   }, [token]);
 
   const postizReady = status?.integrations?.postiz?.reachable === true;
-  const openClawReady = status?.integrations?.openClaw?.reachable === true;
 
   return (
     <div className="space-y-6">
@@ -45,7 +44,7 @@ export default function Dashboard() {
         <ExecutiveMetric label="Approvals" value={status ? count(status.approvals) : '...'} sublabel="Human queue" />
         <ExecutiveMetric label="Packages" value={status ? count(status.publishingPackages) : '...'} sublabel="Prepared only" />
         <ExecutiveMetric label="Postiz" value={postizReady ? 'Ready' : 'Checking'} sublabel="Sandbox surface" />
-        <ExecutiveMetric label="OpenClaw" value={openClawReady ? 'Ready' : 'Checking'} sublabel="Loopback gateway" />
+        <ExecutiveMetric label="External Actions" value="Blocked" sublabel="Approval required" />
       </div>
 
       <div className="grid grid-cols-[1.3fr_1fr] gap-6">
