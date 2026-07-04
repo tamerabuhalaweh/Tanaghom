@@ -26,6 +26,7 @@ import {
   SecondaryAction,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
+import { formatCurrency } from '../lib/currency';
 
 type RecordMap = Record<string, unknown>;
 type WorkspaceTab = 'overview' | 'strategy' | 'kpis' | 'leads' | 'blockers' | 'closeout';
@@ -68,7 +69,7 @@ function titleCase(value: unknown): string {
 }
 
 function money(value: unknown): string {
-  return `${Math.round(numberValue(value)).toLocaleString()} SAR`;
+  return formatCurrency(value);
 }
 
 function percent(value: unknown): string {
@@ -268,7 +269,7 @@ function EventPicker({
   }
 
   return (
-    <ProductCard title="Events" subtitle="Choose the event Amro is operating today.">
+    <ProductCard title="Events" subtitle="Choose the event your team is operating today.">
       <div className="space-y-2">
         {events.map(event => {
           const id = String(event.id || '');
@@ -379,22 +380,22 @@ function OverviewTab({
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(min(100%,170px),1fr))] gap-3">
+            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
               <div className="text-xs uppercase tracking-wide text-white/45">Event date</div>
-              <div className="mt-2 text-lg font-semibold">{formatDate(event.eventDate)}</div>
+              <div className="mt-2 break-words text-base font-semibold leading-snug">{formatDate(event.eventDate)}</div>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
               <div className="text-xs uppercase tracking-wide text-white/45">Location</div>
-              <div className="mt-2 text-lg font-semibold">{text(event.location, 'Not set')}</div>
+              <div className="mt-2 break-words text-base font-semibold leading-snug [overflow-wrap:anywhere]">{text(event.location, 'Not set')}</div>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
               <div className="text-xs uppercase tracking-wide text-white/45">Budget</div>
-              <div className="mt-2 text-lg font-semibold">{money(kpis.plannedBudget)}</div>
+              <div className="mt-2 break-words text-base font-semibold leading-snug [overflow-wrap:anywhere]">{money(kpis.plannedBudget)}</div>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
               <div className="text-xs uppercase tracking-wide text-white/45">CRM readiness</div>
-              <div className="mt-2 text-lg font-semibold">{text(ghlStatus?.credentialStatus) === 'configured' ? 'Configured' : 'Needs setup'}</div>
+              <div className="mt-2 break-words text-base font-semibold leading-snug">{text(ghlStatus?.credentialStatus) === 'configured' ? 'Configured' : 'Needs setup'}</div>
             </div>
           </div>
         </div>
@@ -430,7 +431,7 @@ function OverviewTab({
           )}
         </ProductCard>
 
-        <ProductCard title="What Amro Should Do Next" subtitle="Backend-generated next actions from current event data.">
+        <ProductCard title="What The Team Should Do Next" subtitle="Backend-generated next actions from current event data.">
           {nextActions.length ? (
             <ReadableQueue
               items={nextActions.slice(0, 5).map(action => ({
@@ -490,7 +491,7 @@ function StrategyTab({
         />
       </ProductCard>
 
-      <ProductCard title="Campaign Plan Checklist" subtitle="The work packages Amro needs before launch.">
+      <ProductCard title="Campaign Plan Checklist" subtitle="The work packages your team needs before launch.">
         <div className="grid gap-3 sm:grid-cols-2">
           <MetricCard label="Email Plans" value={emailPlans.length} detail="Upsell and reminder sequences" tone={emailPlans.length ? 'good' : 'warn'} />
           <MetricCard label="WhatsApp Plans" value={whatsappPlans.length} detail="Follow-up messages and reminders" tone={whatsappPlans.length ? 'good' : 'warn'} />

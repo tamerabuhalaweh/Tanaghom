@@ -13,6 +13,7 @@ import {
   WorkflowRail,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
+import { formatCurrency } from '../lib/currency';
 
 type EventType = 'tagyeer_wa_irtaqi' | 'moaaskar_al_tamayoz' | 'business_camp' | 'virtual_event';
 
@@ -187,8 +188,8 @@ export default function EventStrategyWizard() {
       { label: 'Campaign Timing', value: form.campaignStartDate ? `${form.campaignStartDate} to ${form.eventDate}` : `Auto-starts 30 days before ${form.eventDate}` },
       { label: 'Target Audience', value: form.audience || 'Not set' },
       { label: 'Channels', value: form.selectedChannels.length ? form.selectedChannels.map(titleCase).join(', ') : 'Not set' },
-      { label: 'Budget', value: form.plannedBudget ? `${Number(form.plannedBudget).toLocaleString()} SAR` : 'Not set' },
-      { label: 'Revenue Target', value: form.revenueTarget ? `${Number(form.revenueTarget).toLocaleString()} SAR` : 'Not set' },
+      { label: 'Budget', value: form.plannedBudget ? formatCurrency(form.plannedBudget) : 'Not set' },
+      { label: 'Revenue Target', value: form.revenueTarget ? formatCurrency(form.revenueTarget) : 'Not set' },
       { label: 'FOMO Angle', value: form.fomoAngle || 'Not set' },
     ],
     [form],
@@ -265,7 +266,7 @@ export default function EventStrategyWizard() {
     <ProductPage
       eyebrow="Event Strategy"
       title="Create Event Strategy"
-      subtitle="Turn Amro's event plan into a trackable operating workspace for content, sales, budget, leads, meetings, purchases, and learning."
+      subtitle="Turn an event plan into a trackable operating workspace for content, sales, budget, leads, meetings, purchases, and learning."
       action={<ProductStatus tone={readiness >= 80 ? 'good' : 'warn'}>{readiness}% ready</ProductStatus>}
     >
       {message && <Notice tone={message.startsWith('Could not') || message.includes('required') || message.includes('Choose') ? 'warn' : 'info'}>{message}</Notice>}
@@ -331,7 +332,7 @@ export default function EventStrategyWizard() {
             </div>
           </ProductCard>
 
-          <ProductCard title="3. Offer, Audience, and FOMO" subtitle="This is the marketing strategy Amro currently builds manually before content and sales execution.">
+          <ProductCard title="3. Offer, Audience, and FOMO" subtitle="This is the marketing strategy your team builds before content and sales execution.">
             <div className="grid gap-4">
               <Field label="Offer">
                 <textarea className="min-h-24 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm" value={form.offer} onChange={event => update('offer', event.target.value)} />
@@ -391,7 +392,7 @@ export default function EventStrategyWizard() {
                 A real event record is created and tenant-scoped to this workspace.
               </div>
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-800">
-                Amro can track event KPIs, leads, meetings, purchases, no-shows, and budget from the Events dashboard.
+                Your team can track event KPIs, leads, meetings, purchases, no-shows, and budget from the Events dashboard.
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
                 Connectors for Meta, YouTube, Formaloo, GHL, WhatsApp, and SmartLabs still require customer-owned credentials before automatic ingestion.

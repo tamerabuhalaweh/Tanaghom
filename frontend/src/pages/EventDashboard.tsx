@@ -19,6 +19,7 @@ import {
   SecondaryAction,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
+import { formatCurrency } from '../lib/currency';
 
 type RecordMap = Record<string, unknown>;
 type LeadStatus = 'new_lead' | 'contacted' | 'meeting_booked' | 'meeting_attended' | 'no_show' | 'purchased' | 'lost' | 'follow_up_needed' | 'qualified' | 'nurturing' | 'converted' | 'archived';
@@ -258,7 +259,7 @@ function crmSourceTone(lead: RecordMap): 'default' | 'good' | 'warn' | 'danger' 
 }
 
 function money(value: unknown): string {
-  return `${numberValue(value).toLocaleString()} SAR`;
+  return formatCurrency(value);
 }
 
 function percent(value: unknown): string {
@@ -1333,7 +1334,7 @@ export default function EventDashboard() {
       subtitle="Track each course, camp, or live event from campaign launch to leads, meetings, purchases, no-shows, and learning."
       action={(
         <>
-          <ProductStatus tone="info">Amro Workspace</ProductStatus>
+          <ProductStatus tone="info">Event Workspace</ProductStatus>
           <SecondaryAction onClick={() => navigate('/events/master')}>Portfolio Dashboard</SecondaryAction>
           <PrimaryAction onClick={() => navigate('/events/new')}>Create Event</PrimaryAction>
         </>
@@ -1361,13 +1362,13 @@ export default function EventDashboard() {
       {events.length === 0 ? (
         <EmptyProductState
           title="No events yet"
-          message="Create the first event strategy, then this page becomes Amro's operating dashboard for leads, spend, meetings, purchases, and follow-up."
+          message="Create the first event strategy, then this page becomes your operating dashboard for leads, spend, meetings, purchases, and follow-up."
           action={<PrimaryAction onClick={() => navigate('/events/new')}>Create Event Strategy</PrimaryAction>}
         />
       ) : (
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-4">
-            <ProductCard title="Event Queue" subtitle="Choose the event Amro is operating today.">
+            <ProductCard title="Event Queue" subtitle="Choose the event your team is operating today.">
               <div className="space-y-3">
                 {events.map(item => {
                   const active = String(item.id) === selectedEventId;
@@ -1750,7 +1751,7 @@ export default function EventDashboard() {
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-              <ProductCard title="Next Required Actions" subtitle="Operational actions for Amro and the sales/content teams.">
+              <ProductCard title="Next Required Actions" subtitle="Operational actions for the sales and content teams.">
                 {nextActions.length ? (
                   <ReadableQueue
                     items={nextActions.map(action => ({
@@ -1877,7 +1878,7 @@ export default function EventDashboard() {
                 ) : null}
 
                 <Notice tone="info">
-                  Recommendations do not change ads, budgets, CRM, WhatsApp, voice, or content workflows automatically. Amro or an authorized manager decides what to apply.
+                  Recommendations do not change ads, budgets, CRM, WhatsApp, voice, or content workflows automatically. An authorized manager decides what to apply.
                 </Notice>
               </div>
             </ProductCard>
@@ -1963,7 +1964,7 @@ export default function EventDashboard() {
                         value={emailPlanForm.contentDraft}
                         onChange={event => setEmailPlanForm(current => ({ ...current, contentDraft: event.target.value }))}
                         className="min-h-24 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                        placeholder="Write the draft message Amro's team wants to review."
+                        placeholder="Write the draft message the team wants to review."
                       />
                     </Field>
                     <div className="flex flex-wrap gap-2">
@@ -2329,7 +2330,7 @@ export default function EventDashboard() {
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-neutral-950">Record a blocker</div>
                       <p className="mt-1 text-sm leading-6 text-neutral-500">
-                        Capture the problem once so Amro can see why leads, meetings, spend, or sales moved.
+                        Capture the problem once so the team can see why leads, meetings, spend, or sales moved.
                       </p>
                     </div>
                     <ProductStatus tone="info">Event evidence</ProductStatus>

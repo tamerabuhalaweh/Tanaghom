@@ -18,6 +18,7 @@ import {
   SecondaryAction,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
+import { formatCurrency } from '../lib/currency';
 
 type RecordMap = Record<string, unknown>;
 
@@ -65,7 +66,7 @@ function titleCase(value: string): string {
 }
 
 function money(value: unknown): string {
-  return `${Math.round(numberValue(value)).toLocaleString()} SAR`;
+  return formatCurrency(value);
 }
 
 function percent(value: number): string {
@@ -493,7 +494,7 @@ export default function MasterEventsDashboard() {
           </ProductCard>
 
           <Notice tone="info">
-            Production target: connector-synced KPI data. Approved imports are a transition bridge. Manual entries are fallback corrections and should not be the long-term source of truth for Amro's reporting.
+            Production target: connector-synced KPI data. Approved imports are a transition bridge. Manual entries are fallback corrections and should not be the long-term source of truth for customer reporting.
           </Notice>
         </>
       )}
