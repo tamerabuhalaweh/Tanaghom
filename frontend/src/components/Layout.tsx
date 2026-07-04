@@ -83,8 +83,8 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     path: '/integration-credentials',
-    label: 'Connector Setup',
-    description: 'Data sources and imports',
+    label: 'Integrations',
+    description: 'Business systems and data',
     icon: KeyRound,
     group: 'Product',
     roles: CONNECTOR_SETUP_ROLES,
@@ -491,9 +491,9 @@ function SetupGuide({
     {
       number: '4',
       title: 'Connect data sources',
-      body: 'Use Connector Setup to add customer-owned credentials and validate imports. Normal users may need an admin or manager to do this step.',
+      body: 'Use Integrations to connect customer-owned systems like GoHighLevel, Meta/Instagram, Postiz, Formaloo, YouTube, and SmartLabs. Normal users may need an admin or manager to do this step.',
       path: '/integration-credentials',
-      action: 'Open Connectors',
+      action: 'Open Integrations',
     },
     {
       number: '5',

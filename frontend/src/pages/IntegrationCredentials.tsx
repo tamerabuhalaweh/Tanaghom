@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { connectorImportsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, runtimeBridgesApi, socialOAuthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
@@ -24,6 +23,10 @@ function text(value: unknown, fallback = 'Not configured'): string {
 
 function display(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function normalizeRole(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_') : '';
 }
 
 function statusTone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'default' {
@@ -55,6 +58,29 @@ type SetupBlueprint = {
 
 const SETUP_BLUEPRINTS: SetupBlueprint[] = [
   {
+    id: 'gohighlevel',
+    label: 'GoHighLevel CRM',
+    category: 'CRM & Messaging',
+    businessUse: 'Use GHL as the lead source of truth for contacts, tags, stages, opportunities, purchases, meetings, and GHL WhatsApp readiness.',
+    providerKeys: ['gohighlevel', 'ghl'],
+    importConnectorId: 'gohighlevel',
+    route: '/ghl-wizard',
+    routeLabel: 'Open GHL Setup',
+    setupSteps: ['Save GHL API key and location ID', 'Map tags and pipeline stages to Tanaghum lead status', 'Use GHL WhatsApp only when the customer enabled it in GHL/LeadConnector'],
+  },
+  {
+    id: 'meta_analytics',
+    label: 'Meta / Instagram Ads',
+    category: 'Ads & Analytics',
+    businessUse: 'Import ad spend, reach, impressions, dark ads, form activity, and campaign performance into event dashboards.',
+    providerKeys: ['social_oauth', 'meta', 'meta_analytics'],
+    importConnectorId: 'meta_analytics',
+    oauthPlatforms: ['meta'],
+    route: '/events',
+    routeLabel: 'Open Event Import',
+    setupSteps: ['Configure Meta OAuth or API credentials', 'Select the customer ad account and Instagram business account', 'Preview KPI rows before importing event data'],
+  },
+  {
     id: 'postiz',
     label: 'Postiz Scheduling',
     category: 'Scheduling',
@@ -67,21 +93,9 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     setupSteps: ['Save Postiz API key and base URL', 'Connect/select a Postiz channel', 'Keep live scheduling behind approval flags'],
   },
   {
-    id: 'meta_analytics',
-    label: 'Meta / Instagram Analytics',
-    category: 'Analytics',
-    businessUse: 'Bring ad, page, and Instagram performance into event dashboards.',
-    providerKeys: ['social_oauth', 'meta', 'meta_analytics'],
-    importConnectorId: 'meta_analytics',
-    oauthPlatforms: ['meta'],
-    route: '/events',
-    routeLabel: 'Open Event Import',
-    setupSteps: ['Configure Meta OAuth app', 'Complete provider authorization', 'Map imported fields to event KPIs'],
-  },
-  {
     id: 'youtube_analytics',
     label: 'YouTube Analytics',
-    category: 'Analytics',
+    category: 'Video Analytics',
     businessUse: 'Track video reach and engagement for event campaigns.',
     providerKeys: ['youtube_analytics', 'youtube'],
     importConnectorId: 'youtube_analytics',
@@ -101,39 +115,6 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     setupSteps: ['Save Formaloo API key and form ID', 'Map form fields to KPI records', 'Approve import into the selected event'],
   },
   {
-    id: 'gohighlevel',
-    label: 'GoHighLevel CRM',
-    category: 'CRM',
-    businessUse: 'Prepare customer-owned CRM handoff and future lead sync.',
-    providerKeys: ['gohighlevel', 'ghl'],
-    importConnectorId: 'gohighlevel',
-    route: '/ghl-wizard',
-    routeLabel: 'Open GHL Setup',
-    setupSteps: ['Save GHL API key and location ID', 'Map tags and pipeline stages', 'Keep writes approval-gated'],
-  },
-  {
-    id: 'whatsapp_provider',
-    label: 'WhatsApp Provider',
-    category: 'Messaging',
-    businessUse: 'Prepare WhatsApp campaign follow-up evidence and future delivery status import.',
-    providerKeys: ['whatsapp', 'whatsapp_provider'],
-    importConnectorId: 'whatsapp_provider',
-    route: '/events',
-    routeLabel: 'Open Event Import',
-    setupSteps: ['Save WhatsApp provider credentials', 'Verify business account ownership', 'Keep messages disabled until authorized'],
-  },
-  {
-    id: 'telegram_provider',
-    label: 'Telegram Provider',
-    category: 'Messaging',
-    businessUse: 'Prepare Telegram campaign follow-up evidence and future engagement import.',
-    providerKeys: ['telegram', 'telegram_provider'],
-    importConnectorId: 'telegram_provider',
-    route: '/events',
-    routeLabel: 'Open Event Import',
-    setupSteps: ['Save bot token', 'Confirm target chat/channel', 'Keep outbound messages disabled until authorized'],
-  },
-  {
     id: 'smartlabs_voice',
     label: 'SmartLabs Voice',
     category: 'Voice Agent',
@@ -144,43 +125,10 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     routeLabel: 'Open Voice Setup',
     setupSteps: ['Save SmartLabs API key', 'Test agents and voices with tenant credentials', 'Trigger real conversations only after authorization'],
   },
-  {
-    id: 'openclaw',
-    label: 'OpenClaw',
-    category: 'Orchestration',
-    businessUse: 'Optional adjacent orchestration runtime that calls Tanaghum APIs.',
-    providerKeys: ['openclaw'],
-    bridgeProvider: 'openclaw',
-    route: '/mcp-engine',
-    routeLabel: 'Open Integrations',
-    setupSteps: ['Save runtime endpoint', 'Verify bridge health', 'Never let OpenClaw own approvals or customer data'],
-  },
-  {
-    id: 'agentgateway',
-    label: 'agentgateway',
-    category: 'Policy Gateway',
-    businessUse: 'Optional network policy layer for future connector traffic.',
-    providerKeys: ['agentgateway'],
-    bridgeProvider: 'agentgateway',
-    route: '/mcp-engine',
-    routeLabel: 'Open Integrations',
-    setupSteps: ['Save gateway endpoint', 'Verify bridge health', 'Route future connector calls through policy'],
-  },
-  {
-    id: 'agentscope',
-    label: 'AgentScope',
-    category: 'Agent Runtime',
-    businessUse: 'Optional runtime for future isolated agent execution.',
-    providerKeys: ['agentscope'],
-    bridgeProvider: 'agentscope',
-    route: '/mcp-engine',
-    routeLabel: 'Open Integrations',
-    setupSteps: ['Save runtime endpoint', 'Verify bridge health', 'Keep role and tenant authority in Tanaghum'],
-  },
 ];
 
 export default function IntegrationCredentials() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [status, setStatus] = useState<RecordMap | null>(null);
   const [postiz, setPostiz] = useState<RecordMap | null>(null);
   const [ghl, setGhl] = useState<RecordMap | null>(null);
@@ -196,7 +144,7 @@ export default function IntegrationCredentials() {
   const [connectorImportJobs, setConnectorImportJobs] = useState<RecordMap[]>([]);
   const [selected, setSelected] = useState<RecordMap | null>(null);
   const [hasAutoSelectedConnector, setHasAutoSelectedConnector] = useState(false);
-  const [oauthPlatform, setOauthPlatform] = useState('linkedin');
+  const [oauthPlatform, setOauthPlatform] = useState('meta');
   const [postizPlatform, setPostizPlatform] = useState('instagram');
   const [displayName, setDisplayName] = useState('');
   const [secretValues, setSecretValues] = useState<Record<string, string>>({});
@@ -228,7 +176,8 @@ export default function IntegrationCredentials() {
     setMatrix(matrixRows);
     if (!hasAutoSelectedConnector && !selected && matrixRows.length > 0) {
       const firstUsableConnector =
-        matrixRows.find(row => text(row.provider, '').toLowerCase() === 'postiz')
+        matrixRows.find(row => ['gohighlevel', 'ghl'].includes(text(row.provider, '').toLowerCase()))
+        || matrixRows.find(row => text(row.provider, '').toLowerCase() === 'postiz')
         || matrixRows.find(row => text(row.status, '').toLowerCase() !== 'configured')
         || matrixRows[0];
 
@@ -289,6 +238,8 @@ export default function IntegrationCredentials() {
   const configuredImportCount = Number(connectorImportSummary?.totalConfigured || 0);
   const missingImportCount = Number(connectorImportSummary?.totalMissing || 0);
   const blockedImportCount = Number(connectorImportSummary?.totalBlocked || 0);
+  const userRole = normalizeRole((user as RecordMap | null)?.role);
+  const canViewRuntimeInfrastructure = userRole === 'admin' || userRole === 'cco';
 
   const setupRoadmap = useMemo(() => {
     return SETUP_BLUEPRINTS.map(blueprint => {
@@ -483,29 +434,28 @@ export default function IntegrationCredentials() {
 
   return (
     <ProductPage
-      eyebrow="Data Sources"
-      title="Connect Real Campaign Data"
-      subtitle="Connect the customer-owned APIs that feed event dashboards: Meta and Instagram ads, YouTube, Formaloo forms, GoHighLevel CRM, Postiz scheduling, WhatsApp, Telegram, and SmartLabs voice."
+      eyebrow="Integrations"
+      title="Connect Business Systems"
+      subtitle="Connect the customer-owned systems that power the platform: GoHighLevel CRM and WhatsApp readiness, Meta and Instagram ads, YouTube, Postiz scheduling, Formaloo forms, and SmartLabs voice."
       action={<ProductStatus tone="good">Tenant-Owned Credentials</ProductStatus>}
     >
       {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
 
       <Notice tone="info">
-        Production metric flow: save the customer credential here, complete OAuth/channel connection where the provider requires it,
-        map provider fields to Tanaghum event KPIs, run a dry-run preview, then approve the import. Event dashboards only show connector
-        data after this evidence path succeeds.
+        Production flow: save the customer credential, connect the provider account where required, preview imported data, then approve the import.
+        GoHighLevel remains the CRM source of truth; Tanaghum becomes the AI operating and reporting layer.
       </Notice>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="AI Provider" value={text(aiProvider?.provider, 'Requires LLM')} detail={text(aiProvider?.label, 'Status loaded from backend')} tone={statusTone(text(aiProvider?.label))} />
-        <MetricCard label="Postiz" value={text(postiz?.status)} detail={`${text((postiz?.health as RecordMap | undefined)?.credentialStatus)} credential`} tone={statusTone(`${text(postiz?.status)} ${text((postiz?.health as RecordMap | undefined)?.credentialStatus)}`)} />
-        <MetricCard label="GoHighLevel" value={text(ghl?._label)} detail={`${text(ghl?.apiKeyStatus)} API key`} tone={statusTone(`${text(ghl?._label)} ${text(ghl?.apiKeyStatus)}`)} />
+        <MetricCard label="GoHighLevel" value={text(ghl?._label)} detail={`${text(ghl?.apiKeyStatus)} API key | CRM, leads, WhatsApp readiness`} tone={statusTone(`${text(ghl?._label)} ${text(ghl?.apiKeyStatus)}`)} />
+        <MetricCard label="AI Provider" value={text(aiProvider?.provider, 'Requires LLM')} detail={text(aiProvider?.label, 'AI generation status')} tone={statusTone(text(aiProvider?.label))} />
+        <MetricCard label="Postiz" value={text(postiz?.status)} detail={`${text((postiz?.health as RecordMap | undefined)?.credentialStatus)} credential | scheduling`} tone={statusTone(`${text(postiz?.status)} ${text((postiz?.health as RecordMap | undefined)?.credentialStatus)}`)} />
         <MetricCard label="Tenant Vault" value={`${configuredRows}/${matrix.length}`} detail="Configured credential sets" tone={configuredRows > 0 ? 'good' : 'warn'} />
       </div>
 
       <ProductCard
-        title="Start Here: Choose a Connector"
-        subtitle="Pick the system you want to connect. The setup form opens directly below and only saves encrypted tenant-owned credentials."
+        title="Start Here: Choose What You Want To Connect"
+        subtitle="Pick a business system. The setup form opens directly below and only saves encrypted customer-owned credentials."
         action={selected ? <ProductStatus tone="info">Selected: {text(selected.label)}</ProductStatus> : <ProductStatus tone="warn">Choose Connector</ProductStatus>}
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -534,9 +484,7 @@ export default function IntegrationCredentials() {
                     ? item.postizChannelConnected ? 'Channel selected' : 'Channel next'
                     : item.oauthPlatforms?.length
                       ? item.oauthConnected ? 'OAuth connected' : 'OAuth next'
-                      : item.bridgeProvider
-                        ? item.bridgeReady ? 'Runtime reachable' : 'Runtime next'
-                        : 'Credential step'}
+                      : 'Credential step'}
                 </ProductStatus>
               </div>
               <div className="mt-auto pt-4 text-sm font-semibold text-neutral-950">
@@ -599,8 +547,8 @@ export default function IntegrationCredentials() {
             </div>
             <div className="space-y-4">
               <Notice tone="info">
-                Saving credentials only prepares the connector. Publishing, CRM writes, messages, voice calls, and imports still require approval,
-                runtime flags, and connector evidence before execution.
+                Saving credentials only prepares the integration. Imports, CRM writes, messages, voice calls, and publishing still require preview,
+                approval, and the correct runtime safety flags before execution.
               </Notice>
               <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                 <div className="text-sm font-semibold text-neutral-950">After saving</div>
@@ -623,14 +571,14 @@ export default function IntegrationCredentials() {
         ) : (
           <EmptyProductState
             title="Choose a connector to begin"
-            message="Select Postiz, GoHighLevel, Meta/Instagram, YouTube, Formaloo, WhatsApp, Telegram, SmartLabs, or a runtime connector from the cards above."
+            message="Select GoHighLevel, Meta/Instagram, Postiz, YouTube, Formaloo, or SmartLabs from the cards above."
           />
         )}
       </ProductCard>
 
       <ProductCard
-        title="Real API Connection Roadmap"
-        subtitle="Use this as the production setup cockpit. Customers bring their own provider accounts; Tanaghum stores secret status only, guides account connection, and keeps write actions approval-gated."
+        title="How Verified Data Reaches Dashboards"
+        subtitle="Credentials alone do not create live data. Each source must be connected, previewed, mapped, and approved before it affects event reporting."
         action={
           <div className="flex flex-wrap gap-2">
             <ProductStatus tone={configuredImportCount ? 'good' : 'warn'}>{configuredImportCount} import-ready</ProductStatus>
@@ -641,8 +589,8 @@ export default function IntegrationCredentials() {
       >
         <div className="grid gap-3 lg:grid-cols-4">
           {[
-            ['1', 'Save Credentials', 'Admin or marketing manager saves tenant-owned API/OAuth/runtime credentials. Raw secret values are never shown again.'],
-            ['2', 'Connect Account', 'Provider OAuth, Postiz channels, or runtime endpoints prove the account belongs to the customer.'],
+            ['1', 'Save Credentials', 'Admin or marketing manager saves tenant-owned API/OAuth credentials. Raw secret values are never shown again.'],
+            ['2', 'Connect Account', 'Provider OAuth, Postiz channels, or CRM location checks prove the account belongs to the customer.'],
             ['3', 'Import Evidence', 'Event dashboards use mappings, dry-runs, and approval before connector data becomes KPI evidence.'],
             ['4', 'Govern Execution', 'Publishing, CRM, messaging, and voice actions stay blocked until explicit customer authorization.'],
           ].map(([step, title, detail]) => (
@@ -656,68 +604,15 @@ export default function IntegrationCredentials() {
           ))}
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-3">
-          {setupRoadmap.map(item => (
-            <div key={item.id} className="flex min-h-[360px] flex-col rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{item.category}</div>
-                  <h3 className="mt-1 text-base font-semibold text-neutral-950">{item.label}</h3>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">{item.businessUse}</p>
-                </div>
-                <ProductStatus tone={item.tone}>{item.scoreText}</ProductStatus>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <ProductStatus tone={item.credentialConfigured ? 'good' : 'warn'}>
-                  {item.credentialConfigured ? 'Credentials configured' : 'Requires credentials'}
-                </ProductStatus>
-                <ProductStatus tone={item.connectionReady ? 'good' : 'warn'}>
-                  {item.needsPostizChannel
-                    ? item.postizChannelConnected ? 'Channel selected' : 'Channel needed'
-                    : item.oauthPlatforms?.length
-                      ? item.oauthConnected ? 'OAuth connected' : 'OAuth needed'
-                      : item.bridgeProvider
-                        ? item.bridgeReady ? 'Runtime reachable' : 'Runtime check needed'
-                        : 'Connection by credential'}
-                </ProductStatus>
-                {item.importConnectorId && (
-                  <ProductStatus tone={item.importReady ? 'good' : 'info'}>
-                    {item.importReady ? 'Import ready' : display(text(item.jobState || item.importCredentialState, 'Import job needed'))}
-                  </ProductStatus>
-                )}
-              </div>
-
-              <div className="mt-4 rounded-lg border border-neutral-100 bg-neutral-50 p-4">
-                <div className="text-sm font-semibold text-neutral-950">{item.headline}</div>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-neutral-600">
-                  {item.setupSteps.map(step => (
-                    <li key={step} className="flex gap-2">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400" />
-                      <span>{step}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="mt-4 grid gap-2 text-xs leading-5 text-neutral-500">
-                <div><span className="font-medium text-neutral-700">Credential row:</span> {item.primaryCredential ? text(item.primaryCredential.label) : 'Not registered in credential matrix'}</div>
-                {item.importConnectorId && <div><span className="font-medium text-neutral-700">Import connector:</span> {display(item.importConnectorId)}</div>}
-                {item.importJob && <div><span className="font-medium text-neutral-700">Last dry-run:</span> {text(item.importJob.lastDryRunAt, 'Not run')}</div>}
-                <div><span className="font-medium text-neutral-700">Secrets:</span> status only, raw values hidden</div>
-              </div>
-
-              <div className="mt-auto flex flex-wrap gap-2 pt-5">
-                <SecondaryAction onClick={() => item.primaryCredential && chooseRequirement(item.primaryCredential)} disabled={!item.primaryCredential}>
-                  Configure
-                </SecondaryAction>
-                <Link
-                  to={item.route}
-                  className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
-                >
-                  {item.routeLabel}
-                </Link>
-              </div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-3">
+          {[
+            ['GoHighLevel', 'CRM source of truth for leads, tags, stages, meetings, purchases, and WhatsApp readiness.'],
+            ['Meta / YouTube / Formaloo', 'Verified campaign reach, spend, video performance, and form activity for event dashboards.'],
+            ['Postiz / SmartLabs', 'Scheduling and voice/chat handoff surfaces that remain approval-gated before execution.'],
+          ].map(([title, detail]) => (
+            <div key={title} className="rounded-xl border border-neutral-200 bg-white p-4">
+              <div className="text-sm font-semibold text-neutral-950">{title}</div>
+              <p className="mt-2 text-sm leading-6 text-neutral-600">{detail}</p>
             </div>
           ))}
         </div>
@@ -881,7 +776,7 @@ export default function IntegrationCredentials() {
       </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <ProductCard title="Connect Social Account" subtitle="Use real provider OAuth. The callback stores encrypted tokens only after the provider confirms the account identity.">
+        <ProductCard title="Connect Meta / Instagram Account" subtitle="Use provider OAuth for ad account, page, Instagram business account, and lead-form access when the customer provides the required Meta app setup.">
           <div className="space-y-4">
             <Field label="Platform">
               <select
@@ -889,13 +784,11 @@ export default function IntegrationCredentials() {
                 onChange={(event) => setOauthPlatform(event.target.value)}
                 className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
               >
-                <option value="linkedin">LinkedIn</option>
                 <option value="meta">Meta / Instagram / Facebook</option>
-                <option value="x">X / Twitter</option>
               </select>
             </Field>
             <Notice tone="info">
-              Configure the matching OAuth client first. This starts a real provider redirect; no account is marked connected unless the callback exchanges a valid code.
+              Configure the matching Meta OAuth client first. This starts a real provider redirect; no account is marked connected unless the callback exchanges a valid code.
             </Notice>
             <PrimaryAction onClick={() => startOAuth(oauthPlatform)}>Start OAuth Connection</PrimaryAction>
           </div>
@@ -924,40 +817,50 @@ export default function IntegrationCredentials() {
         </ProductCard>
       </div>
 
-      <ProductCard title="Runtime Status" subtitle="Backend readiness view after tenant vault and deployment configuration are evaluated.">
-        <ProductTable
-          columns={['Connector', 'Credential', 'Endpoint', 'Execution Policy']}
-          rows={connectors.map(connector => {
-            const policy = (connector.executionPolicy || {}) as RecordMap;
-            return [
-              <div className="font-medium text-neutral-950">{text(connector.name)}</div>,
-              <ProductStatus tone={statusTone(text(connector.credentialStatus))}>{display(text(connector.credentialStatus))}</ProductStatus>,
-              <ProductStatus tone={statusTone(text(connector.endpointStatus))}>{display(text(connector.endpointStatus))}</ProductStatus>,
-              <div>
-                <ProductStatus tone={text(policy.label).toLowerCase().includes('blocked') ? 'danger' : 'warn'}>{text(policy.label, 'Blocked')}</ProductStatus>
-                <div className="mt-1 text-xs text-neutral-500">{Array.isArray(policy.reasons) ? policy.reasons.join('; ') : text(policy.reason, 'Policy loaded')}</div>
-              </div>,
-            ];
-          })}
-        />
-      </ProductCard>
-
-      <ProductCard title="Runtime Bridges" subtitle="Live health checks for adjacent runtimes. These are not source of truth; STITCH controls business data and authorization.">
-        {runtimeStatuses.length ? (
-          <ProductTable
-            columns={['Runtime', 'Configured', 'Reachable', 'Health', 'Secrets']}
-            rows={runtimeStatuses.map(runtime => [
-              display(text(runtime.provider)),
-              <ProductStatus tone={runtime.configured ? 'good' : 'warn'}>{runtime.configured ? 'Configured' : 'Requires Credentials'}</ProductStatus>,
-              <ProductStatus tone={runtime.reachable ? 'good' : 'warn'}>{runtime.reachable ? 'Reachable' : 'Not Reachable'}</ProductStatus>,
-              text(runtime.label),
-              <ProductStatus tone="muted">{runtime.rawSecretsReturned === false ? 'Hidden' : 'Review Required'}</ProductStatus>,
-            ])}
-          />
-        ) : (
-          <EmptyProductState message="Runtime bridge status is not available." />
-        )}
-      </ProductCard>
+      {canViewRuntimeInfrastructure && (
+        <ProductCard
+          title="Admin/Ops Runtime Infrastructure"
+          subtitle="Internal platform services. These are not customer business integrations and are hidden from normal operator roles."
+        >
+          <div className="grid gap-6 xl:grid-cols-2">
+            <div>
+              <div className="mb-3 text-sm font-semibold text-neutral-950">Backend Connector Policy</div>
+              <ProductTable
+                columns={['Connector', 'Credential', 'Endpoint', 'Execution Policy']}
+                rows={connectors.map(connector => {
+                  const policy = (connector.executionPolicy || {}) as RecordMap;
+                  return [
+                    <div className="font-medium text-neutral-950">{text(connector.name)}</div>,
+                    <ProductStatus tone={statusTone(text(connector.credentialStatus))}>{display(text(connector.credentialStatus))}</ProductStatus>,
+                    <ProductStatus tone={statusTone(text(connector.endpointStatus))}>{display(text(connector.endpointStatus))}</ProductStatus>,
+                    <div>
+                      <ProductStatus tone={text(policy.label).toLowerCase().includes('blocked') ? 'danger' : 'warn'}>{text(policy.label, 'Blocked')}</ProductStatus>
+                      <div className="mt-1 text-xs text-neutral-500">{Array.isArray(policy.reasons) ? policy.reasons.join('; ') : text(policy.reason, 'Policy loaded')}</div>
+                    </div>,
+                  ];
+                })}
+              />
+            </div>
+            <div>
+              <div className="mb-3 text-sm font-semibold text-neutral-950">Runtime Bridges</div>
+              {runtimeStatuses.length ? (
+                <ProductTable
+                  columns={['Runtime', 'Configured', 'Reachable', 'Health', 'Secrets']}
+                  rows={runtimeStatuses.map(runtime => [
+                    display(text(runtime.provider)),
+                    <ProductStatus tone={runtime.configured ? 'good' : 'warn'}>{runtime.configured ? 'Configured' : 'Requires Credentials'}</ProductStatus>,
+                    <ProductStatus tone={runtime.reachable ? 'good' : 'warn'}>{runtime.reachable ? 'Reachable' : 'Not Reachable'}</ProductStatus>,
+                    text(runtime.label),
+                    <ProductStatus tone="muted">{runtime.rawSecretsReturned === false ? 'Hidden' : 'Review Required'}</ProductStatus>,
+                  ])}
+                />
+              ) : (
+                <EmptyProductState message="Runtime bridge status is not available." />
+              )}
+            </div>
+          </div>
+        </ProductCard>
+      )}
     </ProductPage>
   );
 }
