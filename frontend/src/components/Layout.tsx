@@ -186,6 +186,14 @@ const NAV_ITEMS: NavItem[] = [
     roles: ADMIN_ROLES,
   },
   {
+    path: '/runtime-infrastructure',
+    label: 'Runtime Evidence',
+    description: 'Internal runtime status',
+    icon: Network,
+    group: 'Admin',
+    roles: ADMIN_ROLES,
+  },
+  {
     path: '/smartlabs-voice',
     label: 'SmartLabs Voice',
     description: 'Voice agent connector',

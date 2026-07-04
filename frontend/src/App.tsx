@@ -33,6 +33,7 @@ import AcceptOnboarding from './pages/AcceptOnboarding'
 import AccountSecurity from './pages/AccountSecurity'
 import TenantAdmin from './pages/TenantAdmin'
 import OperationsReadiness from './pages/OperationsReadiness'
+import RuntimeInfrastructure from './pages/RuntimeInfrastructure'
 import SmartLabsVoice from './pages/SmartLabsVoice'
 import SocialGrowthIntelligence from './pages/SocialGrowthIntelligence'
 import EventDashboard from './pages/EventDashboard'
@@ -125,6 +126,7 @@ function App() {
             <Route path="admin-users" element={adminOnly(<AdminUsers />)} />
             <Route path="tenant-admin" element={adminOnly(<TenantAdmin />)} />
             <Route path="operations" element={adminOnly(<OperationsReadiness />)} />
+            <Route path="runtime-infrastructure" element={adminOnly(<RuntimeInfrastructure />)} />
             <Route path="smartlabs-voice" element={connectorSetup(<SmartLabsVoice />)} />
             <Route path="mcp-engine" element={adminOnly(<McpEngine />)} />
             <Route path="agent-skills" element={adminOnly(<AgentSkills />)} />

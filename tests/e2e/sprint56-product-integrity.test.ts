@@ -54,6 +54,7 @@ describe('Sprint 56 production product integrity contracts', () => {
       { path: '/tenant-admin', route: 'tenant-admin', label: 'Tenant Admin' },
       { path: '/agent-skills', route: 'agent-skills', label: 'Agent Skills' },
       { path: '/operations', route: 'operations', label: 'Operations' },
+      { path: '/runtime-infrastructure', route: 'runtime-infrastructure', label: 'Runtime Evidence' },
       { path: '/smartlabs-voice', route: 'smartlabs-voice', label: 'SmartLabs Voice' },
       { path: '/mcp-engine', route: 'mcp-engine', label: 'Integrations' },
       { path: '/integration-credentials', route: 'integration-credentials', label: 'Integrations' },
@@ -74,6 +75,28 @@ describe('Sprint 56 production product integrity contracts', () => {
     for (const staleCustomerLabel of ['AI Draft Studio', 'My AI Rep', 'Approvals & Publishing', 'Campaigns Briefs']) {
       expect(layout, `${staleCustomerLabel} must not remain in primary navigation`).not.toContain(staleCustomerLabel);
     }
+  });
+
+  it('keeps runtime infrastructure evidence separated from customer integrations', () => {
+    const app = source('frontend', 'src', 'App.tsx');
+    const layout = source('frontend', 'src', 'components', 'Layout.tsx');
+    const integrationCredentials = source('frontend', 'src', 'pages', 'IntegrationCredentials.tsx');
+    const runtimeInfrastructure = source('frontend', 'src', 'pages', 'RuntimeInfrastructure.tsx');
+    const runtimeController = source('modules', 'runtime-bridges', 'controller.ts');
+
+    expect(app).toContain('path="runtime-infrastructure"');
+    expect(app).toContain('adminOnly(<RuntimeInfrastructure />)');
+    expect(layout).toContain("label: 'Runtime Evidence'");
+    expect(layout).toContain("path: '/runtime-infrastructure'");
+    expect(integrationCredentials).not.toContain('runtimeBridgesApi');
+    expect(integrationCredentials).not.toContain('OpenClaw Runtime');
+    expect(runtimeInfrastructure).toContain('OpenClaw');
+    expect(runtimeInfrastructure).toContain('agentgateway');
+    expect(runtimeInfrastructure).toContain('AgentScope');
+    expect(runtimeInfrastructure).toContain('Not Production Active');
+    expect(runtimeController).toContain('requireRuntimeOpsRole(payload.role)');
+    expect(runtimeController).toContain('productionActive');
+    expect(runtimeController).toContain('customerFacing: false');
   });
 
   it('keeps Tenant Admin subscription, export, and deletion controls connected to API clients', () => {

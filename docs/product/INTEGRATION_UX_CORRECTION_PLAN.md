@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; runtime integration phases pending  
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; runtime integration phases pending  
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -299,6 +299,19 @@ Do not show as a customer connector unless the customer is explicitly managing c
 Status: Implemented.
 
 Customer-facing setup no longer treats OpenClaw, agentgateway, or AgentScope as customer-owned connectors. Legacy dashboard wording no longer presents OpenClaw as ready/checking. Product docs now describe these services as optional Admin/Ops runtime infrastructure with production pilots still pending.
+
+### Sprint R1 - Admin/Ops Runtime Infrastructure Evidence
+
+Status: Implemented.
+
+Runtime infrastructure evidence now lives on an Admin/CCO-only page, separate from the customer-facing Integrations page. The backend `/runtime-bridges/status` endpoint is role-gated to Admin/Ops and returns configured/not configured, reachable/not reachable, execution flags, last check time, production-active state, blockers, and the next production gate for OpenClaw, agentgateway, and AgentScope.
+
+Truth after R1:
+
+- OpenClaw is visible as internal runtime evidence only; it is not orchestrating production customer workflows.
+- agentgateway is visible as internal runtime evidence only; no production connector traffic is routed through it.
+- AgentScope is visible as internal runtime evidence only; it is not executing production agent sessions.
+- The customer-facing Integrations page remains focused on business systems: GHL, Meta/Instagram, Postiz, YouTube, Formaloo, SmartLabs, AI provider, and CSV/manual fallback.
 
 ### Sprint I1 - Integration UX Simplification
 

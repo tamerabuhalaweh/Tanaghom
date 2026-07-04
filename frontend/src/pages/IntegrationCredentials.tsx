@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { connectorImportsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, runtimeBridgesApi, socialOAuthApi } from '../api';
+import { connectorImportsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, socialOAuthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -25,10 +25,6 @@ function display(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase());
 }
 
-function normalizeRole(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_') : '';
-}
-
 function statusTone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'default' {
   const lower = value.toLowerCase();
   if (lower.includes('configured') || lower.includes('ready') || lower.includes('connected') || lower.includes('passed')) return 'good';
@@ -49,7 +45,6 @@ type SetupBlueprint = {
   providerKeys: string[];
   importConnectorId?: string;
   oauthPlatforms?: string[];
-  bridgeProvider?: string;
   needsPostizChannel?: boolean;
   route: string;
   routeLabel: string;
@@ -128,7 +123,7 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
 ];
 
 export default function IntegrationCredentials() {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [status, setStatus] = useState<RecordMap | null>(null);
   const [postiz, setPostiz] = useState<RecordMap | null>(null);
   const [ghl, setGhl] = useState<RecordMap | null>(null);
@@ -138,7 +133,6 @@ export default function IntegrationCredentials() {
   const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
   const [postizChannelStatus, setPostizChannelStatus] = useState<RecordMap | null>(null);
   const [postizDiagnostics, setPostizDiagnostics] = useState<RecordMap | null>(null);
-  const [runtimeStatuses, setRuntimeStatuses] = useState<RecordMap[]>([]);
   const [connectorImportSummary, setConnectorImportSummary] = useState<RecordMap | null>(null);
   const [connectorImportReadiness, setConnectorImportReadiness] = useState<RecordMap[]>([]);
   const [connectorImportJobs, setConnectorImportJobs] = useState<RecordMap[]>([]);
@@ -156,14 +150,13 @@ export default function IntegrationCredentials() {
 
   async function load() {
     if (!token) return;
-    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, runtimeResult, postizChannelResult, postizDiagnosticsResult, importReadinessResult, importJobsResult] = await Promise.all([
+    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, postizChannelResult, postizDiagnosticsResult, importReadinessResult, importJobsResult] = await Promise.all([
       integrationStatusApi.get(token),
       postizApi.status(token),
       ghlApi.status(token),
       integrationCredentialsApi.matrix(token),
       integrationCredentialsApi.list(token),
       socialOAuthApi.connections(token),
-      runtimeBridgesApi.status(token),
       postizApi.channels(token).catch((err) => ({ status: 'requires_credentials', channels: [], _label: err instanceof Error ? err.message : 'Postiz channel status unavailable' })),
       postizApi.diagnostics({ platform: postizPlatform }, token).catch((err) => ({ status: 'not_available', diagnostics: null, _label: err instanceof Error ? err.message : 'Postiz diagnostics unavailable' })),
       connectorImportsApi.readiness(token).catch((err) => ({ connectors: [], totalConfigured: 0, totalMissing: 0, totalBlocked: 0, _label: err instanceof Error ? err.message : 'Connector import readiness unavailable' })),
@@ -188,7 +181,6 @@ export default function IntegrationCredentials() {
     }
     setCredentials(Array.isArray((credentialResult as RecordMap).credentials) ? (credentialResult as RecordMap).credentials as RecordMap[] : []);
     setSocialConnections(Array.isArray((socialResult as RecordMap).connections) ? (socialResult as RecordMap).connections as RecordMap[] : []);
-    setRuntimeStatuses(Array.isArray((runtimeResult as RecordMap).statuses) ? (runtimeResult as RecordMap).statuses as RecordMap[] : []);
     setPostizChannelStatus(postizChannelResult as RecordMap);
     setPostizChannels(Array.isArray((postizChannelResult as RecordMap).channels) ? (postizChannelResult as RecordMap).channels as RecordMap[] : []);
     setPostizDiagnostics(postizDiagnosticsResult as RecordMap);
@@ -214,7 +206,6 @@ export default function IntegrationCredentials() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const connectors = Array.isArray(status?.connectors) ? status.connectors as RecordMap[] : [];
   const aiProvider = status?.aiProvider as RecordMap | undefined;
   const configuredRows = matrix.filter(row => text(row.status).toLowerCase() === 'configured').length;
   const selectedFields = useMemo(() => parseRequiredFields(selected?.requiredFields), [selected]);
@@ -238,8 +229,6 @@ export default function IntegrationCredentials() {
   const configuredImportCount = Number(connectorImportSummary?.totalConfigured || 0);
   const missingImportCount = Number(connectorImportSummary?.totalMissing || 0);
   const blockedImportCount = Number(connectorImportSummary?.totalBlocked || 0);
-  const userRole = normalizeRole((user as RecordMap | null)?.role);
-  const canViewRuntimeInfrastructure = userRole === 'admin' || userRole === 'cco';
 
   const setupRoadmap = useMemo(() => {
     return SETUP_BLUEPRINTS.map(blueprint => {
@@ -259,26 +248,20 @@ export default function IntegrationCredentials() {
       const oauthConnected = blueprint.oauthPlatforms?.some(platform =>
         socialConnections.some(connection => text(connection.platform, '').toLowerCase() === platform && text(connection.status, 'active').toLowerCase() !== 'disabled'),
       ) || false;
-      const bridgeStatus = blueprint.bridgeProvider
-        ? runtimeStatuses.find(runtime => text(runtime.provider, '').toLowerCase() === blueprint.bridgeProvider)
-        : null;
       const postizChannelConnected = blueprint.needsPostizChannel ? postizChannels.length > 0 : false;
       const jobState = text(importJob?.state || importReadiness?.jobState, '');
       const importCredentialState = text(importReadiness?.credentialState, '');
-      const bridgeReady = bridgeStatus ? bridgeStatus.configured === true && bridgeStatus.reachable === true : false;
       const connectionReady = blueprint.needsPostizChannel
         ? postizChannelConnected
         : blueprint.oauthPlatforms?.length
           ? oauthConnected
-          : bridgeStatus
-            ? bridgeReady
-            : credentialConfigured;
+          : credentialConfigured;
       const importReady = jobState === 'test_passed' || importCredentialState === 'test_passed' || importCredentialState === 'configured';
       const readinessScore =
         (credentialConfigured ? 1 : 0) +
         (connectionReady ? 1 : 0) +
-        (blueprint.importConnectorId ? (importReady ? 1 : 0) : bridgeStatus ? (bridgeReady ? 1 : 0) : 1);
-      const maxScore = blueprint.importConnectorId || bridgeStatus ? 3 : 2;
+        (blueprint.importConnectorId ? (importReady ? 1 : 0) : 1);
+      const maxScore = blueprint.importConnectorId ? 3 : 2;
       const isReady = readinessScore >= maxScore;
       const needsCredentials = !credentialConfigured;
       const needsConnection = credentialConfigured && !connectionReady;
@@ -297,7 +280,6 @@ export default function IntegrationCredentials() {
         credentialConfigured,
         connectionReady,
         importReady,
-        bridgeReady,
         postizChannelConnected,
         oauthConnected,
         importReadiness,
@@ -309,7 +291,7 @@ export default function IntegrationCredentials() {
         scoreText: `${readinessScore}/${maxScore}`,
       };
     });
-  }, [connectorImportJobs, connectorImportReadiness, matrix, postizChannels.length, runtimeStatuses, socialConnections]);
+  }, [connectorImportJobs, connectorImportReadiness, matrix, postizChannels.length, socialConnections]);
 
   function chooseRequirement(row: RecordMap) {
     setSelected(row);
@@ -816,51 +798,6 @@ export default function IntegrationCredentials() {
           )}
         </ProductCard>
       </div>
-
-      {canViewRuntimeInfrastructure && (
-        <ProductCard
-          title="Admin/Ops Runtime Infrastructure"
-          subtitle="Internal platform services. These are not customer business integrations and are hidden from normal operator roles."
-        >
-          <div className="grid gap-6 xl:grid-cols-2">
-            <div>
-              <div className="mb-3 text-sm font-semibold text-neutral-950">Backend Connector Policy</div>
-              <ProductTable
-                columns={['Connector', 'Credential', 'Endpoint', 'Execution Policy']}
-                rows={connectors.map(connector => {
-                  const policy = (connector.executionPolicy || {}) as RecordMap;
-                  return [
-                    <div className="font-medium text-neutral-950">{text(connector.name)}</div>,
-                    <ProductStatus tone={statusTone(text(connector.credentialStatus))}>{display(text(connector.credentialStatus))}</ProductStatus>,
-                    <ProductStatus tone={statusTone(text(connector.endpointStatus))}>{display(text(connector.endpointStatus))}</ProductStatus>,
-                    <div>
-                      <ProductStatus tone={text(policy.label).toLowerCase().includes('blocked') ? 'danger' : 'warn'}>{text(policy.label, 'Blocked')}</ProductStatus>
-                      <div className="mt-1 text-xs text-neutral-500">{Array.isArray(policy.reasons) ? policy.reasons.join('; ') : text(policy.reason, 'Policy loaded')}</div>
-                    </div>,
-                  ];
-                })}
-              />
-            </div>
-            <div>
-              <div className="mb-3 text-sm font-semibold text-neutral-950">Runtime Bridges</div>
-              {runtimeStatuses.length ? (
-                <ProductTable
-                  columns={['Runtime', 'Configured', 'Reachable', 'Health', 'Secrets']}
-                  rows={runtimeStatuses.map(runtime => [
-                    display(text(runtime.provider)),
-                    <ProductStatus tone={runtime.configured ? 'good' : 'warn'}>{runtime.configured ? 'Configured' : 'Requires Credentials'}</ProductStatus>,
-                    <ProductStatus tone={runtime.reachable ? 'good' : 'warn'}>{runtime.reachable ? 'Reachable' : 'Not Reachable'}</ProductStatus>,
-                    text(runtime.label),
-                    <ProductStatus tone="muted">{runtime.rawSecretsReturned === false ? 'Hidden' : 'Review Required'}</ProductStatus>,
-                  ])}
-                />
-              ) : (
-                <EmptyProductState message="Runtime bridge status is not available." />
-              )}
-            </div>
-          </div>
-        </ProductCard>
-      )}
     </ProductPage>
   );
 }
