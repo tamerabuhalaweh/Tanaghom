@@ -366,7 +366,7 @@ function OverviewTab({
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-wide text-white/55">Event Control Room</div>
-              <h2 className="mt-2 max-w-3xl break-words text-2xl font-semibold leading-tight tracking-tight lg:text-3xl">{eventTitle(event)}</h2>
+              <h2 className="mt-2 line-clamp-3 max-w-3xl break-words text-xl font-semibold leading-tight tracking-tight lg:text-2xl">{eventTitle(event)}</h2>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">
                 Plan the campaign, track lead flow, compare spend against outcomes, and keep the sales team focused on the next action.
               </p>
