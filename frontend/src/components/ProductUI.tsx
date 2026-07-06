@@ -67,22 +67,33 @@ export function ProductPage({
   children: ReactNode;
 }) {
   return (
-    <div className="flex w-full max-w-[1560px] flex-col gap-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="relative overflow-hidden rounded-[2rem] bg-[#080813] text-white shadow-[0_28px_90px_rgba(8,8,19,0.22)]">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 top-12 h-72 w-72 rounded-full bg-[#ff5268]/18 blur-3xl" />
+        <div className="absolute right-0 top-0 h-96 w-96 rounded-full bg-[#00dcae]/14 blur-3xl" />
+        <div className="absolute bottom-0 left-1/2 h-80 w-80 rounded-full bg-[#8a7cff]/12 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_38%)]" />
+      </div>
+
+      <header className="relative flex flex-col gap-4 border-b border-white/10 px-5 py-6 sm:px-7 lg:px-8 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           {eyebrow && (
-            <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
+              <span className="h-2 w-2 rounded-full bg-[#00dcae] shadow-[0_0_18px_rgba(0,220,174,0.9)]" />
               {eyebrow}
             </div>
           )}
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-950 sm:text-3xl">
+          <h1 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.04] tracking-tight text-white sm:text-5xl">
             {title}
           </h1>
-          {subtitle && <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">{subtitle}</p>}
+          {subtitle && <p className="mt-4 max-w-3xl text-sm leading-7 text-white/58 sm:text-base">{subtitle}</p>}
         </div>
-        {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+        {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
       </header>
-      {children}
+
+      <div className="relative space-y-6 px-5 py-6 sm:px-7 lg:px-8">
+        {children}
+      </div>
     </div>
   );
 }
@@ -101,7 +112,7 @@ export function ProductCard({
   className?: string;
 }) {
   return (
-    <section className={cx('rounded-lg border border-neutral-200 bg-white shadow-sm', className)}>
+    <section className={cx('rounded-[1.35rem] border border-white/10 bg-white text-neutral-950 shadow-[0_18px_56px_rgba(8,8,19,0.16)]', className)}>
       {(title || subtitle || action) && (
         <div className="flex flex-col gap-3 border-b border-neutral-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -118,7 +129,7 @@ export function ProductCard({
 
 export function ProductStatus({ children, tone = 'default' }: { children: ReactNode; tone?: Tone }) {
   return (
-    <span className={cx('inline-flex max-w-full items-center rounded-md border px-2 py-1 text-xs font-medium leading-5', statusClasses[tone])}>
+    <span className={cx('inline-flex max-w-full items-center rounded-full border px-3 py-1.5 text-xs font-semibold leading-5', statusClasses[tone])}>
       {children}
     </span>
   );
@@ -138,7 +149,7 @@ export function PrimaryAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex min-h-10 items-center justify-center rounded-md bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-45"
+      className="inline-flex min-h-11 items-center justify-center rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-neutral-800 hover:shadow-md disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-45"
     >
       {children}
     </button>
@@ -159,7 +170,7 @@ export function SecondaryAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-45"
+      className="inline-flex min-h-11 items-center justify-center rounded-full border border-neutral-200 bg-white px-5 py-2.5 text-sm font-semibold text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-neutral-50 hover:shadow-md disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-45"
     >
       {children}
     </button>
@@ -311,13 +322,13 @@ export function ExecutiveStatusGrid({
 
 export function WorkflowRail({ steps }: { steps: { label: string; state: 'done' | 'active' | 'waiting' | 'blocked' }[] }) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm">
+    <div className="rounded-[1.35rem] border border-white/10 bg-white p-3 shadow-[0_18px_56px_rgba(8,8,19,0.12)]">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         {steps.map((step, index) => (
           <div
             key={`${step.label}-${index}`}
             className={cx(
-              'rounded-md border px-3 py-3',
+              'rounded-2xl border px-3 py-3',
               step.state === 'active' && 'border-neutral-950 bg-neutral-950 text-white',
               step.state === 'done' && 'border-emerald-200 bg-emerald-50 text-emerald-800',
               step.state === 'waiting' && 'border-neutral-200 bg-neutral-50 text-neutral-500',
@@ -346,7 +357,7 @@ export function DetailGrid({ items }: { items: { label: string; value: string }[
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
       {items.map((item) => (
-        <div key={item.label} className="min-w-0 rounded-md border border-neutral-100 bg-neutral-50 p-4">
+        <div key={item.label} className="min-w-0 rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{item.label}</div>
           <div className="mt-2 break-words text-sm font-medium leading-6 text-neutral-800">{item.value}</div>
         </div>
@@ -379,7 +390,7 @@ export function ProductTable({
   rows: Array<Array<ReactNode>>;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200">
+    <div className="overflow-hidden rounded-2xl border border-neutral-200">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse bg-white text-sm">
           <thead className="bg-neutral-50 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -426,7 +437,7 @@ export function Notice({
   tone?: Exclude<Tone, 'default' | 'muted'>;
 }) {
   return (
-    <div className={cx('rounded-lg border px-4 py-3 text-sm leading-6', noticeClasses[tone])}>
+    <div className={cx('rounded-2xl border px-4 py-3 text-sm leading-6', noticeClasses[tone])}>
       {children}
     </div>
   );
@@ -442,7 +453,7 @@ export function EmptyProductState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 p-8 text-center">
+    <div className="rounded-[1.25rem] border border-dashed border-neutral-200 bg-neutral-50 p-8 text-center">
       <div className="text-sm font-medium text-neutral-950">{title}</div>
       <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-neutral-500">{message}</p>
       {action && <div className="mt-4 flex justify-center">{action}</div>}
@@ -464,7 +475,7 @@ export function ProgressBar({ value }: { value: number }) {
 
 export function PlatformPill({ children, active = false }: { children: ReactNode; active?: boolean }) {
   return (
-    <span className={cx('inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium', active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white text-neutral-700')}>
+    <span className={cx('inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold', active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white text-neutral-700')}>
       {children}
     </span>
   );

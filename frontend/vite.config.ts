@@ -26,7 +26,7 @@ export default defineConfig({
       '/users': 'http://localhost:4000',
       '/departments': 'http://localhost:4000',
       '/health': 'http://localhost:4000',
-      '/ideas': 'http://localhost:4000',
+      '^/ideas/(generate|workflows|convert-to-campaign)': 'http://localhost:4000',
     },
   },
 })
