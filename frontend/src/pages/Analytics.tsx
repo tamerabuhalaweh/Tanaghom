@@ -388,7 +388,7 @@ export default function Analytics() {
               },
               {
                 title: 'GoHighLevel handoff',
-                meta: 'Qualified leads can be prepared for CRM after tenant-owned credentials are configured.',
+                meta: 'Qualified leads can be prepared for CRM after the customer account is configured.',
                 status: titleCase(text(growthIntegrations.goHighLevel, 'requires_credentials')),
                 tone: text(growthIntegrations.goHighLevel) === 'configured' ? 'good' : 'warn',
               },
