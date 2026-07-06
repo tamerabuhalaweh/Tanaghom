@@ -257,10 +257,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem(GUIDE_STORAGE_KEY) !== 'true';
-  });
+  const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -294,7 +291,7 @@ export default function Layout() {
       <a href="#main-content" className="skip-to-content">Skip to content</a>
 
       <header className="sticky top-0 z-50 border-b border-black/5 bg-[#f4f4f8]/88 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-20 max-w-[1560px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-20 max-w-[1560px] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <Link to="/command-center" className="flex shrink-0 items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#080813] text-white shadow-[0_16px_40px_rgba(8,8,19,0.22)]">
               <Sparkles className="h-5 w-5" />
@@ -305,7 +302,7 @@ export default function Layout() {
             </span>
           </Link>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-2 xl:flex" aria-label="Primary workspace navigation">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-2 2xl:flex" aria-label="Primary workspace navigation">
             {productNav.map(item => (
               <NavPill key={item.path} item={item} active={activeForPath(location.pathname, item.path)} />
             ))}
@@ -352,11 +349,12 @@ export default function Layout() {
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-black/10 bg-white px-3 text-neutral-900 shadow-sm xl:hidden"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 text-sm font-semibold text-neutral-900 shadow-sm 2xl:hidden"
               aria-label="Open navigation"
               aria-expanded={mobileOpen}
             >
               <Menu className="h-5 w-5" />
+              <span className="hidden sm:inline">Menu</span>
             </button>
           </div>
         </div>
@@ -517,7 +515,7 @@ function MobileNavigation({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/45 p-3 backdrop-blur-sm xl:hidden">
+    <div className="fixed inset-0 z-[70] bg-black/45 p-3 backdrop-blur-sm 2xl:hidden">
       <div className="flex max-h-full flex-col overflow-hidden rounded-[1.5rem] bg-[#080813] text-white shadow-[0_28px_90px_rgba(8,8,19,0.4)]">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="flex items-center gap-3">

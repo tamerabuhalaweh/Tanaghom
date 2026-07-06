@@ -390,16 +390,16 @@ function TabGuide({
 }) {
   const tab = TABS.find(item => item.id === activeTab) || TABS[0];
   return (
-    <AieroLightPanel>
+    <AieroPanel>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{tab.label}</div>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-neutral-950">{tab.helper}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">{tab.action}</p>
+          <div className="text-xs font-medium uppercase tracking-wide text-white/42">{tab.label}</div>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">{tab.helper}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">{tab.action}</p>
         </div>
-        <ProductStatus tone="info">Current step</ProductStatus>
+        <AieroStatusPill accent="blue">Current step</AieroStatusPill>
       </div>
-    </AieroLightPanel>
+    </AieroPanel>
   );
 }
 
@@ -940,23 +940,23 @@ export default function HybridEventWorkspace() {
             </ProductCard>
           ) : (
             <>
-              <AieroLightPanel>
+              <AieroPanel className="bg-white/[0.05]">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <ProductStatus tone={statusTone(event.status)}>{titleCase(event.status)}</ProductStatus>
-                      <ProductStatus tone={statusTone(sourceStatus.primarySource)}>{sourceLabel(sourceStatus.primarySource)}</ProductStatus>
-                      <ProductStatus tone={text(ghlStatus?.credentialStatus) === 'configured' ? 'good' : 'warn'}>
+                      <AieroStatusPill accent="blue">{titleCase(event.status)}</AieroStatusPill>
+                      <AieroStatusPill accent={text(sourceStatus.primarySource) === 'none' ? 'amber' : 'teal'}>{sourceLabel(sourceStatus.primarySource)}</AieroStatusPill>
+                      <AieroStatusPill accent={text(ghlStatus?.credentialStatus) === 'configured' ? 'teal' : 'amber'}>
                         {text(ghlStatus?.credentialStatus) === 'configured' ? 'GHL configured' : 'GHL needs setup'}
-                      </ProductStatus>
+                      </AieroStatusPill>
                     </div>
-                    <h2 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-950">{eventTitle(event)}</h2>
-                    <p className="mt-2 max-w-4xl text-sm leading-6 text-neutral-500">
+                    <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">{eventTitle(event)}</h2>
+                    <p className="mt-2 max-w-4xl text-sm leading-6 text-white/55">
                       {titleCase(event.eventType)} in {text(event.location, 'unspecified location')} on {formatDate(event.eventDate)}.
                     </p>
                   </div>
                 </div>
-              </AieroLightPanel>
+              </AieroPanel>
 
               <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} />
               <TabGuide activeTab={activeTab} />

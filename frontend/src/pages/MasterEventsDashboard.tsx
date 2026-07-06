@@ -4,7 +4,6 @@ import { masterEventsApi } from '../api';
 import {
   AieroActionButton,
   AieroGhostButton,
-  AieroLightPanel,
   AieroMetricCard,
   AieroPage,
   AieroPanel,
@@ -22,7 +21,6 @@ import {
   ProductCard,
   ProductStatus,
   ProductTable,
-  ReadableQueue,
   SecondaryAction,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
@@ -309,13 +307,27 @@ export default function MasterEventsDashboard() {
           </div>
         </AieroPanel>
 
-        <AieroLightPanel title="Next Actions" subtitle="The shortest path to improve event results.">
-          <ReadableQueue items={nextActions} />
-          <div className="mt-4 flex flex-wrap gap-2">
-            <PrimaryAction onClick={() => navigate('/events')}>Open Events</PrimaryAction>
-            <SecondaryAction onClick={() => navigate('/integration-credentials')}>Connect Data</SecondaryAction>
+        <AieroPanel title="Next Actions" subtitle="The shortest path to improve event results.">
+          <div className="space-y-3">
+            {nextActions.map(action => (
+              <div key={action.title} className="rounded-2xl border border-white/10 bg-white/[0.05] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-white">{action.title}</div>
+                    <p className="mt-1 text-sm leading-6 text-white/55">{action.meta}</p>
+                  </div>
+                  <AieroStatusPill accent={action.tone === 'danger' ? 'rose' : action.tone === 'good' ? 'teal' : action.tone === 'info' ? 'blue' : 'amber'}>
+                    {action.status}
+                  </AieroStatusPill>
+                </div>
+              </div>
+            ))}
           </div>
-        </AieroLightPanel>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <AieroActionButton onClick={() => navigate('/events')}>Open Events</AieroActionButton>
+            <AieroGhostButton onClick={() => navigate('/integration-credentials')}>Connect Data</AieroGhostButton>
+          </div>
+        </AieroPanel>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-4">
