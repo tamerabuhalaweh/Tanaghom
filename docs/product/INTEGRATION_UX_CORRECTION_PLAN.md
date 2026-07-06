@@ -575,7 +575,7 @@ Remaining R5 live acceptance:
 R5 deployed smoke on 2026-07-06:
 
 - Hybrid health returned HTTP 200.
-- Hybrid app and frontend containers were rebuilt and restarted at commit `9713e6e`.
+- Hybrid app and frontend containers were rebuilt and restarted for R5; backend correction redeployed at commit `1042abe`.
 - Migration `20260706_ghl_appointments_sync` applied successfully.
 - `/api/ghl-sync/status` returned:
   - credential missing

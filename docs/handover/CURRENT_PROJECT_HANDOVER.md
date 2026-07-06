@@ -3,7 +3,7 @@
 Last updated: 2026-07-06  
 Repository: `tamerabuhalaweh/Tanaghom`  
 Current working branch at handover: `feature/hybrid-emergent-ux-governed-tanaghum`  
-Current deployed hybrid commit at handover: `9713e6e`  
+Current deployed hybrid commit at handover: `1042abe`  
 
 This is the single current onboarding document for a new developer or delivery team. Older sprint notes remain useful as history, but this file is the current operational handover source of truth.
 
@@ -58,7 +58,7 @@ feature/hybrid-emergent-ux-governed-tanaghum
 Current important commit:
 
 ```bash
-de12392 feat: productionize GHL read sync appointments
+1042abe fix: align GHL opportunity search with API docs
 ```
 
 ## 4. Architecture Truth

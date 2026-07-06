@@ -19,7 +19,7 @@ feature/hybrid-emergent-ux-governed-tanaghum
 Latest known active commit at this update:
 
 ```text
-de12392 feat: productionize GHL read sync appointments
+1042abe fix: align GHL opportunity search with API docs
 ```
 
 ## Current Product Direction
@@ -81,7 +81,7 @@ Current R4/R4A status:
 
 Current R5 status:
 
-- GoHighLevel read-sync adapter is implemented and deployed to hybrid at commit `9713e6e`.
+- GoHighLevel read-sync adapter is implemented and deployed to hybrid at commit `1042abe`.
 - Customer-owned GHL API key, location ID, tag mapping, and pipeline/stage mapping are required.
 - Read sync is gated by `GHL_READ_SYNC_ENABLED=true`; write-back remains separately gated by `GHL_WRITE_BACK_ENABLED=true`.
 - R5 backend path pulls contacts, opportunities, per-contact appointments/meetings, tags, stages, purchases, meeting/no-show state, and maps those into Tanaghum lead mirrors.
