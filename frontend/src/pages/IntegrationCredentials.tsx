@@ -2,6 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { connectorImportsApi, connectorReadinessApi, eventsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, socialOAuthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
+  AieroLightPanel,
+  AieroMetricCard,
+  AieroNumberedStep,
+  AieroPage,
+  AieroPanel,
+  AieroStatusPill,
+} from '../components/AieroUX';
+import {
   DetailGrid,
   EmptyProductState,
   Field,
@@ -9,7 +17,6 @@ import {
   Notice,
   PrimaryAction,
   ProductCard,
-  ProductPage,
   ProductStatus,
   ProductTable,
   SecondaryAction,
@@ -538,30 +545,37 @@ export default function IntegrationCredentials() {
   }
 
   return (
-    <ProductPage
+    <AieroPage
       eyebrow="Integrations"
       title="Connect Business Systems"
       subtitle="Connect the customer-owned systems that power the platform: GoHighLevel CRM and WhatsApp readiness, Meta and Instagram ads, YouTube, Postiz scheduling, Formaloo forms, and SmartLabs voice."
-      action={<ProductStatus tone="good">Tenant-Owned Credentials</ProductStatus>}
+      action={<AieroStatusPill accent="teal">Tenant-Owned Credentials</AieroStatusPill>}
     >
       {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
 
-      <Notice tone="info">
-        Production flow: save the customer credential, connect the provider account where required, preview imported data, then approve the import.
-        GoHighLevel remains the CRM source of truth; Tanaghum becomes the AI operating and reporting layer.
-      </Notice>
+      <AieroPanel>
+        <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/38">Setup without confusion</div>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight tracking-tight">Connect the tools the customer already uses.</h2>
+            <p className="mt-4 text-sm leading-7 text-white/56">
+              Save the customer credential, connect the provider account where required, preview imported data, then approve the import.
+              GoHighLevel remains the CRM source of truth; Tanaghum becomes the AI operating and reporting layer.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <AieroMetricCard label="GoHighLevel" value={text(ghl?._label)} detail={`${text(ghl?.apiKeyStatus)} API key | CRM, leads, WhatsApp readiness`} accent="rose" />
+            <AieroMetricCard label="AI Provider" value={text(aiProvider?.provider, 'Requires LLM')} detail={text(aiProvider?.label, 'AI generation status')} accent="violet" />
+            <AieroMetricCard label="Postiz" value={text(postiz?.status)} detail={`${text((postiz?.health as RecordMap | undefined)?.credentialStatus)} credential | scheduling`} accent="teal" />
+            <AieroMetricCard label="Tenant Vault" value={`${configuredRows}/${matrix.length}`} detail="Configured credential sets" accent="amber" />
+          </div>
+        </div>
+      </AieroPanel>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="GoHighLevel" value={text(ghl?._label)} detail={`${text(ghl?.apiKeyStatus)} API key | CRM, leads, WhatsApp readiness`} tone={statusTone(`${text(ghl?._label)} ${text(ghl?.apiKeyStatus)}`)} />
-        <MetricCard label="AI Provider" value={text(aiProvider?.provider, 'Requires LLM')} detail={text(aiProvider?.label, 'AI generation status')} tone={statusTone(text(aiProvider?.label))} />
-        <MetricCard label="Postiz" value={text(postiz?.status)} detail={`${text((postiz?.health as RecordMap | undefined)?.credentialStatus)} credential | scheduling`} tone={statusTone(`${text(postiz?.status)} ${text((postiz?.health as RecordMap | undefined)?.credentialStatus)}`)} />
-        <MetricCard label="Tenant Vault" value={`${configuredRows}/${matrix.length}`} detail="Configured credential sets" tone={configuredRows > 0 ? 'good' : 'warn'} />
-      </div>
-
-      <ProductCard
-        title="Start Here: Choose What You Want To Connect"
-        subtitle="Pick a business system. The setup form opens directly below and only saves encrypted customer-owned credentials."
-        action={selected ? <ProductStatus tone="info">Selected: {text(selected.label)}</ProductStatus> : <ProductStatus tone="warn">Choose Connector</ProductStatus>}
+      <AieroPanel
+        title="Setup Wizard: Choose A Data Source"
+        subtitle="Start with the business system the customer wants to connect. The page will show the exact credential, validation, mapping, and import path for that source."
+        action={selected ? <AieroStatusPill accent="blue">Selected: {text(selected.label)}</AieroStatusPill> : <AieroStatusPill accent="amber">Choose Connector</AieroStatusPill>}
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {setupRoadmap.map(item => (
@@ -570,16 +584,16 @@ export default function IntegrationCredentials() {
               type="button"
               onClick={() => item.primaryCredential && chooseRequirement(item.primaryCredential)}
               disabled={!item.primaryCredential}
-              className="flex min-h-[220px] flex-col rounded-xl border border-neutral-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-[220px] flex-col rounded-[1.25rem] border border-white/10 bg-[#0c0c19] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-white/24 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{item.category}</div>
-                  <div className="mt-1 text-base font-semibold text-neutral-950">{item.label}</div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-white/38">{item.category}</div>
+                  <div className="mt-1 text-base font-semibold text-white">{item.label}</div>
                 </div>
                 <ProductStatus tone={item.tone}>{item.scoreText}</ProductStatus>
               </div>
-              <p className="mt-3 line-clamp-3 text-sm leading-6 text-neutral-600">{item.businessUse}</p>
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-white/48">{item.businessUse}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <ProductStatus tone={item.credentialConfigured ? 'good' : 'warn'}>
                   {item.credentialConfigured ? 'Credentials saved' : 'Needs credentials'}
@@ -592,15 +606,15 @@ export default function IntegrationCredentials() {
                       : 'Credential step'}
                 </ProductStatus>
               </div>
-              <div className="mt-auto pt-4 text-sm font-semibold text-neutral-950">
+              <div className="mt-auto pt-4 text-sm font-semibold text-white">
                 {item.primaryCredential ? 'Configure now' : 'Not available yet'}
               </div>
             </button>
           ))}
         </div>
-      </ProductCard>
+      </AieroPanel>
 
-      <ProductCard
+      <AieroLightPanel
         title={selected ? `Secure Setup: ${text(selected.label)}` : 'Secure Setup Wizard'}
         subtitle={selected ? 'Enter the required fields for this connector. Raw secrets are encrypted and never shown again.' : 'Choose a connector above to open the exact fields required for setup.'}
         action={selected ? <SecondaryAction onClick={() => setSelected(null)}>Clear Selection</SecondaryAction> : undefined}
@@ -722,9 +736,9 @@ export default function IntegrationCredentials() {
             message="Select GoHighLevel, Meta/Instagram, Postiz, YouTube, Formaloo, or SmartLabs from the cards above."
           />
         )}
-      </ProductCard>
+      </AieroLightPanel>
 
-      <ProductCard
+      <AieroPanel
         title="How Verified Data Reaches Dashboards"
         subtitle="Credentials alone do not create live data. Each source must be connected, previewed, mapped, and approved before it affects event reporting."
         action={
@@ -736,20 +750,10 @@ export default function IntegrationCredentials() {
         }
       >
         <div className="grid gap-3 lg:grid-cols-4">
-          {[
-            ['1', 'Save Credentials', 'Admin or marketing manager saves tenant-owned API/OAuth credentials. Raw secret values are never shown again.'],
-            ['2', 'Connect Account', 'Provider OAuth, Postiz channels, or CRM location checks prove the account belongs to the customer.'],
-            ['3', 'Import Evidence', 'Event dashboards use mappings, dry-runs, and approval before connector data becomes KPI evidence.'],
-            ['4', 'Govern Execution', 'Publishing, CRM, messaging, and voice actions stay blocked until explicit customer authorization.'],
-          ].map(([step, title, detail]) => (
-            <div key={step} className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">{step}</span>
-                <div className="text-sm font-semibold text-neutral-950">{title}</div>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-neutral-600">{detail}</p>
-            </div>
-          ))}
+          <AieroNumberedStep number="1" title="Save Credentials" detail="Admin or marketing manager saves tenant-owned API/OAuth credentials. Raw secret values are never shown again." accent="teal" />
+          <AieroNumberedStep number="2" title="Connect Account" detail="Provider OAuth, Postiz channels, or CRM location checks prove the account belongs to the customer." accent="rose" />
+          <AieroNumberedStep number="3" title="Import Evidence" detail="Event dashboards use mappings, dry-runs, and approval before connector data becomes KPI evidence." accent="violet" />
+          <AieroNumberedStep number="4" title="Govern Execution" detail="Publishing, CRM, messaging, and voice actions stay blocked until explicit customer authorization." accent="amber" />
         </div>
 
         <div className="mt-5 grid gap-3 lg:grid-cols-3">
@@ -758,13 +762,13 @@ export default function IntegrationCredentials() {
             ['Meta / YouTube / Formaloo', 'Verified campaign reach, spend, video performance, and form activity for event dashboards.'],
             ['Postiz / SmartLabs', 'Scheduling and voice/chat handoff surfaces that remain approval-gated before execution.'],
           ].map(([title, detail]) => (
-            <div key={title} className="rounded-xl border border-neutral-200 bg-white p-4">
-              <div className="text-sm font-semibold text-neutral-950">{title}</div>
-              <p className="mt-2 text-sm leading-6 text-neutral-600">{detail}</p>
+            <div key={title} className="rounded-[1.25rem] border border-white/10 bg-[#0c0c19] p-4">
+              <div className="text-sm font-semibold text-white">{title}</div>
+              <p className="mt-2 text-sm leading-6 text-white/50">{detail}</p>
             </div>
           ))}
         </div>
-      </ProductCard>
+      </AieroPanel>
 
       <ProductCard
         title="Postiz Scheduling Connection"
@@ -1001,28 +1005,35 @@ export default function IntegrationCredentials() {
         </div>
       </ProductCard>
 
-      <ProductCard title="Saved Credentials" subtitle="Only status, field names, and fingerprints are shown. Raw values are never returned.">
-        {credentials.length ? (
-          <ProductTable
-            columns={['Credential', 'Fields', 'Fingerprints', 'Status', 'Action']}
-            rows={credentials.map(credential => [
-              <div>
-                <div className="font-medium text-neutral-950">{text(credential.displayName)}</div>
-                <div className="mt-1 text-xs text-neutral-500">{display(text(credential.provider))} / {display(text(credential.credentialType))} / {text(credential.connectionKey, 'default')}</div>
-              </div>,
-              <div className="flex flex-wrap gap-1">
-                {parseRequiredFields(credential.secretFields).map(field => <ProductStatus key={field} tone="muted">{field}</ProductStatus>)}
-              </div>,
-              <div className="max-w-sm text-xs leading-5 text-neutral-500">
-                {Object.entries((credential.secretFingerprints || {}) as Record<string, unknown>).map(([key, value]) => `${key}: ${String(value)}`).join(' | ') || 'Hidden'}
-              </div>,
-              <ProductStatus tone={credential.isActive ? 'good' : 'danger'}>{credential.isActive ? 'Configured' : 'Disabled'}</ProductStatus>,
-              credential.isActive ? <SecondaryAction onClick={() => disableCredential(text(credential.id))}>Disable</SecondaryAction> : <ProductStatus tone="muted">Disabled</ProductStatus>,
-            ])}
-          />
-        ) : (
-          <EmptyProductState message="No tenant integration credentials have been saved yet." />
-        )}
+      <ProductCard title="Credential Evidence" subtitle="Advanced status for admins and managers. Raw values are never returned.">
+        <details>
+          <summary className="cursor-pointer rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-semibold text-neutral-950">
+            Show saved credential status
+          </summary>
+          <div className="mt-4">
+            {credentials.length ? (
+              <ProductTable
+                columns={['Credential', 'Fields', 'Fingerprints', 'Status', 'Action']}
+                rows={credentials.map(credential => [
+                  <div>
+                    <div className="font-medium text-neutral-950">{text(credential.displayName)}</div>
+                    <div className="mt-1 text-xs text-neutral-500">{display(text(credential.provider))} / {display(text(credential.credentialType))} / {text(credential.connectionKey, 'default')}</div>
+                  </div>,
+                  <div className="flex flex-wrap gap-1">
+                    {parseRequiredFields(credential.secretFields).map(field => <ProductStatus key={field} tone="muted">{field}</ProductStatus>)}
+                  </div>,
+                  <div className="max-w-sm text-xs leading-5 text-neutral-500">
+                    {Object.entries((credential.secretFingerprints || {}) as Record<string, unknown>).map(([key, value]) => `${key}: ${String(value)}`).join(' | ') || 'Hidden'}
+                  </div>,
+                  <ProductStatus tone={credential.isActive ? 'good' : 'danger'}>{credential.isActive ? 'Configured' : 'Disabled'}</ProductStatus>,
+                  credential.isActive ? <SecondaryAction onClick={() => disableCredential(text(credential.id))}>Disable</SecondaryAction> : <ProductStatus tone="muted">Disabled</ProductStatus>,
+                ])}
+              />
+            ) : (
+              <EmptyProductState message="No tenant integration credentials have been saved yet." />
+            )}
+          </div>
+        </details>
       </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -1066,6 +1077,6 @@ export default function IntegrationCredentials() {
           )}
         </ProductCard>
       </div>
-    </ProductPage>
+    </AieroPage>
   );
 }

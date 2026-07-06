@@ -10,6 +10,15 @@ import {
   learningRecommendationsApi,
 } from '../api';
 import {
+  AieroActionButton,
+  AieroGhostButton,
+  AieroLightPanel,
+  AieroMetricCard,
+  AieroPage,
+  AieroPanel,
+  AieroStatusPill,
+} from '../components/AieroUX';
+import {
   BarList,
   DetailGrid,
   EmptyProductState,
@@ -19,7 +28,6 @@ import {
   Notice,
   PrimaryAction,
   ProductCard,
-  ProductPage,
   ProductStatus,
   ProductTable,
   ReadableQueue,
@@ -31,13 +39,13 @@ import { formatCurrency } from '../lib/currency';
 type RecordMap = Record<string, unknown>;
 type WorkspaceTab = 'overview' | 'strategy' | 'kpis' | 'leads' | 'blockers' | 'closeout';
 
-const TABS: Array<{ id: WorkspaceTab; label: string; helper: string }> = [
-  { id: 'overview', label: 'Overview', helper: 'Today status' },
-  { id: 'strategy', label: 'Plan', helper: 'Offer and campaign work' },
-  { id: 'kpis', label: 'KPIs', helper: 'Spend, reach, forms, sales' },
-  { id: 'leads', label: 'Leads', helper: 'CRM and sales flow' },
-  { id: 'blockers', label: 'Risks', helper: 'What needs attention' },
-  { id: 'closeout', label: 'Learning', helper: 'Closeout and lessons' },
+const TABS: Array<{ id: WorkspaceTab; label: string; helper: string; action: string }> = [
+  { id: 'overview', label: 'Overview', helper: 'What needs attention today', action: 'Review the event health and next team action.' },
+  { id: 'strategy', label: 'Plan', helper: 'Offer, audience and work packages', action: 'Confirm the event strategy and required campaign work.' },
+  { id: 'kpis', label: 'KPIs', helper: 'Spend, reach, forms and sales', action: 'Connect or import campaign results so the numbers stay current.' },
+  { id: 'leads', label: 'Leads', helper: 'CRM and sales flow', action: 'Review lead temperature, sales stages, meetings and purchases.' },
+  { id: 'blockers', label: 'Risks', helper: 'Issues slowing the event', action: 'Record and resolve blockers before they affect sales.' },
+  { id: 'closeout', label: 'Learning', helper: 'Lessons for the next event', action: 'Use evidence to understand what worked and what to improve.' },
 ];
 
 function list(value: unknown): RecordMap[] {
@@ -300,18 +308,18 @@ function EventPicker({
 }) {
   if (!events.length) {
     return (
-      <ProductCard title="Events" subtitle="Start by creating the event you want to sell.">
+      <AieroLightPanel title="Events" subtitle="Start by creating the event you want to sell.">
         <EmptyProductState
           title="No events yet"
           message="Create the first event, then this workspace will track its campaign plan, spend, leads, and sales outcomes."
         />
-      </ProductCard>
+      </AieroLightPanel>
     );
   }
 
   return (
-    <ProductCard title="Events" subtitle="Choose the event your team is operating today.">
-      <div className="space-y-2">
+    <AieroPanel title="Events" subtitle="Choose the event your team is operating today.">
+      <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
         {events.map(event => {
           const id = String(event.id || '');
           const active = id === selectedEventId;
@@ -320,16 +328,16 @@ function EventPicker({
               key={id}
               type="button"
               onClick={() => onSelect(id)}
-              className={`w-full rounded-lg border p-4 text-left transition ${
+              className={`w-full rounded-2xl border p-4 text-left transition ${
                 active
-                  ? 'border-neutral-950 bg-neutral-950 text-white shadow-sm'
-                  : 'border-neutral-200 bg-white text-neutral-950 hover:border-neutral-300 hover:bg-neutral-50'
+                  ? 'border-white bg-white text-[#080813] shadow-sm'
+                  : 'border-white/10 bg-white/[0.04] text-white hover:border-white/24 hover:bg-white/[0.07]'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="line-clamp-2 text-sm font-semibold">{eventTitle(event)}</div>
-                  <div className={`mt-1 text-xs ${active ? 'text-white/70' : 'text-neutral-500'}`}>
+                  <div className={`mt-1 text-xs ${active ? 'text-neutral-500' : 'text-white/46'}`}>
                     {titleCase(event.eventType)} - {formatDate(event.eventDate)}
                   </div>
                 </div>
@@ -339,7 +347,7 @@ function EventPicker({
           );
         })}
       </div>
-    </ProductCard>
+    </AieroPanel>
   );
 }
 
@@ -351,8 +359,8 @@ function WorkspaceTabs({
   onChange: (tab: WorkspaceTab) => void;
 }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-2 shadow-sm">
-      <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.06] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
         {TABS.map(tab => {
           const active = tab.id === activeTab;
           return (
@@ -360,17 +368,38 @@ function WorkspaceTabs({
               key={tab.id}
               type="button"
               onClick={() => onChange(tab.id)}
-              className={`rounded-lg px-4 py-3 text-left transition ${
-                active ? 'bg-neutral-950 text-white shadow-sm' : 'bg-neutral-50 text-neutral-700 hover:bg-neutral-100'
+              className={`rounded-[1.15rem] px-4 py-4 text-left transition ${
+                active ? 'bg-white text-[#080813] shadow-sm' : 'bg-white/[0.04] text-white hover:bg-white/[0.08]'
               }`}
+              aria-pressed={active}
             >
               <div className="text-sm font-semibold">{tab.label}</div>
-              <div className={`mt-1 text-xs ${active ? 'text-white/65' : 'text-neutral-500'}`}>{tab.helper}</div>
+              <div className={`mt-1 text-xs ${active ? 'text-neutral-500' : 'text-white/45'}`}>{tab.helper}</div>
             </button>
           );
         })}
       </div>
     </div>
+  );
+}
+
+function TabGuide({
+  activeTab,
+}: {
+  activeTab: WorkspaceTab;
+}) {
+  const tab = TABS.find(item => item.id === activeTab) || TABS[0];
+  return (
+    <AieroLightPanel>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{tab.label}</div>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-neutral-950">{tab.helper}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">{tab.action}</p>
+        </div>
+        <ProductStatus tone="info">Current step</ProductStatus>
+      </div>
+    </AieroLightPanel>
   );
 }
 
@@ -403,66 +432,60 @@ function OverviewTab({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 2xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="overflow-hidden rounded-2xl bg-[#151426] p-6 text-white shadow-[0_18px_54px_rgba(15,15,22,0.24)]">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <AieroPanel className="bg-[#121122]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.45fr)]">
             <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wide text-white/55">Event Control Room</div>
-              <h2 className="mt-2 max-w-3xl text-2xl font-semibold leading-tight tracking-tight">Today&apos;s execution view</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">
-                Plan the campaign, track lead flow, compare spend against outcomes, and keep the sales team focused on the next action.
+              <div className="flex flex-wrap gap-2">
+                <AieroStatusPill accent="blue">{titleCase(event.status)}</AieroStatusPill>
+                <AieroStatusPill accent={numberValue(sourceStatus.connectorRecords) ? 'teal' : 'amber'}>
+                  {sourceLabel(sourceStatus.primarySource)}
+                </AieroStatusPill>
+              </div>
+              <div className="mt-5 text-xs font-semibold uppercase tracking-wide text-white/55">Today</div>
+              <h2 className="mt-2 text-4xl font-semibold leading-tight tracking-tight">Run the event workflow</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">
+                Keep the team focused on the plan, the campaign numbers, lead follow-up, and the next sales action.
               </p>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <ProductStatus tone={statusTone(event.status)}>{titleCase(event.status)}</ProductStatus>
-              <ProductStatus tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'}>
-                {sourceLabel(sourceStatus.primarySource)}
-              </ProductStatus>
-            </div>
-          </div>
 
-          <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(min(100%,170px),1fr))] gap-3">
-            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs uppercase tracking-wide text-white/45">Event date</div>
-              <div className="mt-2 break-words text-base font-semibold leading-snug">{formatDate(event.eventDate)}</div>
-            </div>
-            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs uppercase tracking-wide text-white/45">Location</div>
-              <div className="mt-2 break-words text-base font-semibold leading-snug [overflow-wrap:anywhere]">{text(event.location, 'Not set')}</div>
-            </div>
-            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs uppercase tracking-wide text-white/45">Budget</div>
-              <div className="mt-2 break-words text-base font-semibold leading-snug [overflow-wrap:anywhere]">{money(kpis.plannedBudget)}</div>
-            </div>
-            <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs uppercase tracking-wide text-white/45">CRM readiness</div>
-              <div className="mt-2 break-words text-base font-semibold leading-snug">{text(ghlStatus?.credentialStatus) === 'configured' ? 'Configured' : 'Needs setup'}</div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              {[
+                ['Event date', formatDate(event.eventDate)],
+                ['Location', text(event.location, 'Not set')],
+                ['Budget', money(kpis.plannedBudget)],
+                ['CRM', text(ghlStatus?.credentialStatus) === 'configured' ? 'Configured' : 'Needs setup'],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-white/38">{label}</div>
+                  <div className="mt-2 break-words text-lg font-semibold leading-snug text-white [overflow-wrap:anywhere]">{value}</div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        </AieroPanel>
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-          <ExecutiveGauge
-            value={readiness}
-            label="Operating readiness"
-            detail="Based on KPI records, spend, leads, sales outcomes, and connector/import data."
-          />
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <ProductStatus tone={numberValue(problemDashboard?.openProblems) ? 'warn' : 'good'}>
-              {numberValue(problemDashboard?.openProblems)} active risk(s)
-            </ProductStatus>
-            <ProductStatus tone={numberValue(problemDashboard?.criticalOpen) ? 'danger' : 'good'}>
-              {numberValue(problemDashboard?.criticalOpen)} critical
-            </ProductStatus>
-          </div>
-        </div>
+        <ExecutiveGauge
+          value={readiness}
+          label="Operating readiness"
+          detail="Calculated from KPI records, leads, sales outcomes, risks, and connector/import data."
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ProductStatus tone={numberValue(problemDashboard?.openProblems) ? 'warn' : 'good'}>
+          {numberValue(problemDashboard?.openProblems)} active risk(s)
+        </ProductStatus>
+        <ProductStatus tone={numberValue(problemDashboard?.criticalOpen) ? 'danger' : 'good'}>
+          {numberValue(problemDashboard?.criticalOpen)} critical risk(s)
+        </ProductStatus>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="New Leads" value={numberValue(kpis.newLeads).toLocaleString()} detail={`${numberValue(kpis.capturedLeads)} captured in system`} tone="info" />
-        <MetricCard label="Meetings Booked" value={numberValue(kpis.meetingsBooked).toLocaleString()} detail={`${numberValue(kpis.meetingsAttended)} attended / ${numberValue(kpis.noShows)} no-show`} tone="warn" />
-        <MetricCard label="Purchases" value={numberValue(kpis.purchases).toLocaleString()} detail={`${percent(kpis.noShowRate)} no-show rate`} tone={numberValue(kpis.purchases) ? 'good' : 'warn'} />
-        <MetricCard label="Spend" value={money(kpis.actualSpend)} detail={`${money(kpis.budgetVariance)} remaining variance`} tone={numberValue(kpis.actualSpend) ? 'info' : 'warn'} />
+        <AieroMetricCard label="New Leads" value={numberValue(kpis.newLeads).toLocaleString()} detail={`${numberValue(kpis.capturedLeads)} captured in system`} accent="teal" />
+        <AieroMetricCard label="Meetings Booked" value={numberValue(kpis.meetingsBooked).toLocaleString()} detail={`${numberValue(kpis.meetingsAttended)} attended / ${numberValue(kpis.noShows)} no-show`} accent="amber" />
+        <AieroMetricCard label="Purchases" value={numberValue(kpis.purchases).toLocaleString()} detail={`${percent(kpis.noShowRate)} no-show rate`} accent={numberValue(kpis.purchases) ? 'rose' : 'amber'} />
+        <AieroMetricCard label="Spend" value={money(kpis.actualSpend)} detail={`${money(kpis.budgetVariance)} remaining variance`} accent="violet" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
@@ -869,24 +892,23 @@ export default function HybridEventWorkspace() {
 
   if (loading) {
     return (
-      <ProductPage eyebrow="Event Workspace" title="Loading events..." subtitle="Opening the governed Tanaghum event operating workspace.">
+      <AieroPage eyebrow="Events" title="Event Workspace" subtitle="Opening the event operating workspace.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[1, 2, 3, 4].map(item => <div key={item} className="skeleton-pulse h-36 rounded-xl" />)}
+          {[1, 2, 3, 4].map(item => <div key={item} className="h-36 rounded-[1.25rem] border border-white/10 bg-white/[0.08]" />)}
         </div>
-      </ProductPage>
+      </AieroPage>
     );
   }
 
   return (
-    <ProductPage
-      eyebrow="Commercial / Social"
-      title="Event Operating Workspace"
-      subtitle="A simple daily workspace for planning, campaign KPIs, lead follow-up, blockers, and event learning. Powered by Tanaghum governance and backend APIs."
+    <AieroPage
+      eyebrow="Events"
+      title="Event Workspace"
+      subtitle="Plan each event, track campaign performance, follow leads, manage risks, and learn what to improve next."
       action={(
         <>
-          <ProductStatus tone="info">Hybrid v2</ProductStatus>
-          <SecondaryAction onClick={() => navigate('/events/master')}>Portfolio Dashboard</SecondaryAction>
-          <PrimaryAction onClick={() => navigate('/events/new')}>Create Event</PrimaryAction>
+          <AieroGhostButton onClick={() => navigate('/events/master')}>Portfolio Dashboard</AieroGhostButton>
+          <AieroActionButton onClick={() => navigate('/events/new')}>Create Event</AieroActionButton>
         </>
       )}
     >
@@ -896,7 +918,7 @@ export default function HybridEventWorkspace() {
         <aside className="space-y-5">
           <EventPicker events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
 
-          <ProductCard title="Today Focus" subtitle="What this workspace is for.">
+          <AieroLightPanel title="Today Focus" subtitle="What this workspace is for.">
             <ReadableQueue
               items={[
                 { title: 'Plan the event', meta: 'Offer, audience, budget, channels, content, email, WhatsApp, and upsell plan.', status: 'Plan', tone: 'info' },
@@ -904,7 +926,7 @@ export default function HybridEventWorkspace() {
                 { title: 'Close the loop', meta: 'Sync CRM leads, record blockers, and learn what to improve for the next event.', status: 'Learning', tone: 'good' },
               ]}
             />
-          </ProductCard>
+          </AieroLightPanel>
         </aside>
 
         <section className="min-w-0 space-y-5">
@@ -918,7 +940,7 @@ export default function HybridEventWorkspace() {
             </ProductCard>
           ) : (
             <>
-              <ProductCard>
+              <AieroLightPanel>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -933,11 +955,11 @@ export default function HybridEventWorkspace() {
                       {titleCase(event.eventType)} in {text(event.location, 'unspecified location')} on {formatDate(event.eventDate)}.
                     </p>
                   </div>
-                  <SecondaryAction onClick={() => navigate(`/events/advanced/${selectedEventId}`)}>Advanced Workspace</SecondaryAction>
                 </div>
-              </ProductCard>
+              </AieroLightPanel>
 
               <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} />
+              <TabGuide activeTab={activeTab} />
 
               {activeTab === 'overview' && (
                 <OverviewTab
@@ -999,6 +1021,6 @@ export default function HybridEventWorkspace() {
           )}
         </section>
       </div>
-    </ProductPage>
+    </AieroPage>
   );
 }

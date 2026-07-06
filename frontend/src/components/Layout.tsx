@@ -21,7 +21,6 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
   UserRound,
   Users,
   X,
@@ -29,7 +28,7 @@ import {
 import { useAuth } from '../contexts/useAuth';
 import { ProductStatus } from './ProductUI';
 
-type NavGroup = 'Product' | 'Admin';
+type NavGroup = 'Product' | 'Setup' | 'Admin';
 type NavItem = {
   path: string;
   label: string;
@@ -59,17 +58,9 @@ const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_man
 const NAV_ITEMS: NavItem[] = [
   {
     path: '/command-center',
-    label: 'Dashboard',
-    description: 'Events, leads, spend and sales',
+    label: 'Home',
+    description: 'Today, events, leads and sales',
     icon: LayoutDashboard,
-    group: 'Product',
-    roles: PRODUCT_ROLES,
-  },
-  {
-    path: '/growth',
-    label: 'Growth Engine',
-    description: 'Course sales and lead growth',
-    icon: TrendingUp,
     group: 'Product',
     roles: PRODUCT_ROLES,
   },
@@ -84,7 +75,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     path: '/integration-credentials',
     label: 'Integrations',
-    description: 'Business systems and data',
+    description: 'Connect customer data sources',
     icon: KeyRound,
     group: 'Product',
     roles: CONNECTOR_SETUP_ROLES,
@@ -99,15 +90,15 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     path: '/ideas',
-    label: 'Content Creator',
-    description: 'Ideas and campaign creation',
+    label: 'Content',
+    description: 'Ideas, posts and campaign content',
     icon: Sparkles,
     group: 'Product',
     roles: PRODUCT_ROLES.filter(role => role !== 'viewer'),
   },
   {
     path: '/approvals',
-    label: 'Review & Approve',
+    label: 'Review',
     description: 'Review and approve content',
     icon: ClipboardCheck,
     group: 'Product',
@@ -124,7 +115,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     path: '/analytics',
     label: 'Performance',
-    description: 'Results and customer interest',
+    description: 'Leads, spend, sales and results',
     icon: BarChart3,
     group: 'Product',
     roles: PRODUCT_ROLES,
@@ -134,7 +125,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'My Profile',
     description: 'Your role and permissions',
     icon: UserRound,
-    group: 'Product',
+    group: 'Setup',
     roles: PRODUCT_ROLES,
   },
   {
@@ -142,7 +133,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Account Security',
     description: 'MFA and recovery codes',
     icon: ShieldCheck,
-    group: 'Product',
+    group: 'Setup',
     roles: PRODUCT_ROLES,
   },
   {
@@ -150,7 +141,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'AI Settings',
     description: 'Connect your AI model',
     icon: Brain,
-    group: 'Product',
+    group: 'Setup',
     roles: PRODUCT_ROLES,
   },
   {
@@ -198,13 +189,13 @@ const NAV_ITEMS: NavItem[] = [
     label: 'SmartLabs Voice',
     description: 'Voice agent connector',
     icon: PhoneCall,
-    group: 'Admin',
+    group: 'Setup',
     roles: CONNECTOR_SETUP_ROLES,
   },
   {
     path: '/mcp-engine',
-    label: 'Integrations',
-    description: 'Connector registry',
+    label: 'Connector Registry',
+    description: 'Technical connector records',
     icon: Network,
     group: 'Admin',
     roles: ADMIN_ROLES,
@@ -227,8 +218,14 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-const GROUPS: NavGroup[] = ['Product', 'Admin'];
+const GROUPS: NavGroup[] = ['Product', 'Setup', 'Admin'];
 const GUIDE_STORAGE_KEY = 'tanaghum-setup-guide-dismissed';
+
+const GROUP_LABELS: Record<NavGroup, string> = {
+  Product: 'Daily Work',
+  Setup: 'Account Setup',
+  Admin: 'Admin & Operations',
+};
 
 function getStringField(source: unknown, keys: string[], fallback = ''): string {
   if (!source || typeof source !== 'object') return fallback;
@@ -255,6 +252,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [setupExpanded, setSetupExpanded] = useState(false);
   const [adminExpanded, setAdminExpanded] = useState(false);
   const [guideOpen, setGuideOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -294,6 +292,7 @@ export default function Layout() {
     if (path === '/events' && location.pathname.startsWith('/events') && location.pathname !== '/events/master') return true;
     return false;
   };
+  const setupNavVisible = setupExpanded || currentItem?.group === 'Setup';
   const adminNavVisible = adminExpanded || currentItem?.group === 'Admin';
 
   const sidebar = (
@@ -318,20 +317,25 @@ export default function Layout() {
           if (!groupItems.length) return null;
           return (
             <div key={group} className="mb-6">
-              {group === 'Admin' ? (
+              {group === 'Product' ? (
+                <div className="px-2 pb-2 text-xs font-medium text-neutral-500">{GROUP_LABELS[group]}</div>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setAdminExpanded(current => !current)}
+                  onClick={() => {
+                    if (group === 'Setup') setSetupExpanded(current => !current);
+                    if (group === 'Admin') setAdminExpanded(current => !current);
+                  }}
                   className="mb-2 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
-                  aria-expanded={adminNavVisible}
+                  aria-expanded={group === 'Setup' ? setupNavVisible : adminNavVisible}
                 >
-                  <span>Admin & Settings</span>
-                  <span aria-hidden="true">{adminNavVisible ? '-' : '+'}</span>
+                  <span>{GROUP_LABELS[group]}</span>
+                  <span aria-hidden="true">{(group === 'Setup' ? setupNavVisible : adminNavVisible) ? '-' : '+'}</span>
                 </button>
-              ) : (
-                <div className="px-2 pb-2 text-xs font-medium text-neutral-500">Content Studio</div>
               )}
-              <div className={`space-y-1 ${group === 'Admin' && !adminNavVisible ? 'hidden' : ''}`}>
+              <div className={`space-y-1 ${
+                (group === 'Setup' && !setupNavVisible) || (group === 'Admin' && !adminNavVisible) ? 'hidden' : ''
+              }`}>
                 {groupItems.map(item => {
                   const Icon = item.icon;
                   const active = isActive(item.path);

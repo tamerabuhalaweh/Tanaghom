@@ -2,19 +2,27 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { masterEventsApi } from '../api';
 import {
+  AieroActionButton,
+  AieroGhostButton,
+  AieroLightPanel,
+  AieroMetricCard,
+  AieroPage,
+  AieroPanel,
+  AieroStatusPill,
+} from '../components/AieroUX';
+import {
   BarList,
   EmptyProductState,
   ExecutiveGauge,
-  ExecutiveKpiCard,
   Field,
   FunnelChart,
   MetricCard,
   Notice,
   PrimaryAction,
   ProductCard,
-  ProductPage,
   ProductStatus,
   ProductTable,
+  ReadableQueue,
   SecondaryAction,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
@@ -136,6 +144,51 @@ function getEventName(row: RecordMap): string {
   return text(row.eventName, 'Unnamed event');
 }
 
+function buildNextActions(totals: RecordMap, dataSourceSummary: RecordMap, events: RecordMap[]) {
+  const actions: { title: string; meta: string; status: string; tone: 'good' | 'warn' | 'danger' | 'info' }[] = [];
+  if (!numberValue(dataSourceSummary.connectorRecords) && !numberValue(dataSourceSummary.importedRecords)) {
+    actions.push({
+      title: 'Connect campaign data',
+      meta: 'Add customer-owned Meta, YouTube, Formaloo, GHL, Postiz, or CSV imports so performance is verified.',
+      status: 'Data',
+      tone: 'warn',
+    });
+  }
+  if (numberValue(totals.noShowRate) > 0.2) {
+    actions.push({
+      title: 'Reduce meeting no-shows',
+      meta: `${Math.round(numberValue(totals.noShowRate) * 100)}% no-show rate needs WhatsApp, email, or sales follow-up action.`,
+      status: 'Sales',
+      tone: 'danger',
+    });
+  }
+  if (numberValue(totals.totalLeads) && !numberValue(totals.purchases)) {
+    actions.push({
+      title: 'Turn leads into purchases',
+      meta: 'Leads exist, but purchases are not moving yet. Review lead stages, sales tasks, and CRM mapping.',
+      status: 'Revenue',
+      tone: 'warn',
+    });
+  }
+  if (!events.length) {
+    actions.push({
+      title: 'Create the first event',
+      meta: 'Start with the event date, offer, audience, budget, and target location.',
+      status: 'Start',
+      tone: 'info',
+    });
+  }
+  if (!actions.length) {
+    actions.push({
+      title: 'Review top performing event',
+      meta: 'Use the event comparison table to continue the event with the strongest revenue or lead signal.',
+      status: 'Review',
+      tone: 'good',
+    });
+  }
+  return actions;
+}
+
 export default function MasterEventsDashboard() {
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -186,6 +239,7 @@ export default function MasterEventsDashboard() {
   const byGeography = mapEntries(dashboard?.byGeography);
   const purchaseConversion = calculatePurchaseConversion(totals);
   const noShowPct = numberValue(totals.noShowRate) * 100;
+  const nextActions = buildNextActions(totals, dataSourceSummary, events);
 
   const funnelStages = useMemo(
     () => [
@@ -219,72 +273,71 @@ export default function MasterEventsDashboard() {
 
   if (pageLoading) {
     return (
-      <ProductPage eyebrow="Events" title="Master Events Dashboard" subtitle="Loading cross-event results...">
+      <AieroPage eyebrow="Home" title="Business Control Room" subtitle="Loading cross-event results...">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[1, 2, 3, 4].map(item => <div key={item} className="skeleton-pulse h-36 rounded-xl" />)}
+          {[1, 2, 3, 4].map(item => <div key={item} className="h-36 rounded-[1.25rem] border border-white/10 bg-white/[0.08]" />)}
         </div>
-      </ProductPage>
+      </AieroPage>
     );
   }
 
   return (
-    <ProductPage
-      eyebrow="Executive Event Results"
-      title="Master Events Dashboard"
-      subtitle="Compare every course, camp, and live event by leads, meetings, purchases, spend efficiency, channels, and audience source."
+    <AieroPage
+      eyebrow="Home"
+      title="Business Control Room"
+      subtitle="See what needs action today across events, leads, spend, meetings, purchases, and campaign data sources."
       action={(
         <>
-          <ProductStatus tone="info">{numberValue(dashboard?.filteredEvents)} shown</ProductStatus>
-          <PrimaryAction onClick={() => navigate('/events/new')}>Create Event</PrimaryAction>
+          <AieroStatusPill accent="blue">{numberValue(dashboard?.filteredEvents)} shown</AieroStatusPill>
+          <AieroActionButton onClick={() => navigate('/events/new')}>Create Event</AieroActionButton>
         </>
       )}
     >
       {message && <Notice tone="danger">{message}</Notice>}
 
-      <div className="grid gap-4 xl:grid-cols-4">
-        <ExecutiveKpiCard
-          label="Total Leads"
-          value={numberValue(totals.totalLeads).toLocaleString()}
-          detail={`${numberValue(totals.formCompletions).toLocaleString()} form completions`}
-          tone={numberValue(totals.totalLeads) ? 'good' : 'warn'}
-          series={[numberValue(totals.formCompletions), numberValue(totals.totalLeads), numberValue(totals.meetingsBooked), numberValue(totals.purchases)]}
-        />
-        <ExecutiveKpiCard
-          label="Meetings Booked"
-          value={numberValue(totals.meetingsBooked).toLocaleString()}
-          detail={`${numberValue(totals.meetingsAttended).toLocaleString()} attended / ${numberValue(totals.noShows).toLocaleString()} no-show`}
-          tone={numberValue(totals.meetingsBooked) ? 'info' : 'warn'}
-          series={[numberValue(totals.totalLeads), numberValue(totals.meetingsBooked), numberValue(totals.meetingsAttended), numberValue(totals.noShows)]}
-        />
-        <ExecutiveKpiCard
-          label="Purchases"
-          value={numberValue(totals.purchases).toLocaleString()}
-          detail={`${money(totals.revenue)} recorded revenue`}
-          tone={numberValue(totals.purchases) ? 'good' : 'warn'}
-          series={[numberValue(totals.meetingsBooked), numberValue(totals.meetingsAttended), numberValue(totals.purchases)]}
-        />
-        <ExecutiveKpiCard
-          label="Cost Per Lead"
-          value={money(totals.costPerLead)}
-          detail={`${money(totals.actualSpend)} actual spend`}
-          tone={numberValue(totals.costPerLead) ? 'info' : 'default'}
-          series={[numberValue(totals.plannedBudget), numberValue(totals.actualSpend), numberValue(totals.totalLeads)]}
-        />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+        <AieroPanel className="bg-[#121122]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-white/55">Today</div>
+          <h2 className="mt-2 max-w-2xl text-4xl font-semibold leading-tight tracking-tight">Keep events moving from attention to purchase.</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">
+            Use this page to decide what needs work now: data connections, lead follow-up, no-show recovery, spend efficiency, and sales conversion.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <AieroMetricCard label="Events" value={events.length} detail="Active event workspace" accent="teal" />
+            <AieroMetricCard label="Leads" value={numberValue(totals.totalLeads).toLocaleString()} detail="Captured and imported interest" accent="rose" />
+            <AieroMetricCard label="Purchases" value={numberValue(totals.purchases).toLocaleString()} detail="Closed sales outcomes" accent="violet" />
+          </div>
+        </AieroPanel>
+
+        <AieroLightPanel title="Next Actions" subtitle="The shortest path to improve event results.">
+          <ReadableQueue items={nextActions} />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <PrimaryAction onClick={() => navigate('/events')}>Open Events</PrimaryAction>
+            <SecondaryAction onClick={() => navigate('/integration-credentials')}>Connect Data</SecondaryAction>
+          </div>
+        </AieroLightPanel>
       </div>
 
-      <ProductCard
+      <div className="grid gap-4 xl:grid-cols-4">
+        <AieroMetricCard label="Total Leads" value={numberValue(totals.totalLeads).toLocaleString()} detail={`${numberValue(totals.formCompletions).toLocaleString()} form completions`} accent="teal" />
+        <AieroMetricCard label="Meetings Booked" value={numberValue(totals.meetingsBooked).toLocaleString()} detail={`${numberValue(totals.meetingsAttended).toLocaleString()} attended / ${numberValue(totals.noShows).toLocaleString()} no-show`} accent="amber" />
+        <AieroMetricCard label="Purchases" value={numberValue(totals.purchases).toLocaleString()} detail={`${money(totals.revenue)} recorded revenue`} accent="rose" />
+        <AieroMetricCard label="Cost Per Lead" value={money(totals.costPerLead)} detail={`${money(totals.actualSpend)} actual spend`} accent="violet" />
+      </div>
+
+      <AieroPanel
         title="Production Data Backbone"
         subtitle="Portfolio-level source control for KPI records. Connector data is the production target; approved imports are a bridge; manual entries are fallback corrections."
-        action={<ProductStatus tone={numberValue(dataSourceSummary.connectorRecords) ? 'good' : numberValue(dataSourceSummary.importedRecords) ? 'info' : 'warn'}>{numberValue(dataSourceSummary.connectorRecords) ? 'Connector Data Active' : numberValue(dataSourceSummary.importedRecords) ? 'Import Bridge Active' : 'Manual Fallback Active'}</ProductStatus>}
+        action={<AieroStatusPill accent={numberValue(dataSourceSummary.connectorRecords) ? 'teal' : numberValue(dataSourceSummary.importedRecords) ? 'blue' : 'amber'}>{numberValue(dataSourceSummary.connectorRecords) ? 'Connector Data Active' : numberValue(dataSourceSummary.importedRecords) ? 'Import Bridge Active' : 'Manual Fallback Active'}</AieroStatusPill>}
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard label="Connector Records" value={numberValue(dataSourceSummary.connectorRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingConnectorData)} event(s) connected`} tone={numberValue(dataSourceSummary.connectorRecords) ? 'good' : 'warn'} />
-          <MetricCard label="Approved Imports" value={numberValue(dataSourceSummary.importedRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingImportedData)} event(s) using imports`} tone={numberValue(dataSourceSummary.importedRecords) ? 'info' : 'default'} />
-          <MetricCard label="Manual Fallback" value={numberValue(dataSourceSummary.manualRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingManualFallback)} event(s) fallback`} tone={numberValue(dataSourceSummary.eventsUsingManualFallback) ? 'warn' : 'default'} />
-          <MetricCard label="Synced Jobs" value={numberValue(dataSourceSummary.syncedConnectorJobs)} detail={`${numberValue(dataSourceSummary.readyConnectorJobs)} ready / ${numberValue(dataSourceSummary.failedConnectorJobs)} failed`} tone={numberValue(dataSourceSummary.syncedConnectorJobs) ? 'good' : 'warn'} />
-          <MetricCard label="Last Sync" value={formatDateTime(dataSourceSummary.lastConnectorSyncAt)} detail={`${numberValue(dataSourceSummary.connectorRowsImported)} row(s) imported`} tone={dataSourceSummary.lastConnectorSyncAt ? 'good' : 'default'} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <AieroMetricCard label="Connector Records" value={numberValue(dataSourceSummary.connectorRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingConnectorData)} event(s) connected`} accent="teal" />
+          <AieroMetricCard label="Approved Imports" value={numberValue(dataSourceSummary.importedRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingImportedData)} event(s) using imports`} accent="blue" />
+          <AieroMetricCard label="Manual Fallback" value={numberValue(dataSourceSummary.manualRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingManualFallback)} event(s) fallback`} accent="amber" />
+          <AieroMetricCard label="Synced Jobs" value={numberValue(dataSourceSummary.syncedConnectorJobs)} detail={`${numberValue(dataSourceSummary.readyConnectorJobs)} ready / ${numberValue(dataSourceSummary.failedConnectorJobs)} failed`} accent="violet" />
+          <AieroMetricCard label="Last Sync" value={formatDateTime(dataSourceSummary.lastConnectorSyncAt)} detail={`${numberValue(dataSourceSummary.connectorRowsImported)} row(s) imported`} accent="rose" />
         </div>
-      </ProductCard>
+      </AieroPanel>
 
       {!numberValue(dataSourceSummary.connectorRecords) && (
         <Notice tone="warn">
@@ -296,9 +349,9 @@ export default function MasterEventsDashboard() {
                 After credentials, mapping, dry-run, and approval, connector data will populate these dashboards.
               </div>
             </div>
-            <SecondaryAction onClick={() => navigate('/integration-credentials')}>
+            <AieroGhostButton onClick={() => navigate('/integration-credentials')}>
               Open Data Sources
-            </SecondaryAction>
+            </AieroGhostButton>
           </div>
         </Notice>
       )}
@@ -498,6 +551,6 @@ export default function MasterEventsDashboard() {
           </Notice>
         </>
       )}
-    </ProductPage>
+    </AieroPage>
   );
 }

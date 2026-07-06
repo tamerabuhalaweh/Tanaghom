@@ -40,6 +40,7 @@ import EventDashboard from './pages/EventDashboard'
 import EventStrategyWizard from './pages/EventStrategyWizard'
 import MasterEventsDashboard from './pages/MasterEventsDashboard'
 import HybridEventWorkspace from './pages/HybridEventWorkspace'
+import AieroInspiredPreview from './pages/AieroInspiredPreview'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
@@ -96,6 +97,9 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/accept-onboarding" element={<AcceptOnboarding />} />
+          <Route path="/ux/aiero-preview" element={<AieroInspiredPreview page="home" />} />
+          <Route path="/ux/aiero-preview/events" element={<AieroInspiredPreview page="events" />} />
+          <Route path="/ux/aiero-preview/integrations" element={<AieroInspiredPreview page="integrations" />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<MasterEventsDashboard />} />
             <Route path="events/master" element={<MasterEventsDashboard />} />
