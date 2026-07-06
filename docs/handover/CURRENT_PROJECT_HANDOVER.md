@@ -3,7 +3,7 @@
 Last updated: 2026-07-06  
 Repository: `tamerabuhalaweh/Tanaghom`  
 Current working branch at handover: `feature/hybrid-emergent-ux-governed-tanaghum`  
-Current deployed hybrid commit at handover: `d825b06`  
+Current deployed hybrid commit at handover: `9713e6e`  
 
 This is the single current onboarding document for a new developer or delivery team. Older sprint notes remain useful as history, but this file is the current operational handover source of truth.
 
@@ -412,7 +412,7 @@ Current R4/R4A status:
 
 Current R5 status:
 
-- GoHighLevel read-sync adapter is implemented locally as the CRM read path.
+- GoHighLevel read-sync adapter is implemented and deployed to hybrid as the CRM read path.
 - GHL remains the CRM source of truth; Tanaghum is the operating/reporting mirror.
 - Customer-owned GHL credential and location ID are required.
 - Customer-owned tag/stage mappings are required for high-confidence status/temperature mapping.
@@ -421,6 +421,7 @@ Current R5 status:
 - The adapter now covers contacts, opportunities, per-contact appointments/meetings, purchase outcomes, tags, stages, no-shows, meeting attendance, and lead temperature/status mapping.
 - Sync run evidence includes contact, opportunity, and appointment counts and never returns raw GHL payloads.
 - Local verification passed on 2026-07-06: backend lint, typecheck, full backend tests (118 files, 1769 tests), backend build, frontend lint, and frontend build.
+- Hybrid deployed smoke on 2026-07-06 returned the honest customer setup blocker: credential missing, mapping missing, read sync disabled, write-back disabled, and pull preview status `requires_credentials` with no raw payload returned.
 
 Recommended target options after R5:
 

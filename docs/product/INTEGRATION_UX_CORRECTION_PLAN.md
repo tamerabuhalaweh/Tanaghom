@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync productionization in progress; full production runtime pilots still pending
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -520,7 +520,7 @@ R4A live acceptance:
 
 Goal: Make GoHighLevel the production CRM read source while Tanaghum remains the governed operating/reporting layer.
 
-Status: Implemented locally on the hybrid branch. Deployment/live validation is next.
+Status: Implemented, deployed to hybrid, and smoke-validated with the expected customer-credential blocker.
 
 What R5 implements:
 
@@ -571,6 +571,20 @@ Remaining R5 live acceptance:
 - `GHL_READ_SYNC_ENABLED=true` must be enabled only for an approved test tenant/environment.
 - Run pull preview and sync against customer data.
 - Confirm dashboard lead counts and sales outcomes match GHL.
+
+R5 deployed smoke on 2026-07-06:
+
+- Hybrid health returned HTTP 200.
+- Hybrid app and frontend containers were rebuilt and restarted at commit `9713e6e`.
+- Migration `20260706_ghl_appointments_sync` applied successfully.
+- `/api/ghl-sync/status` returned:
+  - credential missing
+  - mapping missing
+  - read sync disabled
+  - write-back disabled
+  - required customer actions listed
+- `/api/ghl-sync/pull-preview` returned `requires_credentials`, `appointmentsPulled: 0`, and `rawPayloadReturned: false`.
+- Browser smoke logged in, opened Events, dismissed setup guide, and showed no console errors or failed API responses.
 
 Verification on 2026-07-06:
 
