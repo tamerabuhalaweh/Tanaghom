@@ -55,10 +55,10 @@ Current branch:
 feature/hybrid-emergent-ux-governed-tanaghum
 ```
 
-Current important commit:
+Current R5A implementation commit:
 
 ```bash
-c2f4557 feat: accept GHL credentials and validate mappings
+82e160b feat: accept GHL credentials and validate mappings
 ```
 
 ## 4. Architecture Truth

@@ -16,10 +16,10 @@ Read that file before starting any new development, review, deployment, or AI-ag
 feature/hybrid-emergent-ux-governed-tanaghum
 ```
 
-Latest known active commit at this update:
+Latest known R5A implementation commit at this update:
 
 ```text
-c2f4557 feat: accept GHL credentials and validate mappings
+82e160b feat: accept GHL credentials and validate mappings
 ```
 
 ## Current Product Direction
