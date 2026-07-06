@@ -22,6 +22,12 @@ Latest known R5A implementation commit at this update:
 82e160b feat: accept GHL credentials and validate mappings
 ```
 
+Latest deployed hybrid branch commit at this update:
+
+```text
+0f32140 docs: record R5A implementation evidence
+```
+
 ## Current Product Direction
 
 The active implementation lane is Hybrid Tanaghum:
@@ -88,11 +94,9 @@ Current R5 status:
 - Tanaghum never exposes raw GHL payloads or secrets in the response.
 - Local verification on 2026-07-06 passed backend lint, typecheck, full backend tests (1769), backend build, frontend lint, and frontend build.
 - Deployed smoke on 2026-07-06 returned the expected customer setup blocker: missing GHL credential/mapping, read sync disabled, write-back disabled, and pull preview `requires_credentials` with `rawPayloadReturned: false`.
-- R4A still needs hybrid deployment/live validation.
-
 Current R5A status:
 
-- In implementation on 2026-07-06.
+- Implemented, pushed, deployed to hybrid, and smoke-tested on 2026-07-06.
 - Adds read-only GHL credential acceptance through `POST /ghl-setup/test-connection`.
 - The test uses tenant-owned GHL credential fields from the secure vault and performs a read-only contact search only.
 - If successful, `last_validated_at` is recorded on the tenant GHL credential.
@@ -105,15 +109,16 @@ Current R5A status:
   - follow-up needed
   - warm / hot / buyer temperature
 - GHL setup mappings created by the GHL wizard now validate against Tanaghum lead status/temperature vocabulary.
+- Deployed API smoke returned the expected missing-credential blocker with `rawSecretsReturned: false` and `rawPayloadReturned: false`.
+- Deployed browser smoke on `/ghl-wizard` clicked "Validate GHL Mappings" and received HTTP 200, status `not_ready`, 9 missing required outcomes, `readyForReadSync: false`, 0 console errors, and 0 failed requests.
 - Real read sync still requires customer-owned credentials, mappings, and `GHL_READ_SYNC_ENABLED=true`.
 - CRM writes remain blocked unless separately authorized through `GHL_WRITE_BACK_ENABLED=true`.
 
 Next recommended work:
 
-1. Finish R5A verification, deploy to hybrid, and smoke-test missing-credential plus mapping-validation states.
-2. If the customer provides real GHL credentials, run GHL credential acceptance.
-3. If accepted, map required tags/stages and run GHL read-sync preview with `GHL_READ_SYNC_ENABLED=true`.
-4. Then move to Formaloo import or Meta/YouTube analytics readiness depending on available customer credentials.
+1. If the customer provides real GHL credentials, run GHL credential acceptance.
+2. If accepted, map required tags/stages and run GHL read-sync preview with `GHL_READ_SYNC_ENABLED=true`.
+3. Then move to Formaloo import or Meta/YouTube analytics readiness depending on available customer credentials.
 
 ## Current Required Verification
 

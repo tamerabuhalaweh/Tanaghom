@@ -3,7 +3,7 @@
 Last updated: 2026-07-06  
 Repository: `tamerabuhalaweh/Tanaghom`  
 Current working branch at handover: `feature/hybrid-emergent-ux-governed-tanaghum`  
-Current deployed hybrid commit at handover: `1042abe`  
+Current deployed hybrid commit at handover: `0f32140`  
 
 This is the single current onboarding document for a new developer or delivery team. Older sprint notes remain useful as history, but this file is the current operational handover source of truth.
 
@@ -59,6 +59,12 @@ Current R5A implementation commit:
 
 ```bash
 82e160b feat: accept GHL credentials and validate mappings
+```
+
+Current deployed hybrid commit:
+
+```bash
+0f32140 docs: record R5A implementation evidence
 ```
 
 ## 4. Architecture Truth
@@ -185,6 +191,13 @@ Current limitation:
 
 - R5A cannot be fully live-accepted without a customer-owned GHL API key and location ID.
 - CRM writes remain blocked unless separately authorized through `GHL_WRITE_BACK_ENABLED=true`.
+
+Hybrid deployment verification from 2026-07-06:
+
+- Hybrid is deployed at commit `0f32140`.
+- `GET /api/health` returned healthy app, database, and Redis status.
+- `POST /api/ghl-setup/test-connection` returned the expected `requires_credentials` state with no raw secrets or raw payload.
+- Browser smoke on `/ghl-wizard` clicked "Validate GHL Mappings" and received HTTP 200, status `not_ready`, 9 missing required outcomes, `readyForReadSync: false`, 0 console errors, and 0 failed requests.
 
 ## 6. Local Development Setup
 
