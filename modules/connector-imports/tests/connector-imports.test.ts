@@ -8,7 +8,7 @@ const prismaMocks = vi.hoisted(() => ({
     update: vi.fn(),
   },
   commercialEvent: { findFirst: vi.fn() },
-  integrationCredential: { findFirst: vi.fn() },
+  integrationCredential: { findFirst: vi.fn(), findUnique: vi.fn() },
   auditRecord: { create: vi.fn() },
   eventKpiRecord: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
 }));
@@ -63,6 +63,7 @@ describe('Connector Imports', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.integrationCredential.findFirst.mockResolvedValue(null);
+    prismaMocks.integrationCredential.findUnique.mockResolvedValue(null);
   });
 
   describe('Readiness', () => {
@@ -121,12 +122,12 @@ describe('Connector Imports', () => {
     });
 
     it('persists last_dry_run_at and last_dry_run_result', async () => {
-      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test' }));
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'meta_analytics' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: new Date() });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
-      await repo.dryRun('tenant-a', 'user-1', 'postiz', 'event-1');
+      await repo.dryRun('tenant-a', 'user-1', 'meta_analytics', 'event-1');
 
       expect(prismaMocks.connectorImportJob.update).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
@@ -139,12 +140,12 @@ describe('Connector Imports', () => {
     });
 
     it('does not fabricate KPI rows without a read-only connector adapter', async () => {
-      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test' }));
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'meta_analytics' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: null });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
-      const result = await repo.dryRun('tenant-a', 'user-1', 'postiz', 'event-1');
+      const result = await repo.dryRun('tenant-a', 'user-1', 'meta_analytics', 'event-1');
       expect(result.kpiRows).toEqual([]);
       expect(result.warnings[0]).toContain('No read-only adapter is implemented');
     });

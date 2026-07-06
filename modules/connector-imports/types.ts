@@ -251,6 +251,19 @@ export interface DryRunResult {
   kpiRows: DryRunKpiRow[];
   leadAttributions: number;
   warnings: string[];
+  providerStatus?: {
+    provider: string;
+    adapter: string;
+    readOnly: true;
+    externalWritesAllowed: false;
+    rawSecretsReturned: false;
+    channelsFound?: number;
+    selectedIntegrationId?: string | null;
+    selectedChannel?: Record<string, unknown> | null;
+    analyticsFetched?: boolean;
+    analyticsMetricLabels?: string[];
+    source?: string;
+  };
   runtimeMediation?: {
     provider: 'agentgateway';
     operation: 'connector_import.dry_run';

@@ -9,6 +9,8 @@ import type {
   ConnectorSyncStatus, ConnectorSyncStatusSummary,
 } from './types';
 import { CONNECTOR_REQUIREMENTS, SUPPORTED_CONNECTORS, VALID_TRANSITIONS } from './types';
+import { getActiveIntegrationCredential } from '../integration-credentials/service';
+import { runPostizReadOnlyDryRun } from './adapters/postiz';
 
 export function getRequirements() {
   return Object.entries(CONNECTOR_REQUIREMENTS).map(([id, req]) => ({
@@ -293,21 +295,8 @@ export async function dryRun(
     throw new ValidationError('Cannot run dry run: customer credentials not configured');
   }
 
-  // This endpoint persists a typed preview envelope, but it must not fabricate connector data.
-  // Real kpiRows must come from a future read-only connector adapter.
-  const sampleKpiRows: DryRunKpiRow[] = [];
-  const warnings = [
-    `No read-only adapter is implemented for ${connectorId} yet - no external API calls made and no rows are importable.`,
-  ];
-
-  const dryRunResult: DryRunResult = {
-    connectorId,
-    eventId: eventId ?? null,
-    kpiRows: sampleKpiRows,
-    leadAttributions: 0,
-    warnings,
-  };
-  const dryRunSyncStatus: ConnectorSyncStatus = sampleKpiRows.length > 0 ? 'ready_for_sync' : 'blocked';
+  const dryRunResult = await runReadOnlyConnectorDryRun(tenantKey, connectorId, eventId);
+  const dryRunSyncStatus: ConnectorSyncStatus = dryRunResult.kpiRows.length > 0 ? 'ready_for_sync' : 'blocked';
 
   await prisma.connectorImportJob.update({
     where: { id: job.id },
@@ -315,7 +304,7 @@ export async function dryRun(
       last_dry_run_at: new Date(),
       last_dry_run_result: dryRunResult as unknown as Prisma.InputJsonValue,
       sync_status: dryRunSyncStatus,
-      last_sync_error: sampleKpiRows.length > 0 ? null : warnings[0],
+      last_sync_error: dryRunResult.kpiRows.length > 0 ? null : dryRunResult.warnings[0] ?? 'Connector dry run produced no importable rows',
     },
   });
 
@@ -327,11 +316,56 @@ export async function dryRun(
       human_user_id: userId,
       target_object_type: 'connector_import_job',
       target_object_id: job.id,
-      reason: `Dry run executed for ${connectorId}: ${sampleKpiRows.length} importable rows`,
+      reason: `Dry run executed for ${connectorId}: ${dryRunResult.kpiRows.length} importable rows`,
     },
   });
 
   return dryRunResult;
+}
+
+async function runReadOnlyConnectorDryRun(
+  tenantKey: string,
+  connectorId: string,
+  eventId?: string,
+): Promise<DryRunResult> {
+  if (connectorId === 'postiz') {
+    const credential = await getActiveIntegrationCredential('postiz', 'api_key', tenantKey);
+    if (!credential) {
+      return {
+        connectorId,
+        eventId: eventId ?? null,
+        kpiRows: [],
+        leadAttributions: 0,
+        warnings: [
+          'Postiz credential is configured in readiness, but the active Postiz API key credential could not be resolved for read-only dry-run.',
+        ],
+        providerStatus: {
+          provider: 'postiz',
+          adapter: 'postiz_public_api',
+          readOnly: true,
+          externalWritesAllowed: false,
+          rawSecretsReturned: false,
+          channelsFound: 0,
+          selectedIntegrationId: null,
+          selectedChannel: null,
+          analyticsFetched: false,
+          analyticsMetricLabels: [],
+          source: 'Postiz Public API',
+        },
+      };
+    }
+    return runPostizReadOnlyDryRun({ credential, eventId });
+  }
+
+  return {
+    connectorId,
+    eventId: eventId ?? null,
+    kpiRows: [],
+    leadAttributions: 0,
+    warnings: [
+      `No read-only adapter is implemented for ${connectorId} yet - no external API calls made and no rows are importable.`,
+    ],
+  };
 }
 
 export async function approveAndImport(

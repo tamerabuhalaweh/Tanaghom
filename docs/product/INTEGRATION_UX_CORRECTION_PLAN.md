@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; runtime production pilots still pending  
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter implemented locally; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -344,7 +344,7 @@ Truth after R2:
 
 ### Sprint R3 - agentgateway Sandbox Policy Pilot Activation
 
-Status: Implemented as a sandbox policy adapter, not full production agentgateway.
+Status: Live accepted on the hybrid deployment as a sandbox policy adapter, not full production agentgateway.
 
 Official agentgateway documentation positions agentgateway as a proxy/data plane with routes, listeners, backends, and policies for HTTP, gRPC, MCP, and A2A traffic. It is not a simple built-in custom REST decision API for Tanaghum connector imports. Because of that, R3 activates a narrow sandbox policy target that matches the future gateway contract and can later sit behind a real agentgateway route.
 
@@ -370,9 +370,93 @@ Truth after R3:
 - The STITCH dry-run mediation hook can now be pointed at a live sandbox policy endpoint.
 - The sandbox endpoint proves allow/deny behavior and policy payload shape.
 - The VPS can enable `AGENTGATEWAY_DRY_RUN_POLICY_ENABLED=true` only after a tenant runtime credential is saved.
+- The hybrid VPS has `agentgateway` runtime evidence configured and reachable.
+- A live Postiz connector dry-run was mediated through the sandbox policy adapter and allowed with `externalWritesAllowed: false`.
+- A live unsupported connector policy request was denied with `externalWritesAllowed: false` and `productionGateway: false`.
 - This is still not full production agentgateway deployment.
 - No connector adapter imports real external data because read-only provider adapters are still separate work.
 - No external writes, import approvals, publishing, CRM writes, messaging, voice calls, OpenClaw orchestration, or M5 execution are enabled by this sprint.
+
+Live acceptance evidence on 2026-07-06:
+
+- Runtime status: configured `true`, reachable `true`, HTTP `200`, production active `false`.
+- Dry-run mediation: mediated `true`, decision `allowed`, policy status `200`.
+- Dry-run safety: external writes `false`, raw secrets returned `false`.
+- Postiz rows imported: `0`.
+- Postiz warning: no read-only Postiz adapter is implemented yet; no external API calls were made and no rows are importable.
+- Deny path: unsupported connector returned decision `deny`, dry-run only `true`, external writes `false`, production gateway `false`.
+
+### Sprint R4 - First Real Read-Only Connector Adapter Through Governed Runtime Path
+
+Goal: Turn the R3 policy proof into customer-visible value by wiring one read-only connector preview through the governed runtime path.
+
+Status: Implemented locally with Postiz as the first read-only adapter. Deployment/live customer credential validation remains the next acceptance step.
+
+Recommended target order:
+
+1. Postiz channel/status and platform analytics adapter.
+2. GoHighLevel read sync if the customer provides a token, location ID, tag/stage mapping, and acceptance data.
+3. Formaloo read/import adapter if the customer provides form access.
+4. Meta/Instagram or YouTube analytics only after customer/provider account access and scopes are confirmed.
+
+What R4 implements:
+
+- Adds a Postiz read-only adapter under `modules/connector-imports/adapters/postiz.ts`.
+- Uses Postiz Public API read endpoints only:
+  - `GET /integrations`
+  - `GET /analytics/{integration}?date=30`
+- Uses the tenant-owned `postiz/api_key/default` credential.
+- Requires `baseUrl` and `apiKey`.
+- Uses optional `integrationId` to select the channel for analytics.
+- Returns provider status:
+  - channels found
+  - selected integration ID
+  - selected channel summary
+  - analytics fetched yes/no
+  - metric labels returned
+  - raw secrets returned false
+- Maps recognized Postiz analytics labels into KPI dry-run rows:
+  - reach
+  - impressions/views
+  - clicks
+  - engagement/interactions/likes/comments/shares/reactions
+  - leads
+  - form submissions/completions
+- Reports unmapped metrics honestly instead of inventing values.
+- Keeps unsupported connectors on the existing honest empty-state path.
+- Keeps writes blocked:
+  - dry-run writes no KPI records
+  - import still requires separate approval
+  - no scheduling/publishing/CRM/message/voice write occurs
+
+Acceptance:
+
+- Tenant-owned credential is configured.
+- Read-only dry-run produces real preview rows or a real provider status result.
+- R3 policy mediation remains enabled and records allow/deny evidence.
+- No external writes happen.
+- Human approval is required before any import/write.
+- Audit evidence is recorded.
+- UI explains the business outcome in customer language.
+- If the provider has no available data, the system reports an honest empty state instead of fake rows.
+
+Verification on 2026-07-06:
+
+- Focused connector tests: 28 passed.
+- Full backend tests: 117 files passed, 1763 tests passed.
+- Backend lint: passed.
+- Backend typecheck: passed.
+- Backend build: passed.
+- Frontend lint: passed.
+- Frontend build: passed.
+
+Remaining R4 acceptance before calling it live-complete:
+
+- Deploy the R4 code to the hybrid VPS.
+- Run dry-run against the tenant Postiz credential.
+- If the Postiz workspace has no connected channel, confirm honest zero-channel state.
+- If the customer connects a channel and saves `integrationId`, confirm analytics read-only preview.
+- Confirm R3 mediation still wraps the R4 dry-run.
 
 ### Sprint I1 - Integration UX Simplification
 

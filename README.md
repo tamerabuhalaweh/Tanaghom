@@ -1,5 +1,9 @@
 # Tanaghom AI Enterprise Platform
 
+> **Current handover source of truth:** start with
+> [`docs/handover/CURRENT_PROJECT_HANDOVER.md`](docs/handover/CURRENT_PROJECT_HANDOVER.md).
+> Some historical sprint/status sections below are retained for audit context and may not reflect the latest hybrid/R-sprint state.
+
 A STITCH-based, SAIF-governed, multi-agent enterprise operating platform covering Commercial/Social/Content, Finance, HR, Procurement, Inventory, Purchase Management, Supply Chain, and optional ERP integrations.
 
 ## Current Status
