@@ -19,7 +19,7 @@ feature/hybrid-emergent-ux-governed-tanaghum
 Latest known active commit at this update:
 
 ```text
-1042abe fix: align GHL opportunity search with API docs
+c2f4557 feat: accept GHL credentials and validate mappings
 ```
 
 ## Current Product Direction
@@ -90,11 +90,30 @@ Current R5 status:
 - Deployed smoke on 2026-07-06 returned the expected customer setup blocker: missing GHL credential/mapping, read sync disabled, write-back disabled, and pull preview `requires_credentials` with `rawPayloadReturned: false`.
 - R4A still needs hybrid deployment/live validation.
 
+Current R5A status:
+
+- In implementation on 2026-07-06.
+- Adds read-only GHL credential acceptance through `POST /ghl-setup/test-connection`.
+- The test uses tenant-owned GHL credential fields from the secure vault and performs a read-only contact search only.
+- If successful, `last_validated_at` is recorded on the tenant GHL credential.
+- Adds `POST /ghl-setup/validate-mappings` to check whether GHL tag/stage mappings cover required sales outcomes:
+  - meeting booked
+  - meeting attended
+  - no-show
+  - purchased
+  - lost
+  - follow-up needed
+  - warm / hot / buyer temperature
+- GHL setup mappings created by the GHL wizard now validate against Tanaghum lead status/temperature vocabulary.
+- Real read sync still requires customer-owned credentials, mappings, and `GHL_READ_SYNC_ENABLED=true`.
+- CRM writes remain blocked unless separately authorized through `GHL_WRITE_BACK_ENABLED=true`.
+
 Next recommended work:
 
-1. Deploy R4A to hybrid and live-test the Postiz channel UX.
-2. If the customer connects a channel and saves `integrationId`, confirm analytics preview rows.
-3. Then move to GHL read sync or Formaloo import depending on available customer credentials.
+1. Finish R5A verification, deploy to hybrid, and smoke-test missing-credential plus mapping-validation states.
+2. If the customer provides real GHL credentials, run GHL credential acceptance.
+3. If accepted, map required tags/stages and run GHL read-sync preview with `GHL_READ_SYNC_ENABLED=true`.
+4. Then move to Formaloo import or Meta/YouTube analytics readiness depending on available customer credentials.
 
 ## Current Required Verification
 

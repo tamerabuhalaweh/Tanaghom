@@ -58,7 +58,7 @@ feature/hybrid-emergent-ux-governed-tanaghum
 Current important commit:
 
 ```bash
-1042abe fix: align GHL opportunity search with API docs
+c2f4557 feat: accept GHL credentials and validate mappings
 ```
 
 ## 4. Architecture Truth
@@ -140,6 +140,51 @@ R3 live acceptance evidence from 2026-07-06:
 - Deny path: unsupported connector returned `deny`, `externalWritesAllowed: false`, `productionGateway: false`.
 
 Do not overstate this. R3 proves sandbox policy mediation and deny/allow behavior. It does not prove real production `agentgateway` proxy routing.
+
+### R5
+
+GoHighLevel read-sync adapter is deployed to hybrid.
+
+Current truth:
+
+- GHL is treated as the CRM source of truth.
+- Tanaghum is the operating and reporting layer.
+- The backend can pull contacts, opportunities, tags, pipeline stages, purchases, and per-contact appointments/meetings.
+- Tanaghum mirrors those records into tenant-scoped lead records when read sync is enabled.
+- Raw GHL payloads and secrets are not returned.
+- Real read sync requires:
+  - customer-owned GHL API key
+  - customer-owned GHL location ID
+  - GHL tag/stage mappings
+  - `GHL_READ_SYNC_ENABLED=true`
+
+### R5A
+
+R5A adds customer credential acceptance and mapping validation.
+
+New backend contract:
+
+- `POST /ghl-setup/test-connection`
+  - uses the secure tenant vault
+  - performs a read-only GHL contact search
+  - marks `last_validated_at` on success
+  - returns status and next action only
+  - never returns raw secrets or raw GHL payloads
+- `POST /ghl-setup/validate-mappings`
+  - checks whether saved GHL mappings cover the required sales outcomes:
+    - meeting booked
+    - meeting attended
+    - no-show
+    - purchased
+    - lost
+    - follow-up needed
+    - warm / hot / buyer temperature
+  - reports missing outcomes clearly
+
+Current limitation:
+
+- R5A cannot be fully live-accepted without a customer-owned GHL API key and location ID.
+- CRM writes remain blocked unless separately authorized through `GHL_WRITE_BACK_ENABLED=true`.
 
 ## 6. Local Development Setup
 

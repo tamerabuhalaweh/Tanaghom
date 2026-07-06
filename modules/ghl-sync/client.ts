@@ -13,6 +13,11 @@ export interface GhlClient {
   upsertContact(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: unknown }>;
 }
 
+export interface GhlConnectionTestResult {
+  checkedContacts: number;
+  rawPayloadReturned: false;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -106,6 +111,21 @@ function normalizeAppointment(input: unknown, fallbackContactId: string): GhlApp
 
 export class LeadConnectorClient implements GhlClient {
   constructor(private readonly config: GhlClientConfig) {}
+
+  async testConnection(): Promise<GhlConnectionTestResult> {
+    const contactsBody = await this.request('/contacts/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        locationId: this.config.locationId,
+        page: 1,
+        pageLimit: 1,
+      }),
+    });
+    return {
+      checkedContacts: extractItems(contactsBody, ['contacts', 'items', 'results']).length,
+      rawPayloadReturned: false,
+    };
+  }
 
   async pull(limit: number): Promise<GhlPullResult> {
     const [contactsBody, opportunitiesBody] = await Promise.all([

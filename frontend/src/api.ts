@@ -411,6 +411,8 @@ export const ghlSetupApi = {
   wizard: (token: string) => apiFetch<unknown>('/ghl-setup/wizard', { token }),
   credentialStatus: (token: string) => apiFetch<unknown>('/ghl-setup/credential-status', { token }),
   mappingReadiness: (token: string) => apiFetch<unknown>('/ghl-setup/mapping-readiness', { token }),
+  testConnection: (token: string) => apiFetch<unknown>('/ghl-setup/test-connection', { method: 'POST', token }),
+  validateMappings: (token: string) => apiFetch<unknown>('/ghl-setup/validate-mappings', { method: 'POST', token }),
   saveTags: (mappings: unknown[], token: string) =>
     apiFetch<unknown>('/ghl-setup/tags', { method: 'POST', body: { mappings }, token }),
   savePipelines: (mappings: unknown[], token: string) =>

@@ -49,8 +49,12 @@ function tone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'muted' {
 
 const INTERNAL_TAGS = [
   'new_lead',
-  'warm_lead',
-  'hot_lead',
+  'contacted',
+  'qualified',
+  'nurturing',
+  'warm',
+  'hot',
+  'buyer',
   'meeting_booked',
   'purchased',
   'no_show',
@@ -74,6 +78,8 @@ export default function GhlWizard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
   const [writeCheck, setWriteCheck] = useState<RecordMap | null>(null);
+  const [connectionTest, setConnectionTest] = useState<RecordMap | null>(null);
+  const [mappingCheck, setMappingCheck] = useState<RecordMap | null>(null);
   const [locationForm, setLocationForm] = useState({ ghlLocationId: '', displayName: '' });
   const [tagForm, setTagForm] = useState({
     ghlTagId: '',
@@ -113,6 +119,8 @@ export default function GhlWizard() {
 
   const credential = asRecord(wizard?.credentialStatus);
   const readiness = asRecord(wizard?.mappingReadiness);
+  const connectionAcceptance = asRecord(wizard?.connectionAcceptance);
+  const mappingAcceptance = asRecord(wizard?.mappingAcceptance);
   const tagReadiness = asRecord(readiness.tags);
   const pipelineReadiness = asRecord(readiness.pipelines);
   const locationReadiness = asRecord(readiness.location);
@@ -121,10 +129,14 @@ export default function GhlWizard() {
   const pipelines = asRecords(pipelineReadiness.items);
   const completedSteps = asStrings(wizard?.completedSteps);
   const currentStep = text(wizard?.currentStep, 'credentials');
-  const credentialStatus = text(credential.status, 'missing');
+  const connectionStatus = text(connectionAcceptance.status, 'requires_credentials');
+  const mappingStatus = text(mappingAcceptance.status, 'not_ready');
   const hasApiKey = credential.hasApiKey === true;
   const hasLocationId = credential.hasLocationId === true;
   const liveWriteBlocked = wizard?.liveWriteBlocked === true;
+  const missingMappingOutcomes = asRecords((mappingCheck || mappingAcceptance).missingRequiredOutcomes);
+  const mappingWarnings = asStrings((mappingCheck || mappingAcceptance).warnings);
+  const requiredActions = asStrings((connectionTest || connectionAcceptance).requiredActions);
 
   const railSteps = useMemo(() => {
     return ['credentials', 'location', 'tags', 'pipeline', 'review'].map(step => ({
@@ -192,6 +204,44 @@ export default function GhlWizard() {
     }
   }
 
+  async function testConnection() {
+    if (!token) return;
+    setSaving('connection');
+    setMessage('');
+    try {
+      const result = await ghlSetupApi.testConnection(token);
+      setConnectionTest(result as RecordMap);
+      const status = text(asRecord(result).status, 'failed');
+      setMessage(status === 'accepted'
+        ? 'GHL connection accepted. Tanaghum can read the customer location without exposing secrets.'
+        : 'GHL connection could not be accepted yet. Review the required action shown below.');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'GHL connection test failed');
+    } finally {
+      setSaving('');
+    }
+  }
+
+  async function validateMappings() {
+    if (!token) return;
+    setSaving('mappings');
+    setMessage('');
+    try {
+      const result = await ghlSetupApi.validateMappings(token);
+      setMappingCheck(result as RecordMap);
+      const status = text(asRecord(result).status, 'not_ready');
+      setMessage(status === 'ready'
+        ? 'GHL mappings are ready for authorized read sync.'
+        : 'GHL mappings need attention before production read sync.');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'GHL mapping validation failed');
+    } finally {
+      setSaving('');
+    }
+  }
+
   async function testWriteGate() {
     if (!token) return;
     setSaving('write');
@@ -219,25 +269,39 @@ export default function GhlWizard() {
       <WorkflowRail steps={railSteps} />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Credential" value={titleCase(credentialStatus)} detail={hasApiKey ? 'API key saved in tenant vault' : 'Add customer API key in Integrations'} tone={tone(credentialStatus)} />
+        <MetricCard label="Credential" value={titleCase(connectionStatus)} detail={hasApiKey ? 'API key saved in tenant vault' : 'Add customer API key in Integrations'} tone={tone(connectionStatus)} />
         <MetricCard label="Location" value={hasLocationId ? 'Saved' : titleCase(text(locationReadiness.state, 'not_started'))} detail="GHL location controls contact ownership" tone={hasLocationId ? 'good' : tone(text(locationReadiness.state, 'not_started'))} />
         <MetricCard label="Tags" value={`${tagReadiness.mappedCount || 0}/${tagReadiness.totalCount || 0}`} detail="Lead and buyer category mapping" tone={tone(text(tagReadiness.state, 'not_started'))} />
-        <MetricCard label="Pipeline" value={`${pipelineReadiness.mappedCount || 0}/${pipelineReadiness.totalCount || 0}`} detail="Sales stage mapping" tone={tone(text(pipelineReadiness.state, 'not_started'))} />
+        <MetricCard label="Pipeline" value={`${pipelineReadiness.mappedCount || 0}/${pipelineReadiness.totalCount || 0}`} detail={`Mapping ${titleCase(mappingStatus)}`} tone={tone(mappingStatus)} />
       </div>
 
       <ProductCard
-        title="Credential Status"
-        subtitle="Raw API keys are never shown after save. If credentials are missing, add them from Integrations first."
-        action={<Link to="/integration-credentials" className="inline-flex min-h-10 items-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50">Open Integrations</Link>}
+        title="GHL Connection Acceptance"
+        subtitle="Save the customer-owned API key and location ID, then run a read-only contact search to prove Tanaghum can read the GHL location. No CRM writes happen here."
+        action={<div className="flex flex-wrap gap-2">
+          <Link to="/integration-credentials" className="inline-flex min-h-10 items-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50">Open Integrations</Link>
+          <PrimaryAction onClick={testConnection} disabled={saving === 'connection' || !hasApiKey || !hasLocationId}>
+            {saving === 'connection' ? 'Testing...' : 'Test GHL Connection'}
+          </PrimaryAction>
+        </div>}
       >
         <DetailGrid items={[
           { label: 'Provider', value: 'gohighlevel' },
           { label: 'Credential Type', value: 'api_key' },
           { label: 'API Key', value: hasApiKey ? 'Configured' : 'Missing' },
           { label: 'Location ID', value: hasLocationId ? 'Configured' : 'Missing' },
+          { label: 'Acceptance', value: titleCase(connectionStatus) },
           { label: 'Last Validated', value: text(credential.lastValidatedAt, 'Not validated yet') },
           { label: 'Raw Secrets Returned', value: credential.rawSecretsReturned === false ? 'No' : 'Review required' },
         ]} />
+        {requiredActions.length > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="text-sm font-semibold text-amber-950">Required action</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">
+              {requiredActions.map(action => <li key={action}>{action}</li>)}
+            </ul>
+          </div>
+        )}
       </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -373,6 +437,44 @@ export default function GhlWizard() {
           )}
         </ProductCard>
       </div>
+
+      <ProductCard
+        title="Mapping Validation"
+        subtitle="Check whether GHL tags and pipeline stages cover the lead journey the sales team needs: booked meetings, attended meetings, no-shows, purchases, lost leads, follow-ups, and lead temperature."
+        action={<PrimaryAction onClick={validateMappings} disabled={saving === 'mappings'}>
+          {saving === 'mappings' ? 'Checking...' : 'Validate GHL Mappings'}
+        </PrimaryAction>}
+      >
+        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+            <div className="text-xs font-semibold uppercase text-neutral-500">Read-sync readiness</div>
+            <div className="mt-2 text-2xl font-semibold text-neutral-950">{titleCase(mappingStatus)}</div>
+            <p className="mt-2 text-sm text-neutral-600">
+              {mappingAcceptance.readyForReadSync === true
+                ? 'Mappings and environment gate are ready for authorized GHL read sync.'
+                : 'Complete the missing mappings before trusting automated CRM reporting.'}
+            </p>
+          </div>
+          <div className="space-y-4">
+            {missingMappingOutcomes.length > 0 ? (
+              <ProductTable
+                columns={['Missing outcome', 'Type']}
+                rows={missingMappingOutcomes.map(item => [
+                  text(item.label, text(item.key)),
+                  titleCase(text(item.category)),
+                ])}
+              />
+            ) : (
+              <EmptyProductState message="No missing required mapping outcomes were reported." />
+            )}
+            {mappingWarnings.length > 0 && (
+              <Notice tone="warn">
+                {mappingWarnings.join(' ')}
+              </Notice>
+            )}
+          </div>
+        </div>
+      </ProductCard>
 
       <ProductCard title="CRM Write Gate" subtitle="Confirm the system still blocks uncontrolled CRM writes. This records an audit trail without writing to GoHighLevel.">
         <div className="space-y-4">

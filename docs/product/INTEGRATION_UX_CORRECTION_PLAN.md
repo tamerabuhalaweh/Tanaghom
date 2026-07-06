@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; full production runtime pilots still pending
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; Sprint R5A GoHighLevel customer credential acceptance and mapping validation in verification; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -175,6 +175,27 @@ Wizard steps:
 6. Preview leads/opportunities.
 7. Enable read sync.
 8. Keep write sync approval-gated.
+
+R5A acceptance rule:
+
+- Saving a credential is not enough.
+- The customer-owned GHL API key and location ID must pass a read-only connection test.
+- The read-only test uses contact search only and never returns raw GHL payloads or secrets.
+- Successful acceptance records `last_validated_at` on the tenant credential.
+- Failed acceptance returns precise required actions without exposing the key.
+
+R5A mapping rule:
+
+- Tags and pipeline stages must be mapped to valid Tanaghum lead status/temperature values.
+- Required production reporting outcomes are:
+  - meeting booked
+  - meeting attended
+  - no-show
+  - purchased
+  - lost
+  - follow-up needed
+  - warm / hot / buyer temperature
+- The UI must not show "ready" until required outcomes are covered and read sync is environment-authorized.
 
 Customer copy:
 

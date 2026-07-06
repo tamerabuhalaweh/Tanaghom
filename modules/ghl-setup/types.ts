@@ -1,3 +1,5 @@
+import type { LeadStatus, LeadTemperature } from '../lead-lifecycle/types';
+
 export const GHL_WIZARD_STEPS = [
   'credentials',
   'location',
@@ -25,6 +27,25 @@ export const MAPPING_READINESS_STATES = [
 ] as const;
 
 export type MappingReadinessState = (typeof MAPPING_READINESS_STATES)[number];
+
+export const GHL_CONNECTION_ACCEPTANCE_STATUSES = [
+  'requires_credentials',
+  'needs_test',
+  'accepted',
+  'failed',
+] as const;
+
+export type GhlConnectionAcceptanceStatus = (typeof GHL_CONNECTION_ACCEPTANCE_STATUSES)[number];
+
+export const GHL_MAPPING_ACCEPTANCE_STATUSES = [
+  'not_ready',
+  'partial',
+  'ready',
+] as const;
+
+export type GhlMappingAcceptanceStatus = (typeof GHL_MAPPING_ACCEPTANCE_STATUSES)[number];
+
+export type GhlTagTarget = LeadStatus | LeadTemperature;
 
 export interface GhlCredentialStatus {
   provider: 'gohighlevel';
@@ -79,11 +100,39 @@ export interface GhlMappingReadiness {
   };
 }
 
+export interface GhlConnectionAcceptance {
+  status: GhlConnectionAcceptanceStatus;
+  canReadContacts: boolean;
+  checkedContacts: number;
+  lastValidatedAt: string | null;
+  requiredActions: string[];
+  rawSecretsReturned: false;
+  rawPayloadReturned: false;
+}
+
+export interface GhlMappingOutcome {
+  key: string;
+  label: string;
+  category: 'pipeline_stage' | 'lead_temperature';
+  covered: boolean;
+}
+
+export interface GhlMappingAcceptance {
+  status: GhlMappingAcceptanceStatus;
+  readyForReadSync: boolean;
+  coveredOutcomes: GhlMappingOutcome[];
+  missingRequiredOutcomes: GhlMappingOutcome[];
+  warnings: string[];
+  rawSecretsReturned: false;
+}
+
 export interface GhlSetupWizardState {
   tenantKey: string;
   currentStep: GhlWizardStep;
   credentialStatus: GhlCredentialStatus;
   mappingReadiness: GhlMappingReadiness;
+  connectionAcceptance: GhlConnectionAcceptance;
+  mappingAcceptance: GhlMappingAcceptance;
   liveWriteBlocked: true;
   blockReason: string;
   completedSteps: GhlWizardStep[];
