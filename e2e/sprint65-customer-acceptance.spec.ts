@@ -11,6 +11,7 @@ type JsonObject = Record<string, unknown>;
 
 const uuidPattern = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
 const secretPattern = /(sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9_]{12,}|x-api-key|access_token["']?\s*[:=]\s*["'][^"']{8,}|apiKey["']?\s*[:=]\s*["'][^"']{8,}|botToken["']?\s*[:=]\s*["'][^"']{8,})/i;
+const customerVisibleInternalTextPattern = /\b(Sprint\s*\d+|Acceptance|smoke test|test tenant|raw values|STITCH|SAIF|MCP|M5)\b/i;
 
 function api(path: string): string {
   return `${apiBaseUrl}${path}`;
@@ -44,19 +45,19 @@ async function getOrCreateEvent(request: APIRequestContext, token: string): Prom
   expectNoSecretLeak(events, 'events list');
 
   if (events.length) return events[0];
-  expect(allowWrites, 'No event exists. Set E2E_ALLOW_ACCEPTANCE_WRITES=true to create an acceptance event.').toBe(true);
+  expect(allowWrites, 'No event exists. Set E2E_ALLOW_ACCEPTANCE_WRITES=true to create a customer review event.').toBe(true);
 
   const createdResponse = await request.post(api('/events'), {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      name: `Sprint 65 Acceptance Event ${Date.now()}`,
+      name: `Customer Review Event ${Date.now()}`,
       eventType: 'tagyeer_wa_irtaqi',
       eventDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      location: 'Acceptance Sandbox',
+      location: 'Customer review workspace',
       expectedAttendance: 200,
       revenueTarget: 120000,
       plannedBudget: 35000,
-      offer: 'Two-day live course acceptance test event.',
+      offer: 'Two-day live course review event.',
       audience: 'Warm followers and existing customers.',
       geography: 'GCC and Jordan',
       fomoAngle: 'Limited seats and date-based urgency.',
@@ -122,6 +123,7 @@ async function expectCustomerPage(page: Page, path: string, heading: RegExp | st
   expect(body, `${path} should not show raw UUIDs in the customer path`).not.toMatch(uuidPattern);
   expect(body, `${path} should not show obvious raw JSON blocks`).not.toMatch(/^\s*[{[]\s*"/m);
   expect(body, `${path} should not expose raw secrets`).not.toMatch(secretPattern);
+  expect(body, `${path} should not show internal delivery/test language`).not.toMatch(customerVisibleInternalTextPattern);
 }
 
 test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
@@ -206,16 +208,16 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         eventId,
-        leadName: `Sprint 65 Acceptance Lead ${Date.now()}`,
-        leadEmail: `acceptance-${Date.now()}@example.com`,
+        leadName: `Customer Review Lead ${Date.now()}`,
+        leadEmail: `customer-review-${Date.now()}@tanaghum.local`,
         leadPhone: '+962790000000',
         leadStatus: 'new_lead',
         leadTemperature: 'warm',
         audienceSource: 'follower',
         channelAttribution: 'instagram',
         platform: 'instagram',
-        salesNotes: 'Created by Sprint 65 acceptance workflow.',
-        nextAction: 'Follow up after customer acceptance run.',
+        salesNotes: 'Created by customer review workflow.',
+        nextAction: 'Follow up after customer review run.',
       },
     });
     expect(createLead.ok(), `POST /leads failed with ${createLead.status()}`).toBe(true);
@@ -227,7 +229,7 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
 
     const transition = await request.post(api(`/leads/${leadId}/transition`), {
       headers: { Authorization: `Bearer ${token}` },
-      data: { toStatus: 'contacted', reason: 'Sprint 65 acceptance lifecycle smoke.' },
+      data: { toStatus: 'contacted', reason: 'Customer review lifecycle check.' },
     });
     expect(transition.ok(), `Lead transition failed with ${transition.status()}`).toBe(true);
     expectNoSecretLeak(await transition.json(), 'lead transition');

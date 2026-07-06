@@ -549,7 +549,7 @@ export default function IntegrationCredentials() {
       eyebrow="Integrations"
       title="Connect Business Systems"
       subtitle="Connect the customer-owned systems that power the platform: GoHighLevel CRM and WhatsApp readiness, Meta and Instagram ads, YouTube, Postiz scheduling, Formaloo forms, and SmartLabs voice."
-      action={<AieroStatusPill accent="teal">Tenant-Owned Credentials</AieroStatusPill>}
+      action={<AieroStatusPill accent="teal">Customer-Owned Accounts</AieroStatusPill>}
     >
       {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('missing') ? 'warn' : 'good'}>{message}</Notice>}
 
@@ -1005,10 +1005,10 @@ export default function IntegrationCredentials() {
         </div>
       </ProductCard>
 
-      <ProductCard title="Credential Evidence" subtitle="Advanced status for admins and managers. Raw values are never returned.">
+      <ProductCard title="Saved Connection Status" subtitle="Credentials are stored securely. Secret values are never displayed after saving.">
         <details>
           <summary className="cursor-pointer rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-semibold text-neutral-950">
-            Show saved credential status
+            Show saved connection status
           </summary>
           <div className="mt-4">
             {credentials.length ? (

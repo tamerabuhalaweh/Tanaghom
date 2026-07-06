@@ -55,6 +55,20 @@ function titleCase(value: string): string {
     .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
+const internalCustomerTextPattern = /\b(sprint\s*\d+|acceptance|smoke)\b/i;
+
+function safeEventName(event: RecordMap | null | undefined): string {
+  if (!event) return 'Choose an event';
+  const rawName = text(event.name, '');
+  if (rawName && !internalCustomerTextPattern.test(rawName)) return rawName;
+  const eventDate = text(event.eventDate, '');
+  if (!eventDate) return 'Customer event';
+  const date = new Date(eventDate);
+  return Number.isNaN(date.getTime())
+    ? 'Customer event'
+    : `Customer event - ${date.toLocaleDateString()}`;
+}
+
 function defaultScheduleInput(): string {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -429,14 +443,14 @@ export default function PublishingPrep() {
                 className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
               >
                 {events.length ? events.map(event => (
-                  <option key={text(event.id)} value={text(event.id, '')}>{text(event.name, 'Untitled event')}</option>
+                  <option key={text(event.id)} value={text(event.id, '')}>{safeEventName(event)}</option>
                 )) : (
                   <option value="">No events available</option>
                 )}
               </select>
             </Field>
             <DetailGrid items={[
-              { label: 'Selected Event', value: text(selectedEvent?.name, 'Choose an event') },
+              { label: 'Selected Event', value: safeEventName(selectedEvent) },
               { label: 'Postiz Connector', value: activePostizConnector ? text(activePostizConnector.connectorName, 'Active scheduling connector') : 'No active scheduling connector' },
               { label: 'Connected Channels', value: String(postizChannels.length) },
               { label: 'Assigned Channels', value: String(eventSelections.length) },

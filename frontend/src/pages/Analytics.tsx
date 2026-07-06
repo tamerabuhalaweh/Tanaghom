@@ -38,6 +38,48 @@ function titleCase(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+const internalCustomerTextPattern = /\b(sprint\s*\d+|acceptance|smoke)\b/i;
+
+function isInternalCustomerText(value: unknown): boolean {
+  return typeof value === 'string' && internalCustomerTextPattern.test(value);
+}
+
+function sourceLabel(lead: RecordMap): string {
+  const source = text(
+    lead.sourcePlatform || lead.channelAttribution || lead.externalSourceProvider || lead.sourceOfTruth,
+    'manual',
+  );
+  return titleCase(source);
+}
+
+function customerLeadName(lead: RecordMap, fallbackIndex?: number): string {
+  const rawName = text(lead.leadName, '');
+  if (rawName && !isInternalCustomerText(rawName)) return rawName;
+
+  const crmProvider = text(lead.sourceOfTruth || lead.externalSourceProvider, '');
+  if (crmProvider && crmProvider !== 'Not available') return `${titleCase(crmProvider)} lead`;
+
+  const source = sourceLabel(lead);
+  const suffix = typeof fallbackIndex === 'number' ? ` ${fallbackIndex + 1}` : '';
+  return `${source} lead${suffix}`;
+}
+
+function customerLeadContact(lead: RecordMap): string {
+  const email = text(lead.leadEmail, '');
+  if (email && !isInternalCustomerText(email) && !email.toLowerCase().endsWith('@example.com')) {
+    return email;
+  }
+
+  const phone = text(lead.leadPhone, '');
+  if (phone && !isInternalCustomerText(phone)) return phone;
+
+  return 'Contact details pending';
+}
+
+function leadTemperatureLabel(lead: RecordMap): string {
+  return titleCase(text(lead.leadTemperature || lead.temperature, 'new lead'));
+}
+
 function metricTotal(snapshots: RecordMap[], key: string): number {
   return snapshots.reduce((total, snapshot) => {
     const metrics = ((snapshot.normalizedMetrics || snapshot.metrics || {}) as RecordMap);
@@ -122,9 +164,7 @@ export default function Analytics() {
   const impressions = metricTotal(snapshots, 'impressions');
   const engagement = metricTotal(snapshots, 'engagement');
   const selectedLead = leads[selectedLeadIndex] || leads[0] || null;
-  const selectedLeadName = selectedLead
-    ? text(selectedLead.leadName, `${titleCase(text(selectedLead.sourcePlatform, 'Manual'))} lead`)
-    : '';
+  const selectedLeadName = selectedLead ? customerLeadName(selectedLead, selectedLeadIndex) : '';
   const qualified = numberValue(leadStats?.qualified);
   const totalLeads = numberValue(leadStats?.total);
   const hasAnalyticsData = snapshots.length > 0 || reports.length > 0;
@@ -137,15 +177,17 @@ export default function Analytics() {
       selectedLead
         ? [
             { label: 'Lead', value: selectedLeadName },
-            { label: 'Platform', value: titleCase(text(selectedLead.sourcePlatform, 'manual')) },
+            { label: 'Source', value: sourceLabel(selectedLead) },
             { label: 'Status', value: titleCase(text(selectedLead.leadStatus, 'new_lead')) },
             {
-              label: 'Email',
-              value: text(selectedLead.leadEmail, 'Not provided'),
+              label: 'Contact',
+              value: customerLeadContact(selectedLead),
             },
             {
               label: 'Phone',
-              value: text(selectedLead.leadPhone, 'Not provided'),
+              value: isInternalCustomerText(selectedLead.leadPhone)
+                ? 'Contact details pending'
+                : text(selectedLead.leadPhone, 'Not provided'),
             },
             {
               label: 'Interest Score',
@@ -544,15 +586,18 @@ export default function Analytics() {
         </ProductCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(360px,0.42fr)_minmax(0,1fr)]">
         <ProductCard
           title="Your Leads"
           subtitle="Captured customer interest, ready for review and handoff."
         >
           {leads.length ? (
-            <div className="max-h-[400px] space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-[460px] space-y-3 overflow-y-auto pr-2">
               {leads.map((lead, index) => {
                 const active = selectedLeadIndex === index;
+                const status = titleCase(text(lead.leadStatus, 'new_lead'));
+                const source = sourceLabel(lead);
+                const contact = customerLeadContact(lead);
                 return (
                   <button
                     key={String(lead.id)}
@@ -562,23 +607,55 @@ export default function Analytics() {
                       setGhlPreview(null);
                       setVoicePreview(null);
                     }}
-                    className={`w-full rounded-lg border p-4 text-left transition ${
+                    className={`w-full rounded-2xl border p-4 text-left transition ${
                       active
                         ? 'border-neutral-950 bg-neutral-950 text-white'
                         : 'border-neutral-200 bg-white hover:bg-neutral-50'
                     }`}
                   >
-                    <div className="font-semibold">
-                      {text(lead.leadName, `${titleCase(text(lead.sourcePlatform, 'Manual'))} lead`)}
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="break-words text-base font-semibold leading-6">
+                          {customerLeadName(lead, index)}
+                        </div>
+                        <div
+                          className={`mt-1 break-all text-sm leading-5 ${
+                            active ? 'text-white/60' : 'text-neutral-500'
+                          }`}
+                        >
+                          {contact}
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          active ? 'bg-white/12 text-white' : 'bg-neutral-100 text-neutral-700'
+                        }`}
+                      >
+                        {source}
+                      </span>
                     </div>
-                    <div
-                      className={`mt-2 text-sm ${
-                        active ? 'text-white/60' : 'text-neutral-500'
-                      }`}
-                    >
-                      {titleCase(text(lead.leadStatus, 'new_lead'))} / interest score{' '}
-                      {numberValue(lead.qualificationScore)}
-                      {lead.leadEmail ? ` / ${text(lead.leadEmail)}` : ''}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          active ? 'bg-white/12 text-white' : 'bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {status}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          active ? 'bg-white/12 text-white' : 'bg-blue-50 text-blue-700'
+                        }`}
+                      >
+                        {leadTemperatureLabel(lead)}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          active ? 'bg-white/12 text-white' : 'bg-neutral-100 text-neutral-700'
+                        }`}
+                      >
+                        Score {numberValue(lead.qualificationScore)}
+                      </span>
                     </div>
                   </button>
                 );

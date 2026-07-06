@@ -94,6 +94,12 @@ function formatDateTime(value: unknown): string {
   return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+const internalCustomerTextPattern = /\b(sprint\s*\d+|acceptance|smoke)\b/i;
+
+function isInternalCustomerText(value: unknown): boolean {
+  return typeof value === 'string' && internalCustomerTextPattern.test(value);
+}
+
 function sourceLabel(value: unknown): string {
   const source = text(value, 'none');
   if (source === 'connector') return 'Connector';
@@ -139,7 +145,11 @@ function calculatePurchaseConversion(totals: RecordMap): number {
 }
 
 function getEventName(row: RecordMap): string {
-  return text(row.eventName, 'Unnamed event');
+  const rawName = text(row.eventName, '');
+  if (rawName && !isInternalCustomerText(rawName)) return rawName;
+  const eventDate = row.eventDate || row.date;
+  const date = formatDate(eventDate);
+  return date === 'Not set' ? 'Customer event' : `Customer event - ${date}`;
 }
 
 function buildNextActions(totals: RecordMap, dataSourceSummary: RecordMap, events: RecordMap[]) {
@@ -459,13 +469,13 @@ export default function MasterEventsDashboard() {
               <MetricCard label="Best Audience" value={titleCase(text(bestPerforming.bestAudienceSource, 'Unknown'))} detail="Highest lead volume" tone={bestPerforming.bestAudienceSource ? 'good' : 'default'} />
               <MetricCard
                 label="Highest Revenue Event"
-                value={text((bestPerforming.highestRevenueEvent as RecordMap | undefined)?.eventName, 'Not enough data')}
+                value={bestPerforming.highestRevenueEvent ? getEventName(bestPerforming.highestRevenueEvent as RecordMap) : 'Not enough data'}
                 detail={money((bestPerforming.highestRevenueEvent as RecordMap | undefined)?.revenue)}
                 tone={bestPerforming.highestRevenueEvent ? 'good' : 'default'}
               />
               <MetricCard
                 label="Lowest Cost Per Lead"
-                value={text((bestPerforming.lowestCostPerLeadEvent as RecordMap | undefined)?.eventName, 'Not enough data')}
+                value={bestPerforming.lowestCostPerLeadEvent ? getEventName(bestPerforming.lowestCostPerLeadEvent as RecordMap) : 'Not enough data'}
                 detail={money((bestPerforming.lowestCostPerLeadEvent as RecordMap | undefined)?.costPerLead)}
                 tone={bestPerforming.lowestCostPerLeadEvent ? 'info' : 'default'}
               />

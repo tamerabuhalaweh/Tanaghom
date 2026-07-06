@@ -300,7 +300,7 @@ export default function GhlWizard() {
       </div>
 
       <ProductCard
-        title="GHL Connection Acceptance"
+        title="GHL Connection Readiness"
         subtitle="Save the customer-owned API key and location ID, then run a read-only contact search to prove Tanaghum can read the GHL location. No CRM writes happen here."
         action={<div className="flex flex-wrap gap-2">
           <Link to="/integration-credentials" className="inline-flex min-h-10 items-center rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50">Open Integrations</Link>
@@ -314,7 +314,7 @@ export default function GhlWizard() {
           { label: 'Credential Type', value: 'api_key' },
           { label: 'API Key', value: hasApiKey ? 'Configured' : 'Missing' },
           { label: 'Location ID', value: hasLocationId ? 'Configured' : 'Missing' },
-          { label: 'Acceptance', value: titleCase(connectionStatus) },
+          { label: 'Readiness', value: titleCase(connectionStatus) },
           { label: 'Last Validated', value: text(credential.lastValidatedAt, 'Not validated yet') },
           { label: 'Raw Secrets Returned', value: credential.rawSecretsReturned === false ? 'No' : 'Review required' },
         ]} />

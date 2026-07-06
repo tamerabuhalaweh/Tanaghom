@@ -108,7 +108,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Integrations',
     description: 'Connect customer data sources',
     icon: KeyRound,
-    group: 'Product',
+    group: 'Setup',
     roles: CONNECTOR_SETUP_ROLES,
   },
   {
@@ -296,7 +296,7 @@ export default function Layout() {
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#080813] text-white shadow-[0_16px_40px_rgba(8,8,19,0.22)]">
               <Sparkles className="h-5 w-5" />
             </span>
-            <span className="hidden min-w-0 sm:block">
+            <span className="hidden min-w-[132px] sm:block">
               <span className="block text-sm font-semibold tracking-tight">Tanaghum</span>
               <span className="block text-xs text-neutral-500">Commercial workspace</span>
             </span>
@@ -312,15 +312,15 @@ export default function Layout() {
             <button
               type="button"
               onClick={() => setGuideOpen(true)}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-black/10 bg-white p-0 text-sm font-semibold text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              aria-label="Open product guide"
             >
               <CircleHelp className="h-4 w-4" />
-              <span className="hidden md:inline">Guide</span>
             </button>
 
             {setupNav.length > 0 && (
               <MenuButton
-                label="Setup"
+                label="Settings"
                 open={setupOpen}
                 setOpen={(next) => {
                   setSetupOpen(next);
@@ -473,7 +473,7 @@ function UserMenu({ displayName, role, onLogout }: { displayName: string; role: 
         {displayName.charAt(0).toUpperCase()}
       </div>
       <div className="min-w-0">
-        <div className="max-w-36 truncate text-sm font-semibold leading-4 text-neutral-950">{displayName}</div>
+        <div className="max-w-36 truncate text-sm font-semibold leading-4 text-neutral-950">My Account</div>
         <div className="max-w-36 truncate text-xs text-neutral-500">{role === 'unknown' ? 'workspace user' : role.replaceAll('_', ' ')}</div>
       </div>
       <button

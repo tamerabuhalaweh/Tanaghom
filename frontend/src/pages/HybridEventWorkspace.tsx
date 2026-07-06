@@ -158,8 +158,31 @@ function strongestChannel(rows: RecordMap[]): string {
   return titleCase(sorted[0]?.channel || sorted[0]?.label || sorted[0]?.source || 'Not enough data');
 }
 
+const internalCustomerTextPattern = /\b(sprint\s*\d+|acceptance|smoke)\b/i;
+
+function isInternalCustomerText(value: unknown): boolean {
+  return typeof value === 'string' && internalCustomerTextPattern.test(value);
+}
+
+function customerSafeText(value: unknown, fallback: string): string {
+  const raw = text(value, '');
+  if (!raw || isInternalCustomerText(raw)) return fallback;
+  return raw;
+}
+
 function eventTitle(event: RecordMap): string {
-  return text(event.name || event.eventName, 'Untitled event');
+  const rawTitle = text(event.name || event.eventName, '');
+  if (rawTitle && !isInternalCustomerText(rawTitle)) return rawTitle;
+  const date = formatDate(event.eventDate);
+  return date === 'Not scheduled' ? 'Customer event' : `Customer event - ${date}`;
+}
+
+function leadTitle(lead: RecordMap, index?: number): string {
+  const rawTitle = text(lead.leadName || lead.name, '');
+  if (rawTitle && !isInternalCustomerText(rawTitle)) return rawTitle;
+  const source = titleCase(lead.sourceOfTruth || lead.externalSourceProvider || lead.platform || 'local');
+  const suffix = typeof index === 'number' ? ` ${index + 1}` : '';
+  return `${source} lead${suffix}`;
 }
 
 function firstAvailableId(events: RecordMap[], routeId?: string): string {
@@ -452,7 +475,7 @@ function OverviewTab({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               {[
                 ['Event date', formatDate(event.eventDate)],
-                ['Location', text(event.location, 'Not set')],
+                ['Location', customerSafeText(event.location, 'Not set')],
                 ['Budget', money(kpis.plannedBudget)],
                 ['CRM', text(ghlStatus?.credentialStatus) === 'configured' ? 'Configured' : 'Needs setup'],
               ].map(([label, value]) => (
@@ -545,11 +568,11 @@ function StrategyTab({
       >
         <DetailGrid
           items={[
-            { label: 'Offer', value: text(event.offer, 'Add the event offer and promise.') },
-            { label: 'Audience', value: text(event.audience, 'Define target segment, age, location, warm or cold audience.') },
+            { label: 'Offer', value: customerSafeText(event.offer, 'Add the event offer and promise.') },
+            { label: 'Audience', value: customerSafeText(event.audience, 'Define target segment, age, location, warm or cold audience.') },
             { label: 'Location / Geography', value: text(event.geography, 'Set the city, country, or target market.') },
-            { label: 'FOMO Angle', value: text(event.fomoAngle, 'Add deadline, limited seats, or outcome pressure.') },
-            { label: 'Upsell Plan', value: text(event.upsellPlan, 'Describe upsell path for existing customers.') },
+            { label: 'FOMO Angle', value: customerSafeText(event.fomoAngle, 'Add deadline, limited seats, or outcome pressure.') },
+            { label: 'Upsell Plan', value: customerSafeText(event.upsellPlan, 'Describe upsell path for existing customers.') },
             { label: 'Channels', value: selectedChannels },
           ]}
         />
@@ -704,8 +727,8 @@ function LeadsTab({
           {salesLeads.length ? (
             <ProductTable
               columns={['Lead', 'Status', 'Temperature', 'Source', 'Last Sync']}
-              rows={salesLeads.slice(0, 10).map(lead => [
-                text(lead.leadName || lead.name, 'Unnamed lead'),
+              rows={salesLeads.slice(0, 10).map((lead, index) => [
+                leadTitle(lead, index),
                 <ProductStatus tone={statusTone(lead.leadStatus || lead.status)}>{titleCase(lead.leadStatus || lead.status)}</ProductStatus>,
                 <ProductStatus tone={statusTone(lead.leadTemperature)}>{titleCase(lead.leadTemperature)}</ProductStatus>,
                 titleCase(lead.sourceOfTruth || lead.externalSourceProvider || lead.platform || 'Tanaghum'),
@@ -952,7 +975,7 @@ export default function HybridEventWorkspace() {
                     </div>
                     <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">{eventTitle(event)}</h2>
                     <p className="mt-2 max-w-4xl text-sm leading-6 text-white/55">
-                      {titleCase(event.eventType)} in {text(event.location, 'unspecified location')} on {formatDate(event.eventDate)}.
+                      {titleCase(event.eventType)} in {customerSafeText(event.location, 'the selected location')} on {formatDate(event.eventDate)}.
                     </p>
                   </div>
                 </div>
