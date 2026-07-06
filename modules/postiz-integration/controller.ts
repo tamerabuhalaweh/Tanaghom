@@ -340,6 +340,7 @@ const postizConnectChannelSchema = z.object({
 
 const postizSelectChannelSchema = z.object({
   integrationId: z.string().trim().min(1).max(200),
+  validationMode: z.enum(['listed_channel', 'manual']).optional().default('listed_channel'),
 });
 
 postizIntegrationRouter.post('/connect-channel', async (req: Request, res: Response, next: NextFunction) => {
@@ -442,12 +443,24 @@ postizIntegrationRouter.post('/select-channel', async (req: Request, res: Respon
       return;
     }
 
-    const selectedChannel = result.channels.find(channel => channel.id === input.integrationId);
+    const listedChannel = result.channels.find(channel => channel.id === input.integrationId);
+    const selectedChannel = listedChannel ?? (input.validationMode === 'manual'
+      ? {
+          id: input.integrationId,
+          name: 'Manual Postiz integration ID',
+          identifier: 'postiz',
+          providerIdentifier: 'postiz',
+          profile: input.integrationId,
+          disabled: false,
+          refreshNeeded: false,
+          selectionMode: 'manual_pending_analytics_validation',
+        }
+      : null);
     if (!selectedChannel) {
       res.status(404).json({
         status: 'not_found',
         rawTokensReturned: false,
-        _label: 'The selected Postiz channel was not returned by the tenant Postiz account',
+        _label: 'The selected Postiz channel was not returned by the tenant Postiz account. Paste the integration ID manually only if it came from the same Postiz workspace, then run analytics validation.',
       });
       return;
     }
@@ -466,16 +479,19 @@ postizIntegrationRouter.post('/select-channel', async (req: Request, res: Respon
         ...credential.metadata,
         selectedChannel: selectedChannel,
         selectedAt: new Date().toISOString(),
-        source: 'postiz_channel_picker',
+        selectedChannelValidation: listedChannel ? 'listed_channel' : 'manual_pending_analytics_validation',
+        source: listedChannel ? 'postiz_channel_picker' : 'postiz_manual_integration_id',
       },
     });
 
     res.json({
-      status: 'selected',
+      status: listedChannel ? 'selected' : 'manual_pending_validation',
       selectedChannel,
       credential: saved,
       rawSecretsReturned: false,
-      _label: 'Postiz channel selected for sandbox scheduling packages',
+      _label: listedChannel
+        ? 'Postiz channel selected for scheduling packages'
+        : 'Postiz integration ID saved. Run analytics validation before using it for reporting.',
     });
   } catch (err) {
     next(err);

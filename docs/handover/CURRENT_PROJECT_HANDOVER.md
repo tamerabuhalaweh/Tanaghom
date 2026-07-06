@@ -338,7 +338,7 @@ Check route registration in `src/index.ts` before adding new routes.
 
 | Connector | Current implementation truth |
 | --- | --- |
-| Postiz | R4 read-only adapter implemented locally for Public API integrations and analytics preview. Requires tenant Postiz `baseUrl`, `apiKey`, and optional `integrationId`. No scheduling or publishing happens in this adapter. |
+| Postiz | R4 read-only adapter deployed and live-accepted for Public API integrations and analytics preview. R4A channel selection UX is implemented locally. Requires tenant Postiz `baseUrl`, `apiKey`, and a connected/validated `integrationId` for KPI rows. No scheduling or publishing happens in this adapter. |
 | GoHighLevel | Dedicated setup/sync modules exist. Customer credentials, mappings, and acceptance data are still required before production validation. |
 | Formaloo | CSV/import foundations exist. Official API adapter still pending customer credentials and mapping. |
 | Meta / Instagram | Readiness/mapping foundation exists. Official analytics adapter requires customer Meta account/API/OAuth access. |
@@ -397,24 +397,26 @@ Recommended labels:
 
 ## 16. Immediate Next Sprint Recommendation
 
-Next recommended sprint after R3:
+Next recommended sprint after R4A:
 
-**Sprint R4 - First Real Read-Only Connector Adapter Through Governed Runtime Path**
+**Sprint R5 - GoHighLevel Read-Sync Adapter / Production CRM Validation**
 
-Current R4 status:
+Current R4/R4A status:
 
 - Postiz is the first real read-only adapter.
-- It calls Postiz Public API `integrations` and `analytics` endpoints in dry-run only.
-- It maps recognized analytics metrics into KPI preview rows.
-- It does not write KPI records during dry-run.
-- It does not schedule or publish.
+- R4 is deployed and live-accepted on hybrid.
+- R4 live result: Postiz credential valid, zero channels returned by Postiz, zero KPI rows, no writes.
+- R4A adds production-facing Postiz channel setup UX:
+  - save/list channel
+  - paste integration ID
+  - run read-only analytics validation
+  - show rows/warnings without scheduling or publishing
+- R4A is implemented locally and requires hybrid deployment/live validation.
 - Import still requires a later human-approved `approve-import`.
-- Local verification is green.
-- Hybrid VPS deployment and live customer credential validation remain required for live acceptance.
 
 Recommended target options:
 
-1. Deploy and live-validate the Postiz read-only adapter.
+1. Deploy and live-validate R4A Postiz channel UX.
 2. GHL read-sync adapter if the customer provides GHL credentials and mapping.
 3. Formaloo API import adapter if the customer provides form access.
 

@@ -38,7 +38,10 @@ describe('Postiz read-only dry-run adapter', () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await runPostizReadOnlyDryRun({ credential: credential(), eventId: 'event-1' });
+    const result = await runPostizReadOnlyDryRun({
+      credential: credential({ secrets: { apiKey: 'postiz-api-key', baseUrl: 'https://postiz.example.test' } }),
+      eventId: 'event-1',
+    });
 
     expect(result.kpiRows).toEqual([]);
     expect(result.providerStatus?.provider).toBe('postiz');
@@ -129,6 +132,47 @@ describe('Postiz read-only dry-run adapter', () => {
     expect(result.providerStatus?.analyticsFetched).toBe(false);
     expect(result.warnings[0]).toContain('no integrationId is selected');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('tests analytics with a manually pasted integrationId even when it is not listed by Postiz', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([
+        { id: 'other-integration', name: 'Other Channel', providerIdentifier: 'instagram' },
+      ]))
+      .mockResolvedValueOnce(jsonResponse([
+        {
+          label: 'Impressions',
+          data: [{ date: '2026-07-01', total: 840 }],
+        },
+      ]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runPostizReadOnlyDryRun({
+      credential: credential({
+        secrets: {
+          apiKey: 'postiz-api-key',
+          baseUrl: 'https://postiz.example.test',
+          integrationId: 'manual-integration-1',
+        },
+      }),
+      eventId: 'event-1',
+    });
+
+    expect(result.providerStatus?.channelsFound).toBe(1);
+    expect(result.providerStatus?.selectedIntegrationId).toBe('manual-integration-1');
+    expect(result.providerStatus?.selectedChannel).toEqual(expect.objectContaining({
+      id: 'manual-integration-1',
+      providerIdentifier: 'postiz',
+    }));
+    expect(result.providerStatus?.analyticsFetched).toBe(true);
+    expect(result.kpiRows).toEqual([
+      expect.objectContaining({
+        impressions: 840,
+        channel: 'postiz',
+      }),
+    ]);
+    expect(result.warnings[0]).toContain('not returned by the Postiz channel list');
+    expect(fetchMock.mock.calls[1][0].toString()).toBe('https://postiz.example.test/api/public/v1/analytics/manual-integration-1?date=30');
   });
 
   it('fails safely when Postiz rejects the read-only API credential', async () => {

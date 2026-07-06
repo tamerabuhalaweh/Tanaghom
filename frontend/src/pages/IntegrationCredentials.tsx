@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { connectorImportsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, socialOAuthApi } from '../api';
+import { connectorImportsApi, eventsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, socialOAuthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -133,9 +133,13 @@ export default function IntegrationCredentials() {
   const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
   const [postizChannelStatus, setPostizChannelStatus] = useState<RecordMap | null>(null);
   const [postizDiagnostics, setPostizDiagnostics] = useState<RecordMap | null>(null);
+  const [postizAnalyticsResult, setPostizAnalyticsResult] = useState<RecordMap | null>(null);
   const [connectorImportSummary, setConnectorImportSummary] = useState<RecordMap | null>(null);
   const [connectorImportReadiness, setConnectorImportReadiness] = useState<RecordMap[]>([]);
   const [connectorImportJobs, setConnectorImportJobs] = useState<RecordMap[]>([]);
+  const [events, setEvents] = useState<RecordMap[]>([]);
+  const [postizAnalyticsEventId, setPostizAnalyticsEventId] = useState('');
+  const [manualPostizIntegrationId, setManualPostizIntegrationId] = useState('');
   const [selected, setSelected] = useState<RecordMap | null>(null);
   const [hasAutoSelectedConnector, setHasAutoSelectedConnector] = useState(false);
   const [oauthPlatform, setOauthPlatform] = useState('meta');
@@ -147,10 +151,11 @@ export default function IntegrationCredentials() {
   const [connectingPostiz, setConnectingPostiz] = useState(false);
   const [diagnosingPostiz, setDiagnosingPostiz] = useState(false);
   const [selectingPostizChannel, setSelectingPostizChannel] = useState('');
+  const [testingPostizAnalytics, setTestingPostizAnalytics] = useState(false);
 
   async function load() {
     if (!token) return;
-    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, postizChannelResult, postizDiagnosticsResult, importReadinessResult, importJobsResult] = await Promise.all([
+    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, postizChannelResult, postizDiagnosticsResult, importReadinessResult, importJobsResult, eventsResult] = await Promise.all([
       integrationStatusApi.get(token),
       postizApi.status(token),
       ghlApi.status(token),
@@ -161,6 +166,7 @@ export default function IntegrationCredentials() {
       postizApi.diagnostics({ platform: postizPlatform }, token).catch((err) => ({ status: 'not_available', diagnostics: null, _label: err instanceof Error ? err.message : 'Postiz diagnostics unavailable' })),
       connectorImportsApi.readiness(token).catch((err) => ({ connectors: [], totalConfigured: 0, totalMissing: 0, totalBlocked: 0, _label: err instanceof Error ? err.message : 'Connector import readiness unavailable' })),
       connectorImportsApi.jobs(token).catch(() => []),
+      eventsApi.list(token).catch(() => []),
     ]);
     setStatus(integration as RecordMap);
     setPostiz(postizStatus as RecordMap);
@@ -182,11 +188,18 @@ export default function IntegrationCredentials() {
     setCredentials(Array.isArray((credentialResult as RecordMap).credentials) ? (credentialResult as RecordMap).credentials as RecordMap[] : []);
     setSocialConnections(Array.isArray((socialResult as RecordMap).connections) ? (socialResult as RecordMap).connections as RecordMap[] : []);
     setPostizChannelStatus(postizChannelResult as RecordMap);
+    const loadedSelectedPostizId = typeof (postizChannelResult as RecordMap).selectedIntegrationId === 'string'
+      ? (postizChannelResult as RecordMap).selectedIntegrationId as string
+      : '';
+    if (!manualPostizIntegrationId && loadedSelectedPostizId) setManualPostizIntegrationId(loadedSelectedPostizId);
     setPostizChannels(Array.isArray((postizChannelResult as RecordMap).channels) ? (postizChannelResult as RecordMap).channels as RecordMap[] : []);
     setPostizDiagnostics(postizDiagnosticsResult as RecordMap);
     setConnectorImportSummary(importReadinessResult as RecordMap);
     setConnectorImportReadiness(Array.isArray((importReadinessResult as RecordMap).connectors) ? (importReadinessResult as RecordMap).connectors as RecordMap[] : []);
     setConnectorImportJobs(Array.isArray(importJobsResult) ? importJobsResult as RecordMap[] : Array.isArray((importJobsResult as RecordMap).jobs) ? (importJobsResult as RecordMap).jobs as RecordMap[] : []);
+    const eventRows = Array.isArray(eventsResult) ? eventsResult as RecordMap[] : [];
+    setEvents(eventRows);
+    if (!postizAnalyticsEventId && eventRows.length > 0) setPostizAnalyticsEventId(text(eventRows[0].id, ''));
   }
 
   useEffect(() => {
@@ -225,10 +238,19 @@ export default function IntegrationCredentials() {
   const postizAuthorization = (postizDiagnostics?.authorization || {}) as RecordMap;
   const postizAuthorizationUrl = text(postizAuthorization.authorizationUrl, '');
   const postizProviderReady = postizAuthorization.providerConfigurationReady === true;
-  const postizClientIdStatus = text(postizAuthorization.clientIdStatus, 'not checked');
   const configuredImportCount = Number(connectorImportSummary?.totalConfigured || 0);
   const missingImportCount = Number(connectorImportSummary?.totalMissing || 0);
   const blockedImportCount = Number(connectorImportSummary?.totalBlocked || 0);
+  const selectedPostizCredential = matrix.find(row => text(row.provider, '').toLowerCase() === 'postiz');
+  const postizCredentialConfigured = text(selectedPostizCredential?.status, '').toLowerCase() === 'configured'
+    || text((postiz?.health as RecordMap | undefined)?.credentialStatus, '').toLowerCase() === 'configured';
+  const postizAnalyticsRows = Array.isArray(postizAnalyticsResult?.kpiRows) ? postizAnalyticsResult.kpiRows as RecordMap[] : [];
+  const postizAnalyticsWarnings = Array.isArray(postizAnalyticsResult?.warnings)
+    ? postizAnalyticsResult.warnings.filter((item): item is string => typeof item === 'string')
+    : [];
+  const postizProviderStatus = (postizAnalyticsResult?.providerStatus || {}) as RecordMap;
+  const postizAnalyticsReady = postizAnalyticsRows.length > 0;
+  const postizChannelsFound = Number(postizProviderStatus.channelsFound ?? postizChannels.length);
 
   const setupRoadmap = useMemo(() => {
     return SETUP_BLUEPRINTS.map(blueprint => {
@@ -388,6 +410,71 @@ export default function IntegrationCredentials() {
       setMessage(err instanceof Error ? err.message : 'Failed to select Postiz channel');
     } finally {
       setSelectingPostizChannel('');
+    }
+  }
+
+  async function saveManualPostizIntegrationId() {
+    if (!token) return;
+    const integrationId = manualPostizIntegrationId.trim();
+    if (!integrationId) {
+      setMessage('Enter the Postiz integration ID before saving.');
+      return;
+    }
+    setSelectingPostizChannel(integrationId);
+    setMessage('');
+    try {
+      await postizApi.selectChannel({ integrationId, validationMode: 'manual' }, token);
+      setPostizAnalyticsResult(null);
+      setMessage('Postiz integration ID saved as pending validation. Run analytics test before using it for reporting.');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to save Postiz integration ID');
+    } finally {
+      setSelectingPostizChannel('');
+    }
+  }
+
+  async function runPostizAnalyticsTest() {
+    if (!token) return;
+    const eventId = postizAnalyticsEventId || text(events[0]?.id, '');
+    if (!eventId) {
+      setMessage('Create or select an event before testing Postiz analytics.');
+      return;
+    }
+    setTestingPostizAnalytics(true);
+    setMessage('');
+    try {
+      let jobs = connectorImportJobs.filter(job => text(job.eventId, '') === eventId);
+      if (!jobs.length) {
+        const jobResult = await connectorImportsApi.jobs(token, eventId);
+        jobs = Array.isArray(jobResult)
+          ? jobResult as RecordMap[]
+          : Array.isArray((jobResult as RecordMap).jobs)
+            ? (jobResult as RecordMap).jobs as RecordMap[]
+            : [];
+      }
+      const existingJob = jobs.find(job => text(job.connectorId, '').toLowerCase() === 'postiz' && text(job.eventId, '') === eventId);
+      if (!existingJob) {
+        await connectorImportsApi.createJob({
+          connectorId: 'postiz',
+          displayName: 'Postiz analytics validation',
+          eventId,
+          notes: 'Read-only analytics validation from Connector Setup. No scheduling or publishing.',
+        }, token);
+      }
+      const result = await connectorImportsApi.dryRun({ connectorId: 'postiz', eventId }, token) as RecordMap;
+      setPostizAnalyticsResult(result);
+      const rows = Array.isArray(result.kpiRows) ? result.kpiRows.length : 0;
+      const warnings = Array.isArray(result.warnings) ? result.warnings as string[] : [];
+      setMessage(rows > 0
+        ? `Postiz analytics test passed with ${rows} importable KPI row(s).`
+        : warnings[0] || 'Postiz analytics test completed, but no importable KPI rows were found.');
+      await load();
+    } catch (err) {
+      setPostizAnalyticsResult(null);
+      setMessage(err instanceof Error ? err.message : 'Postiz analytics test failed');
+    } finally {
+      setTestingPostizAnalytics(false);
     }
   }
 
@@ -601,135 +688,237 @@ export default function IntegrationCredentials() {
       </ProductCard>
 
       <ProductCard
-        title="Postiz Social Channels"
-        subtitle="Tanaghum can start Postiz channel OAuth and list connected channels. Postiz still owns the provider login and channel tokens."
+        title="Postiz Scheduling Connection"
+        subtitle="Connect the customer's Postiz workspace, choose the channel used for approved content, then test whether analytics can be read. Nothing is scheduled or published from this page."
+        action={<ProductStatus tone={postizAnalyticsReady ? 'good' : postizCredentialConfigured ? 'warn' : 'info'}>{postizAnalyticsReady ? 'Analytics Ready' : postizCredentialConfigured ? 'Needs Channel Test' : 'Needs Credentials'}</ProductStatus>}
       >
-        <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="grid gap-3 lg:grid-cols-3">
+          {[
+            ['1', 'Save Postiz Access', postizCredentialConfigured ? 'Postiz API key and base URL are saved.' : 'Open Postiz from the connector cards above and save API key + base URL.', postizCredentialConfigured ? 'good' : 'warn'],
+            ['2', 'Choose Channel', selectedPostizIntegrationId ? 'A Postiz integration ID is saved for this tenant.' : postizChannels.length ? 'Choose one of the channels returned by Postiz.' : 'Connect a social channel in Postiz or paste its integration ID.', selectedPostizIntegrationId ? 'good' : 'warn'],
+            ['3', 'Test Analytics', postizAnalyticsReady ? `${postizAnalyticsRows.length} KPI row(s) can be read.` : 'Run the read-only analytics test before using the channel for reporting.', postizAnalyticsReady ? 'good' : 'info'],
+          ].map(([step, title, detail, tone]) => (
+            <div key={step} className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">{step}</span>
+                  <div className="text-sm font-semibold text-neutral-950">{title}</div>
+                </div>
+                <ProductStatus tone={tone as 'good' | 'warn' | 'info'}>{tone === 'good' ? 'Done' : 'Next'}</ProductStatus>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-neutral-600">{detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div className="space-y-4">
             <DetailGrid items={[
-              { label: 'Postiz Server', value: text(postiz?.status) },
-              { label: 'API Key', value: text((postiz?.health as RecordMap | undefined)?.credentialStatus) },
-              { label: 'Saved Channel ID', value: text((postiz?.health as RecordMap | undefined)?.integrationIdStatus) },
-              { label: 'Connected Channels', value: String(postizChannels.length) },
+              { label: 'Postiz status', value: text(postiz?.status) },
+              { label: 'Credential', value: postizCredentialConfigured ? 'Configured' : 'Missing' },
+              { label: 'Visible channels', value: String(postizChannels.length) },
+              { label: 'Saved integration ID', value: selectedPostizIntegrationId || 'Not selected' },
             ]} />
-            <Field label="Channel To Connect">
-              <select
-                value={postizPlatform}
-                onChange={(event) => setPostizPlatform(event.target.value)}
-                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
-              >
-                <option value="instagram">Instagram / Facebook via Meta</option>
-                <option value="instagram-standalone">Instagram Standalone</option>
-                <option value="linkedin">LinkedIn</option>
-                <option value="x">X / Twitter</option>
-                <option value="facebook">Facebook</option>
-                <option value="threads">Threads</option>
-                <option value="tiktok">TikTok</option>
-                <option value="youtube">YouTube</option>
-              </select>
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              <PrimaryAction onClick={connectPostizChannel} disabled={connectingPostiz}>
-                {connectingPostiz ? 'Opening...' : 'Connect Channel via Postiz'}
-              </PrimaryAction>
-              <SecondaryAction onClick={runPostizDiagnostics} disabled={diagnosingPostiz}>
-                {diagnosingPostiz ? 'Checking...' : 'Run Diagnostics'}
-              </SecondaryAction>
-              {postizAuthorizationUrl && (
-                <SecondaryAction onClick={() => window.open(postizAuthorizationUrl, '_blank', 'noopener,noreferrer')} disabled={!postizProviderReady}>
-                  {postizProviderReady ? 'Open OAuth URL' : 'Provider Setup Required'}
+
+            <div className="rounded-xl border border-neutral-200 bg-white p-4">
+              <div className="text-sm font-semibold text-neutral-950">Connect or refresh channel list</div>
+              <p className="mt-1 text-sm leading-6 text-neutral-600">
+                Use this when the customer needs to connect a social account through Postiz. Provider login and account tokens stay inside Postiz.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  value={postizPlatform}
+                  onChange={(event) => setPostizPlatform(event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
+                >
+                  <option value="instagram">Instagram / Facebook via Meta</option>
+                  <option value="instagram-standalone">Instagram Standalone</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="x">X / Twitter</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="threads">Threads</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="youtube">YouTube</option>
+                </select>
+                <PrimaryAction onClick={connectPostizChannel} disabled={connectingPostiz || !postizCredentialConfigured}>
+                  {connectingPostiz ? 'Opening...' : 'Connect'}
+                </PrimaryAction>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <SecondaryAction onClick={runPostizDiagnostics} disabled={diagnosingPostiz || !postizCredentialConfigured}>
+                  {diagnosingPostiz ? 'Checking...' : 'Check Connection'}
                 </SecondaryAction>
+                {postizAuthorizationUrl && (
+                  <SecondaryAction onClick={() => window.open(postizAuthorizationUrl, '_blank', 'noopener,noreferrer')} disabled={!postizProviderReady}>
+                    {postizProviderReady ? 'Open Provider Login' : 'Provider Setup Required'}
+                  </SecondaryAction>
+                )}
+                <SecondaryAction onClick={() => void load()}>Refresh</SecondaryAction>
+              </div>
+              {postizAuthorizationUrl && !postizProviderReady && (
+                <Notice tone="warn">
+                  Postiz needs provider app setup before this channel can connect. Configure the provider app in Postiz, then check again.
+                </Notice>
               )}
-              <SecondaryAction onClick={() => void load()}>Refresh Channels</SecondaryAction>
             </div>
-            {postizAuthorizationUrl && !postizProviderReady && (
-              <Notice tone="warn">
-                Postiz returned an OAuth handoff, but the provider client ID is {display(postizClientIdStatus)}.
-                Configure the provider app credentials in Postiz, restart Postiz, then run diagnostics again.
-              </Notice>
-            )}
-            <Notice tone="info">
-              Tanaghum requests the OAuth URL through the Postiz API, then Postiz owns the provider login, consent screen, and channel token storage.
-            </Notice>
-            {postizDiagnosticChecks.length > 0 && (
-              <div className="rounded-xl border border-neutral-200 bg-white p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-neutral-950">{text(diagnosticPayload.title, 'Postiz channel diagnostics')}</div>
-                    <p className="mt-1 text-xs leading-5 text-neutral-500">{text(diagnosticPayload.summary, 'Run diagnostics to inspect the channel connection path.')}</p>
-                  </div>
-                  <ProductStatus tone={statusTone(text(diagnosticPayload.status))}>{display(text(diagnosticPayload.status, 'not checked'))}</ProductStatus>
+
+            <div className="rounded-xl border border-neutral-200 bg-white p-4">
+              <div className="text-sm font-semibold text-neutral-950">Paste Postiz integration ID</div>
+              <p className="mt-1 text-sm leading-6 text-neutral-600">
+                Use this if Postiz shows the channel ID but the channel list is empty here. Saving the ID does not prove it works; the analytics test below does.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <input
+                  value={manualPostizIntegrationId}
+                  onChange={(event) => setManualPostizIntegrationId(event.target.value)}
+                  placeholder="Paste Postiz integration/channel ID"
+                  className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                />
+                <SecondaryAction onClick={saveManualPostizIntegrationId} disabled={!postizCredentialConfigured || selectingPostizChannel === manualPostizIntegrationId.trim()}>
+                  {selectingPostizChannel === manualPostizIntegrationId.trim() ? 'Saving...' : 'Save ID'}
+                </SecondaryAction>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-neutral-200 bg-white p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-neutral-950">Connected Postiz channels</div>
+                  <p className="mt-1 text-sm leading-6 text-neutral-600">
+                    Choose a listed channel, or paste its ID if Postiz does not return the list yet.
+                  </p>
                 </div>
-                <div className="space-y-2">
+                <ProductStatus tone={postizChannels.length ? 'good' : 'warn'}>{postizChannels.length} found</ProductStatus>
+              </div>
+
+              {postizChannels.length ? (
+                <div className="mt-4">
+                  <ProductTable
+                    columns={['Channel', 'Provider', 'Status', 'Action']}
+                    rows={postizChannels.map(channel => {
+                      const channelId = text(channel.id, '');
+                      const disabled = Boolean(channel.disabled);
+                      const refreshNeeded = Boolean(channel.refreshNeeded);
+                      const selectedForScheduling = channelId === selectedPostizIntegrationId;
+                      return [
+                        <div>
+                          <div className="font-medium text-neutral-950">{text(channel.name, text(channel.profile, 'Unnamed channel'))}</div>
+                          <div className="mt-1 break-all text-xs text-neutral-500">{channelId}</div>
+                        </div>,
+                        display(text(channel.providerIdentifier || channel.type)),
+                        <ProductStatus tone={disabled || refreshNeeded ? 'warn' : selectedForScheduling ? 'good' : 'info'}>
+                          {selectedForScheduling ? 'Selected' : disabled ? 'Disabled' : refreshNeeded ? 'Reconnect' : 'Available'}
+                        </ProductStatus>,
+                        <SecondaryAction onClick={() => void selectPostizChannel(channelId)} disabled={!channelId || disabled || selectedForScheduling || selectingPostizChannel === channelId}>
+                          {selectedForScheduling ? 'Selected' : selectingPostizChannel === channelId ? 'Saving...' : 'Use'}
+                        </SecondaryAction>,
+                      ];
+                    })}
+                  />
+                </div>
+              ) : (
+                <div className="mt-4 rounded-lg border border-dashed border-neutral-200 bg-neutral-50 p-5">
+                  <EmptyProductState
+                    title="No channels visible yet"
+                    message="The Postiz credential is valid only after Postiz returns channels or an entered integration ID passes the analytics test."
+                  />
+                  {postizNextActions.length > 0 && (
+                    <ol className="mt-4 space-y-2 text-sm leading-6 text-neutral-700">
+                      {postizNextActions.map((action, index) => (
+                        <li key={action} className="flex gap-3">
+                          <span className="font-semibold text-neutral-950">{index + 1}.</span>
+                          <span>{action}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-neutral-200 bg-white p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-neutral-950">Test Postiz analytics</div>
+                  <p className="mt-1 text-sm leading-6 text-neutral-600">
+                    This reads Postiz analytics for the selected ID and previews KPI rows for one event. It does not import, schedule, or publish.
+                  </p>
+                </div>
+                <ProductStatus tone={postizAnalyticsReady ? 'good' : postizProviderStatus.analyticsFetched ? 'warn' : 'info'}>
+                  {postizAnalyticsReady ? 'Rows Found' : postizProviderStatus.analyticsFetched ? 'No Rows' : 'Not Tested'}
+                </ProductStatus>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  value={postizAnalyticsEventId}
+                  onChange={(event) => setPostizAnalyticsEventId(event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
+                >
+                  {events.map(event => (
+                    <option key={text(event.id)} value={text(event.id)}>{text(event.name, 'Untitled event')}</option>
+                  ))}
+                </select>
+                <PrimaryAction onClick={runPostizAnalyticsTest} disabled={testingPostizAnalytics || !postizCredentialConfigured || !selectedPostizIntegrationId}>
+                  {testingPostizAnalytics ? 'Testing...' : 'Test Analytics'}
+                </PrimaryAction>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <MetricCard label="Channels Found" value={postizChannelsFound} detail="Returned by Postiz Public API" tone={postizChannelsFound ? 'good' : 'warn'} />
+                <MetricCard label="KPI Rows" value={postizAnalyticsRows.length} detail="Preview rows from analytics" tone={postizAnalyticsRows.length ? 'good' : 'warn'} />
+                <MetricCard label="External Writes" value="Off" detail="Read-only validation only" tone="good" />
+              </div>
+              {postizAnalyticsWarnings.length > 0 && (
+                <Notice tone={postizAnalyticsRows.length ? 'info' : 'warn'}>
+                  {postizAnalyticsWarnings[0]}
+                </Notice>
+              )}
+              {postizAnalyticsRows.length > 0 && (
+                <div className="mt-4">
+                  <ProductTable
+                    columns={['Date', 'Channel', 'Reach', 'Impressions', 'Interactions', 'Clicks', 'Leads']}
+                    rows={postizAnalyticsRows.slice(0, 5).map(row => [
+                      text(row.metricDate),
+                      text(row.channel),
+                      String(row.reach ?? 0),
+                      String(row.impressions ?? 0),
+                      String(row.interactions ?? 0),
+                      String(row.clicks ?? 0),
+                      String(row.leads ?? 0),
+                    ])}
+                  />
+                </div>
+              )}
+            </div>
+
+            {postizDiagnosticChecks.length > 0 && (
+              <details className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-neutral-950">Show connection checks</summary>
+                <div className="mt-4 space-y-2">
                   {postizDiagnosticChecks.map(check => (
-                    <div key={text(check.id)} className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+                    <div key={text(check.id)} className="rounded-lg border border-neutral-100 bg-white p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium text-neutral-950">{text(check.label)}</div>
                         <ProductStatus tone={statusTone(text(check.status))}>{display(text(check.status))}</ProductStatus>
                       </div>
                       <div className="mt-1 text-xs leading-5 text-neutral-500">{text(check.detail)}</div>
-                      {text(check.action, '') && <div className="mt-2 text-xs font-medium text-neutral-700">Next: {text(check.action)}</div>}
                     </div>
                   ))}
+                  {postizDiagnosticActions.length > 0 && (
+                    <ol className="space-y-2 text-sm leading-6 text-neutral-700">
+                      {postizDiagnosticActions.map((action, index) => (
+                        <li key={action} className="flex gap-3">
+                          <span className="font-semibold text-neutral-950">{index + 1}.</span>
+                          <span>{action}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </div>
-                {postizDiagnosticActions.length > 0 && (
-                  <ol className="mt-4 space-y-2 text-sm leading-6 text-neutral-700">
-                    {postizDiagnosticActions.map((action, index) => (
-                      <li key={action} className="flex gap-3">
-                        <span className="font-semibold text-neutral-950">{index + 1}.</span>
-                        <span>{action}</span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </div>
+              </details>
             )}
           </div>
-          {postizChannels.length ? (
-            <ProductTable
-              columns={['Channel', 'Provider', 'Profile', 'Status', 'Action']}
-              rows={postizChannels.map(channel => {
-                const channelId = text(channel.id, '');
-                const disabled = Boolean(channel.disabled);
-                const refreshNeeded = Boolean(channel.refreshNeeded);
-                const selectedForScheduling = channelId === selectedPostizIntegrationId;
-                return [
-                  <div>
-                    <div className="font-medium text-neutral-950">{text(channel.name, text(channel.profile, 'Unnamed channel'))}</div>
-                    <div className="mt-1 text-xs text-neutral-500">{channelId}</div>
-                  </div>,
-                  display(text(channel.providerIdentifier || channel.type)),
-                  text(channel.profile),
-                  <ProductStatus tone={disabled || refreshNeeded ? 'warn' : 'good'}>
-                    {selectedForScheduling ? 'Selected' : disabled ? 'Disabled' : refreshNeeded ? 'Reconnect Needed' : 'Connected'}
-                  </ProductStatus>,
-                  <SecondaryAction onClick={() => void selectPostizChannel(channelId)} disabled={!channelId || disabled || selectedForScheduling || selectingPostizChannel === channelId}>
-                    {selectedForScheduling ? 'Selected' : selectingPostizChannel === channelId ? 'Saving...' : 'Use for Scheduling'}
-                  </SecondaryAction>,
-                ];
-              })}
-            />
-          ) : (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-              <EmptyProductState
-                title={text(postizGuidance.title, 'No Postiz channels connected')}
-                message={text(postizChannelStatus?._label, 'Save Postiz API credentials, then connect a channel through Postiz.')}
-              />
-              {postizNextActions.length > 0 && (
-                <div className="mt-5 rounded-lg border border-amber-200 bg-white p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Next actions</div>
-                  <ol className="mt-3 space-y-2 text-sm leading-6 text-amber-950">
-                    {postizNextActions.map((action, index) => (
-                      <li key={action} className="flex gap-3">
-                        <span className="font-semibold">{index + 1}.</span>
-                        <span>{action}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </ProductCard>
 

@@ -53,13 +53,14 @@ export async function runPostizReadOnlyDryRun(input: PostizDryRunInput): Promise
   const selectedChannel = selectedIntegrationId
     ? normalizedIntegrations.find(item => item.id === selectedIntegrationId) ?? null
     : null;
+  const analyticsTarget = selectedChannel ?? (selectedIntegrationId ? buildManualIntegration(selectedIntegrationId) : null);
 
   if (normalizedIntegrations.length === 0) {
     warnings.push('Postiz credential is valid, but Postiz returned zero connected channels. Connect a supported social channel inside Postiz first.');
   } else if (!selectedIntegrationId) {
     warnings.push(`Postiz returned ${normalizedIntegrations.length} channel(s), but no integrationId is selected for Tanaghum scheduling/import readiness.`);
   } else if (!selectedChannel) {
-    warnings.push('Selected Postiz integrationId was not returned by the Postiz workspace. Re-select the channel from the Postiz integration setup.');
+    warnings.push('Selected Postiz integrationId was not returned by the Postiz channel list. Tanaghum will still test analytics with the pasted ID.');
   } else if (selectedChannel.disabled) {
     warnings.push('Selected Postiz channel is disabled. Re-authenticate or re-enable it in Postiz before importing analytics.');
   } else if (selectedChannel.refreshNeeded) {
@@ -69,17 +70,17 @@ export async function runPostizReadOnlyDryRun(input: PostizDryRunInput): Promise
   let kpiRows: DryRunKpiRow[] = [];
   let analyticsFetched = false;
   let analyticsMetricLabels: string[] = [];
-  if (selectedChannel && !selectedChannel.disabled && !selectedChannel.refreshNeeded) {
+  if (analyticsTarget && !analyticsTarget.disabled && !analyticsTarget.refreshNeeded) {
     const analytics = await fetchPostizJson<PostizAnalyticsMetric[]>(
       apiBase,
-      `/analytics/${encodeURIComponent(selectedChannel.id)}?date=30`,
+      `/analytics/${encodeURIComponent(analyticsTarget.id)}?date=30`,
       apiKey,
     );
     analyticsFetched = true;
     analyticsMetricLabels = analytics
       .map(metric => safeString(metric.label))
       .filter((label): label is string => Boolean(label));
-    const normalized = normalizePostizAnalyticsRows(analytics, selectedChannel);
+    const normalized = normalizePostizAnalyticsRows(analytics, analyticsTarget);
     kpiRows = normalized.kpiRows;
     warnings.push(...normalized.warnings);
     if (kpiRows.length === 0) {
@@ -101,11 +102,24 @@ export async function runPostizReadOnlyDryRun(input: PostizDryRunInput): Promise
       rawSecretsReturned: false,
       channelsFound: normalizedIntegrations.length,
       selectedIntegrationId: selectedIntegrationId ?? null,
-      selectedChannel: selectedChannel ? sanitizeIntegration(selectedChannel) : null,
+      selectedChannel: analyticsTarget ? sanitizeIntegration(analyticsTarget) : null,
       analyticsFetched,
       analyticsMetricLabels,
       source: 'Postiz Public API',
     },
+  };
+}
+
+function buildManualIntegration(integrationId: string): PostizIntegration {
+  return {
+    id: integrationId,
+    name: 'Manual Postiz integration ID',
+    identifier: 'postiz',
+    providerIdentifier: 'postiz',
+    profile: integrationId,
+    disabled: false,
+    refreshNeeded: false,
+    source: 'manual_pending_validation',
   };
 }
 

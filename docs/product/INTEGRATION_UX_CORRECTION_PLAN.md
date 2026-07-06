@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter implemented locally; full production runtime pilots still pending
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX implemented locally; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -390,7 +390,7 @@ Live acceptance evidence on 2026-07-06:
 
 Goal: Turn the R3 policy proof into customer-visible value by wiring one read-only connector preview through the governed runtime path.
 
-Status: Implemented locally with Postiz as the first read-only adapter. Deployment/live customer credential validation remains the next acceptance step.
+Status: Implemented, deployed to hybrid, and live-accepted with Postiz as the first read-only adapter.
 
 Recommended target order:
 
@@ -450,13 +450,70 @@ Verification on 2026-07-06:
 - Frontend lint: passed.
 - Frontend build: passed.
 
-Remaining R4 acceptance before calling it live-complete:
+R4 live acceptance evidence on 2026-07-06:
 
-- Deploy the R4 code to the hybrid VPS.
-- Run dry-run against the tenant Postiz credential.
-- If the Postiz workspace has no connected channel, confirm honest zero-channel state.
-- If the customer connects a channel and saves `integrationId`, confirm analytics read-only preview.
-- Confirm R3 mediation still wraps the R4 dry-run.
+- Hybrid health: healthy.
+- R3 mediation still wraps the dry-run: mediated `true`, decision `allowed`.
+- Safety: `externalWritesAllowed: false`, `rawSecretsReturned: false`.
+- Provider: Postiz Public API adapter.
+- Live tenant credential was valid enough to call Postiz.
+- Channels found: `0`.
+- KPI rows: `0`.
+- Honest blocker returned: Postiz returned zero connected channels. The customer must connect a supported social channel inside Postiz before analytics can return KPI rows.
+
+### Sprint R4A - Postiz Channel Selection UX + Live Channel Validation
+
+Goal: Make the Postiz setup usable for a production customer who owns the Postiz workspace, API key, and social channel setup.
+
+Status: Implemented locally. Deployment/live validation is required before calling R4A live-complete.
+
+What R4A implements:
+
+- Rebuilds the Postiz section inside `frontend/src/pages/IntegrationCredentials.tsx` into a three-step user workflow:
+  1. Save Postiz access.
+  2. Choose or paste a Postiz integration/channel ID.
+  3. Run a read-only analytics test.
+- Keeps the language customer-facing:
+  - credential saved
+  - channel selected
+  - analytics tested
+  - no scheduling or publishing from this page
+- Adds event selection for analytics validation.
+- Creates the Postiz connector import job automatically when needed for the selected event.
+- Runs `POST /connector-imports/dry-run` from the UI and shows:
+  - channels found
+  - KPI rows found
+  - first provider warning
+  - preview rows if Postiz analytics returns recognized metrics
+- Adds a manual Postiz integration ID fallback:
+  - `POST /postiz/select-channel` accepts `validationMode: manual`.
+  - The ID is saved as `manual_pending_analytics_validation`.
+  - It is not treated as proven until the analytics dry-run succeeds.
+- Updates the Postiz adapter so a pasted ID can be tested against `GET /analytics/{integration}?date=30` even if it was not returned by `GET /integrations`.
+- Keeps safety unchanged:
+  - no import approval
+  - no scheduling
+  - no publishing
+  - no external writes
+  - no raw secrets returned
+
+Verification on 2026-07-06:
+
+- Focused Postiz adapter tests: 5 passed.
+- Backend lint: passed.
+- Backend typecheck: passed.
+- Full backend tests: 117 files passed, 1764 tests passed.
+- Backend build: passed.
+- Frontend lint: passed.
+- Frontend build: passed.
+
+Remaining R4A acceptance:
+
+- Deploy to hybrid VPS.
+- Open `/integration-credentials`.
+- Confirm the Postiz section shows a simple three-step production workflow.
+- Confirm manual integration ID can be saved as pending validation.
+- Confirm analytics test runs and reports either real KPI rows or a precise customer setup blocker.
 
 ### Sprint I1 - Integration UX Simplification
 

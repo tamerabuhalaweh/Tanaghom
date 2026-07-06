@@ -19,7 +19,7 @@ feature/hybrid-emergent-ux-governed-tanaghum
 Latest known active commit at this update:
 
 ```text
-a18de9d fix: allow sandbox policy service token
+0399098 feat: improve Postiz channel validation UX
 ```
 
 ## Current Product Direction
@@ -66,21 +66,25 @@ Those belong under Admin/Ops evidence only.
 - AgentScope is not executing production agent sessions.
 - External writes, publishing, CRM writes, messaging, voice calls, and M5 remain blocked unless explicitly authorized.
 
-Current R4 status:
+Current R4/R4A status:
 
-- Postiz read-only adapter implemented locally for connector dry-run.
+- Postiz read-only adapter is deployed and live-accepted on hybrid for connector dry-run.
 - It uses tenant-owned Postiz `baseUrl`, `apiKey`, and optional `integrationId`.
 - It reads Postiz integrations and analytics only.
 - It does not schedule, publish, import, or write KPI records during dry-run.
-- Local verification is green.
-- Hybrid deployment and live credential validation are still required before R4 live acceptance.
+- R4 live validation returned: credential valid, zero connected channels, zero KPI rows, no writes, honest customer setup blocker.
+- R4A channel selection UX is implemented locally:
+  - user can select listed channels
+  - user can paste a Postiz integration ID as pending validation
+  - user can run read-only analytics validation for an event
+  - the UI shows KPI preview rows or precise setup blockers
+- R4A still needs hybrid deployment/live validation.
 
 Next recommended work:
 
-1. Deploy R4 to hybrid and live-test against the tenant Postiz credential.
-2. If no Postiz channel exists, confirm honest zero-channel state.
-3. If a channel exists and `integrationId` is saved, confirm analytics preview rows.
-4. Then move to GHL read sync or Formaloo import depending on available customer credentials.
+1. Deploy R4A to hybrid and live-test the Postiz channel UX.
+2. If the customer connects a channel and saves `integrationId`, confirm analytics preview rows.
+3. Then move to GHL read sync or Formaloo import depending on available customer credentials.
 
 ## Current Required Verification
 
