@@ -121,6 +121,9 @@ describe('Sprint 56 production product integrity contracts', () => {
     expect(agentgateway).toContain('externalWritesAllowed: false');
     expect(agentgateway).toContain('rawSecretsReturned: false');
     expect(runtimeController).toContain('AGENTGATEWAY_DRY_RUN_POLICY_ENABLED');
+    expect(runtimeController).toContain("'/agentgateway/sandbox-policy/connector-dry-run'");
+    expect(runtimeController).toContain('AGENTGATEWAY_SANDBOX_POLICY_TOKEN');
+    expect(runtimeController).toContain('productionGateway: false');
   });
 
   it('keeps Tenant Admin subscription, export, and deletion controls connected to API clients', () => {

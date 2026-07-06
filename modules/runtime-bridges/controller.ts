@@ -63,6 +63,23 @@ const RUNTIME_METADATA: Record<RuntimeProvider, {
   },
 };
 
+const agentgatewaySandboxPolicySchema = z.object({
+  operation: z.literal('connector_import.dry_run'),
+  connectorId: z.string().trim().min(1).max(120),
+  eventId: z.string().nullable().optional(),
+  authority: z.object({
+    sourceOfTruth: z.literal('STITCH'),
+    tenantKey: z.string().trim().min(1).max(80),
+    humanUserId: z.string().trim().min(1).max(120),
+    role: z.string().trim().min(1).max(80),
+  }),
+  safety: z.object({
+    dryRunOnly: z.literal(true),
+    externalWritesAllowed: z.literal(false),
+    importWritesAllowed: z.literal(false),
+  }),
+});
+
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) throw new UnauthorizedError();
@@ -74,6 +91,73 @@ function requireRuntimeOpsRole(role: string) {
     throw new ForbiddenError('Admin/Ops runtime infrastructure evidence requires admin or CCO access');
   }
 }
+
+runtimeBridgesRouter.get('/agentgateway/sandbox-policy/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    provider: 'agentgateway',
+    adapter: 'sandbox_policy',
+    productionGateway: false,
+    supportedOperation: 'connector_import.dry_run',
+    externalWritesAllowed: false,
+    _label: 'Sandbox policy adapter for the first agentgateway dry-run mediation pilot',
+  });
+});
+
+runtimeBridgesRouter.post('/agentgateway/sandbox-policy/connector-dry-run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const configuredToken = process.env.AGENTGATEWAY_SANDBOX_POLICY_TOKEN;
+    if (!configuredToken) {
+      throw new AppError('agentgateway sandbox policy token is not configured.', 424, 'AGENTGATEWAY_SANDBOX_POLICY_NOT_CONFIGURED');
+    }
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${configuredToken}`) {
+      throw new UnauthorizedError('Invalid agentgateway sandbox policy token');
+    }
+
+    const input = agentgatewaySandboxPolicySchema.parse(req.body);
+    const supportedConnectors = new Set([
+      'postiz',
+      'gohighlevel',
+      'formaloo',
+      'meta_analytics',
+      'youtube_analytics',
+      'whatsapp_provider',
+      'telegram_provider',
+      'smartlabs_voice',
+    ]);
+
+    if (!supportedConnectors.has(input.connectorId)) {
+      res.status(200).json({
+        decision: 'deny',
+        reason: `Unsupported connector for sandbox policy: ${input.connectorId}`,
+        provider: 'agentgateway',
+        adapter: 'sandbox_policy',
+        productionGateway: false,
+        dryRunOnly: true,
+        externalWritesAllowed: false,
+      });
+      return;
+    }
+
+    res.json({
+      decision: 'allow',
+      reason: `Sandbox policy allowed ${input.connectorId} dry-run preview only. No import, publishing, CRM write, messaging, voice, or external write is authorized.`,
+      provider: 'agentgateway',
+      adapter: 'sandbox_policy',
+      productionGateway: false,
+      operation: input.operation,
+      connectorId: input.connectorId,
+      tenantKey: input.authority.tenantKey,
+      dryRunOnly: true,
+      externalWritesAllowed: false,
+      importWritesAllowed: false,
+      rawSecretsReturned: false,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 runtimeBridgesRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {

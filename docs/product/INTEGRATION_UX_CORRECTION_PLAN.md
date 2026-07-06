@@ -342,6 +342,38 @@ Truth after R2:
 - No connector production traffic is routed through agentgateway unless the env flag and tenant runtime credential are configured.
 - No external writes, CRM writes, publishing, messaging, voice execution, or OpenClaw orchestration are enabled by this sprint.
 
+### Sprint R3 - agentgateway Sandbox Policy Pilot Activation
+
+Status: Implemented as a sandbox policy adapter, not full production agentgateway.
+
+Official agentgateway documentation positions agentgateway as a proxy/data plane with routes, listeners, backends, and policies for HTTP, gRPC, MCP, and A2A traffic. It is not a simple built-in custom REST decision API for Tanaghum connector imports. Because of that, R3 activates a narrow sandbox policy target that matches the future gateway contract and can later sit behind a real agentgateway route.
+
+What R3 implements:
+
+- Adds an internal sandbox policy endpoint:
+  - `GET /runtime-bridges/agentgateway/sandbox-policy/health`
+  - `POST /runtime-bridges/agentgateway/sandbox-policy/connector-dry-run`
+- Protects the sandbox policy endpoint with `AGENTGATEWAY_SANDBOX_POLICY_TOKEN`.
+- Accepts only `connector_import.dry_run` policy payloads.
+- Requires `authority.sourceOfTruth = STITCH`.
+- Requires all write flags to be false:
+  - `dryRunOnly: true`
+  - `externalWritesAllowed: false`
+  - `importWritesAllowed: false`
+- Allows only supported connector IDs.
+- Denies unsupported connector IDs.
+- Keeps `productionGateway: false` in responses so nobody mistakes this for full agentgateway production traffic.
+- Documents `AGENTGATEWAY_DRY_RUN_POLICY_ENABLED` and `AGENTGATEWAY_SANDBOX_POLICY_TOKEN` in `.env.example`.
+
+Truth after R3:
+
+- The STITCH dry-run mediation hook can now be pointed at a live sandbox policy endpoint.
+- The sandbox endpoint proves allow/deny behavior and policy payload shape.
+- The VPS can enable `AGENTGATEWAY_DRY_RUN_POLICY_ENABLED=true` only after a tenant runtime credential is saved.
+- This is still not full production agentgateway deployment.
+- No connector adapter imports real external data because read-only provider adapters are still separate work.
+- No external writes, import approvals, publishing, CRM writes, messaging, voice calls, OpenClaw orchestration, or M5 execution are enabled by this sprint.
+
 ### Sprint I1 - Integration UX Simplification
 
 Goal: Make the page understandable in 30 seconds.
