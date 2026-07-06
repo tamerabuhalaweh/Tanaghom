@@ -58,7 +58,7 @@ describe('LeadConnectorClient', () => {
     const result = await client.pull(25);
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://services.leadconnectorhq.com/contacts/search', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://services.leadconnectorhq.com/opportunities/search', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://services.leadconnectorhq.com/opportunities/search?location_id=loc-1&limit=25', expect.objectContaining({ method: 'GET' }));
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://services.leadconnectorhq.com/contacts/contact-1/appointments', expect.objectContaining({ method: 'GET' }));
     expect(result.contacts).toHaveLength(1);
     expect(result.opportunities).toHaveLength(1);

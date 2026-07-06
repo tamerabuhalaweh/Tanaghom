@@ -117,15 +117,8 @@ export class LeadConnectorClient implements GhlClient {
           pageLimit: limit,
         }),
       }),
-      this.request('/opportunities/search', {
-        method: 'POST',
-        body: JSON.stringify({
-          location_id: this.config.locationId,
-          locationId: this.config.locationId,
-          limit,
-          page: 1,
-          pageLimit: limit,
-        }),
+      this.request(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=${limit}`, {
+        method: 'GET',
       }),
     ]);
 
