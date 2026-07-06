@@ -29,6 +29,7 @@ import {
   saveLocationMapping,
   testGhlConnection,
   validateMappingAcceptance,
+  validateGhlLiveCredentials,
 } from '../service';
 
 describe('GHL Setup - tenant isolation', () => {
@@ -474,5 +475,170 @@ describe('GHL Setup - production mapping acceptance', () => {
     expect(result.readyForReadSync).toBe(true);
     expect(result.missingRequiredOutcomes).toEqual([]);
     process.env.GHL_READ_SYNC_ENABLED = original;
+  });
+});
+
+describe('GHL Setup - live customer credential validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    credentialServiceMocks.getActiveIntegrationCredential.mockResolvedValue(null);
+    prismaMocks.integrationCredential.update.mockResolvedValue({});
+    prismaMocks.connectorFieldMapping.findMany.mockResolvedValue([]);
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue(null);
+  });
+
+  it('does not call GHL live validation when tenant credential is missing', async () => {
+    const clientFactory = vi.fn();
+    const result = await validateGhlLiveCredentials('admin', 'user-1', 'customer-a', clientFactory);
+
+    expect(result.status).toBe('requires_credentials');
+    expect(result.requiredActions[0]).toContain('Save the customer-owned GoHighLevel API key');
+    expect(result.rawSecretsReturned).toBe(false);
+    expect(result.rawPayloadReturned).toBe(false);
+    expect(clientFactory).not.toHaveBeenCalled();
+  });
+
+  it('validates live GHL read surfaces and marks credential validated when core CRM reads pass', async () => {
+    credentialServiceMocks.getActiveIntegrationCredential.mockResolvedValue({
+      secrets: {
+        apiKey: 'tenant-ghl-key',
+        locationId: 'loc-1',
+        baseUrl: 'https://services.leadconnectorhq.com',
+      },
+    });
+    prismaMocks.connectorFieldMapping.findMany.mockResolvedValue([
+      {
+        id: 'tag-hot',
+        field_mappings: { mappingType: 'tag', ghlTagId: 'tag-hot', ghlTagName: 'Hot Lead', internalTag: 'hot', direction: 'inbound' },
+        validation_status: 'valid',
+      },
+      {
+        id: 'stage-booked',
+        field_mappings: { mappingType: 'pipeline', ghlPipelineId: 'pipe-sales', ghlPipelineName: 'Sales', ghlStageId: 'stage-booked', ghlStageName: 'Booked Meeting', internalStage: 'meeting_booked' },
+        validation_status: 'valid',
+      },
+    ]);
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({
+      field_mappings: { ghlLocationId: 'loc-1', displayName: 'Main' },
+      validation_status: 'valid',
+    });
+    const clientFactory = vi.fn().mockReturnValue({
+      validateReadAccess: vi.fn().mockResolvedValue({
+        canReadContacts: true,
+        checkedContacts: 1,
+        canReadOpportunities: true,
+        checkedOpportunities: 1,
+        canReadTags: true,
+        tagsFound: 1,
+        canReadPipelines: true,
+        pipelinesFound: 1,
+        stagesFound: 1,
+        remoteTags: [{ id: 'tag-hot', name: 'Hot Lead' }],
+        remotePipelineStages: [{ pipelineId: 'pipe-sales', pipelineName: 'Sales', stageId: 'stage-booked', stageName: 'Booked Meeting' }],
+        warnings: [],
+        rawPayloadReturned: false,
+      }),
+    });
+
+    const result = await validateGhlLiveCredentials('marketing_manager', 'user-1', 'customer-a', clientFactory);
+
+    expect(result.status).toBe('validated');
+    expect(result.canReadContacts).toBe(true);
+    expect(result.canReadOpportunities).toBe(true);
+    expect(result.canReadTags).toBe(true);
+    expect(result.canReadPipelines).toBe(true);
+    expect(result.missingSavedMappings).toEqual([]);
+    expect(result.rawSecretsReturned).toBe(false);
+    expect(result.rawPayloadReturned).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('tenant-ghl-key');
+    expect(prismaMocks.integrationCredential.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenant_key_provider_credential_type_connection_key: expect.objectContaining({ tenant_key: 'customer-a' }),
+        }),
+        data: expect.objectContaining({ last_validated_at: expect.any(Date) }),
+      }),
+    );
+  });
+
+  it('returns validated_with_warnings when saved mappings do not exist in live GHL reference data', async () => {
+    credentialServiceMocks.getActiveIntegrationCredential.mockResolvedValue({
+      secrets: {
+        apiKey: 'tenant-ghl-key',
+        locationId: 'loc-1',
+      },
+    });
+    prismaMocks.connectorFieldMapping.findMany.mockResolvedValue([
+      {
+        id: 'tag-missing',
+        field_mappings: { mappingType: 'tag', ghlTagId: 'tag-missing', ghlTagName: 'Missing Tag', internalTag: 'hot', direction: 'inbound' },
+        validation_status: 'valid',
+      },
+      {
+        id: 'stage-missing',
+        field_mappings: { mappingType: 'pipeline', ghlPipelineId: 'pipe-sales', ghlPipelineName: 'Sales', ghlStageId: 'stage-missing', ghlStageName: 'Missing Stage', internalStage: 'purchased' },
+        validation_status: 'valid',
+      },
+    ]);
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({
+      field_mappings: { ghlLocationId: 'loc-1', displayName: 'Main' },
+      validation_status: 'valid',
+    });
+    const clientFactory = vi.fn().mockReturnValue({
+      validateReadAccess: vi.fn().mockResolvedValue({
+        canReadContacts: true,
+        checkedContacts: 0,
+        canReadOpportunities: true,
+        checkedOpportunities: 0,
+        canReadTags: true,
+        tagsFound: 1,
+        canReadPipelines: true,
+        pipelinesFound: 1,
+        stagesFound: 1,
+        remoteTags: [{ id: 'tag-hot', name: 'Hot Lead' }],
+        remotePipelineStages: [{ pipelineId: 'pipe-sales', pipelineName: 'Sales', stageId: 'stage-booked', stageName: 'Booked Meeting' }],
+        warnings: [],
+        rawPayloadReturned: false,
+      }),
+    });
+
+    const result = await validateGhlLiveCredentials('admin', 'user-1', 'customer-a', clientFactory);
+
+    expect(result.status).toBe('validated_with_warnings');
+    expect(result.missingSavedMappings).toHaveLength(2);
+    expect(result.requiredActions).toContain('Update saved Tanaghum mappings so every mapped GHL tag/stage exists in the connected location.');
+    expect(result.rawPayloadReturned).toBe(false);
+  });
+
+  it('fails live validation when core CRM read permissions are missing', async () => {
+    credentialServiceMocks.getActiveIntegrationCredential.mockResolvedValue({
+      secrets: {
+        apiKey: 'tenant-ghl-key',
+        locationId: 'loc-1',
+      },
+    });
+    const clientFactory = vi.fn().mockReturnValue({
+      validateReadAccess: vi.fn().mockResolvedValue({
+        canReadContacts: true,
+        checkedContacts: 1,
+        canReadOpportunities: false,
+        checkedOpportunities: 0,
+        canReadTags: true,
+        tagsFound: 0,
+        canReadPipelines: false,
+        pipelinesFound: 0,
+        stagesFound: 0,
+        remoteTags: [],
+        remotePipelineStages: [],
+        warnings: ['Opportunities read check failed with status 403.'],
+        rawPayloadReturned: false,
+      }),
+    });
+
+    const result = await validateGhlLiveCredentials('admin', 'user-1', 'customer-a', clientFactory);
+
+    expect(result.status).toBe('failed');
+    expect(result.requiredActions).toContain('Grant opportunities read access to the customer GoHighLevel credential.');
+    expect(prismaMocks.integrationCredential.update).not.toHaveBeenCalled();
   });
 });

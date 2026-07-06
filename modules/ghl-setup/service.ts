@@ -1,10 +1,12 @@
 import { auditLog } from '@shared/logging';
-import { LeadConnectorClient, type GhlConnectionTestResult } from '../ghl-sync/client';
+import { LeadConnectorClient, type GhlConnectionTestResult, type GhlLiveReadValidationResult } from '../ghl-sync/client';
 import { checkGhlSetupReadPermission, checkGhlSetupWritePermission } from './policy';
 import * as repo from './repository';
 import type {
   GhlConnectionAcceptance,
   GhlCredentialStatus,
+  GhlLiveValidation,
+  GhlMissingRemoteMapping,
   GhlMappingAcceptance,
   GhlSetupWizardState,
   GhlWizardStep,
@@ -35,7 +37,20 @@ interface GhlConnectionTestClient {
   testConnection(): Promise<GhlConnectionTestResult>;
 }
 
+interface GhlLiveValidationClient {
+  validateReadAccess(): Promise<GhlLiveReadValidationResult>;
+}
+
 function defaultClientFactory(config: repo.GhlSetupRuntimeConfig): GhlConnectionTestClient {
+  return new LeadConnectorClient({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    locationId: config.locationId,
+    version: process.env.GHL_API_VERSION || '2021-07-28',
+  });
+}
+
+function defaultLiveValidationClientFactory(config: repo.GhlSetupRuntimeConfig): GhlLiveValidationClient {
   return new LeadConnectorClient({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
@@ -147,10 +162,164 @@ export async function testGhlConnection(
   }
 }
 
+export async function validateGhlLiveCredentials(
+  role: string,
+  userId: string,
+  tenantKey: string,
+  clientFactory = defaultLiveValidationClientFactory,
+): Promise<GhlLiveValidation> {
+  checkGhlSetupWritePermission(role);
+
+  const config = await repo.resolveGhlSetupRuntimeConfig(tenantKey);
+  if (!config.apiKey || !config.locationId || config.source !== 'tenant_vault') {
+    return {
+      status: 'requires_credentials',
+      canReadContacts: false,
+      checkedContacts: 0,
+      canReadOpportunities: false,
+      checkedOpportunities: 0,
+      canReadTags: false,
+      tagsFound: 0,
+      canReadPipelines: false,
+      pipelinesFound: 0,
+      stagesFound: 0,
+      missingSavedMappings: [],
+      warnings: [],
+      requiredActions: ['Save the customer-owned GoHighLevel API key and location ID first.'],
+      lastValidatedAt: null,
+      rawSecretsReturned: false,
+      rawPayloadReturned: false,
+    };
+  }
+
+  try {
+    const [liveResult, readiness] = await Promise.all([
+      clientFactory(config).validateReadAccess(),
+      repo.getGhlMappingReadiness(tenantKey),
+    ]);
+    const missingSavedMappings = findMissingSavedMappings(readiness, liveResult);
+    const requiredActions: string[] = [];
+    if (!liveResult.canReadContacts) requiredActions.push('Grant contacts read access to the customer GoHighLevel credential.');
+    if (!liveResult.canReadOpportunities) requiredActions.push('Grant opportunities read access to the customer GoHighLevel credential.');
+    if (!liveResult.canReadTags) requiredActions.push('Grant location tags read access to verify saved tag mappings.');
+    if (!liveResult.canReadPipelines) requiredActions.push('Grant opportunities pipeline read access to verify saved pipeline mappings.');
+    if (missingSavedMappings.length) requiredActions.push('Update saved Tanaghum mappings so every mapped GHL tag/stage exists in the connected location.');
+
+    const canReadCoreCrm = liveResult.canReadContacts && liveResult.canReadOpportunities;
+    const canReadReferenceData = liveResult.canReadTags && liveResult.canReadPipelines;
+    const status: GhlLiveValidation['status'] = canReadCoreCrm && canReadReferenceData && missingSavedMappings.length === 0
+      ? 'validated'
+      : canReadCoreCrm
+        ? 'validated_with_warnings'
+        : 'failed';
+
+    let validatedAt: Date | null = null;
+    if (canReadCoreCrm) {
+      validatedAt = new Date();
+      await repo.markGhlCredentialValidated(tenantKey, validatedAt);
+    }
+
+    auditLog(
+      { actor: `user:${userId}`, action: 'ghl_live_credential_validation', object_type: 'ghl_setup', object_id: tenantKey, result: status },
+      `GHL live read validation for tenant ${tenantKey}: contacts=${liveResult.canReadContacts}, opportunities=${liveResult.canReadOpportunities}, tags=${liveResult.canReadTags}, pipelines=${liveResult.canReadPipelines}`,
+    );
+
+    return {
+      status,
+      canReadContacts: liveResult.canReadContacts,
+      checkedContacts: liveResult.checkedContacts,
+      canReadOpportunities: liveResult.canReadOpportunities,
+      checkedOpportunities: liveResult.checkedOpportunities,
+      canReadTags: liveResult.canReadTags,
+      tagsFound: liveResult.tagsFound,
+      canReadPipelines: liveResult.canReadPipelines,
+      pipelinesFound: liveResult.pipelinesFound,
+      stagesFound: liveResult.stagesFound,
+      missingSavedMappings,
+      warnings: liveResult.warnings,
+      requiredActions,
+      lastValidatedAt: validatedAt?.toISOString() ?? null,
+      rawSecretsReturned: false,
+      rawPayloadReturned: false,
+    };
+  } catch (err) {
+    auditLog(
+      { actor: `user:${userId}`, action: 'ghl_live_credential_validation_failed', object_type: 'ghl_setup', object_id: tenantKey, result: 'failed' },
+      `GHL live read validation failed for tenant ${tenantKey}: ${err instanceof Error ? err.message : 'unknown error'}`,
+    );
+    return {
+      status: 'failed',
+      canReadContacts: false,
+      checkedContacts: 0,
+      canReadOpportunities: false,
+      checkedOpportunities: 0,
+      canReadTags: false,
+      tagsFound: 0,
+      canReadPipelines: false,
+      pipelinesFound: 0,
+      stagesFound: 0,
+      missingSavedMappings: [],
+      warnings: [],
+      requiredActions: ['Check the GoHighLevel API key, location ID, scopes, API version, and network access, then validate again.'],
+      lastValidatedAt: null,
+      rawSecretsReturned: false,
+      rawPayloadReturned: false,
+    };
+  }
+}
+
 export async function validateMappingAcceptance(role: string, tenantKey: string): Promise<GhlMappingAcceptance> {
   checkGhlSetupReadPermission(role);
   const readiness = await repo.getGhlMappingReadiness(tenantKey);
   return buildMappingAcceptance(readiness);
+}
+
+function normalizeRef(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function findMissingSavedMappings(
+  readiness: GhlMappingReadiness,
+  liveResult: GhlLiveReadValidationResult,
+): GhlMissingRemoteMapping[] {
+  const missing: GhlMissingRemoteMapping[] = [];
+  if (liveResult.canReadTags) {
+    const remoteTags = new Set(liveResult.remoteTags.flatMap(tag => [normalizeRef(tag.id), normalizeRef(tag.name)]).filter(Boolean));
+    for (const item of readiness.tags.items.filter(tag => tag.status === 'mapped')) {
+      if (!remoteTags.has(normalizeRef(item.ghlTagId)) && !remoteTags.has(normalizeRef(item.ghlTagName))) {
+        missing.push({
+          type: 'tag',
+          id: item.ghlTagId,
+          name: item.ghlTagName,
+          reason: 'Saved tag mapping was not found in the connected GHL location.',
+        });
+      }
+    }
+  }
+
+  if (liveResult.canReadPipelines) {
+    const remoteStages = new Set(liveResult.remotePipelineStages.flatMap(stage => [
+      normalizeRef(stage.stageId),
+      normalizeRef(stage.stageName),
+      `${normalizeRef(stage.pipelineId)}:${normalizeRef(stage.stageId)}`,
+      `${normalizeRef(stage.pipelineName)}:${normalizeRef(stage.stageName)}`,
+    ]).filter(Boolean));
+    for (const item of readiness.pipelines.items.filter(stage => stage.status === 'mapped')) {
+      const directStageMatches = remoteStages.has(normalizeRef(item.ghlStageId)) || remoteStages.has(normalizeRef(item.ghlStageName));
+      const scopedStageMatches = remoteStages.has(`${normalizeRef(item.ghlPipelineId)}:${normalizeRef(item.ghlStageId)}`)
+        || remoteStages.has(`${normalizeRef(item.ghlPipelineName)}:${normalizeRef(item.ghlStageName)}`);
+      if (!directStageMatches && !scopedStageMatches) {
+        missing.push({
+          type: 'pipeline_stage',
+          id: item.ghlStageId,
+          name: `${item.ghlPipelineName} / ${item.ghlStageName}`,
+          reason: 'Saved pipeline stage mapping was not found in the connected GHL location.',
+        });
+      }
+    }
+  }
+
+  return missing;
 }
 
 export async function saveTagMappings(

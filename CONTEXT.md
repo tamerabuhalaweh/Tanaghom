@@ -114,11 +114,26 @@ Current R5A status:
 - Real read sync still requires customer-owned credentials, mappings, and `GHL_READ_SYNC_ENABLED=true`.
 - CRM writes remain blocked unless separately authorized through `GHL_WRITE_BACK_ENABLED=true`.
 
+Current R5B status:
+
+- In implementation on 2026-07-06.
+- Adds `POST /ghl-setup/live-validation` for customer-owned GHL credential validation.
+- The endpoint calls only read-only GHL surfaces:
+  - contacts search
+  - opportunities search
+  - location tags
+  - opportunity pipelines and stages
+- The response returns status/counts/blockers only, with `rawSecretsReturned: false` and `rawPayloadReturned: false`.
+- Saved Tanaghum GHL tag/stage mappings are compared against live GHL tags and pipeline stages when those read scopes are available.
+- No CRM write-back, WhatsApp send, or workflow mutation is enabled by R5B.
+- Full live acceptance still requires customer-owned GHL API key, location ID, and read scopes.
+
 Next recommended work:
 
-1. If the customer provides real GHL credentials, run GHL credential acceptance.
-2. If accepted, map required tags/stages and run GHL read-sync preview with `GHL_READ_SYNC_ENABLED=true`.
-3. Then move to Formaloo import or Meta/YouTube analytics readiness depending on available customer credentials.
+1. Finish R5B verification and deploy to hybrid.
+2. If the customer provides real GHL credentials, run GHL live validation.
+3. If accepted, map required tags/stages and run GHL read-sync preview with `GHL_READ_SYNC_ENABLED=true`.
+4. Then move to Formaloo import or Meta/YouTube analytics readiness depending on available customer credentials.
 
 ## Current Required Verification
 

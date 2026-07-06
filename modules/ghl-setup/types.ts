@@ -110,6 +110,41 @@ export interface GhlConnectionAcceptance {
   rawPayloadReturned: false;
 }
 
+export const GHL_LIVE_VALIDATION_STATUSES = [
+  'requires_credentials',
+  'failed',
+  'validated',
+  'validated_with_warnings',
+] as const;
+
+export type GhlLiveValidationStatus = (typeof GHL_LIVE_VALIDATION_STATUSES)[number];
+
+export interface GhlMissingRemoteMapping {
+  type: 'tag' | 'pipeline_stage';
+  id: string;
+  name: string;
+  reason: string;
+}
+
+export interface GhlLiveValidation {
+  status: GhlLiveValidationStatus;
+  canReadContacts: boolean;
+  checkedContacts: number;
+  canReadOpportunities: boolean;
+  checkedOpportunities: number;
+  canReadTags: boolean;
+  tagsFound: number;
+  canReadPipelines: boolean;
+  pipelinesFound: number;
+  stagesFound: number;
+  missingSavedMappings: GhlMissingRemoteMapping[];
+  warnings: string[];
+  requiredActions: string[];
+  lastValidatedAt: string | null;
+  rawSecretsReturned: false;
+  rawPayloadReturned: false;
+}
+
 export interface GhlMappingOutcome {
   key: string;
   label: string;

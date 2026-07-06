@@ -18,6 +18,34 @@ export interface GhlConnectionTestResult {
   rawPayloadReturned: false;
 }
 
+export interface GhlRemoteTagReference {
+  id: string;
+  name: string;
+}
+
+export interface GhlRemotePipelineStageReference {
+  pipelineId: string;
+  pipelineName: string;
+  stageId: string;
+  stageName: string;
+}
+
+export interface GhlLiveReadValidationResult {
+  canReadContacts: boolean;
+  checkedContacts: number;
+  canReadOpportunities: boolean;
+  checkedOpportunities: number;
+  canReadTags: boolean;
+  tagsFound: number;
+  canReadPipelines: boolean;
+  pipelinesFound: number;
+  stagesFound: number;
+  remoteTags: GhlRemoteTagReference[];
+  remotePipelineStages: GhlRemotePipelineStageReference[];
+  warnings: string[];
+  rawPayloadReturned: false;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -55,6 +83,35 @@ function extractItems(body: unknown, keys: string[]): unknown[] {
     if (nested.length) return nested;
   }
   return [];
+}
+
+function normalizeRemoteTag(input: unknown): GhlRemoteTagReference | null {
+  const record = asRecord(input);
+  const id = firstString(record, ['id', 'tagId', '_id']);
+  const name = firstString(record, ['name', 'tagName', 'label']);
+  if (!id || !name) return null;
+  return { id, name };
+}
+
+function flattenStages(input: unknown[]): unknown[] {
+  return input.flatMap(item => Array.isArray(item) ? item : [item]);
+}
+
+function normalizePipelineStages(input: unknown): GhlRemotePipelineStageReference[] {
+  const pipeline = asRecord(input);
+  const pipelineId = firstString(pipeline, ['id', 'pipelineId', '_id']);
+  const pipelineName = firstString(pipeline, ['name', 'pipelineName']);
+  if (!pipelineId || !pipelineName) return [];
+
+  return flattenStages(asArray(pipeline.stages))
+    .map(stageInput => {
+      const stage = asRecord(stageInput);
+      const stageId = firstString(stage, ['id', 'stageId', 'pipelineStageId', '_id']);
+      const stageName = firstString(stage, ['name', 'stageName']);
+      if (!stageId || !stageName) return null;
+      return { pipelineId, pipelineName, stageId, stageName };
+    })
+    .filter((stage): stage is GhlRemotePipelineStageReference => Boolean(stage));
 }
 
 function normalizeContact(input: unknown): GhlContact | null {
@@ -117,12 +174,62 @@ export class LeadConnectorClient implements GhlClient {
       method: 'POST',
       body: JSON.stringify({
         locationId: this.config.locationId,
-        page: 1,
-        pageLimit: 1,
+        skip: 0,
+        limit: 1,
       }),
     });
     return {
       checkedContacts: extractItems(contactsBody, ['contacts', 'items', 'results']).length,
+      rawPayloadReturned: false,
+    };
+  }
+
+  async validateReadAccess(): Promise<GhlLiveReadValidationResult> {
+    const warnings: string[] = [];
+    const contactsResult = await this.readValidationEndpoint('/contacts/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        locationId: this.config.locationId,
+        skip: 0,
+        limit: 1,
+      }),
+    });
+    const opportunitiesResult = await this.readValidationEndpoint(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=1`, {
+      method: 'GET',
+    });
+    const tagsResult = await this.readValidationEndpoint(`/locations/${encodeURIComponent(this.config.locationId)}/tags`, {
+      method: 'GET',
+    });
+    const pipelinesResult = await this.readValidationEndpoint(`/opportunities/pipelines?locationId=${encodeURIComponent(this.config.locationId)}`, {
+      method: 'GET',
+    });
+
+    if (!contactsResult.ok) warnings.push(`Contacts read check failed with status ${contactsResult.status}.`);
+    if (!opportunitiesResult.ok) warnings.push(`Opportunities read check failed with status ${opportunitiesResult.status}.`);
+    if (!tagsResult.ok) warnings.push(`Tags read check failed with status ${tagsResult.status}.`);
+    if (!pipelinesResult.ok) warnings.push(`Pipeline read check failed with status ${pipelinesResult.status}.`);
+
+    const contactItems = contactsResult.ok ? extractItems(contactsResult.body, ['contacts', 'items', 'results']) : [];
+    const opportunityItems = opportunitiesResult.ok ? extractItems(opportunitiesResult.body, ['opportunities', 'items', 'results']) : [];
+    const remoteTags = tagsResult.ok
+      ? extractItems(tagsResult.body, ['tags', 'items', 'results']).map(normalizeRemoteTag).filter((tag): tag is GhlRemoteTagReference => Boolean(tag))
+      : [];
+    const pipelines = pipelinesResult.ok ? extractItems(pipelinesResult.body, ['pipelines', 'items', 'results']) : [];
+    const remotePipelineStages = pipelines.flatMap(normalizePipelineStages);
+
+    return {
+      canReadContacts: contactsResult.ok,
+      checkedContacts: contactItems.length,
+      canReadOpportunities: opportunitiesResult.ok,
+      checkedOpportunities: opportunityItems.length,
+      canReadTags: tagsResult.ok,
+      tagsFound: remoteTags.length,
+      canReadPipelines: pipelinesResult.ok,
+      pipelinesFound: pipelines.length,
+      stagesFound: remotePipelineStages.length,
+      remoteTags,
+      remotePipelineStages,
+      warnings,
       rawPayloadReturned: false,
     };
   }
@@ -133,8 +240,8 @@ export class LeadConnectorClient implements GhlClient {
         method: 'POST',
         body: JSON.stringify({
           locationId: this.config.locationId,
-          page: 1,
-          pageLimit: limit,
+          skip: 0,
+          limit,
         }),
       }),
       this.request(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=${limit}`, {
@@ -193,6 +300,18 @@ export class LeadConnectorClient implements GhlClient {
       throw new ExternalServiceError('GoHighLevel', `API returned ${response.status}`);
     }
     return body;
+  }
+
+  private async readValidationEndpoint(path: string, init: RequestInit): Promise<{ ok: boolean; status: number; body: unknown }> {
+    const response = await fetch(`${this.config.baseUrl}${path}`, {
+      ...init,
+      headers: {
+        ...this.headers(),
+        ...(init.headers || {}),
+      },
+    });
+    const body = await response.json().catch(() => ({ statusText: response.statusText }));
+    return { ok: response.ok, status: response.status, body };
   }
 
   private headers(): Record<string, string> {

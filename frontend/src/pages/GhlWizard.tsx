@@ -80,6 +80,7 @@ export default function GhlWizard() {
   const [writeCheck, setWriteCheck] = useState<RecordMap | null>(null);
   const [connectionTest, setConnectionTest] = useState<RecordMap | null>(null);
   const [mappingCheck, setMappingCheck] = useState<RecordMap | null>(null);
+  const [liveValidation, setLiveValidation] = useState<RecordMap | null>(null);
   const [locationForm, setLocationForm] = useState({ ghlLocationId: '', displayName: '' });
   const [tagForm, setTagForm] = useState({
     ghlTagId: '',
@@ -137,6 +138,10 @@ export default function GhlWizard() {
   const missingMappingOutcomes = asRecords((mappingCheck || mappingAcceptance).missingRequiredOutcomes);
   const mappingWarnings = asStrings((mappingCheck || mappingAcceptance).warnings);
   const requiredActions = asStrings((connectionTest || connectionAcceptance).requiredActions);
+  const liveValidationStatus = text(liveValidation?.status, 'Not run yet');
+  const liveValidationActions = asStrings(liveValidation?.requiredActions);
+  const liveValidationWarnings = asStrings(liveValidation?.warnings);
+  const missingSavedMappings = asRecords(liveValidation?.missingSavedMappings);
 
   const railSteps = useMemo(() => {
     return ['credentials', 'location', 'tags', 'pipeline', 'review'].map(step => ({
@@ -242,6 +247,25 @@ export default function GhlWizard() {
     }
   }
 
+  async function validateLiveGhl() {
+    if (!token) return;
+    setSaving('live-validation');
+    setMessage('');
+    try {
+      const result = await ghlSetupApi.liveValidation(token);
+      setLiveValidation(result as RecordMap);
+      const status = text(asRecord(result).status, 'failed');
+      setMessage(status === 'validated'
+        ? 'Live GHL validation passed. Tanaghum can read the customer CRM location.'
+        : 'Live GHL validation needs attention. Review the customer actions below.');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Live GHL validation failed');
+    } finally {
+      setSaving('');
+    }
+  }
+
   async function testWriteGate() {
     if (!token) return;
     setSaving('write');
@@ -302,6 +326,54 @@ export default function GhlWizard() {
             </ul>
           </div>
         )}
+      </ProductCard>
+
+      <ProductCard
+        title="Live Customer CRM Validation"
+        subtitle="After the customer saves a real GHL API key and location ID, validate read-only access to contacts, opportunities, tags, and pipeline stages. This does not write to GHL."
+        action={<PrimaryAction onClick={validateLiveGhl} disabled={saving === 'live-validation' || !hasApiKey || !hasLocationId}>
+          {saving === 'live-validation' ? 'Validating...' : 'Validate Live CRM Access'}
+        </PrimaryAction>}
+      >
+        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+            <div className="text-xs font-semibold uppercase text-neutral-500">Live validation</div>
+            <div className="mt-2 text-2xl font-semibold text-neutral-950">{titleCase(liveValidationStatus)}</div>
+            <p className="mt-2 text-sm text-neutral-600">
+              {liveValidation
+                ? 'The backend tested only read access and returned status/counts, not CRM payloads.'
+                : 'Run this after the customer provides their real GoHighLevel credential.'}
+            </p>
+          </div>
+          <div className="space-y-4">
+            <DetailGrid items={[
+              { label: 'Contacts', value: liveValidation ? `${liveValidation.canReadContacts === true ? 'Readable' : 'Blocked'} (${Number(liveValidation.checkedContacts || 0)} checked)` : 'Not tested' },
+              { label: 'Opportunities', value: liveValidation ? `${liveValidation.canReadOpportunities === true ? 'Readable' : 'Blocked'} (${Number(liveValidation.checkedOpportunities || 0)} checked)` : 'Not tested' },
+              { label: 'Tags', value: liveValidation ? `${liveValidation.canReadTags === true ? 'Readable' : 'Blocked'} (${Number(liveValidation.tagsFound || 0)} found)` : 'Not tested' },
+              { label: 'Pipelines', value: liveValidation ? `${liveValidation.canReadPipelines === true ? 'Readable' : 'Blocked'} (${Number(liveValidation.pipelinesFound || 0)} pipelines, ${Number(liveValidation.stagesFound || 0)} stages)` : 'Not tested' },
+              { label: 'Raw Payload Returned', value: liveValidation?.rawPayloadReturned === false ? 'No' : 'No test run yet' },
+            ]} />
+            {missingSavedMappings.length > 0 && (
+              <ProductTable
+                columns={['Saved mapping not found in GHL', 'Type', 'Action']}
+                rows={missingSavedMappings.map(item => [
+                  <div>
+                    <div className="font-medium text-neutral-950">{text(item.name)}</div>
+                    <div className="mt-1 text-xs text-neutral-500">{text(item.id)}</div>
+                  </div>,
+                  titleCase(text(item.type)),
+                  text(item.reason),
+                ])}
+              />
+            )}
+            {liveValidationActions.length > 0 && (
+              <Notice tone="warn">{liveValidationActions.join(' ')}</Notice>
+            )}
+            {liveValidationWarnings.length > 0 && (
+              <Notice tone="info">{liveValidationWarnings.join(' ')}</Notice>
+            )}
+          </div>
+        </div>
       </ProductCard>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">

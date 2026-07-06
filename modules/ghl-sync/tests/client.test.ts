@@ -88,4 +88,68 @@ describe('LeadConnectorClient', () => {
     expect(result.appointments).toEqual([]);
     expect(result.warnings[0]).toContain('Could not read appointments');
   });
+
+  it('validates live read access without returning raw GHL payloads', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ contacts: [{ id: 'contact-1' }] }))
+      .mockResolvedValueOnce(response({ opportunities: [{ id: 'opp-1', contactId: 'contact-1' }] }))
+      .mockResolvedValueOnce(response({ tags: [{ id: 'tag-hot', name: 'Hot Lead' }] }))
+      .mockResolvedValueOnce(response({
+        pipelines: [{
+          id: 'pipe-sales',
+          name: 'Sales',
+          stages: [{ id: 'stage-booked', name: 'Booked Meeting' }],
+        }],
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new LeadConnectorClient({
+      baseUrl: 'https://services.leadconnectorhq.com',
+      apiKey: 'tenant-owned-key',
+      locationId: 'loc-1',
+      version: '2021-07-28',
+    });
+
+    const result = await client.validateReadAccess();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://services.leadconnectorhq.com/contacts/search', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://services.leadconnectorhq.com/opportunities/search?location_id=loc-1&limit=1', expect.objectContaining({ method: 'GET' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://services.leadconnectorhq.com/locations/loc-1/tags', expect.objectContaining({ method: 'GET' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, 'https://services.leadconnectorhq.com/opportunities/pipelines?locationId=loc-1', expect.objectContaining({ method: 'GET' }));
+    expect(result.canReadContacts).toBe(true);
+    expect(result.canReadOpportunities).toBe(true);
+    expect(result.canReadTags).toBe(true);
+    expect(result.canReadPipelines).toBe(true);
+    expect(result.tagsFound).toBe(1);
+    expect(result.stagesFound).toBe(1);
+    expect(result.remoteTags).toEqual([{ id: 'tag-hot', name: 'Hot Lead' }]);
+    expect(result.remotePipelineStages).toEqual([{ pipelineId: 'pipe-sales', pipelineName: 'Sales', stageId: 'stage-booked', stageName: 'Booked Meeting' }]);
+    expect(result.rawPayloadReturned).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('tenant-owned-key');
+  });
+
+  it('returns granular blockers when some live read surfaces fail', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ contacts: [{ id: 'contact-1' }] }))
+      .mockResolvedValueOnce(response({ message: 'forbidden' }, false, 403))
+      .mockResolvedValueOnce(response({ tags: [] }))
+      .mockResolvedValueOnce(response({ message: 'forbidden' }, false, 403));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new LeadConnectorClient({
+      baseUrl: 'https://services.leadconnectorhq.com',
+      apiKey: 'tenant-owned-key',
+      locationId: 'loc-1',
+      version: '2021-07-28',
+    });
+
+    const result = await client.validateReadAccess();
+
+    expect(result.canReadContacts).toBe(true);
+    expect(result.canReadOpportunities).toBe(false);
+    expect(result.canReadPipelines).toBe(false);
+    expect(result.warnings).toContain('Opportunities read check failed with status 403.');
+    expect(result.warnings).toContain('Pipeline read check failed with status 403.');
+    expect(result.rawPayloadReturned).toBe(false);
+  });
 });

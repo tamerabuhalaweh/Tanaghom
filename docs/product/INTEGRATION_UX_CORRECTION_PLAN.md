@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; Sprint R5A GoHighLevel customer credential acceptance and mapping validation deployed/live-smoked with honest customer-credential blocker; full production runtime pilots still pending
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; Sprint R5A GoHighLevel customer credential acceptance and mapping validation deployed/live-smoked with honest customer-credential blocker; Sprint R5B GoHighLevel live read validation implemented locally and awaiting deployment/live smoke; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -616,6 +616,42 @@ Verification on 2026-07-06:
 - Backend build: passed.
 - Frontend lint: passed.
 - Frontend build: passed.
+
+### Sprint R5B - GHL Live Customer Credential Validation
+
+Goal: When the customer provides real GHL credentials, validate read-only CRM access and prove saved mappings belong to the connected GHL location.
+
+Status: Implemented locally; deployment/live smoke pending at this document update.
+
+What R5B adds:
+
+- `POST /api/ghl-setup/live-validation`.
+- Calls only read-only GHL endpoints:
+  - contacts search
+  - opportunities search
+  - location tags
+  - opportunity pipelines and stages
+- Returns only status, counts, setup blockers, and missing mapping references.
+- Never returns raw GHL payloads or raw secrets.
+- Marks the credential validated when core CRM read access works for contacts and opportunities.
+- Compares saved Tanaghum mappings against live GHL tags and pipeline stages when those read scopes are available.
+- Shows a "Live Customer CRM Validation" action in the GHL wizard.
+
+Expected blockers without customer data:
+
+- Missing customer-owned GHL API key.
+- Missing customer-owned GHL location ID.
+- Missing GHL read scopes for contacts, opportunities, tags, or pipelines.
+- Saved Tanaghum mappings that do not exist in the connected GHL location.
+- `GHL_READ_SYNC_ENABLED=true` remains required before actual read sync is executed.
+
+Acceptance:
+
+- Missing credentials return a precise `requires_credentials` state and do not call GHL.
+- Valid credentials call read-only surfaces and return counts only.
+- Partial scopes return `validated_with_warnings` or `failed`, depending on whether core CRM read access works.
+- Missing saved tag/stage mappings are listed for correction.
+- No CRM writes are enabled by this sprint.
 
 ### Sprint I1 - Integration UX Simplification
 

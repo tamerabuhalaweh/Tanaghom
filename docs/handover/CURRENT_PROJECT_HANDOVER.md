@@ -199,6 +199,29 @@ Hybrid deployment verification from 2026-07-06:
 - `POST /api/ghl-setup/test-connection` returned the expected `requires_credentials` state with no raw secrets or raw payload.
 - Browser smoke on `/ghl-wizard` clicked "Validate GHL Mappings" and received HTTP 200, status `not_ready`, 9 missing required outcomes, `readyForReadSync: false`, 0 console errors, and 0 failed requests.
 
+### R5B
+
+R5B adds live customer GHL credential validation.
+
+New backend contract:
+
+- `POST /ghl-setup/live-validation`
+  - uses the secure tenant vault
+  - calls only read-only GHL surfaces:
+    - contacts search
+    - opportunities search
+    - location tags
+    - opportunity pipelines and stages
+  - returns status/counts/blockers only
+  - compares saved Tanaghum mappings against live GHL tags and pipeline stages when those read scopes are available
+  - never returns raw secrets or raw GHL payloads
+
+Current limitation:
+
+- R5B cannot be live-accepted without a customer-owned GHL API key, location ID, and read scopes.
+- CRM writes remain blocked unless separately authorized through `GHL_WRITE_BACK_ENABLED=true`.
+- Actual read sync still requires `GHL_READ_SYNC_ENABLED=true`.
+
 ## 6. Local Development Setup
 
 Prerequisites:
