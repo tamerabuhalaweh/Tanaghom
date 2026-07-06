@@ -1,5 +1,5 @@
 import { ExternalServiceError } from '@shared/errors';
-import type { GhlContact, GhlOpportunity, GhlPullResult } from './types';
+import type { GhlAppointment, GhlContact, GhlOpportunity, GhlPullResult } from './types';
 
 export interface GhlClientConfig {
   baseUrl: string;
@@ -88,6 +88,22 @@ function normalizeOpportunity(input: unknown): GhlOpportunity | null {
   };
 }
 
+function normalizeAppointment(input: unknown, fallbackContactId: string): GhlAppointment | null {
+  const record = asRecord(input);
+  const id = firstString(record, ['id', 'appointmentId', 'eventId', '_id']);
+  const contactId = firstString(record, ['contactId', 'contact_id']) || fallbackContactId;
+  if (!id || !contactId) return null;
+  return {
+    id,
+    contactId,
+    status: firstString(record, ['status', 'appointmentStatus']),
+    title: firstString(record, ['title', 'name', 'appointmentTitle']),
+    calendarId: firstString(record, ['calendarId', 'calendar_id']),
+    startTime: firstString(record, ['startTime', 'start_time', 'startDate', 'start_date', 'date']),
+    endTime: firstString(record, ['endTime', 'end_time', 'endDate', 'end_date']),
+  };
+}
+
 export class LeadConnectorClient implements GhlClient {
   constructor(private readonly config: GhlClientConfig) {}
 
@@ -101,8 +117,15 @@ export class LeadConnectorClient implements GhlClient {
           pageLimit: limit,
         }),
       }),
-      this.request(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=${limit}`, {
-        method: 'GET',
+      this.request('/opportunities/search', {
+        method: 'POST',
+        body: JSON.stringify({
+          location_id: this.config.locationId,
+          locationId: this.config.locationId,
+          limit,
+          page: 1,
+          pageLimit: limit,
+        }),
       }),
     ]);
 
@@ -115,7 +138,23 @@ export class LeadConnectorClient implements GhlClient {
       .map(normalizeOpportunity)
       .filter((opportunity): opportunity is GhlOpportunity => opportunity !== null && contactIds.has(opportunity.contactId));
 
-    return { contacts, opportunities, rawReturned: false };
+    const warnings: string[] = [];
+    const appointmentResults = await Promise.allSettled(
+      contacts.map(contact => this.request(`/contacts/${encodeURIComponent(contact.id)}/appointments`, { method: 'GET' })
+        .then(body => extractItems(body, ['appointments', 'events', 'items', 'results'])
+          .map(item => normalizeAppointment(item, contact.id))
+          .filter((appointment): appointment is GhlAppointment => Boolean(appointment)))),
+    );
+    const appointments: GhlAppointment[] = [];
+    appointmentResults.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        appointments.push(...result.value);
+      } else {
+        warnings.push(`Could not read appointments for contact ${contacts[index]?.id || index + 1}. Lead contact and opportunity sync continued.`);
+      }
+    });
+
+    return { contacts, opportunities, appointments, warnings, rawReturned: false };
   }
 
   async upsertContact(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: unknown }> {

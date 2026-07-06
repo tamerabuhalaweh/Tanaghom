@@ -29,6 +29,7 @@ function mockRun(overrides: Record<string, unknown> = {}) {
     status: 'previewed',
     contacts_pulled: 0,
     opportunities_pulled: 0,
+    appointments_pulled: 0,
     leads_upserted: 0,
     tags_mapped: 0,
     stages_mapped: 0,
@@ -107,6 +108,14 @@ describe('GHL Sync', () => {
         status: 'open',
         monetaryValue: 1000,
       }],
+      appointments: [{
+        id: 'appt-1',
+        contactId: 'contact-1',
+        status: 'confirmed',
+        title: 'Strategy Call',
+        startTime: '2026-08-01T11:00:00.000Z',
+      }],
+      warnings: [],
       rawReturned: false,
     });
     vi.mocked(mockClient.upsertContact).mockResolvedValue({ ok: true, status: 200, body: { id: 'contact-1' } });
@@ -153,6 +162,8 @@ describe('GHL Sync', () => {
         external_opportunity_id: 'opp-1',
         lead_status: 'meeting_booked',
         lead_temperature: 'hot',
+        meeting_date: new Date('2026-08-01T11:00:00.000Z'),
+        meeting_type: 'Strategy Call',
         created_by_agent_rep_id: 'agent-1',
       }),
     }));
@@ -160,6 +171,42 @@ describe('GHL Sync', () => {
       data: expect.objectContaining({
         status: 'synced',
         leads_upserted: 1,
+      }),
+    }));
+  });
+
+  it('records appointment pull evidence and mirrors no-show meeting outcomes from GHL', async () => {
+    vi.mocked(mockClient.pull).mockResolvedValueOnce({
+      contacts: [{
+        id: 'contact-2',
+        name: 'No Show Buyer',
+        email: 'noshow@example.com',
+        phone: '+971511111111',
+        source: 'GHL Calendar',
+        tags: [],
+      }],
+      opportunities: [],
+      appointments: [{
+        id: 'appt-2',
+        contactId: 'contact-2',
+        status: 'no_show',
+        title: 'Enrollment Call',
+        startTime: '2026-08-03T14:00:00.000Z',
+      }],
+      warnings: [],
+      rawReturned: false,
+    });
+
+    const result = await repo.syncPull('tenant-a', 'user-1', 'agent-1', 'event-1', 50, () => mockClient);
+
+    expect(result.run.appointmentsPulled).toBe(1);
+    expect(result.upserted[0]?.leadStatus).toBe('no_show');
+    expect(prismaMocks.leadCaptureRecord.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        lead_status: 'no_show',
+        meeting_date: new Date('2026-08-03T14:00:00.000Z'),
+        meeting_type: 'Enrollment Call',
+        meeting_outcome: 'no_show',
       }),
     }));
   });

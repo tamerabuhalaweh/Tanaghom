@@ -1242,7 +1242,7 @@ export default function EventDashboard() {
     try {
       const result = await ghlSyncApi.pullPreview(token, { eventId: selectedEventId, limit: 50 }) as RecordMap;
       const run = result.run as RecordMap | undefined;
-      setMessage(`GHL preview ${text(run?.status, 'completed')}: ${numberValue(run?.contactsPulled)} contacts and ${numberValue(run?.opportunitiesPulled)} opportunities checked.`);
+      setMessage(`GHL preview ${text(run?.status, 'completed')}: ${numberValue(run?.contactsPulled)} contacts, ${numberValue(run?.opportunitiesPulled)} opportunities, and ${numberValue(run?.appointmentsPulled)} appointment(s) checked.`);
       await load(selectedEventId);
     } catch (error) {
       setMessage(`Could not preview GHL sync: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1697,11 +1697,12 @@ export default function EventDashboard() {
               subtitle="GoHighLevel is the CRM source of truth. Tanaghum mirrors the lead state for campaign operations and reporting."
               action={<ProductStatus tone={ghlReady ? 'good' : 'warn'}>{ghlReady ? 'Ready To Sync' : 'Setup Required'}</ProductStatus>}
             >
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <MetricCard label="CRM Leads Mirrored" value={ghlLeadCount} detail="GHL-owned leads in this event" tone={ghlLeadCount ? 'good' : 'default'} />
                 <MetricCard label="Credential" value={titleCase(text(ghlSyncStatus?.credentialStatus, 'missing'))} detail="Tenant-owned API key only" tone={text(ghlSyncStatus?.credentialStatus) === 'configured' ? 'good' : 'warn'} />
                 <MetricCard label="Mapping" value={titleCase(text(ghlSyncStatus?.mappingStatus, 'missing'))} detail="Tags and stages to lead status" tone={text(ghlSyncStatus?.mappingStatus) === 'ready' ? 'good' : 'warn'} />
                 <MetricCard label="Last Sync" value={formatDateTime(ghlSyncStatus?.lastSyncAt)} detail={`${numberValue(ghlLastRun.contactsPulled)} contact(s) checked`} tone={ghlSyncStatus?.lastSyncAt ? 'good' : 'default'} />
+                <MetricCard label="Meetings Checked" value={numberValue(ghlLastRun.appointmentsPulled)} detail="GHL appointments read during last run" tone={numberValue(ghlLastRun.appointmentsPulled) ? 'info' : 'default'} />
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">

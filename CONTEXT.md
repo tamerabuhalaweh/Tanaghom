@@ -19,7 +19,7 @@ feature/hybrid-emergent-ux-governed-tanaghum
 Latest known active commit at this update:
 
 ```text
-0399098 feat: improve Postiz channel validation UX
+de12392 feat: productionize GHL read sync appointments
 ```
 
 ## Current Product Direction
@@ -78,6 +78,15 @@ Current R4/R4A status:
   - user can paste a Postiz integration ID as pending validation
   - user can run read-only analytics validation for an event
   - the UI shows KPI preview rows or precise setup blockers
+
+Current R5 status:
+
+- GoHighLevel read-sync adapter is implemented locally and ready for hybrid deployment.
+- Customer-owned GHL API key, location ID, tag mapping, and pipeline/stage mapping are required.
+- Read sync is gated by `GHL_READ_SYNC_ENABLED=true`; write-back remains separately gated by `GHL_WRITE_BACK_ENABLED=true`.
+- R5 backend path pulls contacts, opportunities, per-contact appointments/meetings, tags, stages, purchases, meeting/no-show state, and maps those into Tanaghum lead mirrors.
+- Tanaghum never exposes raw GHL payloads or secrets in the response.
+- Local verification on 2026-07-06 passed backend lint, typecheck, full backend tests (1769), backend build, frontend lint, and frontend build.
 - R4A still needs hybrid deployment/live validation.
 
 Next recommended work:

@@ -3,7 +3,7 @@
 Last updated: 2026-07-06  
 Repository: `tamerabuhalaweh/Tanaghom`  
 Current working branch at handover: `feature/hybrid-emergent-ux-governed-tanaghum`  
-Current deployed hybrid commit at handover: `a18de9d`  
+Current deployed hybrid commit at handover: `d825b06`  
 
 This is the single current onboarding document for a new developer or delivery team. Older sprint notes remain useful as history, but this file is the current operational handover source of truth.
 
@@ -58,7 +58,7 @@ feature/hybrid-emergent-ux-governed-tanaghum
 Current important commit:
 
 ```bash
-a18de9d fix: allow sandbox policy service token
+de12392 feat: productionize GHL read sync appointments
 ```
 
 ## 4. Architecture Truth
@@ -395,11 +395,7 @@ Recommended labels:
 - `needs-codex-review`
 - `needs-deployment`
 
-## 16. Immediate Next Sprint Recommendation
-
-Next recommended sprint after R4A:
-
-**Sprint R5 - GoHighLevel Read-Sync Adapter / Production CRM Validation**
+## 16. Current And Next Integration Sprint State
 
 Current R4/R4A status:
 
@@ -411,14 +407,26 @@ Current R4/R4A status:
   - paste integration ID
   - run read-only analytics validation
   - show rows/warnings without scheduling or publishing
-- R4A is implemented locally and requires hybrid deployment/live validation.
+- R4A is deployed to hybrid.
 - Import still requires a later human-approved `approve-import`.
 
-Recommended target options:
+Current R5 status:
 
-1. Deploy and live-validate R4A Postiz channel UX.
-2. GHL read-sync adapter if the customer provides GHL credentials and mapping.
-3. Formaloo API import adapter if the customer provides form access.
+- GoHighLevel read-sync adapter is implemented locally as the CRM read path.
+- GHL remains the CRM source of truth; Tanaghum is the operating/reporting mirror.
+- Customer-owned GHL credential and location ID are required.
+- Customer-owned tag/stage mappings are required for high-confidence status/temperature mapping.
+- Read sync is still gated by `GHL_READ_SYNC_ENABLED=true`.
+- Write-back remains separately gated by `GHL_WRITE_BACK_ENABLED=true` and should stay off unless explicitly authorized.
+- The adapter now covers contacts, opportunities, per-contact appointments/meetings, purchase outcomes, tags, stages, no-shows, meeting attendance, and lead temperature/status mapping.
+- Sync run evidence includes contact, opportunity, and appointment counts and never returns raw GHL payloads.
+- Local verification passed on 2026-07-06: backend lint, typecheck, full backend tests (118 files, 1769 tests), backend build, frontend lint, and frontend build.
+
+Recommended target options after R5:
+
+1. Live-validate R5 with customer-owned GHL token, location ID, and mappings.
+2. Build Formaloo API import adapter if the customer provides form access.
+3. Build Meta/Instagram and YouTube official analytics adapters if the customer provides eligible ad/channel accounts.
 
 Acceptance:
 

@@ -118,6 +118,7 @@ export async function syncPull(
     data: {
       status: 'synced',
       leads_upserted: upserted.length,
+      appointments_pulled: result.run.appointmentsPulled,
       completed_at: now,
     },
   });
@@ -155,7 +156,7 @@ async function pullInternal(
         completed_at: new Date(),
       },
     });
-    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], rawReturned: false } };
+    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
   }
 
   if (process.env.GHL_READ_SYNC_ENABLED !== 'true') {
@@ -167,7 +168,7 @@ async function pullInternal(
         completed_at: new Date(),
       },
     });
-    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], rawReturned: false } };
+    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
   }
 
   try {
@@ -175,17 +176,22 @@ async function pullInternal(
     const mapped = pull.contacts.map(contact => mapGhlLead(
       contact,
       pull.opportunities.filter(opportunity => opportunity.contactId === contact.id),
+      pull.appointments.filter(appointment => appointment.contactId === contact.id),
       mappingSet,
     ));
     const tagsMapped = pull.contacts.reduce((total, contact) => total + countMappedTags(contact, mappingSet), 0);
     const stagesMapped = countMappedStages(pull.opportunities, mappingSet);
-    const warnings = mappingStatus === 'ready' ? [] : ['GHL mapping is incomplete. Contacts were mirrored with conservative fallback status/temperature.'];
+    const warnings = [
+      ...pull.warnings,
+      ...(mappingStatus === 'ready' ? [] : ['GHL mapping is incomplete. Contacts were mirrored with conservative fallback status/temperature.']),
+    ];
     const run = await prisma.ghlLeadSyncRun.create({
       data: {
         ...baseRun,
         status: mode === 'pull_preview' ? 'previewed' : 'previewed',
         contacts_pulled: pull.contacts.length,
         opportunities_pulled: pull.opportunities.length,
+        appointments_pulled: pull.appointments.length,
         tags_mapped: tagsMapped,
         stages_mapped: stagesMapped,
         warnings,
@@ -202,7 +208,7 @@ async function pullInternal(
         completed_at: new Date(),
       },
     });
-    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], rawReturned: false } };
+    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
   }
 }
 
@@ -337,6 +343,8 @@ async function upsertGhlLeadMirror(
     lead_phone_placeholder: mappedLead.leadPhone,
     purchase_amount: mappedLead.purchaseAmount == null ? null : new Prisma.Decimal(mappedLead.purchaseAmount),
     purchase_reference: mappedLead.purchaseReference,
+    meeting_date: mappedLead.meetingDate,
+    meeting_type: mappedLead.meetingType,
     meeting_outcome: mappedLead.meetingOutcome,
     source_of_truth: 'gohighlevel' as const,
     external_source_provider: 'gohighlevel',
@@ -446,6 +454,7 @@ function mapRun(run: {
   status: GhlSyncStatus;
   contacts_pulled: number;
   opportunities_pulled: number;
+  appointments_pulled: number;
   leads_upserted: number;
   tags_mapped: number;
   stages_mapped: number;
@@ -465,6 +474,7 @@ function mapRun(run: {
     sourceOfTruth: 'gohighlevel',
     contactsPulled: run.contacts_pulled,
     opportunitiesPulled: run.opportunities_pulled,
+    appointmentsPulled: run.appointments_pulled,
     leadsUpserted: run.leads_upserted,
     tagsMapped: run.tags_mapped,
     stagesMapped: run.stages_mapped,

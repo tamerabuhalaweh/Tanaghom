@@ -3140,6 +3140,7 @@ model GhlLeadSyncRun {
   source_of_truth       LeadSourceOfTruth @default(gohighlevel)
   contacts_pulled       Int               @default(0)
   opportunities_pulled  Int               @default(0)
+  appointments_pulled   Int               @default(0)
   leads_upserted        Int               @default(0)
   tags_mapped           Int               @default(0)
   stages_mapped         Int               @default(0)

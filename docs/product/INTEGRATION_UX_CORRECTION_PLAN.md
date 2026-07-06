@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX implemented locally; full production runtime pilots still pending
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync productionization in progress; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -465,7 +465,7 @@ R4 live acceptance evidence on 2026-07-06:
 
 Goal: Make the Postiz setup usable for a production customer who owns the Postiz workspace, API key, and social channel setup.
 
-Status: Implemented locally. Deployment/live validation is required before calling R4A live-complete.
+Status: Implemented, deployed to hybrid, and live-validated.
 
 What R4A implements:
 
@@ -507,13 +507,80 @@ Verification on 2026-07-06:
 - Frontend lint: passed.
 - Frontend build: passed.
 
-Remaining R4A acceptance:
+R4A live acceptance:
 
-- Deploy to hybrid VPS.
-- Open `/integration-credentials`.
-- Confirm the Postiz section shows a simple three-step production workflow.
-- Confirm manual integration ID can be saved as pending validation.
-- Confirm analytics test runs and reports either real KPI rows or a precise customer setup blocker.
+- Hybrid health check passed after deployment.
+- `/integration-credentials` ships the three-step Postiz production workflow.
+- Manual integration ID can be saved as pending validation.
+- Analytics test runs read-only and reports either real KPI rows or precise setup blockers.
+- Live provider result on 2026-07-06: credential valid, zero connected channels returned by Postiz, zero KPI rows, no writes.
+- Customer action required: connect/select a supported social channel in Postiz before Postiz analytics can produce KPI rows.
+
+### Sprint R5 - GoHighLevel Read-Sync Adapter / Production CRM Validation
+
+Goal: Make GoHighLevel the production CRM read source while Tanaghum remains the governed operating/reporting layer.
+
+Status: Implemented locally on the hybrid branch. Deployment/live validation is next.
+
+What R5 implements:
+
+- Uses the tenant-owned `gohighlevel/api_key/default` credential only.
+- Requires customer-provided:
+  - Private Integration/API token
+  - location ID
+  - tag mapping
+  - pipeline/stage mapping
+- Keeps read sync gated by `GHL_READ_SYNC_ENABLED=true`.
+- Keeps write-back separately gated by `GHL_WRITE_BACK_ENABLED=true`.
+- Pulls:
+  - contacts
+  - opportunities
+  - per-contact appointments/meetings
+  - tags
+  - pipeline/stage IDs
+  - purchases/won opportunities
+  - meeting booked / attended / no-show status where provider data supports it
+- Maps GHL data into Tanaghum lead mirrors:
+  - lead status
+  - lead temperature
+  - purchase amount/reference
+  - meeting date/type/outcome
+  - external CRM IDs
+  - sync fingerprint
+- Records sync-run evidence:
+  - contacts pulled
+  - opportunities pulled
+  - appointments pulled
+  - mapped tags/stages
+  - raw payload returned false
+- Keeps GHL as the CRM source of truth. Tanaghum mirrors the state for event operations, dashboards, closeout reports, and lead follow-up.
+
+Acceptance:
+
+- With missing credentials, the UI/API must clearly say customer-owned GHL credentials are required.
+- With read sync disabled, the UI/API must say `GHL_READ_SYNC_ENABLED=true` is required.
+- With credentials and flag enabled, pull preview must call GHL read endpoints and return mapped lead previews without raw payloads.
+- Pull sync must upsert tenant-scoped GHL lead mirrors and record lifecycle evidence.
+- Purchase, meeting booked, meeting attended, no-show, and lead temperature outcomes must map from customer GHL tags/stages/opportunities/appointments.
+- No write-back, WhatsApp send, or CRM mutation is enabled by R5.
+
+Remaining R5 live acceptance:
+
+- Customer must provide a valid GHL token and location ID.
+- Customer must confirm which tags and pipeline stages mean hot/warm/cold, purchased, booked meeting, attended, and no-show.
+- `GHL_READ_SYNC_ENABLED=true` must be enabled only for an approved test tenant/environment.
+- Run pull preview and sync against customer data.
+- Confirm dashboard lead counts and sales outcomes match GHL.
+
+Verification on 2026-07-06:
+
+- Focused GHL tests: 3 files passed, 13 tests passed.
+- Backend lint: passed.
+- Backend typecheck: passed.
+- Full backend tests: 118 files passed, 1769 tests passed.
+- Backend build: passed.
+- Frontend lint: passed.
+- Frontend build: passed.
 
 ### Sprint I1 - Integration UX Simplification
 

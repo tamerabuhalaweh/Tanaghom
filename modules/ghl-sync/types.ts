@@ -41,9 +41,21 @@ export interface GhlOpportunity {
   updatedAt?: string | null;
 }
 
+export interface GhlAppointment {
+  id: string;
+  contactId: string;
+  status?: string | null;
+  title?: string | null;
+  calendarId?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+}
+
 export interface GhlPullResult {
   contacts: GhlContact[];
   opportunities: GhlOpportunity[];
+  appointments: GhlAppointment[];
+  warnings: string[];
   rawReturned: false;
 }
 
@@ -69,6 +81,8 @@ export interface GhlMappedLead {
   tags: string[];
   purchaseAmount: number | null;
   purchaseReference: string | null;
+  meetingDate: Date | null;
+  meetingType: string | null;
   meetingOutcome: string | null;
   syncFingerprint: string;
 }
@@ -82,6 +96,7 @@ export interface GhlSyncRunSummary {
   sourceOfTruth: 'gohighlevel';
   contactsPulled: number;
   opportunitiesPulled: number;
+  appointmentsPulled: number;
   leadsUpserted: number;
   tagsMapped: number;
   stagesMapped: number;
