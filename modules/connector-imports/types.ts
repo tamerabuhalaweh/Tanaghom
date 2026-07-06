@@ -74,8 +74,8 @@ export const CONNECTOR_REQUIREMENTS: Record<ConnectorId, {
   },
   formaloo: {
     label: 'Formaloo',
-    requiredCredentialFields: ['apiKey', 'formId'],
-    optionalCredentialFields: ['workspaceId'],
+    requiredCredentialFields: ['clientKey', 'clientSecret', 'formId'],
+    optionalCredentialFields: ['workspaceId', 'baseUrl'],
     purpose: 'Import form submissions and survey responses from Formaloo.',
   },
   meta_analytics: {
@@ -86,8 +86,8 @@ export const CONNECTOR_REQUIREMENTS: Record<ConnectorId, {
   },
   youtube_analytics: {
     label: 'YouTube Analytics',
-    requiredCredentialFields: ['apiKey', 'channelId'],
-    optionalCredentialFields: [],
+    requiredCredentialFields: ['accessToken', 'channelId'],
+    optionalCredentialFields: ['contentOwnerId'],
     purpose: 'Import read-only YouTube channel and video analytics.',
   },
   whatsapp_provider: {

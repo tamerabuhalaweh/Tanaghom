@@ -55,10 +55,10 @@ Current branch:
 feature/hybrid-emergent-ux-governed-tanaghum
 ```
 
-Current R5A implementation commit:
+Current R6 local implementation status:
 
 ```bash
-82e160b feat: accept GHL credentials and validate mappings
+Implemented locally on feature/hybrid-emergent-ux-governed-tanaghum; deploy/live provider validation pending.
 ```
 
 Current deployed hybrid commit:
@@ -231,6 +231,55 @@ Hybrid deployment verification from 2026-07-06:
 - Browser smoke on `/ghl-wizard` showed the "Live Customer CRM Validation" card and "Validate Live CRM Access" button.
 - The button was disabled because no customer GHL credential exists.
 - Browser smoke had 0 console errors and 0 failed requests.
+
+### R6
+
+R6 adds Formaloo / Meta / YouTube connector readiness.
+
+New backend contract:
+
+- Tenant credential vault now accepts:
+  - `meta_analytics`
+  - `youtube_analytics`
+  - `youtube` legacy/fallback compatibility
+  - `formaloo`
+- Customer-facing credential requirements now include:
+  - Meta Ads Read Access: `accessToken`, `adAccountId`, optional `pageId`, `graphApiVersion`
+  - YouTube Analytics Read Access: `accessToken`, `channelId`, optional `contentOwnerId`
+  - Formaloo Forms Read Access: `clientKey`, `clientSecret`, `formId`, optional `workspaceId`, `baseUrl`
+- New endpoint:
+  - `POST /connector-readiness/validate/:providerId`
+- Supported validation providers:
+  - `meta_analytics`
+  - `youtube_analytics`
+  - `formaloo`
+
+Current truth:
+
+- Meta validation performs a read-only Meta Marketing API insights check when customer credentials exist.
+- YouTube validation performs a read-only YouTube Analytics reports query when customer credentials exist.
+- Formaloo credentials can be stored, but live read validation remains blocked until the exact customer Formaloo read contract/test form is confirmed.
+- Validation responses return status, counts, metric labels, and required actions only.
+- Validation responses never return raw secrets or raw provider payloads.
+- Successful Meta/YouTube validation updates `last_validated_at`.
+- The hybrid Integrations page has a "Validate Read Access" panel for Meta, YouTube, and Formaloo inside the secure setup wizard.
+
+Verification from 2026-07-06:
+
+- Backend typecheck passed.
+- Focused connector/credential tests: 5 files passed, 39 tests passed.
+- Full backend tests: 119 files passed, 1786 tests passed.
+- Backend lint passed.
+- Backend build passed.
+- Frontend lint passed.
+- Frontend build passed.
+
+Current limitation:
+
+- R6 is not yet deployed in this handover state.
+- Real Meta/YouTube validation still requires customer-owned credentials with the right read scopes.
+- Formaloo still requires customer API contract confirmation before live reads.
+- Meta/YouTube/Formaloo connector import adapters that convert live provider payloads into KPI dry-run rows are still next-sprint work.
 
 ## 6. Local Development Setup
 

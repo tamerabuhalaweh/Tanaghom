@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; Sprint R5A GoHighLevel customer credential acceptance and mapping validation deployed/live-smoked with honest customer-credential blocker; Sprint R5B GoHighLevel live read validation deployed/live-smoked with honest customer-credential blocker; full production runtime pilots still pending
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; Sprint R5A GoHighLevel customer credential acceptance and mapping validation deployed/live-smoked with honest customer-credential blocker; Sprint R5B GoHighLevel live read validation deployed/live-smoked with honest customer-credential blocker; Sprint R6 Formaloo / Meta / YouTube connector readiness implemented locally and awaiting deployment/live customer credentials; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -665,6 +665,61 @@ R5B deployed smoke on 2026-07-06:
 - Browser smoke on `/ghl-wizard` showed the live validation card and button.
 - The live validation button was disabled because no customer GHL credential exists.
 - Browser smoke had 0 console errors and 0 failed requests.
+
+### Sprint R6 - Formaloo / Meta / YouTube Connector Readiness
+
+Goal: Make the "connect analytics" path real enough for customer-owned credentials instead of leaving Meta, YouTube, and Formaloo as visible but unusable cards.
+
+Status: Implemented locally and verified. Deployment/live customer validation still pending.
+
+What R6 implements:
+
+- Adds tenant vault support for:
+  - `meta_analytics`
+  - `youtube_analytics`
+  - `youtube` legacy/fallback compatibility
+  - `formaloo`
+- Adds customer-facing credential requirements:
+  - Meta Ads Read Access: `accessToken`, `adAccountId`, optional `pageId`, `graphApiVersion`
+  - YouTube Analytics Read Access: `accessToken`, `channelId`, optional `contentOwnerId`
+  - Formaloo Forms Read Access: `clientKey`, `clientSecret`, `formId`, optional `workspaceId`, `baseUrl`
+- Updates connector import requirements so the setup fields match the credential vault.
+- Changes YouTube Analytics from "not configurable" to customer-configurable read access.
+- Keeps Meta compatibility with both:
+  - direct `meta_analytics/api_key/default`
+  - older `social_oauth/oauth_client/meta`
+- Adds `POST /connector-readiness/validate/:providerId` for:
+  - `meta_analytics`
+  - `youtube_analytics`
+  - `formaloo`
+- Meta validation performs a read-only Meta Marketing API insights check when a customer credential exists.
+- YouTube validation performs a read-only YouTube Analytics reports query when a customer credential exists.
+- Formaloo validation remains honest:
+  - credentials can be stored
+  - no external call is made until the exact customer Formaloo read API contract/test form is confirmed
+  - returns `requires_provider_contract`
+- Validation responses never return raw secrets or raw provider payloads.
+- Successful Meta/YouTube validation records `last_validated_at`.
+- Validation creates audit evidence with status/counts only.
+- The Integrations page now shows a "Validate Read Access" panel inside the secure setup wizard for Meta, YouTube, and Formaloo.
+
+Truth after R6:
+
+- The platform is ready to accept customer-owned Meta, YouTube, and Formaloo credentials.
+- Meta/YouTube read validation can run when credentials are provided.
+- Formaloo is not yet a live adapter because the customer-specific Formaloo API/read contract is still needed.
+- Connector imports for Meta/YouTube/Formaloo still need the next adapter sprint to transform live provider responses into KPI dry-run rows.
+- No external writes, ad changes, CRM writes, message sends, voice calls, scheduling, or publishing are enabled by R6.
+
+Verification on 2026-07-06:
+
+- Backend typecheck: passed.
+- Focused connector/credential tests: 5 files passed, 39 tests passed.
+- Full backend tests: 119 files passed, 1786 tests passed.
+- Backend lint: passed.
+- Backend build: passed.
+- Frontend lint: passed.
+- Frontend build: passed.
 
 ### Sprint I1 - Integration UX Simplification
 

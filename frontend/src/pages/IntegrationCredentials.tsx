@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { connectorImportsApi, eventsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, socialOAuthApi } from '../api';
+import { connectorImportsApi, connectorReadinessApi, eventsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, socialOAuthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
@@ -33,8 +33,23 @@ function statusTone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'defau
   return 'info';
 }
 
+function noticeTone(value: string): 'good' | 'warn' | 'danger' | 'info' {
+  const tone = statusTone(value);
+  return tone === 'default' ? 'info' : tone;
+}
+
 function parseRequiredFields(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function validationProviderFor(row: RecordMap): string {
+  const provider = text(row.provider, '').toLowerCase();
+  const connectionKey = text(row.connectionKey, '').toLowerCase();
+  if (provider === 'meta_analytics') return 'meta_analytics';
+  if (provider === 'youtube_analytics' || provider === 'youtube') return 'youtube_analytics';
+  if (provider === 'formaloo') return 'formaloo';
+  if (provider === 'social_oauth' && connectionKey === 'meta') return 'meta_analytics';
+  return '';
 }
 
 type SetupBlueprint = {
@@ -73,7 +88,7 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     oauthPlatforms: ['meta'],
     route: '/events',
     routeLabel: 'Open Event Import',
-    setupSteps: ['Configure Meta OAuth or API credentials', 'Select the customer ad account and Instagram business account', 'Preview KPI rows before importing event data'],
+    setupSteps: ['Save read-only Meta access token and ad account ID', 'Validate read access against Meta insights', 'Preview KPI rows before importing event data'],
   },
   {
     id: 'postiz',
@@ -96,7 +111,7 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     importConnectorId: 'youtube_analytics',
     route: '/events',
     routeLabel: 'Open Event Import',
-    setupSteps: ['Add YouTube API credentials', 'Create a connector import job', 'Approve read-only KPI import'],
+    setupSteps: ['Save YouTube Analytics OAuth token and channel ID', 'Validate read access against YouTube Analytics', 'Approve read-only KPI import'],
   },
   {
     id: 'formaloo',
@@ -107,7 +122,7 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     importConnectorId: 'formaloo',
     route: '/events',
     routeLabel: 'Open Event Import',
-    setupSteps: ['Save Formaloo API key and form ID', 'Map form fields to KPI records', 'Approve import into the selected event'],
+    setupSteps: ['Save Formaloo client key, client secret, and form ID', 'Confirm the customer Formaloo read contract', 'Map form fields to KPI records'],
   },
   {
     id: 'smartlabs_voice',
@@ -134,6 +149,7 @@ export default function IntegrationCredentials() {
   const [postizChannelStatus, setPostizChannelStatus] = useState<RecordMap | null>(null);
   const [postizDiagnostics, setPostizDiagnostics] = useState<RecordMap | null>(null);
   const [postizAnalyticsResult, setPostizAnalyticsResult] = useState<RecordMap | null>(null);
+  const [providerValidationResults, setProviderValidationResults] = useState<Record<string, RecordMap>>({});
   const [connectorImportSummary, setConnectorImportSummary] = useState<RecordMap | null>(null);
   const [connectorImportReadiness, setConnectorImportReadiness] = useState<RecordMap[]>([]);
   const [connectorImportJobs, setConnectorImportJobs] = useState<RecordMap[]>([]);
@@ -152,6 +168,7 @@ export default function IntegrationCredentials() {
   const [diagnosingPostiz, setDiagnosingPostiz] = useState(false);
   const [selectingPostizChannel, setSelectingPostizChannel] = useState('');
   const [testingPostizAnalytics, setTestingPostizAnalytics] = useState(false);
+  const [validatingProvider, setValidatingProvider] = useState('');
 
   async function load() {
     if (!token) return;
@@ -223,6 +240,8 @@ export default function IntegrationCredentials() {
   const configuredRows = matrix.filter(row => text(row.status).toLowerCase() === 'configured').length;
   const selectedFields = useMemo(() => parseRequiredFields(selected?.requiredFields), [selected]);
   const optionalFields = useMemo(() => parseRequiredFields(selected?.optionalFields), [selected]);
+  const selectedValidationProvider = selected ? validationProviderFor(selected) : '';
+  const selectedValidationResult = selectedValidationProvider ? providerValidationResults[selectedValidationProvider] : null;
   const selectedPostizIntegrationId = typeof postizChannelStatus?.selectedIntegrationId === 'string' ? postizChannelStatus.selectedIntegrationId : '';
   const postizGuidance = (postizChannelStatus?.guidance || {}) as RecordMap;
   const postizNextActions = Array.isArray(postizGuidance.nextActions)
@@ -410,6 +429,23 @@ export default function IntegrationCredentials() {
       setMessage(err instanceof Error ? err.message : 'Failed to select Postiz channel');
     } finally {
       setSelectingPostizChannel('');
+    }
+  }
+
+  async function validateSelectedProvider() {
+    if (!token || !selectedValidationProvider) return;
+    setValidatingProvider(selectedValidationProvider);
+    setMessage('');
+    try {
+      const result = await connectorReadinessApi.validateProvider(selectedValidationProvider, token) as RecordMap;
+      setProviderValidationResults(current => ({ ...current, [selectedValidationProvider]: result }));
+      const status = text(result.status);
+      setMessage(`${text(result.displayName, 'Provider')} validation: ${display(status)}. ${text(result.message, '')}`);
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Provider validation failed');
+    } finally {
+      setValidatingProvider('');
     }
   }
 
@@ -635,6 +671,49 @@ export default function IntegrationCredentials() {
                   ))}
                 </ol>
               </div>
+              {selectedValidationProvider && (
+                <div className="rounded-xl border border-neutral-200 bg-white p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-950">Read-access validation</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-600">
+                        Test whether this customer credential can read analytics. This never imports data and never writes to the provider.
+                      </p>
+                    </div>
+                    <ProductStatus tone={selectedValidationResult ? statusTone(text(selectedValidationResult.status)) : 'warn'}>
+                      {selectedValidationResult ? display(text(selectedValidationResult.status)) : 'Not tested'}
+                    </ProductStatus>
+                  </div>
+                  <div className="mt-4">
+                    <SecondaryAction onClick={validateSelectedProvider} disabled={validatingProvider === selectedValidationProvider}>
+                      {validatingProvider === selectedValidationProvider ? 'Checking...' : 'Validate Read Access'}
+                    </SecondaryAction>
+                  </div>
+                  {selectedValidationResult && (
+                    <div className="mt-4 space-y-3">
+                      <Notice tone={noticeTone(text(selectedValidationResult.status))}>
+                        {text(selectedValidationResult.message)}
+                      </Notice>
+                      <DetailGrid items={[
+                        { label: 'Rows found', value: String(((selectedValidationResult.evidence as RecordMap | undefined)?.rowsFound ?? 0)) },
+                        { label: 'Endpoint', value: text((selectedValidationResult.evidence as RecordMap | undefined)?.providerEndpoint, 'Not called') },
+                        { label: 'Account', value: text((selectedValidationResult.evidence as RecordMap | undefined)?.accountReference, 'Not provided') },
+                        { label: 'External writes', value: selectedValidationResult.externalWritesAllowed === false ? 'Off' : 'Unknown' },
+                      ]} />
+                      {Array.isArray(selectedValidationResult.requiredActions) && selectedValidationResult.requiredActions.length > 0 && (
+                        <ol className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm leading-6 text-neutral-700">
+                          {(selectedValidationResult.requiredActions as unknown[]).filter((item): item is string => typeof item === 'string').map((action, index) => (
+                            <li key={action} className="flex gap-3">
+                              <span className="font-semibold text-neutral-950">{index + 1}.</span>
+                              <span>{action}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : (

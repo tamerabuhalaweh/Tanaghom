@@ -1,6 +1,7 @@
 import { checkReadinessPermission } from './policy';
 import * as repo from './repository';
-import type { EventConnectorReadiness } from './types';
+import { requireCredentialAdmin } from '../integration-credentials/service';
+import type { EventConnectorReadiness, ReadAccessValidationResult, ReadValidationProviderId } from './types';
 
 export async function getEventConnectorReadiness(
   role: string, tenantKey: string, eventId: string,
@@ -14,4 +15,14 @@ export async function getGlobalConnectorReadiness(
 ) {
   checkReadinessPermission(role);
   return repo.getGlobalConnectorReadiness(tenantKey);
+}
+
+export async function validateProviderReadAccess(
+  role: string,
+  tenantKey: string,
+  userId: string,
+  providerId: ReadValidationProviderId,
+): Promise<ReadAccessValidationResult> {
+  requireCredentialAdmin(role);
+  return repo.validateProviderReadAccess(tenantKey, userId, providerId);
 }

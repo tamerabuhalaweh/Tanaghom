@@ -8,6 +8,10 @@ import { auditLog } from '@shared/logging';
 export const integrationProviderSchema = z.enum([
   'postiz',
   'gohighlevel',
+  'formaloo',
+  'meta_analytics',
+  'youtube',
+  'youtube_analytics',
   'whatsapp',
   'telegram',
   'voice_chat',

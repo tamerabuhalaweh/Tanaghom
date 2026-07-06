@@ -335,6 +335,13 @@ export const connectorImportsApi = {
     apiFetch<unknown>('/connector-imports/approve-import', { method: 'POST', body: data, token }),
 };
 
+export const connectorReadinessApi = {
+  global: (token: string) => apiFetch<unknown>('/connector-readiness/global', { token }),
+  event: (eventId: string, token: string) => apiFetch<unknown>(`/connector-readiness/events/${eventId}`, { token }),
+  validateProvider: (providerId: string, token: string) =>
+    apiFetch<unknown>(`/connector-readiness/validate/${providerId}`, { method: 'POST', token }),
+};
+
 export const socialOAuthApi = {
   connections: (token: string) => apiFetch<unknown>('/social-oauth/connections', { token }),
   start: (data: unknown, token: string) =>
