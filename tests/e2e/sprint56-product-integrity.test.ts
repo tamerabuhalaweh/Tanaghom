@@ -113,6 +113,7 @@ describe('Sprint 56 production product integrity contracts', () => {
     const connectorService = source('modules', 'connector-imports', 'service.ts');
     const agentgateway = source('modules', 'runtime-bridges', 'agentgateway.ts');
     const runtimeController = source('modules', 'runtime-bridges', 'controller.ts');
+    const backend = source('src', 'index.ts');
 
     expect(connectorService).toContain('mediateConnectorDryRunPolicy');
     expect(connectorService).toContain('runtimeMediation');
@@ -124,6 +125,7 @@ describe('Sprint 56 production product integrity contracts', () => {
     expect(runtimeController).toContain("'/agentgateway/sandbox-policy/connector-dry-run'");
     expect(runtimeController).toContain('AGENTGATEWAY_SANDBOX_POLICY_TOKEN');
     expect(runtimeController).toContain('productionGateway: false');
+    expect(backend).toContain("req.path.startsWith('/runtime-bridges/agentgateway/sandbox-policy/')");
   });
 
   it('keeps Tenant Admin subscription, export, and deletion controls connected to API clients', () => {

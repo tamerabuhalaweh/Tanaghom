@@ -181,7 +181,7 @@ async function rateLimit(req: express.Request, res: express.Response, next: expr
 
 async function enforceTokenRevocation(req: express.Request, _res: express.Response, next: express.NextFunction): Promise<void> {
   try {
-    if (req.path === '/ops/prometheus') {
+    if (req.path === '/ops/prometheus' || req.path.startsWith('/runtime-bridges/agentgateway/sandbox-policy/')) {
       next();
       return;
     }
