@@ -22,10 +22,10 @@ Latest known R5A implementation commit at this update:
 82e160b feat: accept GHL credentials and validate mappings
 ```
 
-Latest deployed hybrid branch commit at this update:
+Latest deployed hybrid code commit at this update:
 
 ```text
-0f32140 docs: record R5A implementation evidence
+baabf59 feat: validate live GHL customer credentials
 ```
 
 ## Current Product Direction
@@ -116,7 +116,7 @@ Current R5A status:
 
 Current R5B status:
 
-- In implementation on 2026-07-06.
+- Implemented, pushed, deployed to hybrid, and smoke-tested on 2026-07-06.
 - Adds `POST /ghl-setup/live-validation` for customer-owned GHL credential validation.
 - The endpoint calls only read-only GHL surfaces:
   - contacts search
@@ -126,14 +126,15 @@ Current R5B status:
 - The response returns status/counts/blockers only, with `rawSecretsReturned: false` and `rawPayloadReturned: false`.
 - Saved Tanaghum GHL tag/stage mappings are compared against live GHL tags and pipeline stages when those read scopes are available.
 - No CRM write-back, WhatsApp send, or workflow mutation is enabled by R5B.
+- Deployed API smoke returned `requires_credentials`, required action "Save the customer-owned GoHighLevel API key and location ID first.", `rawSecretsReturned: false`, and `rawPayloadReturned: false`.
+- Deployed browser smoke on `/ghl-wizard` showed the live validation card and button, with the button disabled because no customer GHL credential exists, 0 console errors, and 0 failed requests.
 - Full live acceptance still requires customer-owned GHL API key, location ID, and read scopes.
 
 Next recommended work:
 
-1. Finish R5B verification and deploy to hybrid.
-2. If the customer provides real GHL credentials, run GHL live validation.
-3. If accepted, map required tags/stages and run GHL read-sync preview with `GHL_READ_SYNC_ENABLED=true`.
-4. Then move to Formaloo import or Meta/YouTube analytics readiness depending on available customer credentials.
+1. If the customer provides real GHL credentials, run GHL live validation.
+2. If accepted, map required tags/stages and run GHL read-sync preview with `GHL_READ_SYNC_ENABLED=true`.
+3. Then move to Formaloo import or Meta/YouTube analytics readiness depending on available customer credentials.
 
 ## Current Required Verification
 

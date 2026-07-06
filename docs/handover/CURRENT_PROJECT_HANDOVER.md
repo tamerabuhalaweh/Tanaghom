@@ -3,7 +3,7 @@
 Last updated: 2026-07-06  
 Repository: `tamerabuhalaweh/Tanaghom`  
 Current working branch at handover: `feature/hybrid-emergent-ux-governed-tanaghum`  
-Current deployed hybrid commit at handover: `0f32140`  
+Current deployed hybrid code commit at handover: `baabf59`  
 
 This is the single current onboarding document for a new developer or delivery team. Older sprint notes remain useful as history, but this file is the current operational handover source of truth.
 
@@ -64,7 +64,7 @@ Current R5A implementation commit:
 Current deployed hybrid commit:
 
 ```bash
-0f32140 docs: record R5A implementation evidence
+baabf59 feat: validate live GHL customer credentials
 ```
 
 ## 4. Architecture Truth
@@ -221,6 +221,16 @@ Current limitation:
 - R5B cannot be live-accepted without a customer-owned GHL API key, location ID, and read scopes.
 - CRM writes remain blocked unless separately authorized through `GHL_WRITE_BACK_ENABLED=true`.
 - Actual read sync still requires `GHL_READ_SYNC_ENABLED=true`.
+
+Hybrid deployment verification from 2026-07-06:
+
+- Hybrid is deployed at code commit `baabf59`.
+- `GET /api/health` returned healthy app, database, and Redis status.
+- `POST /api/ghl-setup/live-validation` returned status `requires_credentials` with the correct required action to save customer-owned GHL API key and location ID.
+- The live validation response returned `rawSecretsReturned: false` and `rawPayloadReturned: false`.
+- Browser smoke on `/ghl-wizard` showed the "Live Customer CRM Validation" card and "Validate Live CRM Access" button.
+- The button was disabled because no customer GHL credential exists.
+- Browser smoke had 0 console errors and 0 failed requests.
 
 ## 6. Local Development Setup
 

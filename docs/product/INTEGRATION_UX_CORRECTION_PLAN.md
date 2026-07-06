@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; Sprint R5A GoHighLevel customer credential acceptance and mapping validation deployed/live-smoked with honest customer-credential blocker; Sprint R5B GoHighLevel live read validation implemented locally and awaiting deployment/live smoke; full production runtime pilots still pending
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; Sprint R3 sandbox policy pilot live-accepted; Sprint R4 Postiz read-only adapter live-accepted; Sprint R4A Postiz channel UX deployed/live-validated; Sprint R5 GoHighLevel read-sync adapter deployed with honest customer-credential blocker; Sprint R5A GoHighLevel customer credential acceptance and mapping validation deployed/live-smoked with honest customer-credential blocker; Sprint R5B GoHighLevel live read validation deployed/live-smoked with honest customer-credential blocker; full production runtime pilots still pending
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -621,7 +621,7 @@ Verification on 2026-07-06:
 
 Goal: When the customer provides real GHL credentials, validate read-only CRM access and prove saved mappings belong to the connected GHL location.
 
-Status: Implemented locally; deployment/live smoke pending at this document update.
+Status: Implemented, deployed to hybrid, and smoke-tested with the expected customer-credential blocker.
 
 What R5B adds:
 
@@ -652,6 +652,19 @@ Acceptance:
 - Partial scopes return `validated_with_warnings` or `failed`, depending on whether core CRM read access works.
 - Missing saved tag/stage mappings are listed for correction.
 - No CRM writes are enabled by this sprint.
+
+R5B deployed smoke on 2026-07-06:
+
+- Hybrid deployed code commit: `baabf59`.
+- `/api/health` returned healthy.
+- `/api/ghl-setup/live-validation` returned:
+  - status `requires_credentials`
+  - required action to save the customer-owned GHL API key and location ID
+  - `rawSecretsReturned: false`
+  - `rawPayloadReturned: false`
+- Browser smoke on `/ghl-wizard` showed the live validation card and button.
+- The live validation button was disabled because no customer GHL credential exists.
+- Browser smoke had 0 console errors and 0 failed requests.
 
 ### Sprint I1 - Integration UX Simplification
 
