@@ -251,6 +251,18 @@ export interface DryRunResult {
   kpiRows: DryRunKpiRow[];
   leadAttributions: number;
   warnings: string[];
+  runtimeMediation?: {
+    provider: 'agentgateway';
+    operation: 'connector_import.dry_run';
+    enabled: boolean;
+    mediated: boolean;
+    decision: 'not_enabled' | 'allowed' | 'denied';
+    reason: string;
+    statusCode: number | null;
+    dryRunOnly: true;
+    externalWritesAllowed: false;
+    rawSecretsReturned: false;
+  };
 }
 
 export interface ImportResult {

@@ -99,6 +99,30 @@ describe('Sprint 56 production product integrity contracts', () => {
     expect(runtimeController).toContain('customerFacing: false');
   });
 
+  it('keeps non-admin event workspaces from calling forbidden problem dashboard APIs', () => {
+    const hybridWorkspace = source('frontend', 'src', 'pages', 'HybridEventWorkspace.tsx');
+
+    expect(hybridWorkspace).toContain('canLoadProblemDashboard(role)');
+    expect(hybridWorkspace).toContain('localProblemDashboard(normalizedProblems)');
+    expect(hybridWorkspace).toContain("limitedByRole: true");
+    expect(hybridWorkspace).toContain("eventProblemsApi.dashboard(nextEventId, token).catch(() => null)");
+    expect(hybridWorkspace).not.toContain("eventProblemsApi.dashboard(nextEventId, token).catch(() => ({}))");
+  });
+
+  it('keeps agentgateway as the selected low-risk runtime pilot for connector dry-runs', () => {
+    const connectorService = source('modules', 'connector-imports', 'service.ts');
+    const agentgateway = source('modules', 'runtime-bridges', 'agentgateway.ts');
+    const runtimeController = source('modules', 'runtime-bridges', 'controller.ts');
+
+    expect(connectorService).toContain('mediateConnectorDryRunPolicy');
+    expect(connectorService).toContain('runtimeMediation');
+    expect(agentgateway).toContain('AGENTGATEWAY_DRY_RUN_POLICY_ENABLED');
+    expect(agentgateway).toContain("operation: 'connector_import.dry_run'");
+    expect(agentgateway).toContain('externalWritesAllowed: false');
+    expect(agentgateway).toContain('rawSecretsReturned: false');
+    expect(runtimeController).toContain('AGENTGATEWAY_DRY_RUN_POLICY_ENABLED');
+  });
+
   it('keeps Tenant Admin subscription, export, and deletion controls connected to API clients', () => {
     const api = source('frontend', 'src', 'api.ts');
     const tenantAdmin = source('frontend', 'src', 'pages', 'TenantAdmin.tsx');

@@ -39,7 +39,12 @@ const RUNTIME_METADATA: Record<RuntimeProvider, {
       {
         name: 'AGENTGATEWAY_TRAFFIC_ENABLED',
         enabled: process.env.AGENTGATEWAY_TRAFFIC_ENABLED === 'true',
-        purpose: 'Reserved gate for future policy-routed connector traffic. No route is active in this sprint.',
+        purpose: 'Reserved gate for future policy-routed connector traffic.',
+      },
+      {
+        name: 'AGENTGATEWAY_DRY_RUN_POLICY_ENABLED',
+        enabled: process.env.AGENTGATEWAY_DRY_RUN_POLICY_ENABLED === 'true',
+        purpose: 'Routes connector dry-run policy checks through agentgateway before STITCH executes the dry-run.',
       },
     ],
   },

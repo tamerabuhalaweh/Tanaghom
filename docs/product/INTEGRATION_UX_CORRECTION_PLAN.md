@@ -1,6 +1,6 @@
 # Integration UX Correction Plan
 
-Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; runtime integration phases pending  
+Status: Approved - Sprint I1 implemented; Sprint R0 truth cleanup implemented; Sprint R1 runtime evidence implemented; Sprint R2 agentgateway dry-run mediation foundation implemented; runtime production pilots still pending  
 Scope: Hybrid Tanaghum product UI and integration architecture  
 Date: 2026-07-04
 
@@ -312,6 +312,35 @@ Truth after R1:
 - agentgateway is visible as internal runtime evidence only; no production connector traffic is routed through it.
 - AgentScope is visible as internal runtime evidence only; it is not executing production agent sessions.
 - The customer-facing Integrations page remains focused on business systems: GHL, Meta/Instagram, Postiz, YouTube, Formaloo, SmartLabs, AI provider, and CSV/manual fallback.
+
+### Sprint R2 - Non-Admin Permission Cleanup + agentgateway Dry-Run Mediation Foundation
+
+Status: Implemented.
+
+Decision: choose agentgateway before OpenClaw for the first runtime pilot.
+
+Reason:
+
+- Connector dry-runs are read/preview operations and are lower risk than workflow/channel orchestration.
+- agentgateway's value maps directly to policy mediation, deny/allow behavior, and external-service traffic control.
+- OpenClaw remains useful later for channel/orchestration workflows, but it should not be the first runtime pilot because orchestration has a wider blast radius.
+
+What R2 implements:
+
+- The hybrid event workspace no longer calls the forbidden event-problem dashboard endpoint for roles that do not have dashboard permission.
+- Normal users can still read event problem records they are allowed to read; the UI computes a local summary instead of producing hidden 403 browser noise.
+- Connector dry-runs now pass through a STITCH-owned `mediateConnectorDryRunPolicy` hook before repository execution.
+- The hook is disabled by default and returns explicit "not enabled" evidence.
+- If `AGENTGATEWAY_DRY_RUN_POLICY_ENABLED=true`, dry-runs require an active tenant `agentgateway` runtime endpoint credential.
+- When enabled, STITCH sends a dry-run-only policy payload to agentgateway. The payload explicitly sets `externalWritesAllowed: false` and `importWritesAllowed: false`.
+- A denial from agentgateway blocks the dry-run before connector preview execution.
+
+Truth after R2:
+
+- agentgateway is selected as the first low-risk runtime pilot path.
+- agentgateway is not yet deployed as production infrastructure on the VPS by this sprint.
+- No connector production traffic is routed through agentgateway unless the env flag and tenant runtime credential are configured.
+- No external writes, CRM writes, publishing, messaging, voice execution, or OpenClaw orchestration are enabled by this sprint.
 
 ### Sprint I1 - Integration UX Simplification
 

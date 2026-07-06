@@ -101,6 +101,41 @@ function statusTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'i
   return 'default';
 }
 
+function userRole(user: unknown): string {
+  return user && typeof user === 'object' ? text((user as RecordMap).role, '') : '';
+}
+
+function canLoadProblemDashboard(role: string): boolean {
+  return ['admin', 'cco', 'department_head', 'marketing_manager', 'social_media_manager', 'sales_manager'].includes(role);
+}
+
+function localProblemDashboard(problems: RecordMap[]): RecordMap {
+  const byCategory: Record<string, number> = {};
+  const bySeverity: Record<string, number> = {};
+  const activeProblems = problems.filter(problem => ['open', 'investigating'].includes(text(problem.status, '').toLowerCase()));
+  for (const problem of problems) {
+    const category = text(problem.category, 'other').toLowerCase();
+    const severity = text(problem.severity, 'medium').toLowerCase();
+    byCategory[category] = (byCategory[category] || 0) + 1;
+    bySeverity[severity] = (bySeverity[severity] || 0) + 1;
+  }
+
+  const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const topBlockers = [...activeProblems]
+    .sort((a, b) => (severityOrder[text(a.severity, 'medium').toLowerCase()] ?? 4) - (severityOrder[text(b.severity, 'medium').toLowerCase()] ?? 4))
+    .slice(0, 5);
+
+  return {
+    totalProblems: problems.length,
+    openProblems: activeProblems.length,
+    criticalOpen: activeProblems.filter(problem => text(problem.severity, '').toLowerCase() === 'critical').length,
+    byCategory,
+    bySeverity,
+    topBlockers,
+    limitedByRole: true,
+  };
+}
+
 function sourceLabel(value: unknown): string {
   const source = text(value, 'none');
   if (source === 'connector') return 'Connector data';
@@ -126,7 +161,8 @@ function firstAvailableId(events: RecordMap[], routeId?: string): string {
 
 function useEventWorkspaceData() {
   const { eventId } = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const role = userRole(user);
   const [events, setEvents] = useState<RecordMap[]>([]);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [dashboard, setDashboard] = useState<RecordMap | null>(null);
@@ -170,6 +206,10 @@ function useEventWorkspaceData() {
         return;
       }
 
+      const problemDashboardRequest = canLoadProblemDashboard(role)
+        ? eventProblemsApi.dashboard(nextEventId, token).catch(() => null)
+        : Promise.resolve(null);
+
       const [
         dashboardData,
         leadData,
@@ -186,7 +226,7 @@ function useEventWorkspaceData() {
       ] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
-        eventProblemsApi.dashboard(nextEventId, token).catch(() => ({})),
+        problemDashboardRequest,
         eventProblemsApi.list(token, { eventId: nextEventId }).catch(() => []),
         eventPlannerApi.emailPlans(nextEventId, token).catch(() => []),
         eventPlannerApi.whatsappPlans(nextEventId, token).catch(() => []),
@@ -200,8 +240,9 @@ function useEventWorkspaceData() {
 
       setDashboard(dashboardData as RecordMap);
       setSalesLeads(list(leadData));
-      setProblemDashboard(problemSummary as RecordMap);
-      setEventProblems(list(problems));
+      const normalizedProblems = list(problems);
+      setProblemDashboard((problemSummary as RecordMap | null) || localProblemDashboard(normalizedProblems));
+      setEventProblems(normalizedProblems);
       setEmailPlans(list(emailData));
       setWhatsappPlans(list(whatsappData));
       setUpsellPlans(list(upsellData));
@@ -224,7 +265,7 @@ function useEventWorkspaceData() {
     }, 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, eventId]);
+  }, [token, eventId, role]);
 
   return {
     token,
