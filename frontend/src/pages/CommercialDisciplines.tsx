@@ -78,7 +78,7 @@ function makeDraft(discipline = '', category = '') {
 }
 
 export default function CommercialDisciplines() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const [workspaces, setWorkspaces] = useState<RecordMap[]>([]);
   const [revenueLines, setRevenueLines] = useState<RecordMap[]>([]);
@@ -100,6 +100,9 @@ export default function CommercialDisciplines() {
   const completedRecords = records.filter(record => text(record.status) === 'completed').length;
   const highPriorityRecords = records.filter(record => ['high', 'critical'].includes(text(record.priority))).length;
   const SelectedIcon = DISCIPLINE_ICONS[selectedDiscipline as keyof typeof DISCIPLINE_ICONS] || BriefcaseBusiness;
+  const userRole = text((user as RecordMap | null)?.role);
+  const canCreateRecord = !['reviewer', 'viewer'].includes(userRole);
+  const canUpdateRecord = ['admin', 'cco', 'department_head', 'marketing_manager'].includes(userRole);
 
   async function load() {
     if (!token) return;
@@ -146,6 +149,10 @@ export default function CommercialDisciplines() {
   }
 
   function editRecord(record: RecordMap) {
+    if (!canUpdateRecord) {
+      setMessage('You can review workspace records. A manager can update approved operating records.');
+      return;
+    }
     setDraft({
       id: text(record.id),
       discipline: text(record.discipline),
@@ -164,6 +171,14 @@ export default function CommercialDisciplines() {
   async function saveRecord() {
     if (!token) return;
     setMessage('');
+    if (draft.id && !canUpdateRecord) {
+      setMessage('A manager must update existing workspace records.');
+      return;
+    }
+    if (!draft.id && !canCreateRecord) {
+      setMessage('Your role can review workspace records but cannot create new ones.');
+      return;
+    }
     if (!draft.discipline || !draft.category || !draft.title.trim()) {
       setMessage('Choose a workspace, choose a record type, and enter a title.');
       return;
@@ -320,10 +335,15 @@ export default function CommercialDisciplines() {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
         <AieroLightPanel
-          title={draft.id ? 'Edit workspace record' : 'Create workspace record'}
-          subtitle="Use this for real daily work: scripts, research notes, campaign observations, data-quality issues, and operating tasks."
-          action={draft.id ? <SecondaryAction onClick={() => setDraft(makeDraft(selectedDiscipline, text(categories[0], '')))}>New record</SecondaryAction> : null}
+          title={canCreateRecord || canUpdateRecord ? (draft.id ? 'Edit workspace record' : 'Create workspace record') : 'Read-only workspace'}
+          subtitle={canCreateRecord || canUpdateRecord
+            ? 'Use this for real daily work: scripts, research notes, campaign observations, data-quality issues, and operating tasks.'
+            : 'Your role can review discipline records. Ask a manager or Stitchi to prepare a governed action when work needs to change.'}
+          action={draft.id && canUpdateRecord ? <SecondaryAction onClick={() => setDraft(makeDraft(selectedDiscipline, text(categories[0], '')))}>New record</SecondaryAction> : null}
         >
+          {!canCreateRecord && !canUpdateRecord && (
+            <Notice tone="info">This workspace is read-only for your role. You can still review context and ask Stitchi what needs attention.</Notice>
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="Workspace">
               <select
@@ -418,9 +438,11 @@ export default function CommercialDisciplines() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <AieroActionButton onClick={saveRecord} disabled={saving}>
-              {saving ? 'Saving...' : draft.id ? 'Save changes' : 'Create record'}
-            </AieroActionButton>
+            {(canCreateRecord || canUpdateRecord) && (
+              <AieroActionButton onClick={saveRecord} disabled={saving || (Boolean(draft.id) && !canUpdateRecord)}>
+                {saving ? 'Saving...' : draft.id ? 'Save changes' : 'Create record'}
+              </AieroActionButton>
+            )}
             <SecondaryAction onClick={() => navigate(`/stitchi?${stitchiParams.toString()}`)}>Ask Stitchi to draft</SecondaryAction>
           </div>
         </AieroLightPanel>
