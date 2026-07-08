@@ -32,6 +32,12 @@ const prismaMocks = vi.hoisted(() => ({
   commercialAssessmentSignal: {
     findMany: vi.fn(),
   },
+  commercialExecutiveReport: {
+    findMany: vi.fn(),
+  },
+  commercialExecutiveReportSchedule: {
+    findMany: vi.fn(),
+  },
 }));
 
 const ghlSyncMocks = vi.hoisted(() => ({
@@ -177,6 +183,17 @@ describe('Stitchi read-only context loader', () => {
       },
     ]);
     prismaMocks.commercialAssessmentSignal.findMany.mockResolvedValue([]);
+    prismaMocks.commercialExecutiveReport.findMany.mockResolvedValue([
+      {
+        title: 'Weekly commercial executive report',
+        status: 'preview',
+        confidence: 'medium',
+        created_at: new Date('2026-07-08T11:00:00Z'),
+      },
+    ]);
+    prismaMocks.commercialExecutiveReportSchedule.findMany.mockResolvedValue([
+      { id: 'schedule-1' },
+    ]);
   });
 
   it('loads summarized tenant-scoped event context without exposing secrets', async () => {
@@ -233,6 +250,14 @@ describe('Stitchi read-only context loader', () => {
       id: 'revenue-line-1',
       type: 'online_course',
       name: 'Online Courses',
+    });
+    expect(context.commercialExecutive).toMatchObject({
+      recentReports: 1,
+      activeSchedules: 1,
+      latestReportTitle: 'Weekly commercial executive report',
+      latestReportStatus: 'preview',
+      latestReportConfidence: 'medium',
+      requiredActions: [],
     });
     expect(context.guardrails).toEqual({
       mode: 'read_only',

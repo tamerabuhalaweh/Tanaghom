@@ -44,6 +44,7 @@ import AieroInspiredPreview from './pages/AieroInspiredPreview'
 import Stitchi from './pages/Stitchi'
 import CommercialCommandCenter from './pages/CommercialCommandCenter'
 import CommercialDisciplines from './pages/CommercialDisciplines'
+import ExecutiveDashboard from './pages/ExecutiveDashboard'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
@@ -112,6 +113,7 @@ function App() {
             <Route path="events/advanced/:eventId" element={<EventDashboard />} />
             <Route path="events/:eventId" element={<HybridEventWorkspace />} />
             <Route path="stitchi" element={<Stitchi />} />
+            <Route path="executive" element={<ExecutiveDashboard />} />
             <Route path="disciplines" element={<CommercialDisciplines />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
@@ -143,6 +145,7 @@ function App() {
             <Route path="ghl-wizard" element={connectorSetup(<GhlWizard />)} />
             <Route path="dashboard" element={<MasterEventsDashboard />} />
             <Route path="command-center" element={<CommercialCommandCenter />} />
+            <Route path="ceo-dashboard" element={<ExecutiveDashboard />} />
             <Route path="content-workflow" element={<DemoCommandCenter />} />
             <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />
             <Route path="content" element={<PostIdeas />} />

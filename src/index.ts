@@ -58,6 +58,7 @@ import { stitchiRouter } from '../modules/stitchi/controller';
 import { commercialCommandCenterRouter } from '../modules/commercial-command-center/controller';
 import { kajabiConnectorRouter } from '../modules/kajabi-connector/controller';
 import { commercialDisciplinesRouter } from '../modules/commercial-disciplines/controller';
+import { commercialExecutiveReportingRouter } from '../modules/commercial-executive-reporting/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -285,6 +286,7 @@ app.use('/smartlabs-validation', smartlabsValidationRouter);
 app.use('/stitchi', stitchiRouter);
 app.use('/commercial-command-center', commercialCommandCenterRouter);
 app.use('/commercial-disciplines', commercialDisciplinesRouter);
+app.use('/commercial-executive', commercialExecutiveReportingRouter);
 app.use('/kajabi', kajabiConnectorRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {

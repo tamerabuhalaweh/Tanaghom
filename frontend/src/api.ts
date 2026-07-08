@@ -612,6 +612,25 @@ export const commercialCommandCenterApi = {
     apiFetch<unknown>('/commercial-command-center/assessment-signals', { method: 'POST', body: data, token }),
 };
 
+export const commercialExecutiveApi = {
+  dashboard: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown>(`/commercial-executive/dashboard${params}`, { token });
+  },
+  reports: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-executive/reports${params}`, { token });
+  },
+  createReportPreview: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-executive/reports/preview', { method: 'POST', body: data, token }),
+  schedules: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-executive/schedules${params}`, { token });
+  },
+  createSchedule: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-executive/schedules', { method: 'POST', body: data, token }),
+};
+
 export const commercialDisciplinesApi = {
   workspaces: (token: string) => apiFetch<unknown[]>('/commercial-disciplines/workspaces', { token }),
   records: (token: string, filters?: Record<string, string>) => {

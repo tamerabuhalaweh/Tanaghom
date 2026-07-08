@@ -108,6 +108,14 @@ export interface StitchiReadOnlyContext {
       linkedEventId: string | null;
     }>;
   };
+  commercialExecutive: {
+    recentReports: number;
+    activeSchedules: number;
+    latestReportTitle: string | null;
+    latestReportStatus: string | null;
+    latestReportConfidence: string | null;
+    requiredActions: string[];
+  };
   guardrails: {
     mode: 'read_only';
     writesExecuted: false;
@@ -169,6 +177,17 @@ export async function loadReadOnlyContext(
     commercialAssessmentSignal?: {
       findMany(args: unknown): Promise<Array<{ id: string }>>;
     };
+    commercialExecutiveReport?: {
+      findMany(args: unknown): Promise<Array<{
+        title: string;
+        status: unknown;
+        confidence: string;
+        created_at: Date;
+      }>>;
+    };
+    commercialExecutiveReportSchedule?: {
+      findMany(args: unknown): Promise<Array<{ id: string }>>;
+    };
   };
 
   const [
@@ -184,6 +203,8 @@ export async function loadReadOnlyContext(
     revenueLines,
     commercialPlans,
     assessmentSignals,
+    executiveReports,
+    executiveSchedules,
   ] = await Promise.all([
     prisma.user.findFirst({
       where: { id: conversation.userId, tenant_key: tenantKey },
@@ -296,6 +317,22 @@ export async function loadReadOnlyContext(
       select: { id: true },
       take: 100,
     }) ?? Promise.resolve([]),
+    commercialClients.commercialExecutiveReport?.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        title: true,
+        status: true,
+        confidence: true,
+        created_at: true,
+      },
+      orderBy: { created_at: 'desc' },
+      take: 3,
+    }) ?? Promise.resolve([]),
+    commercialClients.commercialExecutiveReportSchedule?.findMany({
+      where: { tenant_key: tenantKey, status: 'active' },
+      select: { id: true },
+      take: 20,
+    }) ?? Promise.resolve([]),
   ]);
 
   return {
@@ -342,12 +379,32 @@ export async function loadReadOnlyContext(
         linkedEventId: plan.linked_event_id,
       })),
     },
+    commercialExecutive: summarizeExecutiveReporting(executiveReports, executiveSchedules),
     guardrails: {
       mode: 'read_only',
       writesExecuted: false,
       externalExecution: 'blocked',
       secretsReturned: false,
     },
+  };
+}
+
+function summarizeExecutiveReporting(
+  reports: Array<{ title: string; status: unknown; confidence: string; created_at: Date }>,
+  schedules: Array<{ id: string }>,
+): StitchiReadOnlyContext['commercialExecutive'] {
+  const latest = reports[0] || null;
+  const requiredActions: string[] = [];
+  if (!latest) requiredActions.push('Generate the first CEO commercial report preview.');
+  if (!schedules.length) requiredActions.push('Configure an executive report schedule after the customer confirms recipients and cadence.');
+  if (latest && latest.confidence === 'low') requiredActions.push('Improve report confidence by connecting/importing CRM, analytics, and course data.');
+  return {
+    recentReports: reports.length,
+    activeSchedules: schedules.length,
+    latestReportTitle: latest?.title || null,
+    latestReportStatus: latest ? String(latest.status) : null,
+    latestReportConfidence: latest?.confidence || null,
+    requiredActions,
   };
 }
 

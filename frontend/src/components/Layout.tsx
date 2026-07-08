@@ -74,6 +74,14 @@ const NAV_ITEMS: NavItem[] = [
     roles: PRODUCT_ROLES,
   },
   {
+    path: '/executive',
+    label: 'CEO Dashboard',
+    description: 'Revenue, spend and executive reports',
+    icon: BarChart3,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
+  },
+  {
     path: '/disciplines',
     label: 'Workspaces',
     description: 'Brand, acquisition, sales and operations',

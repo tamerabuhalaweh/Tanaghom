@@ -127,6 +127,8 @@ model Tenant {
   commercial_plans CommercialPlan[]
   commercial_assessment_signals CommercialAssessmentSignal[]
   commercial_discipline_records CommercialDisciplineRecord[]
+  commercial_executive_reports CommercialExecutiveReport[]
+  commercial_executive_report_schedules CommercialExecutiveReportSchedule[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[]
@@ -300,6 +302,8 @@ model User {
   commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
   commercial_discipline_records_owned CommercialDisciplineRecord[] @relation("CommercialDisciplineRecordOwner")
   commercial_discipline_records_created CommercialDisciplineRecord[] @relation("CommercialDisciplineRecordCreatedBy")
+  commercial_executive_reports_generated CommercialExecutiveReport[] @relation("CommercialExecutiveReportGeneratedBy")
+  commercial_executive_report_schedules_created CommercialExecutiveReportSchedule[] @relation("CommercialExecutiveReportScheduleCreatedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[] @relation("StitchiConversationUser")
   stitchi_action_runs StitchiActionRun[] @relation("StitchiActionRunUser")
@@ -3732,6 +3736,34 @@ enum EventKpiSourceType {
   connector
 }
 
+enum CommercialExecutiveReportCadence {
+  daily
+  weekly
+  monthly
+  quarterly
+  annual
+  custom
+}
+
+enum CommercialExecutiveReportStatus {
+  preview
+  generated
+  approved_send_ready
+  archived
+}
+
+enum CommercialExecutiveReportDeliveryChannel {
+  dashboard
+  email
+  whatsapp
+}
+
+enum CommercialExecutiveReportScheduleStatus {
+  active
+  paused
+  archived
+}
+
 model CommercialRevenueLine {
   id                 String                      @id @default(uuid()) @db.Uuid
   tenant_key         String
@@ -3864,6 +3896,63 @@ model CommercialDisciplineRecord {
   @@index([event_id])
   @@index([owner_user_id])
   @@map("commercial_discipline_records")
+}
+
+model CommercialExecutiveReport {
+  id                   String                          @id @default(uuid()) @db.Uuid
+  tenant_key           String
+  cadence              CommercialExecutiveReportCadence
+  period_start         DateTime
+  period_end           DateTime
+  timezone             String                          @default("UTC")
+  status               CommercialExecutiveReportStatus @default(preview)
+  title                String
+  summary              String?                         @db.Text
+  filters              Json?
+  metrics              Json
+  alerts               Json
+  missing_sources      Json
+  confidence           String                          @default("low")
+  preview_payload      Json
+  generated_by_user_id String                          @db.Uuid
+  created_at           DateTime                        @default(now())
+  updated_at           DateTime                        @updatedAt
+
+  tenant       Tenant @relation(fields: [tenant_key], references: [tenant_key])
+  generated_by User   @relation("CommercialExecutiveReportGeneratedBy", fields: [generated_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([cadence])
+  @@index([status])
+  @@index([period_start, period_end])
+  @@index([generated_by_user_id])
+  @@map("commercial_executive_reports")
+}
+
+model CommercialExecutiveReportSchedule {
+  id                     String                                    @id @default(uuid()) @db.Uuid
+  tenant_key             String
+  cadence                CommercialExecutiveReportCadence
+  timezone               String                                    @default("UTC")
+  recipients             String[]                                  @default([])
+  delivery_channels      CommercialExecutiveReportDeliveryChannel[] @default([dashboard])
+  status                 CommercialExecutiveReportScheduleStatus    @default(active)
+  approval_required      Boolean                                   @default(true)
+  next_run_at            DateTime?
+  last_preview_report_id String?                                   @db.Uuid
+  created_by_user_id     String                                    @db.Uuid
+  created_at             DateTime                                  @default(now())
+  updated_at             DateTime                                  @updatedAt
+
+  tenant     Tenant @relation(fields: [tenant_key], references: [tenant_key])
+  created_by User   @relation("CommercialExecutiveReportScheduleCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([cadence])
+  @@index([status])
+  @@index([next_run_at])
+  @@index([created_by_user_id])
+  @@map("commercial_executive_report_schedules")
 }
 
 model CommercialEvent {
