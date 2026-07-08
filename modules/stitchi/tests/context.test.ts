@@ -34,7 +34,12 @@ const prismaMocks = vi.hoisted(() => ({
   },
 }));
 
+const ghlSyncMocks = vi.hoisted(() => ({
+  getGhlSyncStatus: vi.fn(),
+}));
+
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
+vi.mock('../../ghl-sync/repository', () => ghlSyncMocks);
 
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext } from '../context';
 
@@ -112,6 +117,29 @@ describe('Stitchi read-only context loader', () => {
       { sync_status: 'ready_for_sync', state: 'test_passed' },
       { sync_status: 'blocked', state: 'blocked' },
     ]);
+    ghlSyncMocks.getGhlSyncStatus.mockResolvedValue({
+      tenantKey: 'tenant-a',
+      eventId: 'event-1',
+      sourceOfTruth: 'gohighlevel',
+      tanaghumRole: 'operating_reporting_layer',
+      credentialStatus: 'configured',
+      mappingStatus: 'partial',
+      readSyncEnabled: false,
+      writeBackEnabled: false,
+      acceptance: {
+        status: 'requires_mapping',
+        readyForReadSync: false,
+        customerAction: 'Map GoHighLevel stages.',
+        systemAction: 'Validate mappings before sync.',
+        readOnly: true,
+        externalWritesAllowed: false,
+        rawSecretsReturned: false,
+      },
+      ghlLeadCount: 4,
+      lastSyncAt: new Date('2026-07-08T10:00:00Z'),
+      lastRun: null,
+      requiredActions: ['Map a GoHighLevel pipeline stage for Purchased.'],
+    });
     prismaMocks.commercialRevenueLine.findMany.mockResolvedValue([
       {
         id: 'revenue-line-1',
@@ -159,6 +187,17 @@ describe('Stitchi read-only context loader', () => {
     expect(context.kpiSummary.spend).toBe(250);
     expect(context.riskSummary.critical).toBe(1);
     expect(context.connectorSummary.readyForSync).toBe(1);
+    expect(context.ghlCrm).toMatchObject({
+      sourceOfTruth: 'gohighlevel',
+      tanaghumRole: 'operating_reporting_layer',
+      credentialStatus: 'configured',
+      mappingStatus: 'partial',
+      readinessStatus: 'requires_mapping',
+      readyForReadSync: false,
+      mirroredLeadCount: 4,
+      requiredActions: ['Map a GoHighLevel pipeline stage for Purchased.'],
+      rawSecretsReturned: false,
+    });
     expect(context.commercialCenter.revenueLines[0]).toMatchObject({
       id: 'revenue-line-1',
       type: 'online_course',
@@ -174,5 +213,7 @@ describe('Stitchi read-only context loader', () => {
     expect(promptContext).not.toContain('encrypted_payload');
     expect(promptContext).not.toContain('raw-secret');
     expect(promptContext).not.toContain('api_key');
+    expect(promptContext).toContain('gohighlevel');
+    expect(promptContext).toContain('requires_mapping');
   });
 });

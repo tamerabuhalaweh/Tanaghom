@@ -3290,6 +3290,8 @@ model GhlLeadSyncRun {
   errors                Json?
   warnings              Json?
   raw_payload_returned  Boolean           @default(false)
+  provider_endpoint     String?
+  duration_ms           Int?
   created_by_user_id    String            @db.Uuid
   started_at            DateTime          @default(now())
   completed_at          DateTime?

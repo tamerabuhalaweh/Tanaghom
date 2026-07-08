@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
 import { ExternalServiceError, NotFoundError } from '@shared/errors';
 import { getActiveIntegrationCredential } from '../integration-credentials/service';
+import { getGhlMappingReadiness } from '../ghl-setup/repository';
 import { buildGhlMappingSet, countMappedStages, countMappedTags, mapGhlLead } from './mapper';
 import type { GhlClient } from './client';
 import type {
@@ -13,6 +14,27 @@ import type {
   GhlSyncStatusSummary,
   GhlWriteBackPreview,
 } from './types';
+
+const GHL_READ_PROVIDER_ENDPOINT = [
+  'POST /contacts/search',
+  'GET /opportunities/search',
+  'GET /contacts/{contactId}/appointments',
+].join(' + ');
+
+const REQUIRED_PIPELINE_OUTCOMES = [
+  ['meeting_booked', 'Meeting booked'],
+  ['meeting_attended', 'Meeting attended'],
+  ['no_show', 'No-show'],
+  ['purchased', 'Purchased'],
+  ['lost', 'Lost'],
+  ['follow_up_needed', 'Follow-up needed'],
+] as const;
+
+const REQUIRED_TEMPERATURE_OUTCOMES = [
+  ['warm', 'Warm lead'],
+  ['hot', 'Hot lead'],
+  ['buyer', 'Buyer'],
+] as const;
 
 export interface GhlRuntimeConfig {
   baseUrl: string;
@@ -49,9 +71,10 @@ export async function resolveGhlSyncRuntimeConfig(tenantKey: string): Promise<Gh
 
 export async function getGhlSyncStatus(tenantKey: string, eventId?: string): Promise<GhlSyncStatusSummary> {
   if (eventId) await assertEventOwnedByTenant(tenantKey, eventId);
-  const [config, mappings, lastRun, ghlLeadCount] = await Promise.all([
+  const [config, mappings, mappingReadiness, lastRun, ghlLeadCount] = await Promise.all([
     resolveGhlSyncRuntimeConfig(tenantKey),
     getMappingRecords(tenantKey),
+    getGhlMappingReadiness(tenantKey),
     prisma.ghlLeadSyncRun.findFirst({
       where: { tenant_key: tenantKey, event_id: eventId || undefined },
       orderBy: { started_at: 'desc' },
@@ -65,12 +88,13 @@ export async function getGhlSyncStatus(tenantKey: string, eventId?: string): Pro
     }),
   ]);
 
-  const mappingStatus = summarizeMappingStatus(mappings);
+  const mappingBlockers = productionMappingBlockers(mappingReadiness);
+  const mappingStatus = summarizeProductionMappingStatus(mappings, mappingReadiness, mappingBlockers);
   const readSyncEnabled = process.env.GHL_READ_SYNC_ENABLED === 'true';
   const writeBackEnabled = process.env.GHL_WRITE_BACK_ENABLED === 'true';
   const requiredActions: string[] = [];
   if (!credentialConfigured(config)) requiredActions.push('Configure tenant-owned GoHighLevel API key and location id.');
-  if (mappingStatus !== 'ready') requiredActions.push('Map GoHighLevel tags and pipeline stages to Tanaghum lead statuses/temperatures.');
+  if (mappingStatus !== 'ready') requiredActions.push(...mappingBlockers);
   if (!readSyncEnabled) requiredActions.push('Enable GHL_READ_SYNC_ENABLED=true before live read sync.');
   if (!writeBackEnabled) requiredActions.push('Write-back is disabled by default; enable only after customer authorization.');
   const acceptance = buildGhlAcceptance({
@@ -210,8 +234,10 @@ async function pullInternal(
   if (eventId) await assertEventOwnedByTenant(tenantKey, eventId);
   const config = await resolveGhlSyncRuntimeConfig(tenantKey);
   const mappings = await getMappingRecords(tenantKey);
+  const mappingReadiness = await getGhlMappingReadiness(tenantKey);
   const mappingSet = buildGhlMappingSet(mappings);
-  const mappingStatus = summarizeMappingStatus(mappings);
+  const mappingBlockers = productionMappingBlockers(mappingReadiness);
+  const startedAt = new Date();
   const baseRun = {
     tenant_key: tenantKey,
     event_id: eventId || null,
@@ -219,27 +245,47 @@ async function pullInternal(
     source_of_truth: 'gohighlevel' as const,
     created_by_user_id: userId,
     raw_payload_returned: false,
+    provider_endpoint: GHL_READ_PROVIDER_ENDPOINT,
+    started_at: startedAt,
   };
 
   if (!credentialConfigured(config)) {
+    const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
       data: {
         ...baseRun,
         status: 'requires_credentials',
         errors: ['Tenant-owned GoHighLevel API key and location id are required.'],
-        completed_at: new Date(),
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: completedAt,
+      },
+    });
+    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
+  }
+
+  if (mappingBlockers.length > 0) {
+    const completedAt = new Date();
+    const run = await prisma.ghlLeadSyncRun.create({
+      data: {
+        ...baseRun,
+        status: 'mapping_required',
+        errors: mappingBlockers,
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: completedAt,
       },
     });
     return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
   }
 
   if (process.env.GHL_READ_SYNC_ENABLED !== 'true') {
+    const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
       data: {
         ...baseRun,
         status: 'blocked',
         errors: ['GHL_READ_SYNC_ENABLED is not true.'],
-        completed_at: new Date(),
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: completedAt,
       },
     });
     return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
@@ -255,10 +301,8 @@ async function pullInternal(
     ));
     const tagsMapped = pull.contacts.reduce((total, contact) => total + countMappedTags(contact, mappingSet), 0);
     const stagesMapped = countMappedStages(pull.opportunities, mappingSet);
-    const warnings = [
-      ...pull.warnings,
-      ...(mappingStatus === 'ready' ? [] : ['GHL mapping is incomplete. Contacts were mirrored with conservative fallback status/temperature.']),
-    ];
+    const warnings = [...pull.warnings];
+    const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
       data: {
         ...baseRun,
@@ -269,17 +313,20 @@ async function pullInternal(
         tags_mapped: tagsMapped,
         stages_mapped: stagesMapped,
         warnings,
-        completed_at: mode === 'pull_preview' ? new Date() : null,
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: mode === 'pull_preview' ? completedAt : null,
       },
     });
     return { run: mapRun(run), contacts: mapped, pull };
   } catch (err) {
+    const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
       data: {
         ...baseRun,
         status: 'failed',
         errors: [err instanceof Error ? err.message : 'GoHighLevel pull failed.'],
-        completed_at: new Date(),
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: completedAt,
       },
     });
     return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
@@ -293,6 +340,8 @@ export async function buildWriteBackPreview(tenantKey: string, userId: string, l
     getMappingRecords(tenantKey),
   ]);
   if (!lead) throw new NotFoundError('LeadCaptureRecord', leadId);
+  const startedAt = new Date();
+  const completedAt = new Date();
   const mappedTags = outboundTagsForLead(String(lead.lead_status), String(lead.lead_temperature), mappings);
   const reasons: string[] = [];
   if (!credentialConfigured(config)) reasons.push('Tenant-owned GoHighLevel credentials are missing.');
@@ -309,8 +358,10 @@ export async function buildWriteBackPreview(tenantKey: string, userId: string, l
       write_backs_prepared: 1,
       warnings: reasons,
       raw_payload_returned: false,
+      provider_endpoint: `${config.baseUrl}/contacts/upsert`,
+      duration_ms: durationMs(startedAt, completedAt),
       created_by_user_id: userId,
-      completed_at: new Date(),
+      completed_at: completedAt,
     },
   });
 
@@ -349,6 +400,8 @@ export async function executeWriteBack(
 
   const response = await clientFactory(config).upsertContact(preview.payload);
   if (!response.ok) {
+    const startedAt = new Date();
+    const completedAt = new Date();
     await prisma.ghlLeadSyncRun.create({
       data: {
         tenant_key: tenantKey,
@@ -359,13 +412,17 @@ export async function executeWriteBack(
         write_backs_prepared: 1,
         errors: [`GoHighLevel write-back failed with status ${response.status}.`],
         raw_payload_returned: false,
+        provider_endpoint: `${config.baseUrl}/contacts/upsert`,
+        duration_ms: durationMs(startedAt, completedAt),
         created_by_user_id: userId,
-        completed_at: new Date(),
+        completed_at: completedAt,
       },
     });
     throw new ExternalServiceError('GoHighLevel', `Write-back failed with status ${response.status}`);
   }
 
+  const startedAt = new Date();
+  const completedAt = new Date();
   await prisma.ghlLeadSyncRun.create({
     data: {
       tenant_key: tenantKey,
@@ -375,8 +432,10 @@ export async function executeWriteBack(
       source_of_truth: 'gohighlevel',
       write_backs_prepared: 1,
       raw_payload_returned: false,
+      provider_endpoint: `${config.baseUrl}/contacts/upsert`,
+      duration_ms: durationMs(startedAt, completedAt),
       created_by_user_id: userId,
-      completed_at: new Date(),
+      completed_at: completedAt,
     },
   });
 
@@ -490,19 +549,53 @@ async function getMappingRecords(tenantKey: string) {
   });
 }
 
-function summarizeMappingStatus(records: Array<{ field_mappings: unknown; validation_status: string }>): 'missing' | 'partial' | 'ready' {
-  const valid = records.filter(record => record.validation_status === 'valid');
-  const hasTag = valid.some(record => {
-    const fields = record.field_mappings as Record<string, unknown> | null;
-    return fields?.mappingType === 'tag';
-  });
-  const hasPipeline = valid.some(record => {
-    const fields = record.field_mappings as Record<string, unknown> | null;
-    return fields?.mappingType === 'pipeline';
-  });
-  if (hasTag && hasPipeline) return 'ready';
-  if (hasTag || hasPipeline || records.length > 0) return 'partial';
-  return 'missing';
+type GhlMappingReadinessShape = Awaited<ReturnType<typeof getGhlMappingReadiness>>;
+
+function summarizeProductionMappingStatus(
+  records: Array<{ field_mappings: unknown; validation_status: string }>,
+  readiness: GhlMappingReadinessShape,
+  blockers: string[],
+): 'missing' | 'partial' | 'ready' {
+  if (blockers.length === 0) return 'ready';
+  const hasAnyMappedData = readiness.location.mapping !== null
+    || readiness.tags.totalCount > 0
+    || readiness.pipelines.totalCount > 0
+    || records.length > 0;
+  return hasAnyMappedData ? 'partial' : 'missing';
+}
+
+function productionMappingBlockers(readiness: GhlMappingReadinessShape): string[] {
+  const blockers: string[] = [];
+  if (readiness.location.state !== 'ready') {
+    blockers.push('Map the customer GoHighLevel location before read sync.');
+  }
+
+  const pipelineTargets = new Set(
+    readiness.pipelines.items
+      .filter(item => item.status === 'mapped')
+      .map(item => String(item.internalStage)),
+  );
+  const temperatureTargets = new Set(
+    readiness.tags.items
+      .filter(item => item.status === 'mapped')
+      .map(item => String(item.internalTag)),
+  );
+
+  for (const [key, label] of REQUIRED_PIPELINE_OUTCOMES) {
+    if (!pipelineTargets.has(key)) {
+      blockers.push(`Map a GoHighLevel pipeline stage for ${label}.`);
+    }
+  }
+  for (const [key, label] of REQUIRED_TEMPERATURE_OUTCOMES) {
+    if (!temperatureTargets.has(key)) {
+      blockers.push(`Map a GoHighLevel tag for ${label}.`);
+    }
+  }
+  return blockers;
+}
+
+function durationMs(startedAt: Date, completedAt: Date): number {
+  return Math.max(0, completedAt.getTime() - startedAt.getTime());
 }
 
 function outboundTagsForLead(status: string, temperature: string, mappings: Array<{ field_mappings: unknown; validation_status: string }>): string[] {
@@ -536,6 +629,8 @@ function mapRun(run: {
   errors: unknown;
   warnings: unknown;
   raw_payload_returned: boolean;
+  provider_endpoint?: string | null;
+  duration_ms?: number | null;
   started_at: Date;
   completed_at: Date | null;
 }): GhlSyncRunSummary {
@@ -556,6 +651,8 @@ function mapRun(run: {
     errors: normalizeJsonArray(run.errors),
     warnings: normalizeJsonArray(run.warnings),
     rawPayloadReturned: false,
+    providerEndpoint: run.provider_endpoint ?? null,
+    durationMs: run.duration_ms ?? null,
     startedAt: run.started_at,
     completedAt: run.completed_at,
   };

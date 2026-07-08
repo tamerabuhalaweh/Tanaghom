@@ -635,6 +635,8 @@ async function deriveCommercialCenterActionProposalV2(
   };
 }
 
+// Legacy fallback kept temporarily for audit comparison with the V2 commercial derivation path.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function deriveCommercialCenterActionProposal(content: string): ActionProposal | null {
   const lower = content.toLowerCase();
   if (!/(commercial|revenue line|business line|online course|b2b|platinum|trainer network|loyalty|community|three-year|quarterly|department|ØªØ¬Ø§Ø±ÙŠ|Ø¯ÙˆØ±Ø©|Ø§ÙŠØ±Ø§Ø¯)/i.test(lower)) {
