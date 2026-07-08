@@ -106,32 +106,16 @@ function isFollowUpResponse(value: ActionProposal | FollowUpResponse | null): va
 
 async function respondNode(state: typeof orchestrationState.State) {
   if (state.actionProposal) {
-    const threadId = `stitchi-orchestrated-action-${randomUUID()}`;
-    const actionRun = await repo.createActionRun(state.tenantKey, state.userId, state.role, state.conversationId, {
-      actionType: state.actionProposal.actionType,
-      inputPayload: state.actionProposal.inputPayload,
-      previewPayload: state.actionProposal.previewPayload,
-      requiresApproval: true,
-      riskLevel: state.actionProposal.riskLevel,
-      langGraphThreadId: threadId,
-    });
-    await startStitchiActionApprovalWorkflow({
-      threadId,
+    const { actionRun, assistantText } = await createActionRunFromProposal({
       tenantKey: state.tenantKey,
       userId: state.userId,
+      role: state.role,
       conversationId: state.conversationId,
-      actionRunId: actionRun.id,
-      actionType: actionRun.actionType,
-      inputSummary: state.actionProposal.previewPayload,
-    });
+    }, state.actionProposal);
     return {
       actionRun,
       status: 'action_proposed' as const,
-      assistantText: [
-        `I prepared this for review: ${state.actionProposal.reason}.`,
-        'No data has been changed yet.',
-        'A manager must approve it before Tanaghum executes the internal update.',
-      ].join('\n'),
+      assistantText,
     };
   }
 
@@ -165,6 +149,38 @@ async function respondNode(state: typeof orchestrationState.State) {
   }
 }
 
+async function createActionRunFromProposal(
+  state: { tenantKey: string; userId: string; role: string; conversationId: string },
+  proposal: ActionProposal,
+): Promise<{ actionRun: StitchiActionRunSummary; assistantText: string }> {
+  const threadId = `stitchi-orchestrated-action-${randomUUID()}`;
+  const actionRun = await repo.createActionRun(state.tenantKey, state.userId, state.role, state.conversationId, {
+    actionType: proposal.actionType,
+    inputPayload: proposal.inputPayload,
+    previewPayload: proposal.previewPayload,
+    requiresApproval: true,
+    riskLevel: proposal.riskLevel,
+    langGraphThreadId: threadId,
+  });
+  await startStitchiActionApprovalWorkflow({
+    threadId,
+    tenantKey: state.tenantKey,
+    userId: state.userId,
+    conversationId: state.conversationId,
+    actionRunId: actionRun.id,
+    actionType: actionRun.actionType,
+    inputSummary: proposal.previewPayload,
+  });
+  return {
+    actionRun,
+    assistantText: [
+      `I prepared this for review: ${proposal.reason}.`,
+      'No data has been changed yet.',
+      'A manager must approve it before Tanaghum executes the internal update.',
+    ].join('\n'),
+  };
+}
+
 const orchestrationGraph = new StateGraph(orchestrationState)
   .addNode('loadContext', loadContextNode)
   .addNode('classify', classifyNode)
@@ -194,7 +210,7 @@ export async function orchestrateStitchiMessage(
     },
   });
 
-  const result = await orchestrationGraph.invoke({
+  let result = await orchestrationGraph.invoke({
     role,
     tenantKey,
     userId,
@@ -206,6 +222,39 @@ export async function orchestrateStitchiMessage(
   }, {
     configurable: { thread_id: threadId },
   });
+
+  if (!result.actionRun && !result.actionProposal && !result.assistantText) {
+    const conversation = await repo.getConversation(tenantKey, userId, role, conversationId);
+    const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
+    const fallbackEventId = input.eventId || conversation.eventId || context.selectedEvent?.id || undefined;
+    const fallbackProposal = deriveActionProposal(input.content, fallbackEventId, context, input.metadata);
+    if (isFollowUpResponse(fallbackProposal)) {
+      result = {
+        ...result,
+        context,
+        eventId: fallbackEventId,
+        status: 'answered',
+        assistantText: fallbackProposal.assistantText,
+      };
+    } else if (fallbackProposal) {
+      const { actionRun, assistantText } = await createActionRunFromProposal({
+        tenantKey,
+        userId,
+        role,
+        conversationId,
+      }, fallbackProposal);
+      result = {
+        ...result,
+        context,
+        eventId: fallbackEventId,
+        actionProposal: fallbackProposal,
+        actionRun,
+        status: 'action_proposed',
+        assistantText,
+        providerType: 'none',
+      };
+    }
+  }
 
   const status = result.status || 'answered';
   const assistantMessage = await repo.createAssistantMessage(
