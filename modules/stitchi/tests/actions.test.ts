@@ -59,6 +59,7 @@ describe('Stitchi action registry', () => {
       'create_sales_task',
       'create_commercial_revenue_line',
       'create_commercial_plan',
+      'create_commercial_plan_with_revenue_line',
       'update_commercial_plan',
       'create_commercial_assessment_signal',
     ]);
@@ -220,6 +221,52 @@ describe('Stitchi action registry', () => {
     }));
     expect(commercialCenterMocks.createPlan).toHaveBeenCalledOnce();
     expect(commercialCenterMocks.createAssessmentSignal).toHaveBeenCalledOnce();
+  });
+
+  it('configures a missing revenue line before creating a commercial plan', async () => {
+    commercialCenterMocks.createRevenueLine.mockResolvedValueOnce({
+      id: '00000000-0000-0000-0000-000000000040',
+      revenueLineType: 'online_course',
+      name: 'Online Courses',
+    });
+
+    const result = await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'create_commercial_plan_with_revenue_line',
+      inputPayload: {
+        revenueLine: {
+          revenueLineType: 'online_course',
+          name: 'Online Courses',
+          status: 'active',
+          systemOfRecord: 'tanaghum',
+        },
+        plan: {
+          horizon: 'product_or_event',
+          stage: 'strategy_planning',
+          title: 'Leadership course launch plan',
+          objective: 'sell to entrepreneurs',
+          audience: 'warm followers and previous buyers',
+          budgetTarget: 5000,
+          revenueTarget: 30000,
+          actionPlan: 'content, ads, GHL follow-up, WhatsApp reminders',
+          status: 'draft',
+        },
+      },
+    });
+
+    expect(commercialCenterMocks.createRevenueLine).toHaveBeenCalledWith('marketing_manager', 'tenant-a', 'user-1', expect.objectContaining({
+      revenueLineType: 'online_course',
+      name: 'Online Courses',
+    }));
+    expect(commercialCenterMocks.createPlan).toHaveBeenCalledWith('marketing_manager', 'tenant-a', 'user-1', expect.objectContaining({
+      revenueLineId: '00000000-0000-0000-0000-000000000040',
+      objective: 'sell to entrepreneurs',
+      budgetTarget: 5000,
+      revenueTarget: 30000,
+    }));
+    expect(result.objectType).toBe('commercial_plan');
   });
 
   it('executes governed Commercial Command Center plan updates', async () => {

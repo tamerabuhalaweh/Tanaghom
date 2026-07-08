@@ -4,6 +4,7 @@ import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { AppError } from '@shared/errors';
 import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
+import type { CommercialRevenueLineType } from '@modules/commercial-command-center/types';
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext, type StitchiReadOnlyContext } from './context';
 import { checkStitchiPermission } from './policy';
 import * as repo from './repository';
@@ -415,17 +416,6 @@ function deriveCommercialCenterActionProposalV2(
         ].join('\n'),
       };
     }
-    if (!revenueLineId) {
-      return {
-        kind: 'follow_up',
-        assistantText: [
-          `${revenueLine.name} is not configured yet, so I cannot attach a saved plan to it.`,
-          `Do you want me to prepare the ${revenueLine.name} revenue line setup first?`,
-          'After that is approved and saved, I can create the commercial plan.',
-        ].join('\n'),
-      };
-    }
-
     const extractedPlan = extractCommercialPlanFields(content, context);
     const missing = requiredCommercialPlanFields(extractedPlan);
     if (missing.length > 0) {
@@ -436,6 +426,52 @@ function deriveCommercialCenterActionProposalV2(
     }
 
     const stage = inferCommercialStage(lower);
+    if (!revenueLineId) {
+      return {
+        actionType: 'create_commercial_plan_with_revenue_line',
+        inputPayload: {
+          revenueLine: {
+            revenueLineType: revenueLine.type,
+            name: revenueLine.name,
+            description: revenueLineLabel(revenueLine.type),
+            status: 'active',
+            systemOfRecord: 'tanaghum',
+          },
+          plan: {
+            linkedEventId: extractedPlan.linkedEventId ?? undefined,
+            horizon: inferCommercialHorizon(lower),
+            stage,
+            title,
+            objective: extractedPlan.objective,
+            audience: extractedPlan.audience,
+            budgetTarget: extractedPlan.budgetTarget,
+            revenueTarget: extractedPlan.revenueTarget,
+            strategySummary: extractedPlan.strategySummary,
+            actionPlan: extractedPlan.actionPlan,
+            status: 'draft',
+          },
+        },
+        previewPayload: {
+          revenueLineId: null,
+          revenueLineName: revenueLine.name,
+          revenueLineSetup: 'will be configured before saving this plan',
+          title,
+          stage,
+          objective: extractedPlan.objective,
+          audience: extractedPlan.audience,
+          budgetTarget: extractedPlan.budgetTarget,
+          revenueTarget: extractedPlan.revenueTarget,
+          actionPlan: extractedPlan.actionPlan,
+          linkedEventId: extractedPlan.linkedEventId || null,
+          linkedEventName: extractedPlan.linkedEventName || null,
+          approvalRequired: true,
+          externalExecution: 'blocked',
+        },
+        riskLevel: 'medium',
+        reason: `configure ${revenueLine.name} and create a commercial plan`,
+      };
+    }
+
     return {
       actionType: 'create_commercial_plan',
       inputPayload: {
@@ -695,7 +731,7 @@ function derivePlannerActionProposal(content: string, lower: string, eventId: st
 
 type ResolvedRevenueLine = {
   id: string | null;
-  type: string;
+  type: CommercialRevenueLineType;
   name: string;
   status: string;
 };
@@ -725,9 +761,10 @@ function resolveRevenueLine(
   const metadataId = typeof metadata?.revenueLineId === 'string' ? metadata.revenueLineId : '';
   const metadataType = typeof metadata?.revenueLineType === 'string' ? metadata.revenueLineType : '';
   const direct = lines.find(line => (metadataId && line.id === metadataId) || (metadataType && line.type === metadataType));
+  const directType = direct ? asCommercialRevenueLineType(direct.type) : null;
   if (direct) return {
     id: direct.id,
-    type: direct.type,
+    type: directType || 'live_event',
     name: direct.name,
     status: direct.status,
   };
@@ -735,9 +772,10 @@ function resolveRevenueLine(
   const inferredType = inferExplicitRevenueLineType(content.toLowerCase());
   if (inferredType) {
     const byType = lines.find(line => line.type === inferredType);
+    const typedByType = byType ? asCommercialRevenueLineType(byType.type) : null;
     if (byType) return {
       id: byType.id,
-      type: byType.type,
+      type: typedByType || inferredType,
       name: byType.name,
       status: byType.status,
     };
@@ -745,13 +783,28 @@ function resolveRevenueLine(
 
   const normalized = normalizeForMatch(content);
   const byName = lines.find(line => normalized.includes(normalizeForMatch(line.name)));
+  const byNameType = byName ? asCommercialRevenueLineType(byName.type) : null;
   if (byName) return {
     id: byName.id,
-    type: byName.type,
+    type: byNameType || 'live_event',
     name: byName.name,
     status: byName.status,
   };
 
+  return null;
+}
+
+function asCommercialRevenueLineType(value: string): CommercialRevenueLineType | null {
+  if (
+    value === 'live_event'
+    || value === 'online_course'
+    || value === 'b2b'
+    || value === 'platinum_elite'
+    || value === 'certified_trainer_network'
+    || value === 'loyalty_community'
+  ) {
+    return value;
+  }
   return null;
 }
 

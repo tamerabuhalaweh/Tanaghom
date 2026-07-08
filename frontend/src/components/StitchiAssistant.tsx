@@ -123,6 +123,7 @@ function actionTitle(actionType: string): string {
     set_lead_temperature: 'Update lead temperature',
     create_commercial_revenue_line: 'Set up revenue line',
     create_commercial_plan: 'Create commercial plan',
+    create_commercial_plan_with_revenue_line: 'Set up revenue line and create plan',
     update_commercial_plan: 'Update commercial plan',
     create_commercial_assessment_signal: 'Record commercial signal',
   };

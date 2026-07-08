@@ -35,6 +35,7 @@ const SUPPORTED_ACTIONS = [
   'create_sales_task',
   'create_commercial_revenue_line',
   'create_commercial_plan',
+  'create_commercial_plan_with_revenue_line',
   'update_commercial_plan',
   'create_commercial_assessment_signal',
 ] as const;
@@ -62,6 +63,11 @@ const setLeadTemperatureActionSchema = z.object({
 const updateCommercialPlanActionSchema = z.object({
   commercialPlanId: z.string().uuid(),
   plan: updateCommercialPlanSchema,
+});
+
+const createCommercialPlanWithRevenueLineActionSchema = z.object({
+  revenueLine: createRevenueLineSchema,
+  plan: createCommercialPlanSchema.omit({ revenueLineId: true }),
 });
 
 export function isExecutableStitchiAction(actionType: string): actionType is StitchiExecutableActionType {
@@ -154,6 +160,18 @@ export async function executeStitchiAction(input: {
       const payload = createCommercialPlanSchema.parse(input.inputPayload);
       const result = await commercialCenterService.createPlan(input.role, input.tenantKey, input.userId, payload);
       return { objectType: 'commercial_plan', objectId: result.id, result };
+    }
+    case 'create_commercial_plan_with_revenue_line': {
+      const payload = createCommercialPlanWithRevenueLineActionSchema.parse(input.inputPayload);
+      const revenueLine = await commercialCenterService.createRevenueLine(input.role, input.tenantKey, input.userId, payload.revenueLine);
+      if (!revenueLine.id) {
+        throw new ValidationError('Commercial revenue line setup did not return a saved revenue line id');
+      }
+      const plan = await commercialCenterService.createPlan(input.role, input.tenantKey, input.userId, {
+        ...payload.plan,
+        revenueLineId: revenueLine.id,
+      });
+      return { objectType: 'commercial_plan', objectId: plan.id, result: { revenueLine, plan } };
     }
     case 'update_commercial_plan': {
       const payload = updateCommercialPlanActionSchema.parse(input.inputPayload);
