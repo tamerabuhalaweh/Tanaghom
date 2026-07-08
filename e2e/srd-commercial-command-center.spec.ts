@@ -127,9 +127,37 @@ function lineDashboard(revenueLineType: string, planCreated: boolean) {
 async function installCommercialMocks(page: Page) {
   let planCreated = false;
   let stitchiAsked = false;
+  let actionStatus = 'awaiting_approval';
   const unexpectedRequests: string[] = [];
   const failedResponses: string[] = [];
   const consoleErrors: string[] = [];
+
+  const stitchiAction = () => ({
+    id: 'action-online-course-plan',
+    actionType: 'create_commercial_plan_with_revenue_line',
+    status: actionStatus,
+    riskLevel: 'medium',
+    requiresApproval: true,
+    previewPayload: {
+      revenueLineName: 'Online Courses',
+      title: 'Leadership Course Launch',
+      objective: 'sell to entrepreneurs.',
+      audience: 'warm followers and previous buyers.',
+      budgetTarget: 5000,
+      revenueTarget: 30000,
+      actionPlan: 'content, ads, GHL follow-up, WhatsApp reminders.',
+      linkedEventName: 'Leadership Masterclass',
+      externalExecution: 'blocked',
+      approvalRequired: true,
+    },
+    resultPayload: actionStatus === 'completed'
+      ? {
+          objectType: 'commercial_plan',
+          objectId: 'plan-online-course-growth',
+          externalExecution: 'blocked',
+        }
+      : null,
+  });
 
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -203,13 +231,53 @@ async function installCommercialMocks(page: Page) {
       await json(stitchiAsked ? [{
         id: 'message-assistant',
         role: 'assistant',
-        content: 'Focus next on the online course plan, CRM readiness, and missing analytics sources.',
+        content: 'I prepared this for review: configure Online Courses and create a commercial plan.\nNo data has been changed yet.\nA manager must approve it before Tanaghum executes the internal update.',
       }] : []);
       return;
     }
 
     if (pathname === '/stitchi/conversations/conversation-commercial/actions' && method === 'GET') {
-      await json([]);
+      await json(stitchiAsked ? [stitchiAction()] : []);
+      return;
+    }
+
+    if (pathname === '/stitchi/conversations/conversation-commercial/orchestrate' && method === 'POST') {
+      stitchiAsked = true;
+      actionStatus = 'awaiting_approval';
+      await json({
+        status: 'action_proposed',
+        userMessage: {
+          id: 'message-user',
+          role: 'user',
+          content: 'Create an Online Courses plan for a leadership course launch.',
+        },
+        assistantMessage: {
+          id: 'message-assistant',
+          role: 'assistant',
+          content: 'I prepared this for review: configure Online Courses and create a commercial plan.\nNo data has been changed yet.\nA manager must approve it before Tanaghum executes the internal update.',
+        },
+        actionRun: stitchiAction(),
+        safety: {
+          approvalRequired: true,
+          writesExecuted: false,
+          externalExecution: 'blocked',
+        },
+      }, 201);
+      return;
+    }
+
+    if (pathname === '/stitchi/actions/action-online-course-plan/approve-and-execute' && method === 'POST') {
+      actionStatus = 'completed';
+      planCreated = true;
+      await json({
+        approval: { decision: 'approved' },
+        actionRun: stitchiAction(),
+        executed: {
+          objectType: 'commercial_plan',
+          objectId: 'plan-online-course-growth',
+          result: { id: 'plan-online-course-growth' },
+        },
+      });
       return;
     }
 
@@ -276,11 +344,29 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await expect(page.getByText('Leadership Masterclass').last()).toBeVisible();
 
     await page.getByRole('button', { name: 'Ask Stitchi' }).first().click();
-    await expect(page).toHaveURL(/\/stitchi$/);
+    await expect(page).toHaveURL(/\/stitchi(?:$|[?#])/);
     await expect(page.getByRole('heading', { name: /Tell Stitchi what work you want done/i })).toBeVisible();
-    await page.getByPlaceholder(/What should I focus/i).fill('What should I focus on next for the online course revenue line?');
+    await page.getByPlaceholder(/What should I focus/i).fill([
+      'Stitchi, create an Online Courses plan for a leadership course launch.',
+      'Objective: sell to entrepreneurs.',
+      'Audience: warm followers and previous buyers.',
+      'Budget target: 5000.',
+      'Revenue target: 30000.',
+      'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+      'Link it to the next available live event if suitable.',
+    ].join('\n'));
     await page.getByRole('button', { name: 'Ask Stitchi' }).click();
-    await expect(page.getByText(/Focus next on the online course plan/i)).toBeVisible();
+    await expect(page.getByText(/I prepared this for review/i)).toBeVisible();
+    await expect(page.getByText('Online Courses').last()).toBeVisible();
+    await expect(page.getByText('Leadership Course Launch').last()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Approve & Save' }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Approve & Save' }).first().click();
+    await expect(page.getByText('Saved to Tanaghum. The workspace has been refreshed.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open Commercial Command Center' }).first()).toBeVisible();
+    await page.getByRole('link', { name: 'Open Commercial Command Center' }).first().click();
+    await expect(page).toHaveURL(/\/command-center(?:$|[?#])/);
+    await page.getByRole('button', { name: /Online Courses/i }).click();
+    await expect(page.getByRole('button', { name: /Q3 online course growth plan/i })).toBeVisible();
 
     monitor.assertClean();
   });

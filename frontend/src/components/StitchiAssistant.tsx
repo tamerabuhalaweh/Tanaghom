@@ -57,6 +57,13 @@ function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
+function customerLabel(value: unknown, fallback = ''): string {
+  const raw = typeof value === 'number' && Number.isFinite(value) ? String(value) : text(value, fallback);
+  if (/^Sprint\s*\d+\s+Acceptance\s+Event/i.test(raw)) return 'Linked live event';
+  if (/^Sprint\s*\d+\s+Acceptance\s+Lead/i.test(raw)) return 'Captured lead';
+  return raw.replace(/\bSprint\s*\d+\s+Acceptance\s*/gi, '').trim();
+}
+
 function normalizeRole(role: string): string {
   return role.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
 }
@@ -149,6 +156,31 @@ function statusAccent(status: string): 'teal' | 'amber' | 'rose' | 'blue' | 'vio
   if (['awaiting_approval', 'proposed', 'running'].includes(status)) return 'amber';
   if (['rejected', 'failed', 'cancelled'].includes(status)) return 'rose';
   return 'blue';
+}
+
+function isOperatorIntent(content: string): boolean {
+  return /\b(create|build|prepare|set up|setup|update|change|edit|record|save|link|launch|plan)\b/i.test(content)
+    && /\b(plan|commercial|revenue line|online course|course launch|event|blocker|risk|kpi|lead|audience|budget|revenue target|action plan)\b/i.test(content);
+}
+
+function resultObject(action: ActionRun): { objectType: string; objectId: string } | null {
+  if (!action.resultPayload || typeof action.resultPayload !== 'object') return null;
+  const result = action.resultPayload as RecordMap;
+  const objectType = text(result.objectType);
+  const objectId = text(result.objectId);
+  return objectType && objectId ? { objectType, objectId } : null;
+}
+
+function actionResultLink(action: ActionRun): { to: string; label: string } | null {
+  const result = resultObject(action);
+  if (!result) return null;
+  if (result.objectType === 'commercial_plan' || result.objectType === 'commercial_revenue_line') {
+    return { to: '/command-center', label: 'Open Commercial Command Center' };
+  }
+  if (result.objectType === 'event_problem' || result.objectType === 'commercial_event') {
+    return { to: '/events', label: 'Open Events' };
+  }
+  return null;
 }
 
 export function StitchiFloatingAssistant() {
@@ -288,7 +320,8 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     setMessages(prev => [...prev, localUser]);
 
     try {
-      if (nextMode === 'prepare') {
+      const shouldPrepare = nextMode === 'prepare' || isOperatorIntent(content);
+      if (shouldPrepare) {
         const result = await stitchiApi.orchestrate(conversation.id, requestPayload(content), token) as RecordMap;
         const userMessage = mapMessage(result.userMessage);
         const assistantMessage = mapMessage(result.assistantMessage);
@@ -300,6 +333,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
         ]);
         if (actionRun) setActions(prev => [actionRun, ...prev.filter(item => item.id !== actionRun.id)]);
         await refreshActions(conversation.id);
+        if (actionRun) setMode('prepare');
         return;
       }
 
@@ -334,10 +368,14 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     setSending(true);
     try {
       if (decision === 'approve') {
-        await stitchiApi.approveAndExecuteAction(actionId, { notes: 'Approved and saved from Stitchi assistant' }, token);
+        const result = await stitchiApi.approveAndExecuteAction(actionId, { notes: 'Approved and saved from Stitchi assistant' }, token) as RecordMap;
+        const actionRun = mapAction(result.actionRun);
+        if (actionRun) setActions(prev => [actionRun, ...prev.filter(item => item.id !== actionRun.id)]);
+        setMessage('Saved to Tanaghum. The workspace has been refreshed.');
         window.dispatchEvent(new CustomEvent('tanaghum:commercial-data-changed', { detail: { source: 'stitchi' } }));
       } else {
         await stitchiApi.rejectAction(actionId, { notes: 'Rejected from Stitchi assistant' }, token);
+        setMessage('Prepared work rejected. Nothing was changed.');
       }
       await refreshActions();
     } catch (err) {
@@ -387,6 +425,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
           ) : messages.length ? (
             <div className="space-y-4">
               {messages.map(item => <ChatBubble key={item.id} message={item} />)}
+              <InlineActionCard actions={actions} canApprove={canApprove} sending={sending} onDecision={decide} onExecute={execute} />
               <div ref={endRef} />
             </div>
           ) : (
@@ -514,6 +553,42 @@ function ChatBubble({ message }: { message: Message }) {
   );
 }
 
+function InlineActionCard({
+  actions,
+  canApprove,
+  sending,
+  onDecision,
+  onExecute,
+}: {
+  actions: ActionRun[];
+  canApprove: boolean;
+  sending: boolean;
+  onDecision: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
+  onExecute: (actionId: string) => Promise<void>;
+}) {
+  const action = actions.find(item => ['awaiting_approval', 'approved', 'completed', 'failed'].includes(item.status));
+  if (!action) return null;
+  return (
+    <div className="flex justify-start">
+      <div className="w-full max-w-[92%] rounded-[1.35rem] border border-[#70f5df]/24 bg-[#70f5df]/8 p-4 shadow-[0_20px_70px_rgba(0,220,174,0.08)]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-white">{actionTitle(action.actionType)}</div>
+            <div className="mt-1 text-xs leading-5 text-white/55">
+              {action.status === 'completed'
+                ? 'Saved to Tanaghum. External systems were not called.'
+                : 'Review this prepared work, then approve it to save internally.'}
+            </div>
+          </div>
+          <AieroStatusPill accent={statusAccent(action.status)}>{actionStatusLabel(action.status)}</AieroStatusPill>
+        </div>
+        <ActionPreview action={action} />
+        <ActionControls action={action} canApprove={canApprove} sending={sending} onDecision={onDecision} onExecute={onExecute} />
+      </div>
+    </div>
+  );
+}
+
 function ActionList({
   actions,
   canApprove,
@@ -552,44 +627,7 @@ function ActionList({
             <AieroStatusPill accent={statusAccent(action.status)}>{actionStatusLabel(action.status)}</AieroStatusPill>
           </div>
           <ActionPreview action={action} />
-          <div className="mt-3 flex flex-wrap gap-2">
-            {action.status === 'awaiting_approval' && canApprove && (
-              <>
-                <button
-                  type="button"
-                  disabled={sending}
-                  onClick={() => void onDecision(action.id, 'approve')}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#080813] disabled:opacity-45"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Approve & Save
-                </button>
-                <button
-                  type="button"
-                  disabled={sending}
-                  onClick={() => void onDecision(action.id, 'reject')}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-white/70 disabled:opacity-45"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  Reject
-                </button>
-              </>
-            )}
-            {action.status === 'awaiting_approval' && !canApprove && (
-              <span className="text-xs leading-6 text-white/45">Manager approval required.</span>
-            )}
-            {action.status === 'approved' && (
-              <button
-                type="button"
-                disabled={sending}
-                onClick={() => void onExecute(action.id)}
-                className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[#70f5df] px-3 py-1.5 text-xs font-semibold text-[#080813] disabled:opacity-45"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Save approved work
-              </button>
-            )}
-          </div>
+          <ActionControls action={action} canApprove={canApprove} sending={sending} onDecision={onDecision} onExecute={onExecute} />
         </div>
       ))}
     </div>
@@ -597,6 +635,71 @@ function ActionList({
 
   if (compact) return content;
   return <AieroPanel title="Prepared work" subtitle="Approve and save safe internal changes from here.">{content}</AieroPanel>;
+}
+
+function ActionControls({
+  action,
+  canApprove,
+  sending,
+  onDecision,
+  onExecute,
+}: {
+  action: ActionRun;
+  canApprove: boolean;
+  sending: boolean;
+  onDecision: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
+  onExecute: (actionId: string) => Promise<void>;
+}) {
+  const link = actionResultLink(action);
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {action.status === 'awaiting_approval' && canApprove && (
+        <>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() => void onDecision(action.id, 'approve')}
+            className="inline-flex min-h-9 items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#080813] disabled:opacity-45"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Approve & Save
+          </button>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() => void onDecision(action.id, 'reject')}
+            className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-white/70 disabled:opacity-45"
+          >
+            <XCircle className="h-3.5 w-3.5" />
+            Reject
+          </button>
+        </>
+      )}
+      {action.status === 'awaiting_approval' && !canApprove && (
+        <span className="text-xs leading-6 text-white/45">Manager approval required.</span>
+      )}
+      {action.status === 'approved' && (
+        <button
+          type="button"
+          disabled={sending}
+          onClick={() => void onExecute(action.id)}
+          className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[#70f5df] px-3 py-1.5 text-xs font-semibold text-[#080813] disabled:opacity-45"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Save approved work
+        </button>
+      )}
+      {action.status === 'completed' && link && (
+        <Link
+          to={link.to}
+          className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[#70f5df] px-3 py-1.5 text-xs font-semibold text-[#080813]"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {link.label}
+        </Link>
+      )}
+    </div>
+  );
 }
 
 function ActionPreview({ action }: { action: ActionRun }) {
@@ -614,7 +717,7 @@ function ActionPreview({ action }: { action: ActionRun }) {
   ];
   const rows: Array<[string, string]> = rawRows
     .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
-    .map(([label, value]) => [label, String(value)]);
+    .map(([label, value]) => [label, customerLabel(value)]);
   if (!rows.length) return null;
 
   return (
