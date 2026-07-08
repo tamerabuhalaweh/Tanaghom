@@ -1,7 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/auth';
-import { ForbiddenError, UnauthorizedError } from '@shared/errors';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '@shared/errors';
+import { prisma } from '@shared/database';
 import {
   auditSmartLabsAction,
   buildConversationPayload,
@@ -59,6 +61,96 @@ smartLabsVoiceRouter.get('/status', async (req: Request, res: Response, next: Ne
         externalExecutionRequiresFlagsAndApproval: true,
       },
       _label: 'SmartLabs voice connector status for this tenant',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+smartLabsVoiceRouter.post('/leads/:leadId/handoff-preview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    requireConnectorRole(session.role);
+    const input = z.object({
+      message: z.string().trim().min(1).max(4000),
+      escalationReason: z.string().trim().min(1).max(1000).optional(),
+      nextAction: z.string().trim().min(1).max(1000).default('Prepare SmartLabs voice/chat follow-up for review.'),
+      ownerRole: z.string().trim().min(1).max(120).default('sales_manager'),
+      agentId: z.string().trim().min(1).max(160).optional(),
+      voiceId: z.string().trim().min(1).max(160).optional(),
+    }).parse(req.body);
+    const leadId = String(req.params.leadId);
+    const lead = await prisma.leadCaptureRecord.findFirst({
+      where: { id: leadId, tenant_key: session.tenantKey },
+      select: {
+        id: true,
+        lead_name_placeholder: true,
+        lead_phone_placeholder: true,
+        lead_email_placeholder: true,
+        consent_status: true,
+        lead_status: true,
+        lead_temperature: true,
+      },
+    });
+    if (!lead) throw new NotFoundError('LeadCaptureRecord', leadId);
+
+    const config = await resolveSmartLabsConfig(session.tenantKey);
+    const payload = buildConversationPayload(config, {
+      agentId: input.agentId,
+      message: input.message,
+      conversationHistory: [],
+    });
+    const gate = smartLabsExecutionGate(config, { confirmExternalExecution: false });
+    const proposedSteps = {
+      provider: 'smartlabs_voice',
+      handoffType: 'voice_chat_follow_up',
+      lead: {
+        id: lead.id,
+        name: lead.lead_name_placeholder,
+        phone: lead.lead_phone_placeholder,
+        email: lead.lead_email_placeholder,
+        consentStatus: lead.consent_status,
+        status: lead.lead_status,
+        temperature: lead.lead_temperature,
+      },
+      payload,
+      escalationReason: input.escalationReason ?? null,
+      nextAction: input.nextAction,
+      ownerRole: input.ownerRole,
+      executionBlockers: gate.reasons,
+      externalCallPerformed: false,
+      rawSecretsReturned: false,
+    } as unknown as Prisma.InputJsonValue;
+    const sequence = await prisma.conversionSequencePlan.create({
+      data: {
+        lead_capture_record_id: lead.id,
+        sequence_type: 'smartlabs_voice_follow_up',
+        plan_status: 'draft',
+        proposed_steps: proposedSteps,
+        recommended_owner_department: input.ownerRole,
+        created_by_user_id: session.humanUserId,
+        created_by_agent_rep_id: session.agentRepId,
+      },
+    });
+    auditSmartLabsAction({
+      userId: session.humanUserId,
+      tenantKey: session.tenantKey,
+      action: 'smartlabs_lead_handoff_preview',
+      result: 'success',
+      objectId: sequence.id,
+    });
+    res.status(201).json({
+      status: 'prepared',
+      leadId: lead.id,
+      sequencePlanId: sequence.id,
+      payload,
+      reasons: gate.reasons,
+      safety: {
+        externalCallPerformed: false,
+        rawSecretsReturned: false,
+        approvalRequiredBeforeExecution: true,
+      },
+      _label: 'SmartLabs lead handoff package prepared; no conversation or call was triggered',
     });
   } catch (err) {
     next(err);

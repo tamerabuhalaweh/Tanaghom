@@ -112,10 +112,25 @@ describe('Stitchi read-only context loader', () => {
     prismaMocks.eventProblem.findMany.mockResolvedValue([
       { title: 'WhatsApp follow-up delayed', severity: 'critical', category: 'sales' },
     ]);
-    prismaMocks.integrationCredential.findMany.mockResolvedValue([{ id: 'cred-1' }]);
+    prismaMocks.integrationCredential.findMany.mockResolvedValue([
+      { id: 'cred-ghl', provider: 'gohighlevel', credential_type: 'api_key', last_validated_at: new Date('2026-07-08T08:00:00Z') },
+      { id: 'cred-kajabi', provider: 'kajabi', credential_type: 'oauth_client', last_validated_at: null },
+    ]);
     prismaMocks.connectorImportJob.findMany.mockResolvedValue([
-      { sync_status: 'ready_for_sync', state: 'test_passed' },
-      { sync_status: 'blocked', state: 'blocked' },
+      {
+        connector_id: 'kajabi',
+        sync_status: 'ready_for_sync',
+        state: 'test_passed',
+        last_dry_run_at: new Date('2026-07-08T09:00:00Z'),
+        last_sync_at: null,
+      },
+      {
+        connector_id: 'meta_analytics',
+        sync_status: 'blocked',
+        state: 'blocked',
+        last_dry_run_at: null,
+        last_sync_at: null,
+      },
     ]);
     ghlSyncMocks.getGhlSyncStatus.mockResolvedValue({
       tenantKey: 'tenant-a',
@@ -187,6 +202,22 @@ describe('Stitchi read-only context loader', () => {
     expect(context.kpiSummary.spend).toBe(250);
     expect(context.riskSummary.critical).toBe(1);
     expect(context.connectorSummary.readyForSync).toBe(1);
+    expect(context.unifiedDataLayer.kajabi).toMatchObject({
+      provider: 'kajabi',
+      credentialStatus: 'configured',
+      importJobStatus: 'ready_for_sync',
+    });
+    expect(context.unifiedDataLayer.whatsappFollowUp).toMatchObject({
+      sourceOfTruth: 'gohighlevel',
+      ghlCredentialStatus: 'configured',
+      whatsappCredentialStatus: 'missing',
+      externalWritesAllowed: false,
+    });
+    expect(context.unifiedDataLayer.smartLabsVoice).toMatchObject({
+      credentialStatus: 'missing',
+      readyForHandoffPreview: true,
+      externalCallsAllowed: false,
+    });
     expect(context.ghlCrm).toMatchObject({
       sourceOfTruth: 'gohighlevel',
       tanaghumRole: 'operating_reporting_layer',

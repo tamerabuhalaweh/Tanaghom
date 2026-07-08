@@ -272,11 +272,13 @@ export default function Analytics() {
     setLoading('voice-preview');
     setMessage('');
     try {
-      const result = (await smartLabsApi.conversation(
+      const result = (await smartLabsApi.leadHandoffPreview(
+        String(selectedLead.id),
         {
-          mode: 'preview',
           message: `Prepare a follow-up conversation for ${selectedLeadName}. Source: ${titleCase(text(selectedLead.sourcePlatform, 'manual'))}. Interest score: ${numberValue(selectedLead.qualificationScore)}. Goal: answer course questions and guide the lead to the right next step.`,
-          conversationHistory: [],
+          escalationReason: 'Lead requested course guidance or sales follow-up.',
+          nextAction: 'Review the SmartLabs package, then execute only after customer authorization.',
+          ownerRole: 'sales_manager',
         },
         token,
       )) as RecordMap;

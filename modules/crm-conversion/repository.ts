@@ -147,10 +147,9 @@ export async function getCrmHandoffRequestById(id: string, tenantKey: string): P
 export async function createWhatsAppHandoffRequest(input: CreateWhatsAppHandoffRequestInput, tenantKey: string): Promise<WhatsAppHandoffRequestSummary> {
   await getLeadCaptureRecordById(input.leadCaptureRecordId, tenantKey);
 
-  // Validate MCP mediation
-  if (!input.mcpMediationRequestId) {
-    throw new ForbiddenError('Direct WhatsApp access is blocked. MCP mediation is required.');
-  }
+  const blockedReason = input.mcpMediationRequestId
+    ? null
+    : 'Direct WhatsApp sending is blocked. The follow-up package is saved for review; MCP mediation is required before external execution.';
 
   const request = await prisma.whatsAppHandoffRequest.create({
     data: {
@@ -161,8 +160,9 @@ export async function createWhatsAppHandoffRequest(input: CreateWhatsAppHandoffR
       capability_resolution_id: input.capabilityResolutionId,
       requested_by_user_id: input.requestedByUserId,
       requested_by_agent_rep_id: input.requestedByAgentRepId,
-      handoff_status: 'pending',
+      handoff_status: blockedReason ? 'blocked' : 'pending',
       message_template_summary: input.messageTemplateSummary,
+      blocked_reason: blockedReason,
     },
   });
   return mapWhatsAppHandoffRequest(request);

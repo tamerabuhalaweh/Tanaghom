@@ -13,8 +13,13 @@ const prismaMocks = vi.hoisted(() => ({
   eventKpiRecord: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
 }));
 
+const integrationCredentialMocks = vi.hoisted(() => ({
+  getActiveIntegrationCredential: vi.fn(),
+}));
+
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
 vi.mock('@shared/logging', () => ({ auditLog: vi.fn() }));
+vi.mock('../../integration-credentials/service', () => integrationCredentialMocks);
 
 import * as repo from '../repository';
 import { VALID_TRANSITIONS, SUPPORTED_CONNECTORS } from '../types';
@@ -62,8 +67,12 @@ function sampleDryRunResult(overrides: Record<string, unknown> = {}) {
 describe('Connector Imports', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.ACQUISITION_READ_SYNC_ENABLED;
+    delete process.env.KAJABI_READ_SYNC_ENABLED;
     prismaMocks.integrationCredential.findFirst.mockResolvedValue(null);
     prismaMocks.integrationCredential.findUnique.mockResolvedValue(null);
+    integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue(null);
+    vi.unstubAllGlobals();
   });
 
   describe('Readiness', () => {
@@ -124,6 +133,11 @@ describe('Connector Imports', () => {
     it('persists last_dry_run_at and last_dry_run_result', async () => {
       prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'meta_analytics' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: new Date() });
+      integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+        id: 'cred-1',
+        secrets: { accessToken: 'token', adAccountId: '123' },
+        metadata: {},
+      });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
@@ -134,25 +148,35 @@ describe('Connector Imports', () => {
           last_dry_run_at: expect.any(Date),
           last_dry_run_result: expect.objectContaining({ kpiRows: expect.any(Array) }),
           sync_status: 'blocked',
-          last_sync_error: expect.stringContaining('No read-only adapter'),
+          last_sync_error: expect.stringContaining('ACQUISITION_READ_SYNC_ENABLED'),
         }),
       }));
     });
 
-    it('does not fabricate KPI rows without a read-only connector adapter', async () => {
+    it('does not fabricate KPI rows when acquisition read-sync flag is disabled', async () => {
       prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'meta_analytics' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: null });
+      integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+        id: 'cred-1',
+        secrets: { accessToken: 'token', adAccountId: '123' },
+        metadata: {},
+      });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
       const result = await repo.dryRun('tenant-a', 'user-1', 'meta_analytics', 'event-1');
       expect(result.kpiRows).toEqual([]);
-      expect(result.warnings[0]).toContain('No read-only adapter is implemented');
+      expect(result.warnings[0]).toContain('ACQUISITION_READ_SYNC_ENABLED');
     });
 
-    it('records blocked sync status when no read-only adapter exists', async () => {
+    it('records blocked sync status when acquisition read-sync flag is disabled', async () => {
       prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: null });
+      integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+        id: 'cred-1',
+        secrets: { accessToken: 'token', adAccountId: '123' },
+        metadata: {},
+      });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
@@ -161,9 +185,133 @@ describe('Connector Imports', () => {
       expect(prismaMocks.connectorImportJob.update).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           sync_status: 'blocked',
-          last_sync_error: expect.stringContaining('No read-only adapter'),
+          last_sync_error: expect.stringContaining('ACQUISITION_READ_SYNC_ENABLED'),
         }),
       }));
+    });
+
+    it('produces exact Meta KPI rows from read-only provider response', async () => {
+      process.env.ACQUISITION_READ_SYNC_ENABLED = 'true';
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'meta_analytics' }));
+      prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: new Date() });
+      integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+        id: 'cred-1',
+        secrets: { accessToken: 'token', adAccountId: '123' },
+        metadata: {},
+      });
+      prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [{
+            date_start: '2026-07-01',
+            reach: '1000',
+            impressions: '2500',
+            clicks: '70',
+            spend: '500.5',
+            actions: [
+              { action_type: 'lead', value: '12' },
+              { action_type: 'post_engagement', value: '220' },
+              { action_type: 'purchase', value: '3' },
+            ],
+          }],
+        }),
+      }));
+
+      const result = await repo.dryRun('tenant-a', 'user-1', 'meta_analytics', 'event-1');
+
+      expect(result.kpiRows).toHaveLength(1);
+      expect(result.kpiRows[0]).toMatchObject({
+        channel: 'meta',
+        reach: 1000,
+        impressions: 2500,
+        clicks: 70,
+        spend: 500.5,
+        leads: 12,
+        formCompletions: 12,
+        interactions: 220,
+        purchases: 3,
+      });
+      expect(JSON.stringify(result)).not.toContain('token');
+      expect(prismaMocks.eventKpiRecord.create).not.toHaveBeenCalled();
+    });
+
+    it('produces exact YouTube KPI rows from read-only provider response', async () => {
+      process.env.ACQUISITION_READ_SYNC_ENABLED = 'true';
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'youtube_analytics' }));
+      prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-youtube', last_validated_at: new Date() });
+      integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+        id: 'cred-youtube',
+        secrets: { accessToken: 'yt-token', channelId: 'channel-1' },
+        metadata: {},
+      });
+      prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ rows: [['2026-07-01', 900, 45, 8, 12]] }),
+      }));
+
+      const result = await repo.dryRun('tenant-a', 'user-1', 'youtube_analytics', 'event-1');
+
+      expect(result.kpiRows).toHaveLength(1);
+      expect(result.kpiRows[0]).toMatchObject({
+        channel: 'youtube',
+        reach: 900,
+        impressions: 900,
+        interactions: 65,
+      });
+    });
+
+    it('produces Kajabi purchase KPI rows after read-only token and purchases response', async () => {
+      process.env.KAJABI_READ_SYNC_ENABLED = 'true';
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'kajabi' }));
+      prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-kajabi', last_validated_at: new Date() });
+      integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+        id: 'cred-kajabi',
+        secrets: { clientId: 'client', clientSecret: 'secret' },
+        metadata: {},
+      });
+      prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: 'provider-token' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ attributes: { created_at: '2026-07-02T10:00:00Z' } }] }),
+        }));
+
+      const result = await repo.dryRun('tenant-a', 'user-1', 'kajabi', 'event-1');
+
+      expect(result.kpiRows).toHaveLength(1);
+      expect(result.kpiRows[0]).toMatchObject({ channel: 'kajabi', purchases: 1 });
+      expect(result.leadAttributions).toBe(1);
+      expect(JSON.stringify(result)).not.toContain('secret');
+    });
+
+    it('blocks Formaloo dry-run until customer-specific submissions endpoint is configured', async () => {
+      process.env.ACQUISITION_READ_SYNC_ENABLED = 'true';
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'formaloo' }));
+      prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-formaloo', last_validated_at: new Date() });
+      integrationCredentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+        id: 'cred-formaloo',
+        secrets: { clientKey: 'client-key', formId: 'form-1' },
+        metadata: {},
+      });
+      prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+
+      const result = await repo.dryRun('tenant-a', 'user-1', 'formaloo', 'event-1');
+      expect(result.kpiRows).toEqual([]);
+      expect(result.warnings[0]).toContain('submissionsUrl');
     });
 
     it('has no writes to EventKpiRecord', async () => {
