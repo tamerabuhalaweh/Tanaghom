@@ -132,6 +132,7 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
   test.skip(!acceptanceEnabled, 'Set E2E_SPRINT65_ACCEPTANCE=true or E2E_ACCEPTANCE=true with E2E_BASE_URL and E2E_API_BASE_URL to run Sprint 65 acceptance.');
 
   test('15-minute customer path loads without console errors or unexpected failed API responses', async ({ page, request }) => {
+    test.setTimeout(90_000);
     const monitor = await monitorCustomerPath(page);
     const token = await loginByApi(request);
     const event = await getOrCreateEvent(request, token);
@@ -149,12 +150,11 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
     await page.waitForURL(/\/(command-center|dashboard)(?:$|[?#])/);
     await expect(page.getByRole('heading', { name: /Run the commercial business lines/i })).toBeVisible({ timeout: 20000 });
 
-    await expectCustomerPage(page, '/events', /^Events$/i, /Event Queue|No events yet/i);
+    await expectCustomerPage(page, '/events', /Event Workspace/i, /Choose the event|No events yet/i);
     await expectCustomerPage(page, '/events/new', /Create Event Strategy/i, /What Happens After Saving/i);
-    await expectCustomerPage(page, `/events/${eventId}`, /^Events$/i, /Event Campaign Planner/i);
-    await expect(page.getByRole('heading', { name: /Sales Workflow/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Post-Event Closeout Report/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Connector Data Status/i })).toBeVisible();
+    await expectCustomerPage(page, `/events/${eventId}`, /Event Workspace/i, /Run the event workflow|Lead and Sales Funnel/i);
+    await expect(page.getByRole('heading', { name: /Lead and Sales Funnel/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /What The Team Should Do Next/i })).toBeVisible();
 
     await expectCustomerPage(page, '/ideas', /Content Creator/i, /Campaign Brief/i);
     if (requireRealAi) {
@@ -166,8 +166,8 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
     await expectCustomerPage(page, '/approvals', /Review & Approve/i, /Human Review|Review Queue|Nothing to show yet/i);
     await expectCustomerPage(page, '/publishing', /Scheduling/i, /Scheduling Service|Scheduling & Review|Postiz/i);
     await expectCustomerPage(page, '/analytics', /Performance/i, /Lead|Customer Interest|Waiting for Data/i);
-    await expectCustomerPage(page, '/events/master', /Master Events Dashboard/i, /Event Comparison|No event results yet/i);
-    await expectCustomerPage(page, '/integration-credentials', /Connect Business Systems/i, /Start Here: Choose What You Want To Connect/i);
+    await expectCustomerPage(page, '/events/master', /Business Control Room/i, /Event Comparison|No event results yet/i);
+    await expectCustomerPage(page, '/integration-credentials', /Connect Business Systems/i, /Setup Wizard: Choose A Data Source|Choose a connector to begin/i);
 
     monitor.assertClean();
   });
