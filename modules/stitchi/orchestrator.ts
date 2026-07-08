@@ -223,7 +223,7 @@ export async function orchestrateStitchiMessage(
     configurable: { thread_id: threadId },
   });
 
-  if (!result.actionRun && !result.actionProposal && !result.assistantText) {
+  if (!result.actionRun && !result.assistantText) {
     const conversation = await repo.getConversation(tenantKey, userId, role, conversationId);
     const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
     const fallbackEventId = input.eventId || conversation.eventId || context.selectedEvent?.id || undefined;
