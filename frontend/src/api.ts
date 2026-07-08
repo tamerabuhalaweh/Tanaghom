@@ -653,6 +653,8 @@ export const stitchiApi = {
   }),
   approveAction: (actionId: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/stitchi/actions/${actionId}/approve`, { method: 'POST', body: data, token }),
+  approveAndExecuteAction: (actionId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/stitchi/actions/${actionId}/approve-and-execute`, { method: 'POST', body: data, token }),
   rejectAction: (actionId: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/stitchi/actions/${actionId}/reject`, { method: 'POST', body: data, token }),
   executeAction: (actionId: string, token: string) =>

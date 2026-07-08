@@ -300,6 +300,100 @@ describe('Stitchi service RBAC', () => {
     expect(result.executed.objectId).toBe('problem-1');
   });
 
+  it('approves and executes an internal action in one governed service call', async () => {
+    actionMocks.isExecutableStitchiAction.mockReturnValue(true);
+    vi.mocked(repo.decideActionRun).mockResolvedValue({
+      actionRun: {
+        id: 'action-1',
+        tenantKey: 'tenant-a',
+        conversationId: 'conversation-1',
+        userId: 'user-1',
+        actionType: 'create_commercial_plan',
+        status: 'approved',
+        inputPayload: {},
+        previewPayload: null,
+        resultPayload: null,
+        requiresApproval: true,
+        riskLevel: 'medium',
+        auditRecordId: null,
+        langGraphThreadId: 'thread-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        completedAt: null,
+      },
+      approval: {
+        id: 'approval-1',
+        tenantKey: 'tenant-a',
+        actionRunId: 'action-1',
+        approverUserId: 'manager-1',
+        decision: 'approved',
+        notes: null,
+        createdAt: new Date(),
+      },
+    });
+    vi.mocked(repo.getActionRun).mockResolvedValue({
+      id: 'action-1',
+      tenantKey: 'tenant-a',
+      conversationId: 'conversation-1',
+      userId: 'user-1',
+      actionType: 'create_commercial_plan',
+      status: 'approved',
+      inputPayload: {
+        revenueLineId: '00000000-0000-0000-0000-000000000040',
+        horizon: 'quarterly',
+        title: 'Leadership course launch',
+      },
+      previewPayload: null,
+      resultPayload: null,
+      requiresApproval: true,
+      riskLevel: 'medium',
+      auditRecordId: null,
+      langGraphThreadId: 'thread-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: null,
+    });
+    vi.mocked(repo.markActionRunRunning).mockResolvedValue({} as never);
+    actionMocks.executeStitchiAction.mockResolvedValue({
+      objectType: 'commercial_plan',
+      objectId: 'plan-1',
+      result: { id: 'plan-1', title: 'Leadership course launch' },
+    });
+    vi.mocked(repo.completeActionRun).mockResolvedValue({
+      id: 'action-1',
+      tenantKey: 'tenant-a',
+      conversationId: 'conversation-1',
+      userId: 'user-1',
+      actionType: 'create_commercial_plan',
+      status: 'completed',
+      inputPayload: {},
+      previewPayload: null,
+      resultPayload: { objectId: 'plan-1' },
+      requiresApproval: true,
+      riskLevel: 'medium',
+      auditRecordId: null,
+      langGraphThreadId: 'thread-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    const result = await service.approveAndExecuteActionRun('marketing_manager', 'tenant-a', 'manager-1', 'action-1', {
+      notes: 'Approved and saved from Stitchi assistant',
+    });
+
+    expect(repo.decideActionRun).toHaveBeenCalledWith('tenant-a', 'manager-1', 'marketing_manager', 'action-1', 'approved', {
+      notes: 'Approved and saved from Stitchi assistant',
+    });
+    expect(actionMocks.executeStitchiAction).toHaveBeenCalledWith(expect.objectContaining({
+      actionType: 'create_commercial_plan',
+      tenantKey: 'tenant-a',
+      userId: 'manager-1',
+    }));
+    expect(result.actionRun.status).toBe('completed');
+    expect(result.executed.objectId).toBe('plan-1');
+  });
+
   it('generates a read-only assistant answer with the configured user provider', async () => {
     const result = await service.generateReadOnlyAssistantResponse('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: 'What should I prioritize today?',

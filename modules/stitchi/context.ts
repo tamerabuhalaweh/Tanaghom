@@ -2,6 +2,13 @@ import { prisma } from '@shared/database';
 import type { StitchiConversationSummary } from './types';
 
 export interface StitchiReadOnlyContext {
+  currentUser: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    departmentName: string | null;
+  };
   conversation: {
     id: string;
     title: string;
@@ -47,6 +54,7 @@ export interface StitchiReadOnlyContext {
     activePlans: number;
     openAssessmentSignals: number;
     revenueLines: Array<{
+      id: string | null;
       type: string;
       name: string;
       status: string;
@@ -88,6 +96,7 @@ export async function loadReadOnlyContext(
   tenantKey: string,
   conversation: StitchiConversationSummary,
   requestedEventId?: string,
+  currentUserRole = 'unknown',
 ): Promise<StitchiReadOnlyContext> {
   const eventId = requestedEventId || conversation.eventId || undefined;
   const commercialClients = prisma as unknown as {
@@ -118,6 +127,7 @@ export async function loadReadOnlyContext(
   };
 
   const [
+    currentUser,
     selectedEvent,
     recentEvents,
     leads,
@@ -129,6 +139,16 @@ export async function loadReadOnlyContext(
     commercialPlans,
     assessmentSignals,
   ] = await Promise.all([
+    prisma.user.findFirst({
+      where: { id: conversation.userId, tenant_key: tenantKey },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        department: { select: { name: true } },
+      },
+    }),
     eventId
       ? prisma.commercialEvent.findFirst({
         where: { id: eventId, tenant_key: tenantKey },
@@ -229,6 +249,13 @@ export async function loadReadOnlyContext(
   ]);
 
   return {
+    currentUser: {
+      id: currentUser?.id || conversation.userId,
+      name: currentUser?.name || 'Tanaghum user',
+      email: currentUser?.email || '',
+      role: currentUserRole,
+      departmentName: currentUser?.department?.name || null,
+    },
     conversation: {
       id: conversation.id,
       title: conversation.title,
@@ -245,6 +272,7 @@ export async function loadReadOnlyContext(
       activePlans: commercialPlans.filter(plan => String(plan.status) === 'active').length,
       openAssessmentSignals: assessmentSignals.length,
       revenueLines: revenueLines.map(line => ({
+        id: line.id,
         type: String(line.revenue_line_type),
         name: line.name,
         status: String(line.status),

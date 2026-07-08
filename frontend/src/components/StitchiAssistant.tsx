@@ -45,6 +45,7 @@ interface ActionRun {
 
 const STARTER_PROMPTS = [
   'What should I focus on today?',
+  'Create an Online Courses plan for a leadership course launch. Objective: sell to entrepreneurs. Audience: warm followers and previous buyers. Budget target: 5000. Revenue target: 30000. Action plan: content, ads, GHL follow-up, WhatsApp reminders. Link it to the next available live event if suitable.',
   'Prepare the event marketing and sales plan.',
   'Record this blocker: WhatsApp follow-up is taking too long.',
   'Check whether CRM and social data are ready.',
@@ -120,6 +121,10 @@ function actionTitle(actionType: string): string {
     create_event_kpi_record: 'Save KPI record',
     update_lead_status: 'Update lead status',
     set_lead_temperature: 'Update lead temperature',
+    create_commercial_revenue_line: 'Set up revenue line',
+    create_commercial_plan: 'Create commercial plan',
+    update_commercial_plan: 'Update commercial plan',
+    create_commercial_assessment_signal: 'Record commercial signal',
   };
   return labels[actionType] || actionType.replaceAll('_', ' ');
 }
@@ -192,12 +197,23 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
   const location = useLocation();
   const role = getUserRole(user);
   const canApprove = APPROVER_ROLES.includes(role);
-  const eventId = useMemo(() => extractEventId(location.pathname), [location.pathname]);
+  const routeEventId = useMemo(() => extractEventId(location.pathname), [location.pathname]);
+  const searchContext = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return {
+      eventId: routeEventId || text(params.get('eventId')),
+      revenueLineId: text(params.get('revenueLineId')),
+      revenueLineType: text(params.get('revenueLineType')),
+      prompt: text(params.get('prompt')),
+      mode: text(params.get('mode')),
+    };
+  }, [location.search, routeEventId]);
+  const eventId = searchContext.eventId || undefined;
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [actions, setActions] = useState<ActionRun[]>([]);
-  const [input, setInput] = useState('');
-  const [mode, setMode] = useState<ChatMode>('ask');
+  const [input, setInput] = useState(() => searchContext.prompt || '');
+  const [mode, setMode] = useState<ChatMode>(() => searchContext.mode === 'prepare' ? 'prepare' : 'ask');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
@@ -248,6 +264,18 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     setActions((Array.isArray(rows) ? rows : []).map(mapAction).filter(Boolean) as ActionRun[]);
   }
 
+  function requestPayload(content: string) {
+    return {
+      content,
+      ...(eventId ? { eventId } : {}),
+      metadata: {
+        currentPath: `${location.pathname}${location.search}`,
+        ...(searchContext.revenueLineId ? { revenueLineId: searchContext.revenueLineId } : {}),
+        ...(searchContext.revenueLineType ? { revenueLineType: searchContext.revenueLineType } : {}),
+      },
+    };
+  }
+
   async function sendMessage(nextMode = mode, prompt = input) {
     if (!token || !conversation || sending) return;
     const content = prompt.trim();
@@ -260,7 +288,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
 
     try {
       if (nextMode === 'prepare') {
-        const result = await stitchiApi.orchestrate(conversation.id, { content, ...(eventId ? { eventId } : {}) }, token) as RecordMap;
+        const result = await stitchiApi.orchestrate(conversation.id, requestPayload(content), token) as RecordMap;
         const userMessage = mapMessage(result.userMessage);
         const assistantMessage = mapMessage(result.assistantMessage);
         const actionRun = mapAction(result.actionRun);
@@ -276,7 +304,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
 
       const assistantId = `local-assistant-${Date.now()}`;
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', pending: true }]);
-      await stitchiApi.respondStream(conversation.id, { content, ...(eventId ? { eventId } : {}) }, token, (event) => {
+      await stitchiApi.respondStream(conversation.id, requestPayload(content), token, (event) => {
         const data = event.data as RecordMap;
         if (event.event === 'stitchi.token' && typeof data.text === 'string') {
           setMessages(prev => prev.map(item => item.id === assistantId ? { ...item, content: `${item.content}${data.text}` } : item));
@@ -305,7 +333,8 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     setSending(true);
     try {
       if (decision === 'approve') {
-        await stitchiApi.approveAction(actionId, { notes: 'Approved from Stitchi assistant' }, token);
+        await stitchiApi.approveAndExecuteAction(actionId, { notes: 'Approved and saved from Stitchi assistant' }, token);
+        window.dispatchEvent(new CustomEvent('tanaghum:commercial-data-changed', { detail: { source: 'stitchi' } }));
       } else {
         await stitchiApi.rejectAction(actionId, { notes: 'Rejected from Stitchi assistant' }, token);
       }
@@ -323,6 +352,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     setSending(true);
     try {
       await stitchiApi.executeAction(actionId, token);
+      window.dispatchEvent(new CustomEvent('tanaghum:commercial-data-changed', { detail: { source: 'stitchi' } }));
       await refreshActions();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Save failed.');
@@ -520,6 +550,7 @@ function ActionList({
             </div>
             <AieroStatusPill accent={statusAccent(action.status)}>{actionStatusLabel(action.status)}</AieroStatusPill>
           </div>
+          <ActionPreview action={action} />
           <div className="mt-3 flex flex-wrap gap-2">
             {action.status === 'awaiting_approval' && canApprove && (
               <>
@@ -530,7 +561,7 @@ function ActionList({
                   className="inline-flex min-h-9 items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#080813] disabled:opacity-45"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Approve
+                  Approve & Save
                 </button>
                 <button
                   type="button"
@@ -565,6 +596,41 @@ function ActionList({
 
   if (compact) return content;
   return <AieroPanel title="Prepared work" subtitle="Approve and save safe internal changes from here.">{content}</AieroPanel>;
+}
+
+function ActionPreview({ action }: { action: ActionRun }) {
+  if (!action.previewPayload || typeof action.previewPayload !== 'object') return null;
+  const preview = action.previewPayload as RecordMap;
+  const rawRows: Array<[string, unknown]> = [
+    ['Revenue line', preview.revenueLineName],
+    ['Title', preview.title || preview.name],
+    ['Objective', preview.objective],
+    ['Audience', preview.audience],
+    ['Budget target', preview.budgetTarget],
+    ['Revenue target', preview.revenueTarget],
+    ['Linked event', preview.linkedEventName],
+    ['Action plan', preview.actionPlan],
+  ];
+  const rows: Array<[string, string]> = rawRows
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+    .map(([label, value]) => [label, String(value)]);
+  if (!rows.length) return null;
+
+  return (
+    <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-black/15 p-3">
+      {rows.slice(0, 6).map(([label, value]) => (
+        <div key={label} className="grid gap-1 text-xs leading-5 sm:grid-cols-[100px_1fr]">
+          <span className="font-semibold uppercase tracking-[0.14em] text-white/38">{label}</span>
+          <span className="min-w-0 break-words text-white/72">{String(value)}</span>
+        </div>
+      ))}
+      {rows.length > 6 && (
+        <div className="text-xs leading-5 text-white/45">
+          {String(rows[6][1])}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function QuickLink({ to, label }: { to: string; label: string }) {

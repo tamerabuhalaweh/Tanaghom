@@ -117,7 +117,7 @@ export async function generateReadOnlyAssistantResponse(
       requestedEventId: input.eventId,
     },
   });
-  const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId);
+  const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
 
   try {
     const provider = await resolveUserLLMProvider(userId);
@@ -215,7 +215,7 @@ export async function* streamReadOnlyAssistantResponse(
   });
   yield { type: 'user_message_saved', message: userMessage };
 
-  const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId);
+  const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
   const contextShape = summarizeContextShape(context);
   yield {
     type: 'context_loaded',
@@ -467,6 +467,22 @@ export async function executeApprovedActionRun(
     const actionRun = await repo.failActionRun(userId, actionRunId, message);
     throw Object.assign(err instanceof Error ? err : new Error(message), { actionRun });
   }
+}
+
+export async function approveAndExecuteActionRun(
+  role: string,
+  tenantKey: string,
+  userId: string,
+  actionRunId: string,
+  input: ActionDecisionInput,
+) {
+  const approval = await approveActionRun(role, tenantKey, userId, actionRunId, input);
+  const execution = await executeApprovedActionRun(role, tenantKey, userId, actionRunId);
+  return {
+    approval,
+    actionRun: execution.actionRun,
+    executed: execution.executed,
+  };
 }
 
 const READ_ONLY_SYSTEM_PROMPT = [

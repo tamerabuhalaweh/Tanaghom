@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const prismaMocks = vi.hoisted(() => ({
+  user: {
+    findFirst: vi.fn(),
+  },
   commercialEvent: {
     findFirst: vi.fn(),
     findMany: vi.fn(),
@@ -18,6 +21,15 @@ const prismaMocks = vi.hoisted(() => ({
     findMany: vi.fn(),
   },
   connectorImportJob: {
+    findMany: vi.fn(),
+  },
+  commercialRevenueLine: {
+    findMany: vi.fn(),
+  },
+  commercialPlan: {
+    findMany: vi.fn(),
+  },
+  commercialAssessmentSignal: {
     findMany: vi.fn(),
   },
 }));
@@ -42,6 +54,13 @@ const decimal = (value: string) => ({ toString: () => value });
 describe('Stitchi read-only context loader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMocks.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Marketing Manager',
+      email: 'marketing@example.com',
+      role: 'department_head',
+      department: { name: 'Commercial' },
+    });
     prismaMocks.commercialEvent.findFirst.mockResolvedValue({
       id: 'event-1',
       name: 'Leadership Course Launch',
@@ -93,11 +112,39 @@ describe('Stitchi read-only context loader', () => {
       { sync_status: 'ready_for_sync', state: 'test_passed' },
       { sync_status: 'blocked', state: 'blocked' },
     ]);
+    prismaMocks.commercialRevenueLine.findMany.mockResolvedValue([
+      {
+        id: 'revenue-line-1',
+        revenue_line_type: 'online_course',
+        name: 'Online Courses',
+        status: 'active',
+        _count: { plans: 1, assessment_signals: 0 },
+      },
+    ]);
+    prismaMocks.commercialPlan.findMany.mockResolvedValue([
+      {
+        id: 'plan-1',
+        title: 'Course Launch Plan',
+        stage: 'strategy_planning',
+        status: 'draft',
+        budget_target: decimal('5000'),
+        revenue_target: decimal('30000'),
+        linked_event_id: 'event-1',
+        revenue_line: { name: 'Online Courses' },
+      },
+    ]);
+    prismaMocks.commercialAssessmentSignal.findMany.mockResolvedValue([]);
   });
 
   it('loads summarized tenant-scoped event context without exposing secrets', async () => {
-    const context = await loadReadOnlyContext('tenant-a', conversation, 'event-1');
+    const context = await loadReadOnlyContext('tenant-a', conversation, 'event-1', 'marketing_manager');
 
+    expect(context.currentUser).toMatchObject({
+      id: 'user-1',
+      name: 'Marketing Manager',
+      role: 'marketing_manager',
+      departmentName: 'Commercial',
+    });
     expect(prismaMocks.commercialEvent.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'event-1', tenant_key: 'tenant-a' },
     }));
@@ -112,6 +159,11 @@ describe('Stitchi read-only context loader', () => {
     expect(context.kpiSummary.spend).toBe(250);
     expect(context.riskSummary.critical).toBe(1);
     expect(context.connectorSummary.readyForSync).toBe(1);
+    expect(context.commercialCenter.revenueLines[0]).toMatchObject({
+      id: 'revenue-line-1',
+      type: 'online_course',
+      name: 'Online Courses',
+    });
     expect(context.guardrails).toEqual({
       mode: 'read_only',
       writesExecuted: false,

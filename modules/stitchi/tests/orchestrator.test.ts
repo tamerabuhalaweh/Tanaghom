@@ -22,12 +22,53 @@ vi.mock('@modules/ai-provider/controller', () => ({
 
 vi.mock('../context', () => ({
   loadReadOnlyContext: vi.fn().mockResolvedValue({
+    currentUser: {
+      id: 'user-1',
+      name: 'Marketing Manager',
+      email: 'manager@example.com',
+      role: 'marketing_manager',
+      departmentName: 'Commercial',
+    },
     selectedEvent: { id: '00000000-0000-0000-0000-000000000001', name: 'Leadership Event' },
-    recentEvents: [],
+    recentEvents: [
+      {
+        id: '00000000-0000-0000-0000-000000000001',
+        name: 'Leadership Event',
+        status: 'active',
+        eventType: 'live_event',
+        eventDate: new Date('2026-08-02T00:00:00Z'),
+        location: 'Amman',
+        plannedBudget: 5000,
+        revenueTarget: 30000,
+        selectedChannels: ['instagram', 'email'],
+      },
+    ],
     leadSummary: { total: 3 },
     kpiSummary: { records: 1 },
     riskSummary: { open: 0 },
     connectorSummary: { configuredCredentials: 1, connectorJobs: 0 },
+    commercialCenter: {
+      configuredRevenueLines: 1,
+      activePlans: 0,
+      openAssessmentSignals: 0,
+      revenueLines: [
+        {
+          id: '00000000-0000-0000-0000-000000000040',
+          type: 'online_course',
+          name: 'Online Courses',
+          status: 'active',
+          planCount: 0,
+          openSignals: 0,
+        },
+      ],
+      recentPlans: [],
+    },
+    guardrails: {
+      mode: 'read_only',
+      writesExecuted: false,
+      externalExecution: 'blocked',
+      secretsReturned: false,
+    },
   }),
   formatReadOnlyContextForPrompt: vi.fn(() => '{"selectedEvent":{"name":"Leadership Event"}}'),
 }));
@@ -249,6 +290,74 @@ describe('Stitchi natural-language orchestration', () => {
             status: 'active',
           }),
         }),
+      }),
+    );
+  });
+
+  it('turns a business-language Online Courses request into an approval-gated commercial plan', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Objective: sell to entrepreneurs.',
+        'Audience: warm followers and previous buyers.',
+        'Budget target: 5000.',
+        'Revenue target: 30000.',
+        'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+        'Link it to the next available live event if suitable.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_commercial_plan',
+        inputPayload: expect.objectContaining({
+          revenueLineId: '00000000-0000-0000-0000-000000000040',
+          linkedEventId: '00000000-0000-0000-0000-000000000001',
+          objective: 'sell to entrepreneurs.',
+          audience: 'warm followers and previous buyers.',
+          budgetTarget: 5000,
+          revenueTarget: 30000,
+          actionPlan: 'content, ads, GHL follow-up, WhatsApp reminders.',
+          status: 'draft',
+        }),
+        previewPayload: expect.objectContaining({
+          revenueLineName: 'Online Courses',
+          linkedEventName: 'Leadership Event',
+          externalExecution: 'blocked',
+          approvalRequired: true,
+        }),
+      }),
+    );
+  });
+
+  it('asks for the missing budget before preparing a commercial plan action', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Create an Online Courses plan for a leadership course launch.',
+        'Objective: sell to entrepreneurs.',
+        'Audience: warm followers and previous buyers.',
+        'Revenue target: 30000.',
+        'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('budget target'),
+      expect.objectContaining({
+        status: 'answered',
+        writesExecuted: false,
+        externalExecution: 'blocked',
       }),
     );
   });

@@ -208,6 +208,29 @@ export default function CommercialCommandCenter() {
     return () => window.clearTimeout(loadTimer);
   }, [load, token]);
 
+  useEffect(() => {
+    if (!token) return;
+    const refresh = () => {
+      load().catch(err => {
+        setMessage(err instanceof Error ? err.message : 'Could not refresh the Commercial Center.');
+      });
+    };
+    window.addEventListener('tanaghum:commercial-data-changed', refresh);
+    return () => window.removeEventListener('tanaghum:commercial-data-changed', refresh);
+  }, [load, token]);
+
+  function stitchiPath(prompt?: string): string {
+    const params = new URLSearchParams();
+    if (text(selectedLine.id)) params.set('revenueLineId', text(selectedLine.id));
+    if (text(selectedLine.revenueLineType, selectedType)) params.set('revenueLineType', text(selectedLine.revenueLineType, selectedType));
+    if (prompt) {
+      params.set('prompt', prompt);
+      params.set('mode', 'prepare');
+    }
+    const query = params.toString();
+    return `/stitchi${query ? `?${query}` : ''}`;
+  }
+
   async function configureRevenueLine(line: RecordMap) {
     if (!token) return;
     setSaving(true);
@@ -303,7 +326,7 @@ export default function CommercialCommandCenter() {
       subtitle="Assess each revenue line, create plans, link events when needed, track real outcomes, and ask Stitchi to prepare governed work."
       action={(
         <>
-          <AieroGhostButton onClick={() => navigate('/stitchi')}>Ask Stitchi</AieroGhostButton>
+          <AieroGhostButton onClick={() => navigate(stitchiPath())}>Ask Stitchi</AieroGhostButton>
           <AieroActionButton onClick={() => navigate('/events')}>Event Operations</AieroActionButton>
         </>
       )}
@@ -551,7 +574,7 @@ export default function CommercialCommandCenter() {
             <AieroActionButton onClick={savePlan} disabled={saving || !text(selectedLine.id)}>
               {saving ? 'Saving...' : planDraft.id ? 'Save changes' : 'Create plan'}
             </AieroActionButton>
-            <SecondaryAction onClick={() => navigate('/stitchi')}>Ask Stitchi to prepare</SecondaryAction>
+            <SecondaryAction onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}>Ask Stitchi to prepare</SecondaryAction>
           </div>
         </AieroLightPanel>
 
@@ -638,7 +661,7 @@ export default function CommercialCommandCenter() {
             </div>
             <div className="mt-5 flex flex-wrap gap-3">
               <AieroActionButton onClick={() => navigate(text(nextAction.path, '/stitchi'))}>Do next action</AieroActionButton>
-              <AieroGhostButton onClick={() => navigate('/stitchi')}>Ask Stitchi</AieroGhostButton>
+              <AieroGhostButton onClick={() => navigate(stitchiPath())}>Ask Stitchi</AieroGhostButton>
             </div>
           </div>
 

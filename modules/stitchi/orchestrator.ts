@@ -26,6 +26,13 @@ interface ActionProposal {
   reason: string;
 }
 
+interface FollowUpResponse {
+  kind: 'follow_up';
+  assistantText: string;
+}
+
+type CommercialDerivation = ActionProposal | FollowUpResponse | null;
+
 export interface StitchiOrchestrationResult {
   userMessage: StitchiMessageSummary;
   assistantMessage: StitchiMessageSummary;
@@ -51,6 +58,7 @@ const orchestrationState = Annotation.Root({
   conversationId: Annotation<string>,
   content: Annotation<string>,
   eventId: Annotation<string | undefined>,
+  metadata: Annotation<Record<string, unknown> | undefined>,
   context: Annotation<StitchiReadOnlyContext | undefined>,
   actionProposal: Annotation<ActionProposal | undefined>,
   actionRun: Annotation<StitchiActionRunSummary | undefined>,
@@ -62,14 +70,14 @@ const orchestrationState = Annotation.Root({
 
 async function loadContextNode(state: typeof orchestrationState.State) {
   const conversation = await repo.getConversation(state.tenantKey, state.userId, state.role, state.conversationId);
-  const context = await loadReadOnlyContext(state.tenantKey, conversation, state.eventId);
+  const context = await loadReadOnlyContext(state.tenantKey, conversation, state.eventId, state.role);
   return {
     context,
     eventId: state.eventId || conversation.eventId || context.selectedEvent?.id || undefined,
   };
 }
 
-function classifyNode(state: typeof orchestrationState.State) {
+function classifyNode(state: typeof orchestrationState.State): Partial<typeof orchestrationState.State> {
   if (isExternalExecutionRequest(state.content)) {
     return {
       status: 'blocked' as const,
@@ -80,9 +88,19 @@ function classifyNode(state: typeof orchestrationState.State) {
       ].join('\n'),
     };
   }
-  const proposal = deriveActionProposal(state.content, state.eventId);
+  const proposal = deriveActionProposal(state.content, state.eventId, state.context, state.metadata);
+  if (isFollowUpResponse(proposal)) {
+    return {
+      status: 'answered' as const,
+      assistantText: proposal.assistantText,
+    };
+  }
   if (proposal) return { actionProposal: proposal };
   return {};
+}
+
+function isFollowUpResponse(value: ActionProposal | FollowUpResponse | null): value is FollowUpResponse {
+  return Boolean(value && 'kind' in value && value.kind === 'follow_up');
 }
 
 async function respondNode(state: typeof orchestrationState.State) {
@@ -116,7 +134,7 @@ async function respondNode(state: typeof orchestrationState.State) {
     };
   }
 
-  if (state.status === 'blocked') return {};
+  if (state.status === 'blocked' || state.assistantText) return {};
 
   try {
     const provider = await resolveUserLLMProvider(state.userId);
@@ -182,6 +200,7 @@ export async function orchestrateStitchiMessage(
     conversationId,
     content: input.content,
     eventId: input.eventId,
+    metadata: input.metadata,
     status: 'answered',
   }, {
     configurable: { thread_id: threadId },
@@ -248,8 +267,13 @@ export async function orchestrateStitchiMessage(
   };
 }
 
-function deriveActionProposal(content: string, eventId?: string): ActionProposal | null {
-  const commercialProposal = deriveCommercialCenterActionProposal(content);
+function deriveActionProposal(
+  content: string,
+  eventId?: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): ActionProposal | FollowUpResponse | null {
+  const commercialProposal = deriveCommercialCenterActionProposalV2(content, context, metadata);
   if (commercialProposal) return commercialProposal;
   if (!eventId) return null;
   const lower = content.toLowerCase();
@@ -307,6 +331,165 @@ function deriveActionProposal(content: string, eventId?: string): ActionProposal
   }
 
   return null;
+}
+
+function deriveCommercialCenterActionProposalV2(
+  content: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): CommercialDerivation {
+  const lower = content.toLowerCase();
+  if (!isCommercialCenterRequest(lower, metadata)) return null;
+
+  const explicitRevenueLineType = inferExplicitRevenueLineType(lower);
+  const fallbackRevenueLineType = explicitRevenueLineType || inferRevenueLineType(lower);
+  const resolvedRevenueLine = resolveRevenueLine(content, context, metadata);
+  const revenueLine = resolvedRevenueLine || (explicitRevenueLineType ? {
+    id: null,
+    type: explicitRevenueLineType,
+    name: revenueLineLabel(explicitRevenueLineType),
+    status: 'not_configured',
+  } : null);
+  const revenueLineId = revenueLine?.id
+    || extractUuidAfter(lower, 'revenue line')
+    || extractUuidAfter(lower, 'revenueLineId');
+  const commercialPlanId = extractUuidAfter(lower, 'commercial plan') || extractUuidAfter(lower, 'plan') || extractUuidAfter(lower, 'commercialPlanId');
+  const title = inferCommercialPlanTitle(content, revenueLine?.name || revenueLineLabel(fallbackRevenueLineType));
+
+  if (commercialPlanId && /(update|change|edit|move|activate|pause|complete|budget|target|objective|audience|stage|status)/i.test(lower)) {
+    const stage = inferCommercialStage(lower);
+    const status = inferCommercialPlanStatus(lower);
+    return {
+      actionType: 'update_commercial_plan',
+      inputPayload: {
+        commercialPlanId,
+        plan: {
+          ...(status ? { status } : {}),
+          stage,
+          objective: cleanText(content),
+          strategySummary: cleanText(content),
+        },
+      },
+      previewPayload: {
+        commercialPlanId,
+        stage,
+        status: status || 'unchanged',
+        approvalRequired: true,
+        externalExecution: 'blocked',
+      },
+      riskLevel: 'medium',
+      reason: 'update a commercial planning record',
+    };
+  }
+
+  if (/(risk|signal|assess|assessment|finding|problem|gap)/i.test(lower)) {
+    return {
+      actionType: 'create_commercial_assessment_signal',
+      inputPayload: {
+        revenueLineId,
+        title,
+        severity: /(critical|urgent|important|severe)/i.test(lower) ? 'critical' : 'watch',
+        finding: cleanText(content),
+        recommendedAction: 'Review this commercial signal and decide the next planning action.',
+      },
+      previewPayload: {
+        revenueLineId: revenueLineId || 'not linked yet',
+        revenueLineName: revenueLine?.name || revenueLineLabel(fallbackRevenueLineType),
+        title,
+        approvalRequired: true,
+        externalExecution: 'blocked',
+      },
+      riskLevel: 'medium',
+      reason: 'record a commercial assessment signal',
+    };
+  }
+
+  if (/(plan|strategy|quarter|quarterly|year|implementation|create|prepare|build|launch)/i.test(lower)) {
+    if (!revenueLine) {
+      return {
+        kind: 'follow_up',
+        assistantText: [
+          'Which revenue line should I use for this commercial plan?',
+          'I can use Live Events, Online Courses, B2B, Platinum Elite, Certified Trainer Network, or Loyalty & Community.',
+          'Once you choose one, I will prepare the plan card for approval.',
+        ].join('\n'),
+      };
+    }
+    if (!revenueLineId) {
+      return {
+        kind: 'follow_up',
+        assistantText: [
+          `${revenueLine.name} is not configured yet, so I cannot attach a saved plan to it.`,
+          `Do you want me to prepare the ${revenueLine.name} revenue line setup first?`,
+          'After that is approved and saved, I can create the commercial plan.',
+        ].join('\n'),
+      };
+    }
+
+    const extractedPlan = extractCommercialPlanFields(content, context);
+    const missing = requiredCommercialPlanFields(extractedPlan);
+    if (missing.length > 0) {
+      return {
+        kind: 'follow_up',
+        assistantText: formatCommercialPlanFollowUp(revenueLine.name, missing, extractedPlan),
+      };
+    }
+
+    const stage = inferCommercialStage(lower);
+    return {
+      actionType: 'create_commercial_plan',
+      inputPayload: {
+        revenueLineId,
+        linkedEventId: extractedPlan.linkedEventId ?? undefined,
+        horizon: inferCommercialHorizon(lower),
+        stage,
+        title,
+        objective: extractedPlan.objective,
+        audience: extractedPlan.audience,
+        budgetTarget: extractedPlan.budgetTarget,
+        revenueTarget: extractedPlan.revenueTarget,
+        strategySummary: extractedPlan.strategySummary,
+        actionPlan: extractedPlan.actionPlan,
+        status: 'draft',
+      },
+      previewPayload: {
+        revenueLineId,
+        revenueLineName: revenueLine.name,
+        title,
+        stage,
+        objective: extractedPlan.objective,
+        audience: extractedPlan.audience,
+        budgetTarget: extractedPlan.budgetTarget,
+        revenueTarget: extractedPlan.revenueTarget,
+        actionPlan: extractedPlan.actionPlan,
+        linkedEventId: extractedPlan.linkedEventId || null,
+        linkedEventName: extractedPlan.linkedEventName || null,
+        approvalRequired: true,
+        externalExecution: 'blocked',
+      },
+      riskLevel: 'medium',
+      reason: `create a commercial plan for ${revenueLine.name}`,
+    };
+  }
+
+  return {
+    actionType: 'create_commercial_revenue_line',
+    inputPayload: {
+      revenueLineType: revenueLine?.type || fallbackRevenueLineType,
+      name: revenueLine?.name || revenueLineLabel(fallbackRevenueLineType),
+      description: cleanText(content),
+      status: 'active',
+      systemOfRecord: 'tanaghum',
+    },
+    previewPayload: {
+      revenueLineType: revenueLine?.type || fallbackRevenueLineType,
+      name: revenueLine?.name || revenueLineLabel(fallbackRevenueLineType),
+      approvalRequired: true,
+      externalExecution: 'blocked',
+    },
+    riskLevel: 'medium',
+    reason: `configure the ${revenueLine?.name || revenueLineLabel(fallbackRevenueLineType)} commercial revenue line`,
+  };
 }
 
 function deriveCommercialCenterActionProposal(content: string): ActionProposal | null {
@@ -510,6 +693,170 @@ function derivePlannerActionProposal(content: string, lower: string, eventId: st
   return null;
 }
 
+type ResolvedRevenueLine = {
+  id: string | null;
+  type: string;
+  name: string;
+  status: string;
+};
+
+type ExtractedCommercialPlan = {
+  objective: string | null;
+  audience: string | null;
+  budgetTarget: number | null;
+  revenueTarget: number | null;
+  actionPlan: string | null;
+  strategySummary: string | null;
+  linkedEventId: string | null;
+  linkedEventName: string | null;
+};
+
+function isCommercialCenterRequest(lower: string, metadata?: Record<string, unknown>): boolean {
+  if (typeof metadata?.revenueLineId === 'string' || typeof metadata?.revenueLineType === 'string') return true;
+  return /(commercial|revenue line|business line|online course|online courses|course|courses|b2b|platinum|trainer network|loyalty|community|three-year|quarterly|department|leadership course|course launch|commercial plan)/i.test(lower);
+}
+
+function resolveRevenueLine(
+  content: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): ResolvedRevenueLine | null {
+  const lines = context?.commercialCenter?.revenueLines || [];
+  const metadataId = typeof metadata?.revenueLineId === 'string' ? metadata.revenueLineId : '';
+  const metadataType = typeof metadata?.revenueLineType === 'string' ? metadata.revenueLineType : '';
+  const direct = lines.find(line => (metadataId && line.id === metadataId) || (metadataType && line.type === metadataType));
+  if (direct) return {
+    id: direct.id,
+    type: direct.type,
+    name: direct.name,
+    status: direct.status,
+  };
+
+  const inferredType = inferExplicitRevenueLineType(content.toLowerCase());
+  if (inferredType) {
+    const byType = lines.find(line => line.type === inferredType);
+    if (byType) return {
+      id: byType.id,
+      type: byType.type,
+      name: byType.name,
+      status: byType.status,
+    };
+  }
+
+  const normalized = normalizeForMatch(content);
+  const byName = lines.find(line => normalized.includes(normalizeForMatch(line.name)));
+  if (byName) return {
+    id: byName.id,
+    type: byName.type,
+    name: byName.name,
+    status: byName.status,
+  };
+
+  return null;
+}
+
+function extractCommercialPlanFields(content: string, context?: StitchiReadOnlyContext): ExtractedCommercialPlan {
+  const objective = extractLabelValue(content, ['objective', 'goal', 'purpose']);
+  const audience = extractLabelValue(content, ['audience', 'target audience', 'segment']);
+  const budgetTarget = extractMoneyValue(content, ['budget target', 'budget', 'spend target']);
+  const revenueTarget = extractMoneyValue(content, ['revenue target', 'sales target', 'target revenue']);
+  const actionPlan = extractLabelValue(content, ['action plan', 'plan', 'next actions']);
+  const linkedEvent = inferLinkedEvent(content, context);
+  return {
+    objective,
+    audience,
+    budgetTarget,
+    revenueTarget,
+    actionPlan,
+    strategySummary: cleanText(content),
+    linkedEventId: linkedEvent?.id || null,
+    linkedEventName: linkedEvent?.name || null,
+  };
+}
+
+function requiredCommercialPlanFields(plan: ExtractedCommercialPlan): string[] {
+  const missing: string[] = [];
+  if (!plan.objective) missing.push('objective');
+  if (!plan.audience) missing.push('audience');
+  if (plan.budgetTarget == null) missing.push('budget target');
+  if (plan.revenueTarget == null) missing.push('revenue target');
+  if (!plan.actionPlan) missing.push('action plan');
+  return missing;
+}
+
+function formatCommercialPlanFollowUp(
+  revenueLineName: string,
+  missing: string[],
+  plan: ExtractedCommercialPlan,
+): string {
+  const captured: string[] = [];
+  if (plan.objective) captured.push(`objective: ${plan.objective}`);
+  if (plan.audience) captured.push(`audience: ${plan.audience}`);
+  if (plan.budgetTarget != null) captured.push(`budget target: ${plan.budgetTarget}`);
+  if (plan.revenueTarget != null) captured.push(`revenue target: ${plan.revenueTarget}`);
+  if (plan.actionPlan) captured.push(`action plan: ${plan.actionPlan}`);
+  const capturedText = captured.length ? `\nI already captured: ${captured.join('; ')}.` : '';
+  const missingText = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
+  return [
+    `I can prepare the ${revenueLineName} plan, but I need the ${missingText} before I create the approval card.`,
+    capturedText.trim(),
+    `Please send the missing ${missing.length === 1 ? 'field' : 'fields'}, and I will prepare the plan for approval.`,
+  ].filter(Boolean).join('\n');
+}
+
+function inferCommercialPlanTitle(content: string, revenueLineName: string): string {
+  const explicitTitle = extractLabelValue(content, ['title', 'plan title', 'campaign title']);
+  if (explicitTitle) return explicitTitle.slice(0, 260);
+  const launchMatch = content.match(/for\s+(?:a|an|the)?\s*([^.\n:]{8,120}?)(?:\.|\n|objective:|audience:|budget|revenue|action plan|$)/i);
+  if (launchMatch?.[1]) return `${capitalizeWords(launchMatch[1].trim())}`.slice(0, 260);
+  return `${revenueLineName} commercial plan`;
+}
+
+function extractLabelValue(content: string, labels: string[]): string | null {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(`${escaped}\\s*[:\\-]\\s*([^\\n]+)`, 'i').exec(content);
+    if (match?.[1]?.trim()) return cleanText(match[1]).slice(0, 5000);
+  }
+  return null;
+}
+
+function extractMoneyValue(content: string, labels: string[]): number | null {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(`${escaped}\\s*[:\\-]?\\s*([0-9][0-9,]*(?:\\.\\d+)?)`, 'i').exec(content);
+    if (match?.[1]) {
+      const parsed = Number(match[1].replaceAll(',', ''));
+      if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    }
+  }
+  return null;
+}
+
+function inferLinkedEvent(content: string, context?: StitchiReadOnlyContext): { id: string; name: string } | null {
+  const events = context?.recentEvents || [];
+  if (!events.length) return null;
+  const lower = content.toLowerCase();
+  const explicit = events.find(event => normalizeForMatch(content).includes(normalizeForMatch(event.name)));
+  if (explicit) return { id: explicit.id, name: explicit.name };
+  if (!/(next available|next live event|linked event|link it|suitable event|available live event)/i.test(lower)) return null;
+  const now = new Date();
+  const future = events
+    .filter(event => !['completed', 'cancelled', 'archived'].includes(event.status))
+    .filter(event => new Date(event.eventDate).getTime() >= now.getTime())
+    .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+  const selected = future[0] || events.find(event => !['completed', 'cancelled', 'archived'].includes(event.status));
+  return selected ? { id: selected.id, name: selected.name } : null;
+}
+
+function normalizeForMatch(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function capitalizeWords(value: string): string {
+  return value.replace(/\b[a-z]/g, char => char.toUpperCase());
+}
+
 function inferRevenueLineType(lower: string): 'live_event' | 'online_course' | 'b2b' | 'platinum_elite' | 'certified_trainer_network' | 'loyalty_community' {
   if (/(online course|course|ÙƒÙˆØ±Ø³|Ø¯ÙˆØ±Ø©)/i.test(lower)) return 'online_course';
   if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
@@ -517,6 +864,16 @@ function inferRevenueLineType(lower: string): 'live_event' | 'online_course' | '
   if (/(trainer|certified trainer|network|Ù…Ø¯Ø±Ø¨)/i.test(lower)) return 'certified_trainer_network';
   if (/(loyalty|community|retention|referral|Ù…Ø¬ØªÙ…Ø¹)/i.test(lower)) return 'loyalty_community';
   return 'live_event';
+}
+
+function inferExplicitRevenueLineType(lower: string): ReturnType<typeof inferRevenueLineType> | undefined {
+  if (/(live event|events|event campaign|on stage|workshop|camp)/i.test(lower)) return 'live_event';
+  if (/(online course|online courses|course|courses|leadership course)/i.test(lower)) return 'online_course';
+  if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
+  if (/(platinum|elite|premium|vip)/i.test(lower)) return 'platinum_elite';
+  if (/(certified trainer|trainer network)/i.test(lower)) return 'certified_trainer_network';
+  if (/(loyalty|community|retention|referral)/i.test(lower)) return 'loyalty_community';
+  return undefined;
 }
 
 function revenueLineLabel(type: ReturnType<typeof inferRevenueLineType>): string {

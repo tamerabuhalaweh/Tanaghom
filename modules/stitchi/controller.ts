@@ -201,6 +201,18 @@ stitchiRouter.post('/actions/:id/approve', async (req: Request, res: Response, n
   }
 });
 
+stitchiRouter.post('/actions/:id/approve-and-execute', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const context = session(payload);
+    const input = actionDecisionSchema.parse(req.body);
+    const result = await service.approveAndExecuteActionRun(context.role, context.tenantKey, context.userId, req.params.id as string, input);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 stitchiRouter.post('/actions/:id/reject', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
