@@ -197,11 +197,14 @@ test.describe('Sprint 66 role-specific workspace separation', () => {
 
     await page.goto('/my-agent-rep');
     await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Admin & Settings/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Settings$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Admin$/i })).toBeVisible();
 
-    await page.getByRole('button', { name: /Admin & Settings/i }).click();
+    await page.getByRole('button', { name: /^Settings$/i }).click();
+    await expect(page.getByRole('link', { name: /Integrations/i })).toBeVisible();
+
+    await page.getByRole('button', { name: /^Admin$/i }).click();
     await expect(page.getByRole('link', { name: /Users & Roles/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /Tenant Admin/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Integrations/i })).toBeVisible();
   });
 });

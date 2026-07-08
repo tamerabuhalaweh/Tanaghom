@@ -271,12 +271,13 @@ export default function CommercialCommandCenter() {
     try {
       if (planDraft.id) {
         await commercialCommandCenterApi.updatePlan(planDraft.id, payload, token);
+        await loadLine(selectedType);
         setMessage('Commercial plan updated.');
       } else {
         await commercialCommandCenterApi.createPlan(payload, token);
+        await loadLine(selectedType);
         setMessage('Commercial plan created.');
       }
-      await loadLine(selectedType);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not save commercial plan.');
     } finally {

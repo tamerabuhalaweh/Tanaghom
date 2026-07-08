@@ -147,7 +147,7 @@ test.describe('Sprint 65 customer acceptance and deployed release gate', () => {
       timeout: 20000,
     }).toBeTruthy();
     await page.waitForURL(/\/(command-center|dashboard)(?:$|[?#])/);
-    await expect(page.getByRole('heading', { name: /^Dashboard$/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('heading', { name: /Run the commercial business lines/i })).toBeVisible({ timeout: 20000 });
 
     await expectCustomerPage(page, '/events', /^Events$/i, /Event Queue|No events yet/i);
     await expectCustomerPage(page, '/events/new', /Create Event Strategy/i, /What Happens After Saving/i);
