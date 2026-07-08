@@ -305,6 +305,8 @@ export default function Layout() {
     [role],
   );
   const productNav = visibleNav.filter(item => item.group === 'Product' && item.path !== '/campaigns');
+  const primaryProductNav = productNav.filter(item => ['/command-center', '/stitchi', '/executive', '/events', '/ideas', '/approvals'].includes(item.path));
+  const secondaryProductNav = productNav.filter(item => !primaryProductNav.some(primary => primary.path === item.path));
   const setupNav = visibleNav.filter(item => item.group === 'Setup');
   const adminNav = visibleNav.filter(item => item.group === 'Admin');
   const handleLogout = () => {
@@ -328,10 +330,20 @@ export default function Layout() {
             </span>
           </Link>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-2 2xl:flex" aria-label="Primary workspace navigation">
-            {productNav.map(item => (
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-1.5 2xl:flex" aria-label="Primary workspace navigation">
+            {primaryProductNav.map(item => (
               <NavPill key={item.path} item={item} active={activeForPath(location.pathname, item.path)} />
             ))}
+            {secondaryProductNav.length > 0 && (
+              <MenuButton
+                label="More"
+                open={false}
+                setOpen={() => undefined}
+                items={secondaryProductNav}
+                currentPath={location.pathname}
+                controlled={false}
+              />
+            )}
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -442,28 +454,35 @@ function MenuButton({
   setOpen,
   items,
   currentPath,
+  controlled = true,
 }: {
   label: string;
   open: boolean;
   setOpen: (open: boolean) => void;
   items: NavItem[];
   currentPath: string;
+  controlled?: boolean;
 }) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const actualOpen = controlled ? open : internalOpen;
+  const setActualOpen = controlled ? setOpen : setInternalOpen;
+  const hasActiveItem = items.some(item => activeForPath(currentPath, item.path));
+
   return (
     <div className="relative hidden md:block">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => setActualOpen(!actualOpen)}
         className={cx(
           'inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
-          open ? 'border-[#080813] bg-[#080813] text-white' : 'border-black/10 bg-white text-neutral-900',
+          actualOpen || hasActiveItem ? 'border-[#080813] bg-[#080813] text-white' : 'border-black/10 bg-white text-neutral-900',
         )}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={actualOpen}
       >
         {label}
       </button>
-      {open && (
+      {actualOpen && (
         <div className="absolute right-0 top-full z-50 mt-3 w-80 overflow-hidden rounded-[1.35rem] border border-black/10 bg-white p-2 shadow-[0_24px_80px_rgba(8,8,19,0.22)]">
           {items.map(item => {
             const Icon = item.icon;
@@ -472,7 +491,7 @@ function MenuButton({
               <Link
                 key={item.path}
                 to={item.path}
-                onClick={() => setOpen(false)}
+                onClick={() => setActualOpen(false)}
                 className={cx(
                   'flex items-start gap-3 rounded-2xl px-3 py-3 text-sm transition hover:bg-neutral-50',
                   active && 'bg-neutral-950 text-white hover:bg-neutral-950',

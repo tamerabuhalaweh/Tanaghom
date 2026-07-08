@@ -99,6 +99,30 @@ function campaignTitle(campaign: RecordMap): string {
   return text(campaign.topic || campaign.title || campaign.name, 'Untitled content');
 }
 
+function isSetupOrTestContent(campaign: RecordMap): boolean {
+  const combined = `${campaignTitle(campaign)} ${text(campaign.objective || campaign.rawMessage || campaign.raw_message, '')}`;
+  return [
+    /^Sprint\s*\d+\s+Acceptance/i,
+    /Proof-led customer story/i,
+    /Premium social intelligence launch/i,
+    /acceptance-\d+@example\.com/i,
+  ].some(pattern => pattern.test(combined));
+}
+
+function contentSummary(item: RecordMap): string {
+  return text(
+    item.objective || item.rawMessage || item.raw_message || item.summary,
+    'Open this campaign to continue drafting, review, approval, and scheduling.',
+  );
+}
+
+function contentActionLabel(status: string): string {
+  if (status.includes('approved')) return 'Prepare schedule';
+  if (status.includes('review')) return 'Review content';
+  if (status.includes('scheduled') || status.includes('published')) return 'View result';
+  return 'Continue';
+}
+
 function buildGoalPayload(brief: typeof DEFAULT_BRIEF): string {
   return [
     `Campaign: ${brief.campaignName}`,
@@ -143,7 +167,7 @@ export default function PostIdeas() {
   const audiencePayload = buildAudiencePayload(brief);
   const filteredContent = useMemo(() => {
     const search = contentSearch.trim().toLowerCase();
-    return contentLibrary.filter(item => {
+    return contentLibrary.filter(item => !isSetupOrTestContent(item)).filter(item => {
       const platforms = stringList(item.targetPlatforms || item.platforms);
       const status = text(item.status, '').toLowerCase();
       const title = campaignTitle(item).toLowerCase();
@@ -154,6 +178,7 @@ export default function PostIdeas() {
       return true;
     });
   }, [contentLibrary, contentPlatform, contentSearch, contentStatus]);
+  const hiddenSetupContentCount = useMemo(() => contentLibrary.filter(isSetupOrTestContent).length, [contentLibrary]);
 
   useEffect(() => {
     if (!token) return;
@@ -318,11 +343,33 @@ export default function PostIdeas() {
         </Notice>
       )}
 
+      <ProductCard title="What this page helps you do" subtitle="Create campaign directions with AI, choose the best idea, and continue that idea into production.">
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            ['1', 'Write the brief', 'Describe the offer, audience, goal, tone, and platforms.'],
+            ['2', 'Choose the strongest idea', 'AI generates several directions. You select the one worth turning into campaign work.'],
+            ['3', 'Continue production', 'Saved content can move to drafting, review, approval, scheduling, and performance tracking.'],
+          ].map(([step, title, detail]) => (
+            <div key={step} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">{step}</div>
+              <div className="mt-4 text-sm font-semibold text-neutral-950">{title}</div>
+              <p className="mt-2 text-sm leading-6 text-neutral-500">{detail}</p>
+            </div>
+          ))}
+        </div>
+      </ProductCard>
+
       <ProductCard
-        title="Content Library"
-        subtitle="Saved campaign content from the backend. Generated ideas appear here after you create a campaign from the selected direction."
-        action={<ProductStatus tone={contentLibrary.length ? 'good' : 'warn'}>{contentLibrary.length} saved item(s)</ProductStatus>}
+        title="Saved campaign content"
+        subtitle="Customer-ready campaign records created from selected ideas. Use filters to find what needs drafting, review, approval, or scheduling."
+        action={<ProductStatus tone={filteredContent.length ? 'good' : 'warn'}>{filteredContent.length} visible item(s)</ProductStatus>}
       >
+        {hiddenSetupContentCount > 0 && (
+          <Notice tone="info">
+            Archived setup records are hidden from this customer workspace so the team sees only usable campaign content.
+          </Notice>
+        )}
+
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto]">
           <Field label="Search content">
             <input
@@ -372,59 +419,57 @@ export default function PostIdeas() {
 
         <div className="mt-5">
           {filteredContent.length ? (
-            <ProductTable
-              columns={['Content', 'Platforms', 'Status', 'Risk', 'Next Action']}
-              rows={filteredContent.slice(0, 12).map(item => [
-                <div>
-                  <div className="font-medium text-neutral-950">{campaignTitle(item)}</div>
-                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-neutral-500">{text(item.objective || item.rawMessage || item.raw_message, 'Open the campaign workspace to continue this content.')}</div>
-                </div>,
-                stringList(item.targetPlatforms || item.platforms).length
-                  ? stringList(item.targetPlatforms || item.platforms).map(platformLabel).join(', ')
-                  : 'Not selected',
-                <ProductStatus tone={text(item.status, '').includes('approved') ? 'good' : text(item.status, '').includes('review') ? 'warn' : 'info'}>{titleCase(item.status)}</ProductStatus>,
-                titleCase(item.riskCategory || item.risk_category || 'medium'),
-                <Link
-                  to="/campaigns"
-                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50"
-                >
-                  Continue
-                </Link>,
-              ])}
-            />
+            <div className="grid gap-4 xl:grid-cols-2">
+              {filteredContent.slice(0, 12).map(item => {
+                const status = text(item.status, 'idea').toLowerCase();
+                const platforms = stringList(item.targetPlatforms || item.platforms);
+                return (
+                  <article key={text(item.id, campaignTitle(item))} className="flex min-h-[230px] flex-col rounded-[1.25rem] border border-neutral-100 bg-neutral-50 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="line-clamp-2 text-base font-semibold leading-6 text-neutral-950">{campaignTitle(item)}</div>
+                        <p className="mt-2 line-clamp-3 text-sm leading-6 text-neutral-600">{contentSummary(item)}</p>
+                      </div>
+                      <ProductStatus tone={status.includes('approved') ? 'good' : status.includes('review') ? 'warn' : 'info'}>{titleCase(status)}</ProductStatus>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-neutral-100 bg-white p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Platforms</div>
+                        <div className="mt-2 text-sm leading-5 text-neutral-900">{platforms.length ? platforms.map(platformLabel).join(', ') : 'Choose platform'}</div>
+                      </div>
+                      <div className="rounded-2xl border border-neutral-100 bg-white p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Risk</div>
+                        <div className="mt-2 text-sm leading-5 text-neutral-900">{titleCase(item.riskCategory || item.risk_category || 'medium')}</div>
+                      </div>
+                      <div className="rounded-2xl border border-neutral-100 bg-white p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Next step</div>
+                        <div className="mt-2 text-sm leading-5 text-neutral-900">{contentActionLabel(status)}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
+                      <span className="text-xs leading-5 text-neutral-500">Use Campaigns to continue editing and approval.</span>
+                      <Link
+                        to="/campaigns"
+                        className="inline-flex min-h-10 items-center justify-center rounded-full bg-neutral-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-neutral-800"
+                      >
+                        {contentActionLabel(status)}
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           ) : (
             <EmptyProductState
-              title="No saved content matches this view"
-              message="Generate ideas, choose the strongest direction, and create a campaign. Saved campaign content will stay visible here."
+              title="No customer-ready content yet"
+              message="Generate ideas below, choose the strongest direction, then create a campaign. That campaign will appear here for drafting, review, approval, and scheduling."
               action={<SecondaryAction onClick={() => setContentSearch('')}>Show All Content</SecondaryAction>}
             />
           )}
         </div>
       </ProductCard>
-
-      {/* ---- Quick guide for first-time users ---- */}
-      {!ideas.length && !campaign && (
-        <ProductCard
-          title="How it works"
-          subtitle="Three simple steps to create your campaign."
-        >
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[
-              { step: '1', title: 'Write your brief', desc: 'Tell us about your campaign goal, audience, and what action you want people to take.' },
-              { step: '2', title: 'AI generates ideas', desc: 'Your connected AI model creates platform-specific campaign directions for you to review.' },
-              { step: '3', title: 'You choose & create', desc: 'Pick the direction you like, and we create a campaign ready for content generation.' },
-            ].map((item) => (
-              <div key={item.step} className="rounded-lg border border-neutral-200 bg-neutral-50 p-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
-                  {item.step}
-                </div>
-                <div className="mt-3 text-sm font-semibold text-neutral-950">{item.title}</div>
-                <p className="mt-1 text-sm leading-6 text-neutral-600">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </ProductCard>
-      )}
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
         <ProductCard
