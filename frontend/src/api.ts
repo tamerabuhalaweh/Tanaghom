@@ -501,6 +501,11 @@ export const ghlSyncApi = {
   writeBack: (token: string, data: { leadId: string }) => apiFetch<unknown>('/ghl-sync/write-back', { method: 'POST', body: data, token }),
 };
 
+export const kajabiApi = {
+  status: (token: string) => apiFetch<unknown>('/kajabi/status', { token }),
+  validateReadAccess: (token: string) => apiFetch<unknown>('/kajabi/validate-read-access', { method: 'POST', token }),
+};
+
 export const ideasApi = {
   generate: (data: unknown, token: string) => apiFetch<unknown>('/ideas/generate', { method: 'POST', body: data, token }),
   resumeWorkflow: (threadId: string, data: unknown, token: string) =>

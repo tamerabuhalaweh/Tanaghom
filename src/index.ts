@@ -56,6 +56,7 @@ import { postizChannelRouter } from '../modules/postiz-channel-selection/control
 import { smartlabsValidationRouter } from '../modules/smartlabs-validation/controller';
 import { stitchiRouter } from '../modules/stitchi/controller';
 import { commercialCommandCenterRouter } from '../modules/commercial-command-center/controller';
+import { kajabiConnectorRouter } from '../modules/kajabi-connector/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -282,6 +283,7 @@ app.use('/postiz-channels', postizChannelRouter);
 app.use('/smartlabs-validation', smartlabsValidationRouter);
 app.use('/stitchi', stitchiRouter);
 app.use('/commercial-command-center', commercialCommandCenterRouter);
+app.use('/kajabi', kajabiConnectorRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {

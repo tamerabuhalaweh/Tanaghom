@@ -191,6 +191,41 @@ describe('integration credential vault', () => {
     expect(result.rawSecretsReturned).toBe(false);
   });
 
+  it('accepts Kajabi customer OAuth credentials and keeps client secret encrypted', async () => {
+    prismaMocks.integrationCredential.upsert.mockImplementation(async ({ create }) => ({
+      id: 'cred-kajabi',
+      tenant_key: create.tenant_key,
+      provider: create.provider,
+      credential_type: create.credential_type,
+      connection_key: create.connection_key,
+      display_name: create.display_name,
+      encrypted_payload: create.encrypted_payload,
+      secret_fingerprints: create.secret_fingerprints,
+      metadata: create.metadata,
+      created_by_user_id: create.created_by_user_id,
+      is_active: true,
+      created_at: new Date('2026-06-25T00:00:00Z'),
+      updated_at: new Date('2026-06-25T00:00:00Z'),
+      last_validated_at: null,
+    }));
+
+    const result = await upsertIntegrationCredential('marketing_manager', 'user-1', {
+      tenantKey: 'default',
+      provider: 'kajabi',
+      credentialType: 'oauth_client',
+      connectionKey: 'default',
+      displayName: 'Kajabi Courses',
+      secrets: { clientId: 'kajabi-client', clientSecret: 'kajabi-secret', siteId: 'site-1' },
+      metadata: { source: 'connector_setup' },
+    });
+
+    const saved = prismaMocks.integrationCredential.upsert.mock.calls[0][0].create;
+    expect(JSON.stringify(saved.encrypted_payload)).not.toContain('kajabi-secret');
+    expect(result.provider).toBe('kajabi');
+    expect(result.secretFields).toEqual(['clientId', 'clientSecret', 'siteId']);
+    expect(result.rawSecretsReturned).toBe(false);
+  });
+
   it('allows connector setup roles and still blocks unrelated roles', async () => {
     prismaMocks.integrationCredential.findMany.mockResolvedValue([]);
 

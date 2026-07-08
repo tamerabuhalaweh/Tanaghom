@@ -2,6 +2,7 @@ export const PROVIDER_IDS = [
   'meta_analytics',
   'youtube_analytics',
   'formaloo',
+  'kajabi',
   'gohighlevel',
   'whatsapp_provider',
   'telegram_provider',
@@ -48,6 +49,7 @@ export const READ_VALIDATION_PROVIDER_IDS = [
   'meta_analytics',
   'youtube_analytics',
   'formaloo',
+  'kajabi',
 ] as const;
 
 export type ReadValidationProviderId = (typeof READ_VALIDATION_PROVIDER_IDS)[number];
@@ -115,6 +117,17 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     writeBackBlocker: 'Formaloo write-back not supported',
     configurable: true,
     missingCredentialAction: 'Enter Formaloo client key, client secret, and form ID',
+  },
+  kajabi: {
+    displayName: 'Kajabi',
+    oauthRequired: false,
+    mappingRequired: true,
+    dryRunSupported: true,
+    importSupported: true,
+    writeBackSupported: false,
+    writeBackBlocker: 'Kajabi write-back is not authorized; Tanaghum uses Kajabi as a read-only course revenue source',
+    configurable: true,
+    missingCredentialAction: 'Enter Kajabi client ID and client secret from the customer Public API settings',
   },
   gohighlevel: {
     displayName: 'GoHighLevel',

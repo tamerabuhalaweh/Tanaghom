@@ -13,9 +13,15 @@ import * as repo from '../repository';
 import { PROVIDER_IDS, PROVIDER_METADATA } from '../types';
 
 describe('Connector Readiness', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1' });
+    prismaMocks.integrationCredential.findFirst.mockResolvedValue(null);
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue(null);
+    prismaMocks.connectorImportJob.findFirst.mockResolvedValue(null);
+  });
 
-  it('returns all 8 providers', async () => {
+  it('returns every configured connector provider', async () => {
     const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
     expect(result.providers).toHaveLength(PROVIDER_IDS.length);
   });
@@ -91,6 +97,21 @@ describe('Connector Readiness', () => {
     const yt = result.providers.find(p => p.providerId === 'youtube_analytics');
     expect(yt?.credentialState).toBe('validated');
     expect(yt?.nextAction).toBe('Ready for use');
+  });
+
+  it('Kajabi resolves from kajabi OAuth client credential', async () => {
+    prismaMocks.integrationCredential.findFirst.mockImplementation((args: Record<string, unknown>) => {
+      if (args.where?.provider === 'kajabi' && args.where?.credential_type === 'oauth_client') {
+        return Promise.resolve({ id: 'c1', last_validated_at: null });
+      }
+      return Promise.resolve(null);
+    });
+
+    const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
+    const kajabi = result.providers.find(p => p.providerId === 'kajabi');
+    expect(kajabi?.credentialState).toBe('configured');
+    expect(kajabi?.nextAction).toBe('Create field mapping for this provider and event');
+    expect(kajabi?.writeBackStatus).toBe('blocked');
   });
 
   it('credentials + mapping without event dry-run is not Ready for use', async () => {
@@ -214,6 +235,7 @@ describe('Connector Readiness', () => {
       meta_analytics: 'meta_analytics or social_oauth fallback',
       youtube_analytics: 'youtube_analytics',
       formaloo: 'formaloo',
+      kajabi: 'kajabi',
       gohighlevel: 'gohighlevel',
       whatsapp_provider: 'whatsapp',
       telegram_provider: 'telegram',
@@ -221,6 +243,6 @@ describe('Connector Readiness', () => {
       postiz: 'postiz',
     };
 
-    expect(Object.keys(expected)).toHaveLength(8);
+    expect(Object.keys(expected)).toHaveLength(PROVIDER_IDS.length);
   });
 });

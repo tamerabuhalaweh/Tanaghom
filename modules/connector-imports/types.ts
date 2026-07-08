@@ -4,6 +4,7 @@ export const SUPPORTED_CONNECTORS = [
   'postiz',
   'gohighlevel',
   'formaloo',
+  'kajabi',
   'meta_analytics',
   'youtube_analytics',
   'whatsapp_provider',
@@ -77,6 +78,12 @@ export const CONNECTOR_REQUIREMENTS: Record<ConnectorId, {
     requiredCredentialFields: ['clientKey', 'clientSecret', 'formId'],
     optionalCredentialFields: ['workspaceId', 'baseUrl'],
     purpose: 'Import form submissions and survey responses from Formaloo.',
+  },
+  kajabi: {
+    label: 'Kajabi',
+    requiredCredentialFields: ['clientId', 'clientSecret'],
+    optionalCredentialFields: ['baseUrl', 'siteId'],
+    purpose: 'Import course, offer, purchase, order, form, and customer signals from Kajabi after customer-owned API credentials are validated.',
   },
   meta_analytics: {
     label: 'Meta Analytics',

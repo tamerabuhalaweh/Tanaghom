@@ -1,6 +1,7 @@
 import { prisma } from '@shared/database';
 import { NotFoundError, ValidationError } from '@shared/errors';
 import { getActiveIntegrationCredential, type DecryptedIntegrationCredential } from '../integration-credentials/service';
+import { validateKajabiReadAccessInternal } from '../kajabi-connector/service';
 import type {
   CredentialState, ProviderReadiness, EventConnectorReadiness, ReadAccessValidationResult,
   ReadValidationProviderId,
@@ -21,6 +22,7 @@ const PROVIDER_CREDENTIAL_MAP: Record<string, CredentialLookup[]> = {
     { provider: 'youtube', credentialType: 'api_key', connectionKey: 'default' },
   ],
   formaloo: [{ provider: 'formaloo', credentialType: 'api_key', connectionKey: 'default' }],
+  kajabi: [{ provider: 'kajabi', credentialType: 'oauth_client', connectionKey: 'default' }],
   gohighlevel: [{ provider: 'gohighlevel', credentialType: 'api_key', connectionKey: 'default' }],
   whatsapp_provider: [{ provider: 'whatsapp', credentialType: 'api_key', connectionKey: 'default' }],
   telegram_provider: [{ provider: 'telegram', credentialType: 'bot_token', connectionKey: 'default' }],
@@ -282,6 +284,20 @@ export async function validateProviderReadAccess(
     result = await validateMetaReadAccess(credential, fetcher);
   } else if (providerId === 'youtube_analytics') {
     result = await validateYouTubeReadAccess(credential, fetcher);
+  } else if (providerId === 'kajabi') {
+    const kajabiResult = await validateKajabiReadAccessInternal(tenantKey, userId, fetcher);
+    result = validationResult('kajabi', kajabiResult.status === 'validated' ? 'validated' : kajabiResult.status === 'failed' ? 'failed' : kajabiResult.status === 'requires_credentials' ? 'requires_credentials' : 'requires_provider_contract', {
+      message: kajabiResult.status === 'blocked_by_environment'
+        ? 'Kajabi credentials are stored, but live read validation is waiting for KAJABI_READ_SYNC_ENABLED=true.'
+        : `Kajabi read validation: ${kajabiResult.status}.`,
+      requiredActions: kajabiResult.requiredActions,
+      evidence: {
+        rowsFound: kajabiResult.evidence.rowsFound ?? 0,
+        metricLabels: ['contacts', 'customers', 'courses', 'offers', 'purchases', 'orders', 'forms'],
+        accountReference: null,
+        providerEndpoint: kajabiResult.evidence.providerEndpoint ?? 'Kajabi Public API',
+      },
+    });
   } else {
     result = validateFormalooReadAccess(credential);
   }

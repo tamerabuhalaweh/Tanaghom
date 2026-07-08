@@ -9,6 +9,7 @@ export const integrationProviderSchema = z.enum([
   'postiz',
   'gohighlevel',
   'formaloo',
+  'kajabi',
   'meta_analytics',
   'youtube',
   'youtube_analytics',

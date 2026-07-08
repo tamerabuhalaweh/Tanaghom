@@ -117,6 +117,15 @@ export interface GhlSyncStatusSummary {
   mappingStatus: 'missing' | 'partial' | 'ready';
   readSyncEnabled: boolean;
   writeBackEnabled: boolean;
+  acceptance: {
+    status: 'requires_credentials' | 'requires_mapping' | 'blocked_by_environment' | 'ready_for_read_sync' | 'synced';
+    readyForReadSync: boolean;
+    customerAction: string;
+    systemAction: string;
+    readOnly: true;
+    externalWritesAllowed: false;
+    rawSecretsReturned: false;
+  };
   ghlLeadCount: number;
   lastSyncAt: Date | null;
   lastRun: GhlSyncRunSummary | null;

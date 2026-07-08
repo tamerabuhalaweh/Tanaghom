@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { connectorImportsApi, connectorReadinessApi, eventsApi, ghlApi, integrationCredentialsApi, integrationStatusApi, postizApi, socialOAuthApi } from '../api';
+import { connectorImportsApi, connectorReadinessApi, eventsApi, ghlApi, ghlSyncApi, integrationCredentialsApi, integrationStatusApi, kajabiApi, postizApi, socialOAuthApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
   AieroLightPanel,
@@ -68,6 +68,7 @@ function validationProviderFor(row: RecordMap): string {
   if (provider === 'meta_analytics') return 'meta_analytics';
   if (provider === 'youtube_analytics' || provider === 'youtube') return 'youtube_analytics';
   if (provider === 'formaloo') return 'formaloo';
+  if (provider === 'kajabi') return 'kajabi';
   if (provider === 'social_oauth' && connectionKey === 'meta') return 'meta_analytics';
   return '';
 }
@@ -145,6 +146,17 @@ const SETUP_BLUEPRINTS: SetupBlueprint[] = [
     setupSteps: ['Save Formaloo client key, client secret, and form ID', 'Confirm the customer Formaloo read contract', 'Map form fields to KPI records'],
   },
   {
+    id: 'kajabi',
+    label: 'Kajabi Courses',
+    category: 'Course Revenue',
+    businessUse: 'Read course, offer, purchase, order, form, and customer signals for online course revenue dashboards.',
+    providerKeys: ['kajabi'],
+    importConnectorId: 'kajabi',
+    route: '/events',
+    routeLabel: 'Open Event Import',
+    setupSteps: ['Save Kajabi client ID and client secret', 'Validate read-only access to purchases', 'Map course revenue signals into dashboards'],
+  },
+  {
     id: 'smartlabs_voice',
     label: 'SmartLabs Voice',
     category: 'Voice Agent',
@@ -162,6 +174,8 @@ export default function IntegrationCredentials() {
   const [status, setStatus] = useState<RecordMap | null>(null);
   const [postiz, setPostiz] = useState<RecordMap | null>(null);
   const [ghl, setGhl] = useState<RecordMap | null>(null);
+  const [ghlSync, setGhlSync] = useState<RecordMap | null>(null);
+  const [kajabi, setKajabi] = useState<RecordMap | null>(null);
   const [matrix, setMatrix] = useState<RecordMap[]>([]);
   const [credentials, setCredentials] = useState<RecordMap[]>([]);
   const [socialConnections, setSocialConnections] = useState<RecordMap[]>([]);
@@ -192,10 +206,12 @@ export default function IntegrationCredentials() {
 
   async function load() {
     if (!token) return;
-    const [integration, postizStatus, ghlStatus, matrixResult, credentialResult, socialResult, postizChannelResult, postizDiagnosticsResult, importReadinessResult, importJobsResult, eventsResult] = await Promise.all([
+    const [integration, postizStatus, ghlStatus, ghlSyncStatus, kajabiStatus, matrixResult, credentialResult, socialResult, postizChannelResult, postizDiagnosticsResult, importReadinessResult, importJobsResult, eventsResult] = await Promise.all([
       integrationStatusApi.get(token),
       postizApi.status(token),
       ghlApi.status(token),
+      ghlSyncApi.status(token).catch((err) => ({ acceptance: { status: 'not_available' }, _label: err instanceof Error ? err.message : 'GHL sync status unavailable' })),
+      kajabiApi.status(token).catch((err) => ({ status: 'not_available', _label: err instanceof Error ? err.message : 'Kajabi status unavailable' })),
       integrationCredentialsApi.matrix(token),
       integrationCredentialsApi.list(token),
       socialOAuthApi.connections(token),
@@ -208,6 +224,8 @@ export default function IntegrationCredentials() {
     setStatus(integration as RecordMap);
     setPostiz(postizStatus as RecordMap);
     setGhl(ghlStatus as RecordMap);
+    setGhlSync(ghlSyncStatus as RecordMap);
+    setKajabi(kajabiStatus as RecordMap);
     const matrixRows = Array.isArray((matrixResult as RecordMap).rows) ? (matrixResult as RecordMap).rows as RecordMap[] : [];
     setMatrix(matrixRows);
     if (!hasAutoSelectedConnector && !selected && matrixRows.length > 0) {
@@ -257,6 +275,7 @@ export default function IntegrationCredentials() {
   }, [token]);
 
   const aiProvider = status?.aiProvider as RecordMap | undefined;
+  const ghlAcceptance = (ghlSync?.acceptance || {}) as RecordMap;
   const configuredRows = matrix.filter(row => text(row.status).toLowerCase() === 'configured').length;
   const selectedFields = useMemo(() => parseRequiredFields(selected?.requiredFields), [selected]);
   const optionalFields = useMemo(() => parseRequiredFields(selected?.optionalFields), [selected]);
@@ -577,7 +596,8 @@ export default function IntegrationCredentials() {
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <AieroMetricCard label="GoHighLevel" value={text(ghl?._label)} detail={`${text(ghl?.apiKeyStatus)} API key | CRM, leads, WhatsApp readiness`} accent="rose" />
+            <AieroMetricCard label="GoHighLevel" value={display(text(ghlAcceptance.status, text(ghl?._label)))} detail={`${text(ghl?.apiKeyStatus)} API key | CRM read sync acceptance`} accent="rose" />
+            <AieroMetricCard label="Kajabi" value={display(text(kajabi?.status, 'Requires Credentials'))} detail="Course, offer, purchase, and customer signals" accent="blue" />
             <AieroMetricCard label="AI Provider" value={text(aiProvider?.provider, 'Requires LLM')} detail={text(aiProvider?.label, 'AI generation status')} accent="violet" />
             <AieroMetricCard label="Postiz" value={text(postiz?.status)} detail={`${text((postiz?.health as RecordMap | undefined)?.credentialStatus)} credential | scheduling`} accent="teal" />
             <AieroMetricCard label="Tenant Vault" value={`${configuredRows}/${matrix.length}`} detail="Configured credential sets" accent="amber" />

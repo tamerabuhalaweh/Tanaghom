@@ -67,6 +67,15 @@ const REQUIRED_CREDENTIALS = [
     purpose: 'Prepare Formaloo form submission imports for event lead and form-completion reporting. Live API calls require the exact customer Formaloo API contract.',
   },
   {
+    provider: 'kajabi',
+    credentialType: 'oauth_client',
+    connectionKey: 'default',
+    label: 'Kajabi Course Platform',
+    requiredFields: ['clientId', 'clientSecret'],
+    optionalFields: ['baseUrl', 'siteId'],
+    purpose: 'Connect this tenant to its own Kajabi Public API for course, offer, purchase, order, form, and customer signals. Read sync remains customer-credential driven.',
+  },
+  {
     provider: 'whatsapp',
     credentialType: 'api_key',
     connectionKey: 'default',

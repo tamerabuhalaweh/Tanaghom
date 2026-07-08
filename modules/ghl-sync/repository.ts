@@ -66,11 +66,19 @@ export async function getGhlSyncStatus(tenantKey: string, eventId?: string): Pro
   ]);
 
   const mappingStatus = summarizeMappingStatus(mappings);
+  const readSyncEnabled = process.env.GHL_READ_SYNC_ENABLED === 'true';
+  const writeBackEnabled = process.env.GHL_WRITE_BACK_ENABLED === 'true';
   const requiredActions: string[] = [];
   if (!credentialConfigured(config)) requiredActions.push('Configure tenant-owned GoHighLevel API key and location id.');
   if (mappingStatus !== 'ready') requiredActions.push('Map GoHighLevel tags and pipeline stages to Tanaghum lead statuses/temperatures.');
-  if (process.env.GHL_READ_SYNC_ENABLED !== 'true') requiredActions.push('Enable GHL_READ_SYNC_ENABLED=true before live read sync.');
-  if (process.env.GHL_WRITE_BACK_ENABLED !== 'true') requiredActions.push('Write-back is disabled by default; enable only after customer authorization.');
+  if (!readSyncEnabled) requiredActions.push('Enable GHL_READ_SYNC_ENABLED=true before live read sync.');
+  if (!writeBackEnabled) requiredActions.push('Write-back is disabled by default; enable only after customer authorization.');
+  const acceptance = buildGhlAcceptance({
+    credentialConfigured: credentialConfigured(config),
+    mappingStatus,
+    readSyncEnabled,
+    lastRun: lastRun ? mapRun(lastRun) : null,
+  });
 
   return {
     tenantKey,
@@ -79,12 +87,78 @@ export async function getGhlSyncStatus(tenantKey: string, eventId?: string): Pro
     tanaghumRole: 'operating_reporting_layer',
     credentialStatus: credentialConfigured(config) ? 'configured' : 'missing',
     mappingStatus,
-    readSyncEnabled: process.env.GHL_READ_SYNC_ENABLED === 'true',
-    writeBackEnabled: process.env.GHL_WRITE_BACK_ENABLED === 'true',
+    readSyncEnabled,
+    writeBackEnabled,
+    acceptance,
     ghlLeadCount,
     lastSyncAt: lastRun?.completed_at ?? null,
     lastRun: lastRun ? mapRun(lastRun) : null,
     requiredActions,
+  };
+}
+
+function buildGhlAcceptance(input: {
+  credentialConfigured: boolean;
+  mappingStatus: 'missing' | 'partial' | 'ready';
+  readSyncEnabled: boolean;
+  lastRun: GhlSyncRunSummary | null;
+}): GhlSyncStatusSummary['acceptance'] {
+  if (!input.credentialConfigured) {
+    return {
+      status: 'requires_credentials',
+      readyForReadSync: false,
+      customerAction: 'Save the customer-owned GHL API key and location ID.',
+      systemAction: 'After credentials are saved, validate read-only CRM access before syncing leads.',
+      readOnly: true,
+      externalWritesAllowed: false,
+      rawSecretsReturned: false,
+    };
+  }
+
+  if (input.mappingStatus !== 'ready') {
+    return {
+      status: 'requires_mapping',
+      readyForReadSync: false,
+      customerAction: 'Map GHL tags and pipeline stages to lead status, temperature, meetings, no-shows, and purchases.',
+      systemAction: 'Use mapping validation before running a production pull sync.',
+      readOnly: true,
+      externalWritesAllowed: false,
+      rawSecretsReturned: false,
+    };
+  }
+
+  if (!input.readSyncEnabled) {
+    return {
+      status: 'blocked_by_environment',
+      readyForReadSync: false,
+      customerAction: 'No customer action needed after credentials and mappings are ready.',
+      systemAction: 'Enable GHL_READ_SYNC_ENABLED=true in the environment after customer approval.',
+      readOnly: true,
+      externalWritesAllowed: false,
+      rawSecretsReturned: false,
+    };
+  }
+
+  if (input.lastRun?.status === 'synced') {
+    return {
+      status: 'synced',
+      readyForReadSync: true,
+      customerAction: 'Review mirrored CRM leads in the event dashboard.',
+      systemAction: 'Continue scheduled or manual read syncs using GHL as the source of truth.',
+      readOnly: true,
+      externalWritesAllowed: false,
+      rawSecretsReturned: false,
+    };
+  }
+
+  return {
+    status: 'ready_for_read_sync',
+    readyForReadSync: true,
+    customerAction: 'Approve a read-only GHL pull preview or sync for the selected event.',
+    systemAction: 'Pull contacts, opportunities, appointments, purchases, tags, and stages from GHL without writing back.',
+    readOnly: true,
+    externalWritesAllowed: false,
+    rawSecretsReturned: false,
   };
 }
 

@@ -128,9 +128,50 @@ describe('GHL Sync', () => {
     expect(status.tanaghumRole).toBe('operating_reporting_layer');
     expect(status.credentialStatus).toBe('configured');
     expect(status.mappingStatus).toBe('ready');
+    expect(status.acceptance.status).toBe('ready_for_read_sync');
+    expect(status.acceptance.readyForReadSync).toBe(true);
+    expect(status.acceptance.externalWritesAllowed).toBe(false);
     expect(prismaMocks.commercialEvent.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'event-1', tenant_key: 'tenant-a' },
     }));
+  });
+
+  it('reports explicit acceptance blockers before GHL read-sync can run', async () => {
+    credentialMocks.getActiveIntegrationCredential.mockResolvedValueOnce(null);
+    let status = await repo.getGhlSyncStatus('tenant-a', 'event-1');
+    expect(status.acceptance.status).toBe('requires_credentials');
+    expect(status.acceptance.readyForReadSync).toBe(false);
+
+    credentialMocks.getActiveIntegrationCredential.mockResolvedValueOnce({
+      id: 'cred-1',
+      secrets: { apiKey: 'tenant-key', locationId: 'loc-1' },
+    });
+    prismaMocks.connectorFieldMapping.findMany.mockResolvedValueOnce([]);
+    status = await repo.getGhlSyncStatus('tenant-a', 'event-1');
+    expect(status.acceptance.status).toBe('requires_mapping');
+
+    credentialMocks.getActiveIntegrationCredential.mockResolvedValueOnce({
+      id: 'cred-1',
+      secrets: { apiKey: 'tenant-key', locationId: 'loc-1' },
+    });
+    prismaMocks.connectorFieldMapping.findMany.mockResolvedValueOnce([
+      { validation_status: 'valid', field_mappings: { mappingType: 'tag' } },
+      { validation_status: 'valid', field_mappings: { mappingType: 'pipeline' } },
+    ]);
+    process.env.GHL_READ_SYNC_ENABLED = 'false';
+    status = await repo.getGhlSyncStatus('tenant-a', 'event-1');
+    expect(status.acceptance.status).toBe('blocked_by_environment');
+    expect(status.acceptance.systemAction).toContain('GHL_READ_SYNC_ENABLED=true');
+  });
+
+  it('reports synced acceptance when the latest GHL run completed', async () => {
+    prismaMocks.ghlLeadSyncRun.findFirst.mockResolvedValueOnce(mockRun({ status: 'synced', mode: 'pull_sync', leads_upserted: 3 }));
+
+    const status = await repo.getGhlSyncStatus('tenant-a', 'event-1');
+
+    expect(status.acceptance.status).toBe('synced');
+    expect(status.acceptance.readyForReadSync).toBe(true);
+    expect(status.lastRun?.leadsUpserted).toBe(3);
   });
 
   it('blocks pull preview when tenant-owned GHL credentials are missing', async () => {

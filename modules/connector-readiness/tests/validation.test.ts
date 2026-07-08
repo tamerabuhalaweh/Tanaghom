@@ -27,6 +27,7 @@ const baseCredential = {
 describe('provider read-access validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.KAJABI_READ_SYNC_ENABLED;
     credentialMocks.getActiveIntegrationCredential.mockResolvedValue(null);
   });
 
@@ -102,5 +103,58 @@ describe('provider read-access validation', () => {
     expect(result.requiredActions.join(' ')).toContain('Formaloo');
     expect(result.externalWritesAllowed).toBe(false);
     expect(prismaMocks.integrationCredential.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps Kajabi validation blocked until the environment read-sync gate is enabled', async () => {
+    credentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+      ...baseCredential,
+      provider: 'kajabi',
+      credentialType: 'oauth_client',
+      displayName: 'Kajabi read access',
+      secrets: { clientId: 'kajabi-client', clientSecret: 'kajabi-secret' },
+    });
+    const fetcher = vi.fn();
+
+    const result = await repo.validateProviderReadAccess('tenant-a', 'user-1', 'kajabi', fetcher);
+
+    expect(result.status).toBe('requires_provider_contract');
+    expect(result.message).toContain('KAJABI_READ_SYNC_ENABLED');
+    expect(result.externalWritesAllowed).toBe(false);
+    expect(result.rawPayloadReturned).toBe(false);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('kajabi-secret');
+  });
+
+  it('validates Kajabi read access when customer credentials and environment gate are ready', async () => {
+    process.env.KAJABI_READ_SYNC_ENABLED = 'true';
+    credentialMocks.getActiveIntegrationCredential.mockResolvedValue({
+      ...baseCredential,
+      provider: 'kajabi',
+      credentialType: 'oauth_client',
+      displayName: 'Kajabi read access',
+      secrets: { clientId: 'kajabi-client', clientSecret: 'kajabi-secret', baseUrl: 'https://api.kajabi.com' },
+    });
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: 'kajabi-access-token' }),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ id: 'purchase-1' }] }),
+        text: async () => '',
+      });
+
+    const result = await repo.validateProviderReadAccess('tenant-a', 'user-1', 'kajabi', fetcher);
+
+    expect(result.status).toBe('validated');
+    expect(result.evidence.rowsFound).toBe(1);
+    expect(result.rawSecretsReturned).toBe(false);
+    expect(result.rawPayloadReturned).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('kajabi-secret');
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
