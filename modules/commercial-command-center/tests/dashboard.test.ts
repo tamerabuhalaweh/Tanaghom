@@ -149,7 +149,54 @@ describe('Commercial Command Center revenue-line dashboard', () => {
       hasLeadRecords: true,
       hasConnectorRecords: true,
     });
+    expect(dashboard.linkedEvents[0]).toMatchObject({
+      linkedPlanCount: 1,
+      linkedPlanTitles: ['Quarterly course launch'],
+    });
+    expect(dashboard.availableEvents[0]?.name).toBe('Course Launch');
     expect(dashboard.connectorStatus).toMatchObject({ jobs: 2, readyForSync: 1, synced: 1, blocked: 0 });
+  });
+
+  it('shows available tenant events as link choices without counting them as linked data', async () => {
+    prismaMocks.commercialRevenueLine.findUnique.mockResolvedValue(configuredLine());
+    prismaMocks.commercialPlan.findMany.mockResolvedValue([plan(null)]);
+    prismaMocks.commercialEvent.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'event-available',
+          name: 'Leadership Course Live Workshop',
+          status: 'planning',
+          event_type: 'tagyeer_wa_irtaqi',
+          event_date: now,
+          planned_budget: 2000,
+          revenue_target: 12000,
+        },
+        {
+          id: 'event-test',
+          name: 'Sprint 65 Acceptance Event 1783076057587',
+          status: 'draft',
+          event_type: 'tagyeer_wa_irtaqi',
+          event_date: now,
+          planned_budget: 35000,
+          revenue_target: 120000,
+        },
+      ]);
+
+    const dashboard = await getRevenueLineDashboard('tenant-a', 'online_course');
+
+    expect(prismaMocks.eventKpiRecord.findMany).not.toHaveBeenCalled();
+    expect(prismaMocks.leadCaptureRecord.findMany).not.toHaveBeenCalled();
+    expect(dashboard.linkedEvents).toHaveLength(0);
+    expect(dashboard.availableEvents).toHaveLength(1);
+    expect(dashboard.availableEvents[0]).toMatchObject({
+      id: 'event-available',
+      name: 'Leadership Course Live Workshop',
+      linkedPlanCount: 0,
+      linkedPlanTitles: [],
+    });
+    expect(dashboard.dataStatus.hasLinkedEvents).toBe(false);
+    expect(dashboard.dataStatus.missingDataSources).toContain('Link an event or campaign so this revenue line has operating data.');
   });
 
   it('uses all tenant events for the live-event revenue line', async () => {
@@ -185,6 +232,8 @@ describe('Commercial Command Center revenue-line dashboard', () => {
     }));
     expect(dashboard.linkedEvents).toHaveLength(1);
     expect(dashboard.linkedEvents[0]?.name).toBe('Moaaskar Al Tamayoz - New Camp');
+    expect(dashboard.availableEvents).toHaveLength(1);
+    expect(dashboard.availableEvents[0]?.name).toBe('Moaaskar Al Tamayoz - New Camp');
     expect(dashboard.rollups.plannedBudget).toBe(3000);
     expect(dashboard.rollups.plannedRevenueTarget).toBe(12000);
   });

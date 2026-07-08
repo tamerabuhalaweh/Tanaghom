@@ -5,6 +5,7 @@ import {
   REVENUE_LINE_CATALOG,
   type CommercialAssessmentSignalSummary,
   type CommercialCommandCenterDashboard,
+  type CommercialEventBridgeSummary,
   type CommercialOperatingStage,
   type CommercialPlanSummary,
   type CommercialRevenueLineDashboard,
@@ -324,24 +325,41 @@ export async function getRevenueLineDashboard(
     : [];
   const planIds = plans.map(plan => plan.id);
   const planEventIds = [...new Set(plans.map(plan => plan.linkedEventId).filter((id): id is string => Boolean(id)))];
+  const plansByEvent = new Map<string, CommercialPlanSummary[]>();
+  for (const plan of plans) {
+    if (!plan.linkedEventId) continue;
+    const current = plansByEvent.get(plan.linkedEventId) || [];
+    current.push(plan);
+    plansByEvent.set(plan.linkedEventId, current);
+  }
+  const eventSelect = {
+    id: true,
+    name: true,
+    status: true,
+    event_type: true,
+    event_date: true,
+    planned_budget: true,
+    revenue_target: true,
+  } as const;
 
   const rawLinkedEvents = await prisma.commercialEvent.findMany({
     where: revenueLineType === 'live_event'
       ? { tenant_key: tenantKey }
       : { tenant_key: tenantKey, id: { in: planEventIds } },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      event_type: true,
-      event_date: true,
-      planned_budget: true,
-      revenue_target: true,
-    },
+    select: eventSelect,
     orderBy: { event_date: 'desc' },
     take: 50,
   });
   const linkedEvents = rawLinkedEvents.filter(event => isCustomerVisibleRecordName(event.name));
+  const rawAvailableEvents = revenueLineType === 'live_event'
+    ? rawLinkedEvents
+    : await prisma.commercialEvent.findMany({
+      where: { tenant_key: tenantKey },
+      select: eventSelect,
+      orderBy: { event_date: 'desc' },
+      take: 100,
+    });
+  const availableEvents = rawAvailableEvents.filter(event => isCustomerVisibleRecordName(event.name));
   const eventIds = linkedEvents.map(event => event.id);
 
   const [signals, kpis, leads, connectorJobs] = await Promise.all([
@@ -455,15 +473,8 @@ export async function getRevenueLineDashboard(
     },
     plans,
     openSignals: signals.map(mapAssessmentSignal),
-    linkedEvents: linkedEvents.map(event => ({
-      id: event.id,
-      name: event.name,
-      status: String(event.status),
-      eventType: String(event.event_type),
-      eventDate: event.event_date,
-      plannedBudget: decimalToNumber(event.planned_budget),
-      revenueTarget: decimalToNumber(event.revenue_target),
-    })),
+    linkedEvents: linkedEvents.map(event => mapEventBridge(event, plansByEvent.get(event.id))),
+    availableEvents: availableEvents.map(event => mapEventBridge(event, plansByEvent.get(event.id))),
     connectorStatus: {
       jobs: connectorJobs.length,
       readyForSync: connectorJobs.filter(job => String(job.sync_status) === 'ready_for_sync' || String(job.state) === 'test_passed').length,
@@ -687,6 +698,31 @@ function chooseNextAction(
     label: 'Review next action with Stitchi',
     description: 'Ask Stitchi to summarize risks, next steps, and planning updates based on current commercial data.',
     path: '/stitchi',
+  };
+}
+
+function mapEventBridge(
+  event: {
+    id: string;
+    name: string;
+    status: unknown;
+    event_type: unknown;
+    event_date: Date;
+    planned_budget: unknown;
+    revenue_target: unknown;
+  },
+  plans: CommercialPlanSummary[] = [],
+): CommercialEventBridgeSummary {
+  return {
+    id: event.id,
+    name: event.name,
+    status: String(event.status),
+    eventType: String(event.event_type),
+    eventDate: event.event_date,
+    plannedBudget: decimalToNumber(event.planned_budget),
+    revenueTarget: decimalToNumber(event.revenue_target),
+    linkedPlanCount: plans.length,
+    linkedPlanTitles: plans.map(plan => plan.title).slice(0, 4),
   };
 }
 

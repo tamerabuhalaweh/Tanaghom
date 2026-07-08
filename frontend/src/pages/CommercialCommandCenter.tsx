@@ -167,6 +167,8 @@ export default function CommercialCommandCenter() {
   const dataStatus = object(lineDashboard?.dataStatus);
   const plans = list(lineDashboard?.plans);
   const linkedEvents = list(lineDashboard?.linkedEvents);
+  const availableEvents = list(lineDashboard?.availableEvents);
+  const eventChoices = availableEvents.length ? availableEvents : linkedEvents;
   const openSignals = list(lineDashboard?.openSignals);
   const nextAction = object(lineDashboard?.nextAction);
   const stageSummary = dashboard?.stageSummary && typeof dashboard.stageSummary === 'object' ? dashboard.stageSummary as RecordMap : {};
@@ -490,10 +492,15 @@ export default function CommercialCommandCenter() {
                 className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
               >
                 <option value="">No event linked</option>
-                {linkedEvents.map(event => (
-                  <option key={text(event.id)} value={text(event.id)}>{text(event.name)}</option>
+                {eventChoices.map(event => (
+                  <option key={text(event.id)} value={text(event.id)}>
+                    {text(event.name)} - {titleCase(text(event.status, 'draft'))}
+                  </option>
                 ))}
               </select>
+              <p className="mt-2 text-xs leading-5 text-neutral-500">
+                Link this commercial plan to the event it supports. Event execution stays in Event Operations.
+              </p>
             </Field>
             <Field label="Horizon">
               <select
@@ -603,6 +610,11 @@ export default function CommercialCommandCenter() {
                     <span>Budget: {formatMoney(plan.budgetTarget)}</span>
                     <span>Target: {formatMoney(plan.revenueTarget)}</span>
                   </div>
+                  <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${text(plan.id) === planDraft.id ? 'bg-white/10 text-white/70' : 'bg-white text-neutral-500'}`}>
+                    {text(plan.linkedEventName)
+                      ? `Supports event: ${text(plan.linkedEventName)}`
+                      : 'No event linked yet'}
+                  </div>
                 </button>
               ))}
             </div>
@@ -635,6 +647,14 @@ export default function CommercialCommandCenter() {
                   <div className="mt-3 grid gap-2 text-sm text-neutral-500">
                     <span>Budget: {formatMoney(event.plannedBudget)}</span>
                     <span>Target: {formatMoney(event.revenueTarget)}</span>
+                  </div>
+                  <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs text-neutral-500">
+                    {numberValue(event.linkedPlanCount)} supporting plan{numberValue(event.linkedPlanCount) === 1 ? '' : 's'}
+                    {Array.isArray(event.linkedPlanTitles) && event.linkedPlanTitles.length ? (
+                      <span className="mt-1 block font-medium text-neutral-700">
+                        {(event.linkedPlanTitles as string[]).slice(0, 2).join(', ')}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               ))}

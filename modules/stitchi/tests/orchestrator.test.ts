@@ -308,6 +308,34 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('turns a commercial-to-event bridge request into an approval-gated plan link update', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Update commercial plan 00000000-0000-0000-0000-000000000020 and link it to the next available live event.',
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'update_commercial_plan',
+        inputPayload: expect.objectContaining({
+          commercialPlanId: '00000000-0000-0000-0000-000000000020',
+          plan: expect.objectContaining({
+            linkedEventId: '00000000-0000-0000-0000-000000000001',
+          }),
+        }),
+        previewPayload: expect.objectContaining({
+          linkedEventName: 'Leadership Event',
+          approvalRequired: true,
+          externalExecution: 'blocked',
+        }),
+      }),
+    );
+  });
+
   it('turns a business-language Online Courses request into an approval-gated commercial plan', async () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [

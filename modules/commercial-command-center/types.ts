@@ -201,6 +201,18 @@ export interface CommercialAssessmentSignalSummary {
   updatedAt: Date;
 }
 
+export interface CommercialEventBridgeSummary {
+  id: string;
+  name: string;
+  status: string;
+  eventType: string;
+  eventDate: Date;
+  plannedBudget: number | null;
+  revenueTarget: number | null;
+  linkedPlanCount?: number;
+  linkedPlanTitles?: string[];
+}
+
 export interface CommercialCommandCenterDashboard {
   revenueLines: CommercialRevenueLineSummary[];
   stageSummary: Record<CommercialOperatingStage, number>;
@@ -255,15 +267,8 @@ export interface CommercialRevenueLineDashboard {
   };
   plans: CommercialPlanSummary[];
   openSignals: CommercialAssessmentSignalSummary[];
-  linkedEvents: Array<{
-    id: string;
-    name: string;
-    status: string;
-    eventType: string;
-    eventDate: Date;
-    plannedBudget: number | null;
-    revenueTarget: number | null;
-  }>;
+  linkedEvents: CommercialEventBridgeSummary[];
+  availableEvents: CommercialEventBridgeSummary[];
   connectorStatus: {
     jobs: number;
     readyForSync: number;

@@ -437,15 +437,17 @@ async function deriveCommercialCenterActionProposalV2(
   const commercialPlanId = extractUuidAfter(lower, 'commercial plan') || extractUuidAfter(lower, 'plan') || extractUuidAfter(lower, 'commercialPlanId');
   const title = inferCommercialPlanTitle(content, revenueLine?.name || revenueLineLabel(fallbackRevenueLineType));
 
-  if (commercialPlanId && /(update|change|edit|move|activate|pause|complete|budget|target|objective|audience|stage|status)/i.test(lower)) {
+  if (commercialPlanId && /(update|change|edit|move|activate|pause|complete|budget|target|objective|audience|stage|status|link|event)/i.test(lower)) {
     const stage = inferCommercialStage(lower);
     const status = inferCommercialPlanStatus(lower);
+    const linkedEvent = inferLinkedEvent(content, context);
     return {
       actionType: 'update_commercial_plan',
       inputPayload: {
         commercialPlanId,
         plan: {
           ...(status ? { status } : {}),
+          ...(linkedEvent ? { linkedEventId: linkedEvent.id } : {}),
           stage,
           objective: cleanText(content),
           strategySummary: cleanText(content),
@@ -455,6 +457,8 @@ async function deriveCommercialCenterActionProposalV2(
         commercialPlanId,
         stage,
         status: status || 'unchanged',
+        linkedEventId: linkedEvent?.id || null,
+        linkedEventName: linkedEvent?.name || null,
         approvalRequired: true,
         externalExecution: 'blocked',
       },

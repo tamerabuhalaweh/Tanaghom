@@ -108,6 +108,7 @@ function lineDashboard(revenueLineType: string, planCreated: boolean) {
         }]
       : [],
     linkedEvents: [linkedEvent],
+    availableEvents: [linkedEvent],
     openSignals: isCourse ? [] : [{
       id: 'signal-1',
       title: 'CRM source is not connected',
