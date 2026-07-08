@@ -228,4 +228,28 @@ describe('Stitchi natural-language orchestration', () => {
       }),
     );
   });
+
+  it('turns a commercial plan edit into an approval-gated Commercial Command Center update', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Update commercial plan 00000000-0000-0000-0000-000000000020 and activate it for implementation engagement.',
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'update_commercial_plan',
+        inputPayload: expect.objectContaining({
+          commercialPlanId: '00000000-0000-0000-0000-000000000020',
+          plan: expect.objectContaining({
+            stage: 'implementation_engagement',
+            status: 'active',
+          }),
+        }),
+      }),
+    );
+  });
 });

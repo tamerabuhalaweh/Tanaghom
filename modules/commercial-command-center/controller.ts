@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError } from '@shared/errors';
+import { UnauthorizedError, ValidationError } from '@shared/errors';
 import * as service from './service';
+import { COMMERCIAL_REVENUE_LINE_TYPES, type CommercialRevenueLineType } from './types';
 import {
   validateCreateAssessmentSignal,
   validateCreateCommercialPlan,
@@ -9,6 +10,7 @@ import {
   validateDashboardQuery,
   validateListAssessmentSignalsQuery,
   validateListPlansQuery,
+  validateUpdateCommercialPlan,
 } from './validators';
 
 export const commercialCommandCenterRouter = Router();
@@ -48,6 +50,16 @@ commercialCommandCenterRouter.get('/revenue-lines', async (req: Request, res: Re
   }
 });
 
+commercialCommandCenterRouter.get('/revenue-lines/:revenueLineType/dashboard', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const context = session(getPayload(req));
+    const dashboard = await service.getRevenueLineDashboard(context.role, context.tenantKey, parseRevenueLineType(String(req.params.revenueLineType)));
+    res.json(dashboard);
+  } catch (err) {
+    next(err);
+  }
+});
+
 commercialCommandCenterRouter.post('/revenue-lines', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const context = session(getPayload(req));
@@ -81,6 +93,17 @@ commercialCommandCenterRouter.post('/plans', async (req: Request, res: Response,
   }
 });
 
+commercialCommandCenterRouter.put('/plans/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const context = session(getPayload(req));
+    const input = validateUpdateCommercialPlan(req.body);
+    const plan = await service.updatePlan(context.role, context.tenantKey, context.userId, String(req.params.id), input);
+    res.json(plan);
+  } catch (err) {
+    next(err);
+  }
+});
+
 commercialCommandCenterRouter.get('/assessment-signals', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const context = session(getPayload(req));
@@ -102,3 +125,10 @@ commercialCommandCenterRouter.post('/assessment-signals', async (req: Request, r
     next(err);
   }
 });
+
+function parseRevenueLineType(value: string): CommercialRevenueLineType {
+  if (COMMERCIAL_REVENUE_LINE_TYPES.includes(value as CommercialRevenueLineType)) {
+    return value as CommercialRevenueLineType;
+  }
+  throw new ValidationError(`Unknown commercial revenue line type: ${value}`);
+}

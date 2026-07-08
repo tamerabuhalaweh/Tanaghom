@@ -87,6 +87,25 @@ export const createCommercialPlanSchema = z.object({
   ownerUserId: z.string().uuid().nullable().optional(),
 });
 
+export const updateCommercialPlanSchema = z.object({
+  revenueLineId: z.string().uuid().optional(),
+  linkedEventId: z.string().uuid().nullable().optional(),
+  horizon: z.enum(COMMERCIAL_PLAN_HORIZONS).optional(),
+  stage: z.enum(COMMERCIAL_OPERATING_STAGES).optional(),
+  title: z.string().trim().min(1).max(260).optional(),
+  objective: z.string().trim().max(5000).nullable().optional(),
+  audience: z.string().trim().max(5000).nullable().optional(),
+  budgetTarget: z.number().min(0).nullable().optional(),
+  revenueTarget: z.number().min(0).nullable().optional(),
+  kpiTargets: z.record(z.unknown()).nullable().optional(),
+  strategySummary: z.string().trim().max(8000).nullable().optional(),
+  actionPlan: z.string().trim().max(8000).nullable().optional(),
+  status: z.enum(COMMERCIAL_PLAN_STATUSES).optional(),
+  ownerUserId: z.string().uuid().nullable().optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one commercial plan field is required',
+});
+
 export const createAssessmentSignalSchema = z.object({
   revenueLineId: z.string().uuid().nullable().optional(),
   commercialPlanId: z.string().uuid().nullable().optional(),
@@ -118,6 +137,7 @@ export const listAssessmentSignalsQuerySchema = z.object({
 
 export type CreateRevenueLineInput = z.infer<typeof createRevenueLineSchema>;
 export type CreateCommercialPlanInput = z.infer<typeof createCommercialPlanSchema>;
+export type UpdateCommercialPlanInput = z.infer<typeof updateCommercialPlanSchema>;
 export type CreateAssessmentSignalInput = z.infer<typeof createAssessmentSignalSchema>;
 export type DashboardQueryInput = z.infer<typeof dashboardQuerySchema>;
 export type ListPlansQueryInput = z.infer<typeof listPlansQuerySchema>;
@@ -206,5 +226,53 @@ export interface CommercialCommandCenterDashboard {
   stitchi: {
     supported: true;
     suggestedPrompt: string;
+  };
+}
+
+export interface CommercialRevenueLineDashboard {
+  revenueLine: CommercialRevenueLineSummary;
+  rollups: {
+    plannedRevenueTarget: number;
+    knownRevenue: number;
+    plannedBudget: number;
+    knownSpend: number;
+    budgetVariance: number | null;
+    leads: number;
+    purchases: number;
+    meetingsBooked: number;
+    meetingsAttended: number;
+    noShows: number;
+    costPerLead: number | null;
+    costPerPurchase: number | null;
+    leadToPurchaseRate: number | null;
+  };
+  dataStatus: {
+    hasLinkedEvents: boolean;
+    hasKpiRecords: boolean;
+    hasLeadRecords: boolean;
+    hasConnectorRecords: boolean;
+    missingDataSources: string[];
+  };
+  plans: CommercialPlanSummary[];
+  openSignals: CommercialAssessmentSignalSummary[];
+  linkedEvents: Array<{
+    id: string;
+    name: string;
+    status: string;
+    eventType: string;
+    eventDate: Date;
+    plannedBudget: number | null;
+    revenueTarget: number | null;
+  }>;
+  connectorStatus: {
+    jobs: number;
+    readyForSync: number;
+    synced: number;
+    blocked: number;
+  };
+  nextAction: {
+    label: string;
+    description: string;
+    path: string | null;
   };
 }

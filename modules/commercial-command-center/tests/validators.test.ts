@@ -4,6 +4,7 @@ import {
   validateCreateAssessmentSignal,
   validateCreateCommercialPlan,
   validateCreateRevenueLine,
+  validateUpdateCommercialPlan,
 } from '../validators';
 
 describe('Commercial Command Center validators', () => {
@@ -38,6 +39,22 @@ describe('Commercial Command Center validators', () => {
       stage: 'strategy_planning',
       title: 'Quarterly online course growth plan',
     });
+  });
+
+  it('validates partial commercial plan updates', () => {
+    expect(validateUpdateCommercialPlan({
+      stage: 'implementation_engagement',
+      status: 'active',
+      budgetTarget: 12000,
+    })).toMatchObject({
+      stage: 'implementation_engagement',
+      status: 'active',
+      budgetTarget: 12000,
+    });
+  });
+
+  it('rejects empty commercial plan updates', () => {
+    expect(() => validateUpdateCommercialPlan({})).toThrow(ValidationError);
   });
 
   it('validates commercial assessment signal creation', () => {

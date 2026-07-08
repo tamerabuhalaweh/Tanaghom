@@ -16,6 +16,14 @@ describe('Commercial Command Center policy', () => {
     expect(() => checkCommercialCenterPermission('reviewer', 'commercial:center:create')).toThrow(ForbiddenError);
   });
 
+  it('limits plan updates to manager roles', () => {
+    expect(() => checkCommercialCenterPermission('admin', 'commercial:center:update')).not.toThrow();
+    expect(() => checkCommercialCenterPermission('department_head', 'commercial:center:update')).not.toThrow();
+    expect(() => checkCommercialCenterPermission('marketing_manager', 'commercial:center:update')).not.toThrow();
+    expect(() => checkCommercialCenterPermission('sales_manager', 'commercial:center:update')).toThrow(ForbiddenError);
+    expect(() => checkCommercialCenterPermission('specialist', 'commercial:center:update')).toThrow(ForbiddenError);
+  });
+
   it('rejects unknown roles', () => {
     expect(() => checkCommercialCenterPermission('unknown', 'commercial:center:read')).toThrow(ForbiddenError);
   });

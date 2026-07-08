@@ -6,6 +6,7 @@ import {
   dashboardQuerySchema,
   listAssessmentSignalsQuerySchema,
   listPlansQuerySchema,
+  updateCommercialPlanSchema,
 } from './types';
 
 export function validateCreateRevenueLine(data: unknown) {
@@ -14,6 +15,10 @@ export function validateCreateRevenueLine(data: unknown) {
 
 export function validateCreateCommercialPlan(data: unknown) {
   return validateOrThrow(createCommercialPlanSchema, data);
+}
+
+export function validateUpdateCommercialPlan(data: unknown) {
+  return validateOrThrow(updateCommercialPlanSchema, data);
 }
 
 export function validateCreateAssessmentSignal(data: unknown) {

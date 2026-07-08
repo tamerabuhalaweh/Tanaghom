@@ -19,6 +19,7 @@ import {
   createAssessmentSignalSchema,
   createCommercialPlanSchema,
   createRevenueLineSchema,
+  updateCommercialPlanSchema,
 } from '@modules/commercial-command-center/types';
 
 const SUPPORTED_ACTIONS = [
@@ -34,6 +35,7 @@ const SUPPORTED_ACTIONS = [
   'create_sales_task',
   'create_commercial_revenue_line',
   'create_commercial_plan',
+  'update_commercial_plan',
   'create_commercial_assessment_signal',
 ] as const;
 
@@ -56,6 +58,11 @@ const updateLeadStatusActionSchema = z.object({
 const setLeadTemperatureActionSchema = z.object({
   leadId: z.string().uuid(),
 }).merge(setTemperatureSchema);
+
+const updateCommercialPlanActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+  plan: updateCommercialPlanSchema,
+});
 
 export function isExecutableStitchiAction(actionType: string): actionType is StitchiExecutableActionType {
   return SUPPORTED_ACTIONS.includes(actionType as StitchiExecutableActionType);
@@ -146,6 +153,11 @@ export async function executeStitchiAction(input: {
     case 'create_commercial_plan': {
       const payload = createCommercialPlanSchema.parse(input.inputPayload);
       const result = await commercialCenterService.createPlan(input.role, input.tenantKey, input.userId, payload);
+      return { objectType: 'commercial_plan', objectId: result.id, result };
+    }
+    case 'update_commercial_plan': {
+      const payload = updateCommercialPlanActionSchema.parse(input.inputPayload);
+      const result = await commercialCenterService.updatePlan(input.role, input.tenantKey, input.userId, payload.commercialPlanId, payload.plan);
       return { objectType: 'commercial_plan', objectId: result.id, result };
     }
     case 'create_commercial_assessment_signal': {

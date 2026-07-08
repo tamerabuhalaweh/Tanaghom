@@ -5,6 +5,8 @@ import type {
   CommercialAssessmentSignalSummary,
   CommercialCommandCenterDashboard,
   CommercialPlanSummary,
+  CommercialRevenueLineDashboard,
+  CommercialRevenueLineType,
   CommercialRevenueLineSummary,
   CreateAssessmentSignalInput,
   CreateCommercialPlanInput,
@@ -12,6 +14,7 @@ import type {
   DashboardQueryInput,
   ListAssessmentSignalsQueryInput,
   ListPlansQueryInput,
+  UpdateCommercialPlanInput,
 } from './types';
 
 export async function getCommercialCommandCenterDashboard(
@@ -84,6 +87,39 @@ export async function createPlan(
   );
 
   return plan;
+}
+
+export async function updatePlan(
+  requesterRole: string,
+  tenantKey: string,
+  requesterId: string,
+  id: string,
+  input: UpdateCommercialPlanInput,
+): Promise<CommercialPlanSummary> {
+  checkCommercialCenterPermission(requesterRole, 'commercial:center:update');
+  const plan = await repo.updatePlan(tenantKey, id, input);
+
+  auditLog(
+    {
+      actor: `user:${requesterId}`,
+      action: 'commercial_plan_updated',
+      object_type: 'commercial_plan',
+      object_id: plan.id,
+      result: 'success',
+    },
+    `Commercial plan updated: ${plan.title}`,
+  );
+
+  return plan;
+}
+
+export async function getRevenueLineDashboard(
+  requesterRole: string,
+  tenantKey: string,
+  revenueLineType: CommercialRevenueLineType,
+): Promise<CommercialRevenueLineDashboard> {
+  checkCommercialCenterPermission(requesterRole, 'commercial:center:read');
+  return repo.getRevenueLineDashboard(tenantKey, revenueLineType);
 }
 
 export async function listAssessmentSignals(

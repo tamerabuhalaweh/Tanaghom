@@ -582,6 +582,8 @@ export const commercialCommandCenterApi = {
     return apiFetch<unknown>(`/commercial-command-center/dashboard${params}`, { token });
   },
   revenueLines: (token: string) => apiFetch<unknown[]>('/commercial-command-center/revenue-lines', { token }),
+  revenueLineDashboard: (revenueLineType: string, token: string) =>
+    apiFetch<unknown>(`/commercial-command-center/revenue-lines/${encodeURIComponent(revenueLineType)}/dashboard`, { token }),
   createRevenueLine: (data: unknown, token: string) =>
     apiFetch<unknown>('/commercial-command-center/revenue-lines', { method: 'POST', body: data, token }),
   plans: (token: string, filters?: Record<string, string>) => {
@@ -590,6 +592,8 @@ export const commercialCommandCenterApi = {
   },
   createPlan: (data: unknown, token: string) =>
     apiFetch<unknown>('/commercial-command-center/plans', { method: 'POST', body: data, token }),
+  updatePlan: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-command-center/plans/${id}`, { method: 'PUT', body: data, token }),
   assessmentSignals: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
     return apiFetch<unknown[]>(`/commercial-command-center/assessment-signals${params}`, { token });

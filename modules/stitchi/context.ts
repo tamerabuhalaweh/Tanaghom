@@ -46,7 +46,23 @@ export interface StitchiReadOnlyContext {
     configuredRevenueLines: number;
     activePlans: number;
     openAssessmentSignals: number;
-    recentPlans: Array<{ title: string; stage: string; revenueLine: string; status: string }>;
+    revenueLines: Array<{
+      type: string;
+      name: string;
+      status: string;
+      planCount: number;
+      openSignals: number;
+    }>;
+    recentPlans: Array<{
+      id: string;
+      title: string;
+      stage: string;
+      revenueLine: string;
+      status: string;
+      budgetTarget: number | null;
+      revenueTarget: number | null;
+      linkedEventId: string | null;
+    }>;
   };
   guardrails: {
     mode: 'read_only';
@@ -76,13 +92,23 @@ export async function loadReadOnlyContext(
   const eventId = requestedEventId || conversation.eventId || undefined;
   const commercialClients = prisma as unknown as {
     commercialRevenueLine?: {
-      findMany(args: unknown): Promise<Array<{ id: string }>>;
+      findMany(args: unknown): Promise<Array<{
+        id: string;
+        revenue_line_type: unknown;
+        name: string;
+        status: unknown;
+        _count?: { plans?: number; assessment_signals?: number };
+      }>>;
     };
     commercialPlan?: {
       findMany(args: unknown): Promise<Array<{
         title: string;
         stage: unknown;
         status: unknown;
+        id: string;
+        budget_target: unknown;
+        revenue_target: unknown;
+        linked_event_id: string | null;
         revenue_line: { name: string };
       }>>;
     };
@@ -165,8 +191,19 @@ export async function loadReadOnlyContext(
       take: 100,
     }),
     commercialClients.commercialRevenueLine?.findMany({
-      where: { tenant_key: tenantKey, status: 'active' },
-      select: { id: true },
+      where: { tenant_key: tenantKey },
+      select: {
+        id: true,
+        revenue_line_type: true,
+        name: true,
+        status: true,
+        _count: {
+          select: {
+            plans: true,
+            assessment_signals: { where: { status: { in: ['open', 'reviewing'] } } },
+          },
+        },
+      },
       take: 50,
     }) ?? Promise.resolve([]),
     commercialClients.commercialPlan?.findMany({
@@ -175,6 +212,10 @@ export async function loadReadOnlyContext(
         title: true,
         stage: true,
         status: true,
+        id: true,
+        budget_target: true,
+        revenue_target: true,
+        linked_event_id: true,
         revenue_line: { select: { name: true } },
       },
       orderBy: { updated_at: 'desc' },
@@ -200,14 +241,25 @@ export async function loadReadOnlyContext(
     riskSummary: summarizeProblems(openProblems),
     connectorSummary: summarizeConnectors(credentials.length, connectorJobs),
     commercialCenter: {
-      configuredRevenueLines: revenueLines.length,
+      configuredRevenueLines: revenueLines.filter(line => String(line.status) === 'active').length,
       activePlans: commercialPlans.filter(plan => String(plan.status) === 'active').length,
       openAssessmentSignals: assessmentSignals.length,
+      revenueLines: revenueLines.map(line => ({
+        type: String(line.revenue_line_type),
+        name: line.name,
+        status: String(line.status),
+        planCount: line._count?.plans || 0,
+        openSignals: line._count?.assessment_signals || 0,
+      })),
       recentPlans: commercialPlans.map(plan => ({
+        id: plan.id,
         title: plan.title,
         stage: String(plan.stage),
         revenueLine: plan.revenue_line.name,
         status: String(plan.status),
+        budgetTarget: decimalToNumber(plan.budget_target),
+        revenueTarget: decimalToNumber(plan.revenue_target),
+        linkedEventId: plan.linked_event_id,
       })),
     },
     guardrails: {

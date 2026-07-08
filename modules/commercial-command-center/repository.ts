@@ -7,6 +7,8 @@ import {
   type CommercialCommandCenterDashboard,
   type CommercialOperatingStage,
   type CommercialPlanSummary,
+  type CommercialRevenueLineDashboard,
+  type CommercialRevenueLineType,
   type CommercialRevenueLineSummary,
   type CreateAssessmentSignalInput,
   type CreateCommercialPlanInput,
@@ -14,6 +16,7 @@ import {
   type DashboardQueryInput,
   type ListAssessmentSignalsQueryInput,
   type ListPlansQueryInput,
+  type UpdateCommercialPlanInput,
 } from './types';
 
 export async function listRevenueLines(tenantKey: string): Promise<CommercialRevenueLineSummary[]> {
@@ -120,6 +123,45 @@ export async function createPlan(
       status: input.status || 'draft',
       owner_user_id: input.ownerUserId ?? null,
       created_by_user_id: userId,
+    },
+    include: planInclude,
+  });
+
+  return mapPlan(plan);
+}
+
+export async function updatePlan(
+  tenantKey: string,
+  id: string,
+  input: UpdateCommercialPlanInput,
+): Promise<CommercialPlanSummary> {
+  const existing = await prisma.commercialPlan.findFirst({
+    where: { id, tenant_key: tenantKey },
+    select: { id: true, revenue_line_id: true },
+  });
+  if (!existing) throw new NotFoundError('CommercialPlan', id);
+
+  if (input.revenueLineId) await assertRevenueLineInTenant(tenantKey, input.revenueLineId);
+  if (input.linkedEventId) await assertEventInTenant(tenantKey, input.linkedEventId);
+  if (input.ownerUserId) await assertUserInTenant(tenantKey, input.ownerUserId);
+
+  const plan = await prisma.commercialPlan.update({
+    where: { id },
+    data: {
+      ...(input.revenueLineId !== undefined ? { revenue_line_id: input.revenueLineId } : {}),
+      ...(input.linkedEventId !== undefined ? { linked_event_id: input.linkedEventId } : {}),
+      ...(input.horizon !== undefined ? { horizon: input.horizon } : {}),
+      ...(input.stage !== undefined ? { stage: input.stage } : {}),
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.objective !== undefined ? { objective: input.objective } : {}),
+      ...(input.audience !== undefined ? { audience: input.audience } : {}),
+      ...(input.budgetTarget !== undefined ? { budget_target: input.budgetTarget != null ? new Prisma.Decimal(input.budgetTarget) : null } : {}),
+      ...(input.revenueTarget !== undefined ? { revenue_target: input.revenueTarget != null ? new Prisma.Decimal(input.revenueTarget) : null } : {}),
+      ...(input.kpiTargets !== undefined ? { kpi_targets: input.kpiTargets == null ? Prisma.JsonNull : toJsonObject(input.kpiTargets) } : {}),
+      ...(input.strategySummary !== undefined ? { strategy_summary: input.strategySummary } : {}),
+      ...(input.actionPlan !== undefined ? { action_plan: input.actionPlan } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.ownerUserId !== undefined ? { owner_user_id: input.ownerUserId } : {}),
     },
     include: planInclude,
   });
@@ -247,6 +289,188 @@ export async function getDashboard(
       supported: true,
       suggestedPrompt: 'Ask Stitchi to assess a revenue line, prepare a quarterly plan, or create an action item for this commercial workflow.',
     },
+  };
+}
+
+export async function getRevenueLineDashboard(
+  tenantKey: string,
+  revenueLineType: CommercialRevenueLineType,
+): Promise<CommercialRevenueLineDashboard> {
+  const catalogLine = REVENUE_LINE_CATALOG.find(line => line.type === revenueLineType);
+  if (!catalogLine) throw new NotFoundError('CommercialRevenueLineType', revenueLineType);
+
+  const configuredLine = await prisma.commercialRevenueLine.findUnique({
+    where: {
+      tenant_key_revenue_line_type: {
+        tenant_key: tenantKey,
+        revenue_line_type: revenueLineType,
+      },
+    },
+    include: {
+      _count: {
+        select: {
+          plans: true,
+          assessment_signals: { where: { status: { in: ['open', 'reviewing'] } } },
+        },
+      },
+    },
+  });
+  const revenueLine = configuredLine
+    ? mapRevenueLine(configuredLine)
+    : mergeRevenueLineCatalog(tenantKey, [])[REVENUE_LINE_CATALOG.findIndex(line => line.type === revenueLineType)];
+
+  const plans = configuredLine
+    ? await listPlans(tenantKey, { revenueLineId: configuredLine.id })
+    : [];
+  const planIds = plans.map(plan => plan.id);
+  const planEventIds = [...new Set(plans.map(plan => plan.linkedEventId).filter((id): id is string => Boolean(id)))];
+
+  const rawLinkedEvents = await prisma.commercialEvent.findMany({
+    where: revenueLineType === 'live_event'
+      ? { tenant_key: tenantKey }
+      : { tenant_key: tenantKey, id: { in: planEventIds } },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      event_type: true,
+      event_date: true,
+      planned_budget: true,
+      revenue_target: true,
+    },
+    orderBy: { event_date: 'desc' },
+    take: 50,
+  });
+  const linkedEvents = rawLinkedEvents.filter(event => isCustomerVisibleRecordName(event.name));
+  const eventIds = linkedEvents.map(event => event.id);
+
+  const [signals, kpis, leads, connectorJobs] = await Promise.all([
+    configuredLine
+      ? prisma.commercialAssessmentSignal.findMany({
+        where: {
+          tenant_key: tenantKey,
+          status: { in: ['open', 'reviewing'] },
+          OR: [
+            { revenue_line_id: configuredLine.id },
+            ...(planIds.length ? [{ commercial_plan_id: { in: planIds } }] : []),
+          ],
+        },
+        include: assessmentSignalInclude,
+        orderBy: [{ severity: 'desc' }, { created_at: 'desc' }],
+        take: 20,
+      })
+      : Promise.resolve([]),
+    eventIds.length
+      ? prisma.eventKpiRecord.findMany({
+        where: { tenant_key: tenantKey, event_id: { in: eventIds } },
+        select: {
+          source_type: true,
+          spend: true,
+          leads: true,
+          meetings_booked: true,
+          meetings_attended: true,
+          purchases: true,
+          no_shows: true,
+        },
+        take: 1000,
+      })
+      : Promise.resolve([]),
+    eventIds.length
+      ? prisma.leadCaptureRecord.findMany({
+        where: { tenant_key: tenantKey, event_id: { in: eventIds } },
+        select: {
+          lead_status: true,
+          purchase_amount: true,
+          meeting_date: true,
+          meeting_outcome: true,
+        },
+        take: 1000,
+      })
+      : Promise.resolve([]),
+    eventIds.length
+      ? prisma.connectorImportJob.findMany({
+        where: { tenant_key: tenantKey, event_id: { in: eventIds } },
+        select: { state: true, sync_status: true },
+        take: 200,
+      })
+      : Promise.resolve([]),
+  ]);
+
+  const plannedRevenueTarget = plans.reduce((total, plan) => total + (plan.revenueTarget || 0), 0)
+    || linkedEvents.reduce((total, event) => total + (decimalToNumber(event.revenue_target) || 0), 0);
+  const plannedBudget = plans.reduce((total, plan) => total + (plan.budgetTarget || 0), 0)
+    || linkedEvents.reduce((total, event) => total + (decimalToNumber(event.planned_budget) || 0), 0);
+  const knownSpend = kpis.reduce((total, row) => total + (decimalToNumber(row.spend) || 0), 0);
+  const knownRevenue = leads.reduce((total, lead) => total + (decimalToNumber(lead.purchase_amount) || 0), 0);
+  const kpiLeads = kpis.reduce((total, row) => total + row.leads, 0);
+  const leadRecords = leads.length;
+  const purchases = Math.max(
+    kpis.reduce((total, row) => total + row.purchases, 0),
+    leads.filter(lead => String(lead.lead_status) === 'purchased' || (decimalToNumber(lead.purchase_amount) || 0) > 0).length,
+  );
+  const meetingsBooked = Math.max(
+    kpis.reduce((total, row) => total + row.meetings_booked, 0),
+    leads.filter(lead => Boolean(lead.meeting_date)).length,
+  );
+  const meetingsAttended = Math.max(
+    kpis.reduce((total, row) => total + row.meetings_attended, 0),
+    leads.filter(lead => String(lead.meeting_outcome).toLowerCase().includes('attended')).length,
+  );
+  const noShows = Math.max(
+    kpis.reduce((total, row) => total + row.no_shows, 0),
+    leads.filter(lead => String(lead.lead_status) === 'no_show' || String(lead.meeting_outcome).toLowerCase().includes('no_show')).length,
+  );
+  const totalLeads = Math.max(kpiLeads, leadRecords);
+
+  const missingDataSources: string[] = [];
+  if (!revenueLine.configured) missingDataSources.push('Configure this revenue line before planning work can be saved.');
+  if (!eventIds.length) missingDataSources.push('Link an event or campaign so this revenue line has operating data.');
+  if (!kpis.length) missingDataSources.push('Connect analytics or import KPI records to calculate spend, reach and efficiency.');
+  if (!leads.length) missingDataSources.push('Connect CRM or capture leads so the funnel can show real lead and purchase movement.');
+  if (!connectorJobs.length) missingDataSources.push('Set up connector dry-runs for this revenue line when customer credentials are available.');
+
+  return {
+    revenueLine,
+    rollups: {
+      plannedRevenueTarget,
+      knownRevenue,
+      plannedBudget,
+      knownSpend,
+      budgetVariance: plannedBudget > 0 ? round2(plannedBudget - knownSpend) : null,
+      leads: totalLeads,
+      purchases,
+      meetingsBooked,
+      meetingsAttended,
+      noShows,
+      costPerLead: totalLeads > 0 && knownSpend > 0 ? round2(knownSpend / totalLeads) : null,
+      costPerPurchase: purchases > 0 && knownSpend > 0 ? round2(knownSpend / purchases) : null,
+      leadToPurchaseRate: totalLeads > 0 ? round2((purchases / totalLeads) * 100) : null,
+    },
+    dataStatus: {
+      hasLinkedEvents: eventIds.length > 0,
+      hasKpiRecords: kpis.length > 0,
+      hasLeadRecords: leads.length > 0,
+      hasConnectorRecords: kpis.some(row => String(row.source_type) === 'connector'),
+      missingDataSources,
+    },
+    plans,
+    openSignals: signals.map(mapAssessmentSignal),
+    linkedEvents: linkedEvents.map(event => ({
+      id: event.id,
+      name: event.name,
+      status: String(event.status),
+      eventType: String(event.event_type),
+      eventDate: event.event_date,
+      plannedBudget: decimalToNumber(event.planned_budget),
+      revenueTarget: decimalToNumber(event.revenue_target),
+    })),
+    connectorStatus: {
+      jobs: connectorJobs.length,
+      readyForSync: connectorJobs.filter(job => String(job.sync_status) === 'ready_for_sync' || String(job.state) === 'test_passed').length,
+      synced: connectorJobs.filter(job => String(job.sync_status) === 'synced').length,
+      blocked: connectorJobs.filter(job => ['blocked', 'failed'].includes(String(job.sync_status)) || String(job.state) === 'blocked').length,
+    },
+    nextAction: chooseNextAction(revenueLine.configured, eventIds.length, kpis.length, leads.length, plans.length),
   };
 }
 
@@ -415,6 +639,63 @@ function mapAssessmentSignal(signal: {
 
 function getGroupedCount(rows: Array<{ status: unknown; _count: { _all: number } }>, status: string): number {
   return rows.find(row => String(row.status) === status)?._count._all || 0;
+}
+
+function chooseNextAction(
+  configured: boolean,
+  eventCount: number,
+  kpiCount: number,
+  leadCount: number,
+  planCount: number,
+): CommercialRevenueLineDashboard['nextAction'] {
+  if (!configured) {
+    return {
+      label: 'Configure revenue line',
+      description: 'Set up this revenue line so planning records, ownership, and Stitchi actions can attach to it.',
+      path: '/command-center',
+    };
+  }
+  if (planCount === 0) {
+    return {
+      label: 'Create first plan',
+      description: 'Add the first planning item for this revenue line with objective, stage, owner, budget, and expected outcome.',
+      path: '/command-center',
+    };
+  }
+  if (eventCount === 0) {
+    return {
+      label: 'Link operating work',
+      description: 'Connect an event or campaign so this revenue line can show execution progress and outcomes.',
+      path: '/events',
+    };
+  }
+  if (kpiCount === 0) {
+    return {
+      label: 'Connect performance data',
+      description: 'Import KPI records or connect customer-owned analytics credentials to calculate spend and efficiency.',
+      path: '/integration-credentials',
+    };
+  }
+  if (leadCount === 0) {
+    return {
+      label: 'Connect lead source',
+      description: 'Connect CRM or lead capture records so purchases, meetings, and follow-up can be tracked.',
+      path: '/integration-credentials',
+    };
+  }
+  return {
+    label: 'Review next action with Stitchi',
+    description: 'Ask Stitchi to summarize risks, next steps, and planning updates based on current commercial data.',
+    path: '/stitchi',
+  };
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function isCustomerVisibleRecordName(name: string): boolean {
+  return !/\b(sprint\s*\d+|acceptance|smoke test|test tenant|customer review event)\b/i.test(name);
 }
 
 function decimalToNumber(value: unknown): number | null {

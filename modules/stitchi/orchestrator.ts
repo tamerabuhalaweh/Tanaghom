@@ -317,7 +317,33 @@ function deriveCommercialCenterActionProposal(content: string): ActionProposal |
 
   const revenueLineType = inferRevenueLineType(lower);
   const revenueLineId = extractUuidAfter(lower, 'revenue line') || extractUuidAfter(lower, 'revenueLineId');
+  const commercialPlanId = extractUuidAfter(lower, 'commercial plan') || extractUuidAfter(lower, 'plan') || extractUuidAfter(lower, 'commercialPlanId');
   const title = firstSentence(content, 'Commercial plan');
+
+  if (commercialPlanId && /(update|change|edit|move|activate|pause|complete|budget|target|objective|audience|stage|status)/i.test(lower)) {
+    const stage = inferCommercialStage(lower);
+    const status = inferCommercialPlanStatus(lower);
+    return {
+      actionType: 'update_commercial_plan',
+      inputPayload: {
+        commercialPlanId,
+        plan: {
+          ...(status ? { status } : {}),
+          stage,
+          objective: cleanText(content),
+          strategySummary: cleanText(content),
+        },
+      },
+      previewPayload: {
+        commercialPlanId,
+        stage,
+        status: status || 'unchanged',
+        approvalRequired: true,
+      },
+      riskLevel: 'medium',
+      reason: 'update a commercial planning record',
+    };
+  }
 
   if (/(risk|signal|assess|assessment|finding|problem|gap|ØªÙ‚ÙŠÙŠÙ…|Ù…Ø´ÙƒÙ„Ø©|ÙØ¬ÙˆØ©)/i.test(lower)) {
     return {
@@ -516,6 +542,15 @@ function inferCommercialHorizon(lower: string): 'three_year' | 'one_year' | 'qua
   if (/(one-year|1 year|annual|yearly)/i.test(lower)) return 'one_year';
   if (/(quarter|quarterly|q1|q2|q3|q4)/i.test(lower)) return 'quarterly';
   return 'product_or_event';
+}
+
+function inferCommercialPlanStatus(lower: string): 'draft' | 'active' | 'paused' | 'completed' | 'archived' | undefined {
+  if (/(activate|active|start)/i.test(lower)) return 'active';
+  if (/(pause|paused|hold)/i.test(lower)) return 'paused';
+  if (/(complete|completed|done|finish)/i.test(lower)) return 'completed';
+  if (/(archive|archived)/i.test(lower)) return 'archived';
+  if (/(draft)/i.test(lower)) return 'draft';
+  return undefined;
 }
 
 function extractUuidAfter(text: string, label: string): string | undefined {

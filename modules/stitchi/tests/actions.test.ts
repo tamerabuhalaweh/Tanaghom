@@ -14,6 +14,7 @@ const plannerServiceMocks = vi.hoisted(() => ({
 const commercialCenterMocks = vi.hoisted(() => ({
   createRevenueLine: vi.fn(),
   createPlan: vi.fn(),
+  updatePlan: vi.fn(),
   createAssessmentSignal: vi.fn(),
 }));
 
@@ -40,6 +41,7 @@ describe('Stitchi action registry', () => {
     plannerServiceMocks.createSalesTask.mockResolvedValue({ id: 'sales-task-1' });
     commercialCenterMocks.createRevenueLine.mockResolvedValue({ id: 'revenue-line-1', revenueLineType: 'online_course' });
     commercialCenterMocks.createPlan.mockResolvedValue({ id: 'commercial-plan-1' });
+    commercialCenterMocks.updatePlan.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialCenterMocks.createAssessmentSignal.mockResolvedValue({ id: 'commercial-signal-1' });
   });
 
@@ -57,6 +59,7 @@ describe('Stitchi action registry', () => {
       'create_sales_task',
       'create_commercial_revenue_line',
       'create_commercial_plan',
+      'update_commercial_plan',
       'create_commercial_assessment_signal',
     ]);
   });
@@ -217,6 +220,34 @@ describe('Stitchi action registry', () => {
     }));
     expect(commercialCenterMocks.createPlan).toHaveBeenCalledOnce();
     expect(commercialCenterMocks.createAssessmentSignal).toHaveBeenCalledOnce();
+  });
+
+  it('executes governed Commercial Command Center plan updates', async () => {
+    await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'update_commercial_plan',
+      inputPayload: {
+        commercialPlanId: '00000000-0000-0000-0000-000000000020',
+        plan: {
+          stage: 'implementation_engagement',
+          status: 'active',
+          objective: 'Move the course plan into execution.',
+        },
+      },
+    });
+
+    expect(commercialCenterMocks.updatePlan).toHaveBeenCalledWith(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      '00000000-0000-0000-0000-000000000020',
+      expect.objectContaining({
+        stage: 'implementation_engagement',
+        status: 'active',
+      }),
+    );
   });
 
   it('rejects unsupported external/write actions', async () => {
