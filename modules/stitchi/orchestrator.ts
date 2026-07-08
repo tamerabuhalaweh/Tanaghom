@@ -249,6 +249,8 @@ export async function orchestrateStitchiMessage(
 }
 
 function deriveActionProposal(content: string, eventId?: string): ActionProposal | null {
+  const commercialProposal = deriveCommercialCenterActionProposal(content);
+  if (commercialProposal) return commercialProposal;
   if (!eventId) return null;
   const lower = content.toLowerCase();
   const plannerProposal = derivePlannerActionProposal(content, lower, eventId);
@@ -305,6 +307,79 @@ function deriveActionProposal(content: string, eventId?: string): ActionProposal
   }
 
   return null;
+}
+
+function deriveCommercialCenterActionProposal(content: string): ActionProposal | null {
+  const lower = content.toLowerCase();
+  if (!/(commercial|revenue line|business line|online course|b2b|platinum|trainer network|loyalty|community|three-year|quarterly|department|ØªØ¬Ø§Ø±ÙŠ|Ø¯ÙˆØ±Ø©|Ø§ÙŠØ±Ø§Ø¯)/i.test(lower)) {
+    return null;
+  }
+
+  const revenueLineType = inferRevenueLineType(lower);
+  const revenueLineId = extractUuidAfter(lower, 'revenue line') || extractUuidAfter(lower, 'revenueLineId');
+  const title = firstSentence(content, 'Commercial plan');
+
+  if (/(risk|signal|assess|assessment|finding|problem|gap|ØªÙ‚ÙŠÙŠÙ…|Ù…Ø´ÙƒÙ„Ø©|ÙØ¬ÙˆØ©)/i.test(lower)) {
+    return {
+      actionType: 'create_commercial_assessment_signal',
+      inputPayload: {
+        revenueLineId,
+        title,
+        severity: /(critical|urgent|Ù‡Ø§Ù…|Ø­Ø±Ø¬|Ø¹Ø§Ø¬Ù„)/i.test(lower) ? 'critical' : 'watch',
+        finding: cleanText(content),
+        recommendedAction: 'Review this commercial signal and decide the next planning action.',
+      },
+      previewPayload: {
+        revenueLineId: revenueLineId || 'not linked yet',
+        title,
+        approvalRequired: true,
+      },
+      riskLevel: 'medium',
+      reason: 'record a commercial assessment signal',
+    };
+  }
+
+  if (revenueLineId && /(plan|strategy|quarter|quarterly|year|implementation|Ø®Ø·Ø©|Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ©)/i.test(lower)) {
+    const stage = inferCommercialStage(lower);
+    return {
+      actionType: 'create_commercial_plan',
+      inputPayload: {
+        revenueLineId,
+        horizon: inferCommercialHorizon(lower),
+        stage,
+        title,
+        objective: cleanText(content),
+        strategySummary: cleanText(content),
+        actionPlan: 'Prepared by Stitchi from the user request. Review before execution.',
+      },
+      previewPayload: {
+        revenueLineId,
+        title,
+        stage,
+        approvalRequired: true,
+      },
+      riskLevel: 'medium',
+      reason: 'create a commercial plan for this revenue line',
+    };
+  }
+
+  return {
+    actionType: 'create_commercial_revenue_line',
+    inputPayload: {
+      revenueLineType,
+      name: revenueLineLabel(revenueLineType),
+      description: cleanText(content),
+      status: 'active',
+      systemOfRecord: 'tanaghum',
+    },
+    previewPayload: {
+      revenueLineType,
+      name: revenueLineLabel(revenueLineType),
+      approvalRequired: true,
+    },
+    riskLevel: 'medium',
+    reason: `configure the ${revenueLineLabel(revenueLineType)} commercial revenue line`,
+  };
 }
 
 function derivePlannerActionProposal(content: string, lower: string, eventId: string): ActionProposal | null {
@@ -407,6 +482,47 @@ function derivePlannerActionProposal(content: string, lower: string, eventId: st
   }
 
   return null;
+}
+
+function inferRevenueLineType(lower: string): 'live_event' | 'online_course' | 'b2b' | 'platinum_elite' | 'certified_trainer_network' | 'loyalty_community' {
+  if (/(online course|course|ÙƒÙˆØ±Ø³|Ø¯ÙˆØ±Ø©)/i.test(lower)) return 'online_course';
+  if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
+  if (/(platinum|elite|premium|vip)/i.test(lower)) return 'platinum_elite';
+  if (/(trainer|certified trainer|network|Ù…Ø¯Ø±Ø¨)/i.test(lower)) return 'certified_trainer_network';
+  if (/(loyalty|community|retention|referral|Ù…Ø¬ØªÙ…Ø¹)/i.test(lower)) return 'loyalty_community';
+  return 'live_event';
+}
+
+function revenueLineLabel(type: ReturnType<typeof inferRevenueLineType>): string {
+  const labels: Record<ReturnType<typeof inferRevenueLineType>, string> = {
+    live_event: 'Live Events',
+    online_course: 'Online Courses',
+    b2b: 'B2B',
+    platinum_elite: 'Platinum Elite',
+    certified_trainer_network: 'Certified Trainer Network',
+    loyalty_community: 'Loyalty & Community',
+  };
+  return labels[type];
+}
+
+function inferCommercialStage(lower: string): 'assess' | 'strategy_planning' | 'implementation_engagement' {
+  if (/(implementation|engagement|execute|launch|follow-up|sales action|Ù†ÙØ°|ØªÙ†ÙÙŠØ°)/i.test(lower)) return 'implementation_engagement';
+  if (/(strategy|planning|plan|budget|channels|Ø®Ø·Ø©|Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ©)/i.test(lower)) return 'strategy_planning';
+  return 'assess';
+}
+
+function inferCommercialHorizon(lower: string): 'three_year' | 'one_year' | 'quarterly' | 'product_or_event' {
+  if (/(three-year|3 year|three year|3-year)/i.test(lower)) return 'three_year';
+  if (/(one-year|1 year|annual|yearly)/i.test(lower)) return 'one_year';
+  if (/(quarter|quarterly|q1|q2|q3|q4)/i.test(lower)) return 'quarterly';
+  return 'product_or_event';
+}
+
+function extractUuidAfter(text: string, label: string): string | undefined {
+  const uuidPattern = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+  const nearby = new RegExp(`${label}[^0-9a-f]{0,40}${uuidPattern}`, 'i').exec(text);
+  if (nearby?.[1]) return nearby[1];
+  return undefined;
 }
 
 function isExternalExecutionRequest(content: string): boolean {

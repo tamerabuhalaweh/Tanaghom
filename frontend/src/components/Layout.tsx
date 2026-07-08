@@ -59,7 +59,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     path: '/command-center',
     label: 'Home',
-    description: 'Today, events, leads and sales',
+    description: 'Assess, plan and engage',
     icon: LayoutDashboard,
     group: 'Product',
     roles: PRODUCT_ROLES,

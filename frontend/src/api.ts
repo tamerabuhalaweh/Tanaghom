@@ -576,6 +576,28 @@ export const masterEventsApi = {
   },
 };
 
+export const commercialCommandCenterApi = {
+  dashboard: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown>(`/commercial-command-center/dashboard${params}`, { token });
+  },
+  revenueLines: (token: string) => apiFetch<unknown[]>('/commercial-command-center/revenue-lines', { token }),
+  createRevenueLine: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-command-center/revenue-lines', { method: 'POST', body: data, token }),
+  plans: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-command-center/plans${params}`, { token });
+  },
+  createPlan: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-command-center/plans', { method: 'POST', body: data, token }),
+  assessmentSignals: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-command-center/assessment-signals${params}`, { token });
+  },
+  createAssessmentSignal: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-command-center/assessment-signals', { method: 'POST', body: data, token }),
+};
+
 export const eventProblemsApi = {
   list: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';

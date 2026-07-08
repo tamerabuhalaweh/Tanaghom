@@ -1,5 +1,16 @@
 # Stitchi Development Plan
 
+## SRD Alignment Rule
+
+Every new production domain added to Tanaghum must be evaluated for Stitchi support. If the domain creates useful user work, Stitchi should receive:
+
+- read-only context for that domain;
+- approval-gated internal actions where safe;
+- clear blocked status for external execution;
+- audit evidence for every approved action.
+
+Sprint 1 adds Commercial Command Center context and approval-gated actions for revenue lines, commercial plans, and assessment signals.
+
 Status: Sprint ST-1 backend conversation foundation, ST-2 read-only assistant foundation, ST-2B backend workflow/action foundation, ST-2C natural-language orchestration, backend token streaming, and ST-3 Hybrid UI surface are implemented locally.
 
 Target platform: Hybrid only. The AB reference deployment must remain untouched.

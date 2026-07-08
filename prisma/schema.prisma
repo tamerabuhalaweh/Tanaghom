@@ -123,6 +123,9 @@ model Tenant {
   event_problems EventProblem[]
   connector_import_jobs ConnectorImportJob[]
   connector_field_mappings ConnectorFieldMapping[]
+  commercial_revenue_lines CommercialRevenueLine[]
+  commercial_plans CommercialPlan[]
+  commercial_assessment_signals CommercialAssessmentSignal[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[]
@@ -289,6 +292,11 @@ model User {
   connector_imports_created ConnectorImportJob[] @relation("ConnectorImportCreatedBy")
   connector_imports_approved ConnectorImportJob[] @relation("ConnectorImportApprovedBy")
   connector_field_mappings ConnectorFieldMapping[] @relation("ConnectorFieldMappingCreatedBy")
+  commercial_revenue_lines_owned CommercialRevenueLine[] @relation("CommercialRevenueLineOwner")
+  commercial_revenue_lines_created CommercialRevenueLine[] @relation("CommercialRevenueLineCreatedBy")
+  commercial_plans_owned CommercialPlan[] @relation("CommercialPlanOwner")
+  commercial_plans_created CommercialPlan[] @relation("CommercialPlanCreatedBy")
+  commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[] @relation("StitchiConversationUser")
   stitchi_action_runs StitchiActionRun[] @relation("StitchiActionRunUser")
@@ -3615,10 +3623,154 @@ enum CommercialEventStatus {
   cancelled
 }
 
+enum CommercialRevenueLineType {
+  live_event
+  online_course
+  b2b
+  platinum_elite
+  certified_trainer_network
+  loyalty_community
+}
+
+enum CommercialRevenueLineStatus {
+  active
+  paused
+  archived
+}
+
+enum CommercialOperatingStage {
+  assess
+  strategy_planning
+  implementation_engagement
+}
+
+enum CommercialPlanHorizon {
+  three_year
+  one_year
+  quarterly
+  product_or_event
+}
+
+enum CommercialPlanStatus {
+  draft
+  active
+  paused
+  completed
+  archived
+}
+
+enum CommercialAssessmentSeverity {
+  info
+  watch
+  risk
+  critical
+}
+
+enum CommercialAssessmentStatus {
+  open
+  reviewing
+  resolved
+  dismissed
+}
+
 enum EventKpiSourceType {
   manual
   imported
   connector
+}
+
+model CommercialRevenueLine {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  revenue_line_type  CommercialRevenueLineType
+  name               String
+  description        String?                     @db.Text
+  status             CommercialRevenueLineStatus @default(active)
+  system_of_record   String                      @default("tanaghum")
+  owner_user_id      String?                     @db.Uuid
+  created_by_user_id String                      @db.Uuid
+  created_at         DateTime                    @default(now())
+  updated_at         DateTime                    @updatedAt
+
+  tenant             Tenant                      @relation(fields: [tenant_key], references: [tenant_key])
+  owner              User?                       @relation("CommercialRevenueLineOwner", fields: [owner_user_id], references: [id])
+  created_by         User                        @relation("CommercialRevenueLineCreatedBy", fields: [created_by_user_id], references: [id])
+  plans              CommercialPlan[]
+  assessment_signals CommercialAssessmentSignal[]
+
+  @@unique([tenant_key, revenue_line_type])
+  @@index([tenant_key])
+  @@index([revenue_line_type])
+  @@index([status])
+  @@index([owner_user_id])
+  @@map("commercial_revenue_lines")
+}
+
+model CommercialPlan {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  revenue_line_id    String                   @db.Uuid
+  linked_event_id    String?                  @db.Uuid
+  horizon            CommercialPlanHorizon
+  stage              CommercialOperatingStage @default(assess)
+  title              String
+  objective          String?                  @db.Text
+  audience           String?                  @db.Text
+  budget_target      Decimal?                 @db.Decimal(12, 2)
+  revenue_target     Decimal?                 @db.Decimal(12, 2)
+  kpi_targets        Json?
+  strategy_summary   String?                  @db.Text
+  action_plan        String?                  @db.Text
+  status             CommercialPlanStatus     @default(draft)
+  owner_user_id      String?                  @db.Uuid
+  created_by_user_id String                   @db.Uuid
+  created_at         DateTime                 @default(now())
+  updated_at         DateTime                 @updatedAt
+
+  tenant             Tenant                   @relation(fields: [tenant_key], references: [tenant_key])
+  revenue_line       CommercialRevenueLine    @relation(fields: [revenue_line_id], references: [id], onDelete: Cascade)
+  linked_event       CommercialEvent?         @relation(fields: [linked_event_id], references: [id], onDelete: SetNull)
+  owner              User?                    @relation("CommercialPlanOwner", fields: [owner_user_id], references: [id])
+  created_by         User                     @relation("CommercialPlanCreatedBy", fields: [created_by_user_id], references: [id])
+  assessment_signals CommercialAssessmentSignal[]
+
+  @@index([tenant_key])
+  @@index([revenue_line_id])
+  @@index([linked_event_id])
+  @@index([horizon])
+  @@index([stage])
+  @@index([status])
+  @@index([owner_user_id])
+  @@map("commercial_plans")
+}
+
+model CommercialAssessmentSignal {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  revenue_line_id    String?                      @db.Uuid
+  commercial_plan_id String?                      @db.Uuid
+  source_type        String                       @default("manual")
+  title              String
+  severity           CommercialAssessmentSeverity @default(watch)
+  finding            String?                      @db.Text
+  recommended_action String?                      @db.Text
+  status             CommercialAssessmentStatus   @default(open)
+  created_by_user_id String                       @db.Uuid
+  created_at         DateTime                     @default(now())
+  updated_at         DateTime                     @updatedAt
+
+  tenant             Tenant                       @relation(fields: [tenant_key], references: [tenant_key])
+  revenue_line       CommercialRevenueLine?       @relation(fields: [revenue_line_id], references: [id], onDelete: SetNull)
+  commercial_plan    CommercialPlan?              @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  created_by         User                         @relation("CommercialAssessmentSignalCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([revenue_line_id])
+  @@index([commercial_plan_id])
+  @@index([severity])
+  @@index([status])
+  @@index([created_by_user_id])
+  @@map("commercial_assessment_signals")
 }
 
 model CommercialEvent {
@@ -3660,10 +3812,11 @@ model CommercialEvent {
   content_requirements EventContentRequirement[]
   sales_tasks         EventSalesTask[]
   problems            EventProblem[]
-  connector_imports   ConnectorImportJob[]
-  connector_field_mappings ConnectorFieldMapping[]
-  ghl_lead_sync_runs  GhlLeadSyncRun[]
-  stitchi_conversations StitchiConversation[]
+    connector_imports   ConnectorImportJob[]
+    connector_field_mappings ConnectorFieldMapping[]
+    ghl_lead_sync_runs  GhlLeadSyncRun[]
+    stitchi_conversations StitchiConversation[]
+    commercial_plans    CommercialPlan[]
 
   @@index([tenant_key])
   @@index([event_type])

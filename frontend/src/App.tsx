@@ -42,6 +42,7 @@ import MasterEventsDashboard from './pages/MasterEventsDashboard'
 import HybridEventWorkspace from './pages/HybridEventWorkspace'
 import AieroInspiredPreview from './pages/AieroInspiredPreview'
 import Stitchi from './pages/Stitchi'
+import CommercialCommandCenter from './pages/CommercialCommandCenter'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
@@ -102,7 +103,7 @@ function App() {
           <Route path="/ux/aiero-preview/events" element={<AieroInspiredPreview page="events" />} />
           <Route path="/ux/aiero-preview/integrations" element={<AieroInspiredPreview page="integrations" />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<MasterEventsDashboard />} />
+            <Route index element={<CommercialCommandCenter />} />
             <Route path="events/master" element={<MasterEventsDashboard />} />
             <Route path="events" element={<HybridEventWorkspace />} />
             <Route path="events/new" element={<EventStrategyWizard />} />
@@ -139,7 +140,7 @@ function App() {
             <Route path="ghl-readiness" element={adminOnly(<GhlReadiness />)} />
             <Route path="ghl-wizard" element={connectorSetup(<GhlWizard />)} />
             <Route path="dashboard" element={<MasterEventsDashboard />} />
-            <Route path="command-center" element={<MasterEventsDashboard />} />
+            <Route path="command-center" element={<CommercialCommandCenter />} />
             <Route path="content-workflow" element={<DemoCommandCenter />} />
             <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />
             <Route path="content" element={<PostIdeas />} />

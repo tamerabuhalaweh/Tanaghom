@@ -14,6 +14,12 @@ import {
   createUpsellPlanSchema,
   createWhatsappPlanSchema,
 } from '@modules/event-campaign-planner/types';
+import * as commercialCenterService from '@modules/commercial-command-center/service';
+import {
+  createAssessmentSignalSchema,
+  createCommercialPlanSchema,
+  createRevenueLineSchema,
+} from '@modules/commercial-command-center/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -26,6 +32,9 @@ const SUPPORTED_ACTIONS = [
   'create_upsell_plan',
   'create_content_requirement',
   'create_sales_task',
+  'create_commercial_revenue_line',
+  'create_commercial_plan',
+  'create_commercial_assessment_signal',
 ] as const;
 
 export type StitchiExecutableActionType = (typeof SUPPORTED_ACTIONS)[number];
@@ -128,6 +137,21 @@ export async function executeStitchiAction(input: {
       const payload = createSalesTaskSchema.parse(input.inputPayload);
       const result = await plannerService.createSalesTask(input.role, input.tenantKey, input.userId, payload);
       return { objectType: 'event_sales_task', objectId: result.id, result };
+    }
+    case 'create_commercial_revenue_line': {
+      const payload = createRevenueLineSchema.parse(input.inputPayload);
+      const result = await commercialCenterService.createRevenueLine(input.role, input.tenantKey, input.userId, payload);
+      return { objectType: 'commercial_revenue_line', objectId: result.id || result.revenueLineType, result };
+    }
+    case 'create_commercial_plan': {
+      const payload = createCommercialPlanSchema.parse(input.inputPayload);
+      const result = await commercialCenterService.createPlan(input.role, input.tenantKey, input.userId, payload);
+      return { objectType: 'commercial_plan', objectId: result.id, result };
+    }
+    case 'create_commercial_assessment_signal': {
+      const payload = createAssessmentSignalSchema.parse(input.inputPayload);
+      const result = await commercialCenterService.createAssessmentSignal(input.role, input.tenantKey, input.userId, payload);
+      return { objectType: 'commercial_assessment_signal', objectId: result.id, result };
     }
     default:
       throw new ForbiddenError('Stitchi action is not executable');

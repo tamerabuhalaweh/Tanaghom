@@ -42,6 +42,12 @@ export interface StitchiReadOnlyContext {
     synced: number;
     blocked: number;
   };
+  commercialCenter: {
+    configuredRevenueLines: number;
+    activePlans: number;
+    openAssessmentSignals: number;
+    recentPlans: Array<{ title: string; stage: string; revenueLine: string; status: string }>;
+  };
   guardrails: {
     mode: 'read_only';
     writesExecuted: false;
@@ -68,6 +74,22 @@ export async function loadReadOnlyContext(
   requestedEventId?: string,
 ): Promise<StitchiReadOnlyContext> {
   const eventId = requestedEventId || conversation.eventId || undefined;
+  const commercialClients = prisma as unknown as {
+    commercialRevenueLine?: {
+      findMany(args: unknown): Promise<Array<{ id: string }>>;
+    };
+    commercialPlan?: {
+      findMany(args: unknown): Promise<Array<{
+        title: string;
+        stage: unknown;
+        status: unknown;
+        revenue_line: { name: string };
+      }>>;
+    };
+    commercialAssessmentSignal?: {
+      findMany(args: unknown): Promise<Array<{ id: string }>>;
+    };
+  };
 
   const [
     selectedEvent,
@@ -77,6 +99,9 @@ export async function loadReadOnlyContext(
     openProblems,
     credentials,
     connectorJobs,
+    revenueLines,
+    commercialPlans,
+    assessmentSignals,
   ] = await Promise.all([
     eventId
       ? prisma.commercialEvent.findFirst({
@@ -139,6 +164,27 @@ export async function loadReadOnlyContext(
       },
       take: 100,
     }),
+    commercialClients.commercialRevenueLine?.findMany({
+      where: { tenant_key: tenantKey, status: 'active' },
+      select: { id: true },
+      take: 50,
+    }) ?? Promise.resolve([]),
+    commercialClients.commercialPlan?.findMany({
+      where: { tenant_key: tenantKey },
+      select: {
+        title: true,
+        stage: true,
+        status: true,
+        revenue_line: { select: { name: true } },
+      },
+      orderBy: { updated_at: 'desc' },
+      take: 5,
+    }) ?? Promise.resolve([]),
+    commercialClients.commercialAssessmentSignal?.findMany({
+      where: { tenant_key: tenantKey, status: { in: ['open', 'reviewing'] } },
+      select: { id: true },
+      take: 100,
+    }) ?? Promise.resolve([]),
   ]);
 
   return {
@@ -153,6 +199,17 @@ export async function loadReadOnlyContext(
     kpiSummary: summarizeKpis(kpis),
     riskSummary: summarizeProblems(openProblems),
     connectorSummary: summarizeConnectors(credentials.length, connectorJobs),
+    commercialCenter: {
+      configuredRevenueLines: revenueLines.length,
+      activePlans: commercialPlans.filter(plan => String(plan.status) === 'active').length,
+      openAssessmentSignals: assessmentSignals.length,
+      recentPlans: commercialPlans.map(plan => ({
+        title: plan.title,
+        stage: String(plan.stage),
+        revenueLine: plan.revenue_line.name,
+        status: String(plan.status),
+      })),
+    },
     guardrails: {
       mode: 'read_only',
       writesExecuted: false,

@@ -11,11 +11,17 @@ const plannerServiceMocks = vi.hoisted(() => ({
   createContentRequirement: vi.fn(),
   createSalesTask: vi.fn(),
 }));
+const commercialCenterMocks = vi.hoisted(() => ({
+  createRevenueLine: vi.fn(),
+  createPlan: vi.fn(),
+  createAssessmentSignal: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
 vi.mock('@modules/lead-lifecycle/service', () => leadServiceMocks);
 vi.mock('@modules/event-campaign-planner/service', () => plannerServiceMocks);
+vi.mock('@modules/commercial-command-center/service', () => commercialCenterMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -32,6 +38,9 @@ describe('Stitchi action registry', () => {
     plannerServiceMocks.createUpsellPlan.mockResolvedValue({ id: 'upsell-plan-1' });
     plannerServiceMocks.createContentRequirement.mockResolvedValue({ id: 'content-req-1' });
     plannerServiceMocks.createSalesTask.mockResolvedValue({ id: 'sales-task-1' });
+    commercialCenterMocks.createRevenueLine.mockResolvedValue({ id: 'revenue-line-1', revenueLineType: 'online_course' });
+    commercialCenterMocks.createPlan.mockResolvedValue({ id: 'commercial-plan-1' });
+    commercialCenterMocks.createAssessmentSignal.mockResolvedValue({ id: 'commercial-signal-1' });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -46,6 +55,9 @@ describe('Stitchi action registry', () => {
       'create_upsell_plan',
       'create_content_requirement',
       'create_sales_task',
+      'create_commercial_revenue_line',
+      'create_commercial_plan',
+      'create_commercial_assessment_signal',
     ]);
   });
 
@@ -163,6 +175,48 @@ describe('Stitchi action registry', () => {
     expect(plannerServiceMocks.createUpsellPlan).toHaveBeenCalledOnce();
     expect(plannerServiceMocks.createContentRequirement).toHaveBeenCalledOnce();
     expect(plannerServiceMocks.createSalesTask).toHaveBeenCalledOnce();
+  });
+
+  it('executes Commercial Command Center actions through governed services', async () => {
+    await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'create_commercial_revenue_line',
+      inputPayload: {
+        revenueLineType: 'online_course',
+        name: 'Online Courses',
+      },
+    });
+    await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'create_commercial_plan',
+      inputPayload: {
+        revenueLineId: '00000000-0000-0000-0000-000000000020',
+        horizon: 'quarterly',
+        stage: 'strategy_planning',
+        title: 'Q3 online course plan',
+      },
+    });
+    await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'create_commercial_assessment_signal',
+      inputPayload: {
+        title: 'Course funnel needs review',
+        severity: 'watch',
+      },
+    });
+
+    expect(commercialCenterMocks.createRevenueLine).toHaveBeenCalledWith('marketing_manager', 'tenant-a', 'user-1', expect.objectContaining({
+      revenueLineType: 'online_course',
+      name: 'Online Courses',
+    }));
+    expect(commercialCenterMocks.createPlan).toHaveBeenCalledOnce();
+    expect(commercialCenterMocks.createAssessmentSignal).toHaveBeenCalledOnce();
   });
 
   it('rejects unsupported external/write actions', async () => {
