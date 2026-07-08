@@ -5,6 +5,7 @@ import { UnauthorizedError } from '@shared/errors';
 import { validateOrThrow } from '@shared/validation';
 import { evaluateExternalExecution } from '@shared/policy';
 import { getActiveIntegrationCredential } from '../integration-credentials/service';
+import { getGhlSyncStatus } from '../ghl-sync/repository';
 import {
   createLeadCaptureRecordSchema,
   createConversionIntentSchema,
@@ -27,6 +28,39 @@ function getPayload(req: Request): JwtPayload {
 function getSession(req: Request) {
   return resolveSessionContext(getPayload(req));
 }
+
+crmConversionRouter.get('/whatsapp/status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const [ghlStatus, whatsappCredential] = await Promise.all([
+      getGhlSyncStatus(session.tenantKey).catch(() => null),
+      getActiveIntegrationCredential('whatsapp', 'api_key', session.tenantKey),
+    ]);
+    const ghlReady = Boolean(ghlStatus?.credentialStatus === 'configured' && ghlStatus.mappingStatus === 'ready');
+    const directWhatsAppConfigured = Boolean(whatsappCredential?.secrets.accessToken && whatsappCredential.secrets.phoneNumberId);
+    const executionEnabled = process.env.WHATSAPP_LIVE_ENABLED === 'true' && process.env.EXTERNAL_EXECUTION_ENABLED === 'true';
+    const nextActions: string[] = [];
+    if (!ghlStatus || ghlStatus.credentialStatus !== 'configured') nextActions.push('Save customer-owned GoHighLevel credentials before CRM-based WhatsApp follow-up.');
+    if (ghlStatus && ghlStatus.mappingStatus !== 'ready') nextActions.push('Complete GHL tag/stage mappings before automating follow-up workflows.');
+    if (!directWhatsAppConfigured) nextActions.push('If direct WhatsApp Cloud sending is required, save tenant-owned WhatsApp access token and phone number id.');
+    if (!executionEnabled) nextActions.push('External WhatsApp sending is disabled by policy until customer approval and production flags are enabled.');
+    res.json({
+      sourceOfTruth: 'gohighlevel',
+      tanaghumRole: 'prepare_review_and_audit_follow_up',
+      ghlCredentialStatus: ghlStatus?.credentialStatus ?? 'unknown',
+      ghlMappingStatus: ghlStatus?.mappingStatus ?? 'unknown',
+      ghlReadyForWorkflow: ghlReady,
+      directWhatsAppConfigured,
+      executionEnabled,
+      externalWritesAllowed: false,
+      rawSecretsReturned: false,
+      nextActions,
+      _label: 'WhatsApp follow-up readiness through GoHighLevel and tenant-owned credentials',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 crmConversionRouter.get('/leads', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -143,6 +177,42 @@ crmConversionRouter.post('/leads/:id/whatsapp-handoff', async (req: Request, res
       ...handoff,
       executionPolicy: policy,
       _label: 'WhatsApp handoff package recorded - message sending remains policy-gated',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+crmConversionRouter.post('/leads/:id/whatsapp-follow-up-preview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = getSession(req);
+    const input = validateOrThrow(createWhatsAppHandoffRequestSchema, {
+      ...req.body,
+      leadCaptureRecordId: req.params.id,
+      messagingSystem: req.body.messagingSystem ?? 'gohighlevel_whatsapp',
+      requestedByUserId: session.humanUserId,
+      requestedByAgentRepId: session.agentRepId,
+    });
+    const policy = evaluateExternalExecution({
+      system: 'whatsapp',
+      action: 'send_message',
+      executionMode: 'sandbox',
+      approvalId: input.approvalId,
+      capabilityResolutionId: input.capabilityResolutionId,
+      mcpMediationRequestId: input.mcpMediationRequestId,
+      humanApproved: Boolean(input.approvalId),
+    });
+    const handoff = await service.createWhatsAppHandoffRequest(session.role, session.tenantKey, session.humanUserId, session.agentRepId, input);
+    res.status(201).json({
+      ...handoff,
+      executionPolicy: policy,
+      safety: {
+        externalMessageSent: false,
+        externalWritesAllowed: false,
+        approvalRequiredBeforeSend: true,
+        rawSecretsReturned: false,
+      },
+      _label: 'WhatsApp follow-up package prepared for review - no message was sent',
     });
   } catch (err) {
     next(err);

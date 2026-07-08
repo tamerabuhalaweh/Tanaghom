@@ -11,6 +11,34 @@ import type {
 import { CONNECTOR_REQUIREMENTS, SUPPORTED_CONNECTORS, VALID_TRANSITIONS } from './types';
 import { getActiveIntegrationCredential } from '../integration-credentials/service';
 import { runPostizReadOnlyDryRun } from './adapters/postiz';
+import {
+  runFormalooReadOnlyDryRun,
+  runKajabiReadOnlyDryRun,
+  runMetaAnalyticsDryRun,
+  runYouTubeAnalyticsDryRun,
+} from './adapters/read-only-providers';
+
+type IntegrationProvider = Parameters<typeof getActiveIntegrationCredential>[0];
+type CredentialType = Parameters<typeof getActiveIntegrationCredential>[1];
+type CredentialLookup = { provider: IntegrationProvider; credentialType: CredentialType; connectionKey: string };
+
+const CONNECTOR_CREDENTIAL_MAP: Record<string, CredentialLookup[]> = {
+  postiz: [{ provider: 'postiz', credentialType: 'api_key', connectionKey: 'default' }],
+  gohighlevel: [{ provider: 'gohighlevel', credentialType: 'api_key', connectionKey: 'default' }],
+  formaloo: [{ provider: 'formaloo', credentialType: 'api_key', connectionKey: 'default' }],
+  kajabi: [{ provider: 'kajabi', credentialType: 'oauth_client', connectionKey: 'default' }],
+  meta_analytics: [
+    { provider: 'meta_analytics', credentialType: 'api_key', connectionKey: 'default' },
+    { provider: 'social_oauth', credentialType: 'oauth_client', connectionKey: 'meta' },
+  ],
+  youtube_analytics: [
+    { provider: 'youtube_analytics', credentialType: 'oauth_token', connectionKey: 'default' },
+    { provider: 'youtube', credentialType: 'api_key', connectionKey: 'default' },
+  ],
+  whatsapp_provider: [{ provider: 'whatsapp', credentialType: 'api_key', connectionKey: 'default' }],
+  telegram_provider: [{ provider: 'telegram', credentialType: 'bot_token', connectionKey: 'default' }],
+  smartlabs_voice: [{ provider: 'smartlabs_voice', credentialType: 'api_key', connectionKey: 'default' }],
+};
 
 export function getRequirements() {
   return Object.entries(CONNECTOR_REQUIREMENTS).map(([id, req]) => ({
@@ -20,14 +48,37 @@ export function getRequirements() {
 }
 
 async function resolveCredentialState(tenantKey: string, connectorId: string): Promise<CredentialState> {
-  const credential = await prisma.integrationCredential.findFirst({
-    where: { tenant_key: tenantKey, provider: connectorId, is_active: true },
-    select: { id: true, last_validated_at: true },
-  });
+  const lookups = CONNECTOR_CREDENTIAL_MAP[connectorId] ?? [{ provider: connectorId as IntegrationProvider, credentialType: 'api_key', connectionKey: 'default' }];
+  for (const lookup of lookups) {
+    const credential = await prisma.integrationCredential.findFirst({
+      where: {
+        tenant_key: tenantKey,
+        provider: lookup.provider,
+        credential_type: lookup.credentialType,
+        connection_key: lookup.connectionKey,
+        is_active: true,
+      },
+      select: { id: true, last_validated_at: true },
+    });
 
-  if (!credential) return 'customer_credential_missing';
-  if (credential.last_validated_at) return 'test_passed';
-  return 'configured';
+    if (credential?.last_validated_at) return 'test_passed';
+    if (credential) return 'configured';
+  }
+  return 'customer_credential_missing';
+}
+
+async function resolveConnectorCredential(tenantKey: string, connectorId: string) {
+  const lookups = CONNECTOR_CREDENTIAL_MAP[connectorId] ?? [];
+  for (const lookup of lookups) {
+    const credential = await getActiveIntegrationCredential(
+      lookup.provider,
+      lookup.credentialType,
+      tenantKey,
+      lookup.connectionKey,
+    );
+    if (credential) return credential;
+  }
+  return null;
 }
 
 export async function getReadiness(tenantKey: string): Promise<ReadinessSummary> {
@@ -329,7 +380,7 @@ async function runReadOnlyConnectorDryRun(
   eventId?: string,
 ): Promise<DryRunResult> {
   if (connectorId === 'postiz') {
-    const credential = await getActiveIntegrationCredential('postiz', 'api_key', tenantKey);
+    const credential = await resolveConnectorCredential(tenantKey, connectorId);
     if (!credential) {
       return {
         connectorId,
@@ -357,6 +408,30 @@ async function runReadOnlyConnectorDryRun(
     return runPostizReadOnlyDryRun({ credential, eventId });
   }
 
+  if (connectorId === 'kajabi') {
+    const credential = await resolveConnectorCredential(tenantKey, connectorId);
+    if (!credential) return missingCredentialDryRun(connectorId, eventId);
+    return runKajabiReadOnlyDryRun({ credential, eventId });
+  }
+
+  if (connectorId === 'meta_analytics') {
+    const credential = await resolveConnectorCredential(tenantKey, connectorId);
+    if (!credential) return missingCredentialDryRun(connectorId, eventId);
+    return runMetaAnalyticsDryRun({ credential, eventId });
+  }
+
+  if (connectorId === 'youtube_analytics') {
+    const credential = await resolveConnectorCredential(tenantKey, connectorId);
+    if (!credential) return missingCredentialDryRun(connectorId, eventId);
+    return runYouTubeAnalyticsDryRun({ credential, eventId });
+  }
+
+  if (connectorId === 'formaloo') {
+    const credential = await resolveConnectorCredential(tenantKey, connectorId);
+    if (!credential) return missingCredentialDryRun(connectorId, eventId);
+    return runFormalooReadOnlyDryRun({ credential, eventId });
+  }
+
   return {
     connectorId,
     eventId: eventId ?? null,
@@ -365,6 +440,16 @@ async function runReadOnlyConnectorDryRun(
     warnings: [
       `No read-only adapter is implemented for ${connectorId} yet - no external API calls made and no rows are importable.`,
     ],
+  };
+}
+
+function missingCredentialDryRun(connectorId: string, eventId?: string): DryRunResult {
+  return {
+    connectorId,
+    eventId: eventId ?? null,
+    kpiRows: [],
+    leadAttributions: 0,
+    warnings: [`${CONNECTOR_REQUIREMENTS[connectorId as ConnectorId]?.label || connectorId} customer credential is missing. Save tenant-owned credentials before dry-run.`],
   };
 }
 

@@ -195,18 +195,19 @@ export async function createWhatsAppHandoffRequest(
   checkPermission(requesterRole, 'conversion:handoff');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.requestedByUserId, input.requestedByAgentRepId);
 
-  // MCP mediation required
-  if (!input.mcpMediationRequestId) {
-    throw new ForbiddenError('Direct WhatsApp access is blocked. MCP mediation is required.');
-  }
-
-  // M5 write-enabled blocked by default
-  // No real messages sent
+  // Preparing the package is allowed, but external sending remains blocked unless
+  // MCP mediation, approval, and execution policy are all satisfied later.
 
   const request = await repo.createWhatsAppHandoffRequest(input, tenantKey);
 
   auditLog(
-    { actor: `user:${sessionUserId}`, action: 'whatsapp_handoff_requested', object_type: 'whatsapp_handoff_request', object_id: request.id, result: 'success' },
+    {
+      actor: `user:${sessionUserId}`,
+      action: 'whatsapp_handoff_requested',
+      object_type: 'whatsapp_handoff_request',
+      object_id: request.id,
+      result: request.handoffStatus === 'blocked' ? 'blocked' : 'success',
+    },
     `WhatsApp handoff requested: ${request.messagingSystem} (${request.handoffStatus})`,
   );
 

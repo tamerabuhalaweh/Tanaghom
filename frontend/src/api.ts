@@ -453,6 +453,9 @@ export const leadsApi = {
   stats: (token: string) => apiFetch<unknown>('/leads/stats', { token }),
   sandboxExecution: (id: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/crm-conversion/leads/${id}/sandbox-execution`, { method: 'POST', body: data, token }),
+  whatsappStatus: (token: string) => apiFetch<unknown>('/crm-conversion/whatsapp/status', { token }),
+  whatsappFollowUpPreview: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/crm-conversion/leads/${id}/whatsapp-follow-up-preview`, { method: 'POST', body: data, token }),
 };
 
 export const smartLabsApi = {
@@ -463,6 +466,8 @@ export const smartLabsApi = {
     apiFetch<unknown>('/smartlabs/conversation', { method: 'POST', body: data, token }),
   textToSpeech: (data: unknown, token: string) =>
     apiFetch<unknown>('/smartlabs/text-to-speech', { method: 'POST', body: data, token }),
+  leadHandoffPreview: (leadId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/smartlabs/leads/${leadId}/handoff-preview`, { method: 'POST', body: data, token }),
 };
 
 export const smartLabsValidationApi = {

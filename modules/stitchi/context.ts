@@ -50,6 +50,26 @@ export interface StitchiReadOnlyContext {
     synced: number;
     blocked: number;
   };
+  unifiedDataLayer: {
+    kajabi: DataSourceContext;
+    acquisition: DataSourceContext[];
+    whatsappFollowUp: {
+      sourceOfTruth: 'gohighlevel';
+      ghlCredentialStatus: string;
+      whatsappCredentialStatus: string;
+      readyForPreparedFollowUp: boolean;
+      executionEnabled: boolean;
+      externalWritesAllowed: false;
+      requiredActions: string[];
+    };
+    smartLabsVoice: {
+      credentialStatus: string;
+      readyForHandoffPreview: boolean;
+      executionEnabled: boolean;
+      externalCallsAllowed: false;
+      requiredActions: string[];
+    };
+  };
   ghlCrm: {
     sourceOfTruth: 'gohighlevel';
     tanaghumRole: 'operating_reporting_layer';
@@ -94,6 +114,15 @@ export interface StitchiReadOnlyContext {
     externalExecution: 'blocked';
     secretsReturned: false;
   };
+}
+
+interface DataSourceContext {
+  provider: string;
+  credentialStatus: string;
+  importJobStatus: string;
+  lastDryRunAt: Date | null;
+  lastSyncAt: Date | null;
+  requiredActions: string[];
 }
 
 interface EventContext {
@@ -216,14 +245,17 @@ export async function loadReadOnlyContext(
     }),
     prisma.integrationCredential.findMany({
       where: { tenant_key: tenantKey, is_active: true },
-      select: { id: true },
+      select: { id: true, provider: true, credential_type: true, last_validated_at: true },
       take: 100,
     }),
     prisma.connectorImportJob.findMany({
       where: { tenant_key: tenantKey, ...(eventId ? { event_id: eventId } : {}) },
       select: {
+        connector_id: true,
         sync_status: true,
         state: true,
+        last_dry_run_at: true,
+        last_sync_at: true,
       },
       take: 100,
     }),
@@ -285,6 +317,7 @@ export async function loadReadOnlyContext(
     kpiSummary: summarizeKpis(kpis),
     riskSummary: summarizeProblems(openProblems),
     connectorSummary: summarizeConnectors(credentials.length, connectorJobs),
+    unifiedDataLayer: summarizeUnifiedDataLayer(credentials, connectorJobs),
     ghlCrm,
     commercialCenter: {
       configuredRevenueLines: revenueLines.filter(line => String(line.status) === 'active').length,
@@ -488,6 +521,69 @@ function summarizeConnectors(
     readyForSync: jobs.filter((job) => String(job.sync_status) === 'ready_for_sync' || String(job.state) === 'test_passed').length,
     synced: jobs.filter((job) => String(job.sync_status) === 'synced').length,
     blocked: jobs.filter((job) => ['blocked', 'failed'].includes(String(job.sync_status)) || String(job.state) === 'blocked').length,
+  };
+}
+
+function summarizeUnifiedDataLayer(
+  credentials: Array<{ provider: unknown; credential_type: unknown; last_validated_at: Date | null }>,
+  jobs: Array<{ connector_id?: unknown; sync_status: unknown; state: unknown; last_dry_run_at?: Date | null; last_sync_at?: Date | null }>,
+): StitchiReadOnlyContext['unifiedDataLayer'] {
+  const source = (provider: string): DataSourceContext => {
+    const providerCredentials = credentials.filter(credential => String(credential.provider) === provider);
+    const connectorJobs = jobs.filter(job => String(job.connector_id) === provider);
+    const latestJob = connectorJobs[0] || null;
+    const hasCredential = providerCredentials.length > 0;
+    const validated = providerCredentials.some(credential => credential.last_validated_at);
+    const hasDryRun = connectorJobs.some(job => Boolean(job.last_dry_run_at));
+    const synced = connectorJobs.some(job => String(job.sync_status) === 'synced');
+    const requiredActions: string[] = [];
+    if (!hasCredential) requiredActions.push(`Save customer-owned ${provider} credentials.`);
+    if (hasCredential && !validated) requiredActions.push(`Validate ${provider} read access.`);
+    if (validated && !hasDryRun) requiredActions.push(`Run ${provider} read-only dry-run for this event.`);
+    if (hasDryRun && !synced) requiredActions.push(`Approve ${provider} import after reviewing dry-run rows.`);
+    return {
+      provider,
+      credentialStatus: !hasCredential ? 'missing' : validated ? 'validated' : 'configured',
+      importJobStatus: latestJob ? String(latestJob.sync_status) : 'not_started',
+      lastDryRunAt: latestJob?.last_dry_run_at ?? null,
+      lastSyncAt: latestJob?.last_sync_at ?? null,
+      requiredActions,
+    };
+  };
+
+  const ghlCredential = credentials.some(credential => String(credential.provider) === 'gohighlevel');
+  const whatsappCredential = credentials.some(credential => String(credential.provider) === 'whatsapp');
+  const smartLabsCredential = credentials.some(credential => String(credential.provider) === 'smartlabs_voice');
+  return {
+    kajabi: source('kajabi'),
+    acquisition: [
+      source('meta_analytics'),
+      source('youtube_analytics'),
+      source('formaloo'),
+    ],
+    whatsappFollowUp: {
+      sourceOfTruth: 'gohighlevel',
+      ghlCredentialStatus: ghlCredential ? 'configured' : 'missing',
+      whatsappCredentialStatus: whatsappCredential ? 'configured' : 'missing',
+      readyForPreparedFollowUp: ghlCredential || whatsappCredential,
+      executionEnabled: process.env.WHATSAPP_LIVE_ENABLED === 'true' && process.env.EXTERNAL_EXECUTION_ENABLED === 'true',
+      externalWritesAllowed: false,
+      requiredActions: [
+        ...(!ghlCredential ? ['Save customer-owned GoHighLevel credentials for CRM-driven WhatsApp follow-up.'] : []),
+        ...(!whatsappCredential ? ['Save WhatsApp credential only if direct WhatsApp Cloud sending is required.'] : []),
+        ...(process.env.WHATSAPP_LIVE_ENABLED === 'true' && process.env.EXTERNAL_EXECUTION_ENABLED === 'true' ? [] : ['External WhatsApp sending remains disabled until customer authorization and policy flags are enabled.']),
+      ],
+    },
+    smartLabsVoice: {
+      credentialStatus: smartLabsCredential ? 'configured' : 'missing',
+      readyForHandoffPreview: true,
+      executionEnabled: process.env.SMARTLABS_LIVE_ENABLED === 'true' && process.env.VOICE_CHAT_LIVE_ENABLED === 'true',
+      externalCallsAllowed: false,
+      requiredActions: [
+        ...(!smartLabsCredential ? ['Save customer-owned SmartLabs API key, agent id, and voice settings.'] : []),
+        ...(process.env.SMARTLABS_LIVE_ENABLED === 'true' && process.env.VOICE_CHAT_LIVE_ENABLED === 'true' ? [] : ['SmartLabs live conversation/TTS execution remains disabled until customer authorization and policy flags are enabled.']),
+      ],
+    },
   };
 }
 
