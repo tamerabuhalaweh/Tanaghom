@@ -105,8 +105,8 @@ function isSetupOrTestContent(campaign: RecordMap): boolean {
     /^Sprint\s*\d+\s+Acceptance/i,
     /Proof-led customer story/i,
     /Premium social intelligence launch/i,
-    /^Product Feature Announcement$/i,
-    /^Summer Wellness Launch$/i,
+    /Product Feature Announcement/i,
+    /Summer Wellness Launch/i,
     /acceptance-\d+@example\.com/i,
   ].some(pattern => pattern.test(combined));
 }
