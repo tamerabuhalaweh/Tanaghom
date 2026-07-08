@@ -8,6 +8,7 @@ vi.mock('../../integration-credentials/service', () => credentialMocks);
 
 import { AppError, ForbiddenError } from '@shared/errors';
 import { mediateConnectorDryRunPolicy } from '../agentgateway';
+import { AGENTGATEWAY_SANDBOX_POLICY_CONNECTORS } from '../controller';
 
 const input = {
   tenantKey: 'tenant-a',
@@ -25,6 +26,10 @@ describe('agentgateway connector dry-run policy mediation', () => {
     vi.clearAllMocks();
     process.env.AGENTGATEWAY_DRY_RUN_POLICY_ENABLED = '';
     global.fetch = vi.fn() as unknown as typeof fetch;
+  });
+
+  it('allows Kajabi through the local sandbox policy connector allowlist', () => {
+    expect(AGENTGATEWAY_SANDBOX_POLICY_CONNECTORS).toContain('kajabi');
   });
 
   afterEach(() => {

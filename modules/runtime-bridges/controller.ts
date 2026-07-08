@@ -7,6 +7,18 @@ import { getActiveIntegrationCredential } from '../integration-credentials/servi
 
 export const runtimeBridgesRouter = Router();
 
+export const AGENTGATEWAY_SANDBOX_POLICY_CONNECTORS = [
+  'postiz',
+  'gohighlevel',
+  'formaloo',
+  'kajabi',
+  'meta_analytics',
+  'youtube_analytics',
+  'whatsapp_provider',
+  'telegram_provider',
+  'smartlabs_voice',
+] as const;
+
 type RuntimeProvider = 'openclaw' | 'agentgateway' | 'agentscope';
 type RuntimeFlag = { name: string; enabled: boolean; purpose: string };
 
@@ -116,16 +128,7 @@ runtimeBridgesRouter.post('/agentgateway/sandbox-policy/connector-dry-run', asyn
     }
 
     const input = agentgatewaySandboxPolicySchema.parse(req.body);
-    const supportedConnectors = new Set([
-      'postiz',
-      'gohighlevel',
-      'formaloo',
-      'meta_analytics',
-      'youtube_analytics',
-      'whatsapp_provider',
-      'telegram_provider',
-      'smartlabs_voice',
-    ]);
+    const supportedConnectors = new Set<string>(AGENTGATEWAY_SANDBOX_POLICY_CONNECTORS);
 
     if (!supportedConnectors.has(input.connectorId)) {
       res.status(200).json({
