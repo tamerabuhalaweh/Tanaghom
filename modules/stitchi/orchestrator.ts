@@ -1,5 +1,6 @@
 import { Annotation, END, MemorySaver, START, StateGraph } from '@langchain/langgraph';
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { AppError } from '@shared/errors';
@@ -25,14 +26,37 @@ interface ActionProposal {
   previewPayload: Record<string, unknown>;
   riskLevel: 'medium' | 'high';
   reason: string;
+  providerType?: string;
+  providerModel?: string;
 }
 
 interface FollowUpResponse {
   kind: 'follow_up';
   assistantText: string;
+  providerType?: string;
+  providerModel?: string;
 }
 
 type CommercialDerivation = ActionProposal | FollowUpResponse | null;
+
+const commercialPlanAiEnrichmentSchema = z.object({
+  title: z.string().trim().min(1).max(260).optional(),
+  objective: z.string().trim().min(1).max(5000).optional(),
+  audience: z.string().trim().min(1).max(5000).optional(),
+  strategySummary: z.string().trim().min(1).max(8000).optional(),
+  actionPlan: z.string().trim().min(1).max(8000).optional(),
+  contentPillars: z.array(z.string().trim().min(1).max(260)).max(8).optional(),
+  channelPlan: z.array(z.string().trim().min(1).max(320)).max(10).optional(),
+  ghlFollowUpPlan: z.string().trim().min(1).max(1200).optional(),
+  whatsappReminderPlan: z.string().trim().min(1).max(1200).optional(),
+  successMetrics: z.array(z.string().trim().min(1).max(260)).max(10).optional(),
+  assumptions: z.array(z.string().trim().min(1).max(260)).max(8).optional(),
+});
+
+type CommercialPlanAiEnrichment = z.infer<typeof commercialPlanAiEnrichmentSchema> & {
+  providerType: string;
+  providerModel: string | null;
+};
 
 export interface StitchiOrchestrationResult {
   userMessage: StitchiMessageSummary;
@@ -78,7 +102,7 @@ async function loadContextNode(state: typeof orchestrationState.State) {
   };
 }
 
-function classifyNode(state: typeof orchestrationState.State): Partial<typeof orchestrationState.State> {
+async function classifyNode(state: typeof orchestrationState.State): Promise<Partial<typeof orchestrationState.State>> {
   if (isExternalExecutionRequest(state.content)) {
     return {
       status: 'blocked' as const,
@@ -89,19 +113,21 @@ function classifyNode(state: typeof orchestrationState.State): Partial<typeof or
       ].join('\n'),
     };
   }
-  const proposal = deriveActionProposal(state.content, state.eventId, state.context, state.metadata);
+  const proposal = await deriveActionProposal(state.content, state.userId, state.eventId, state.context, state.metadata);
   if (isFollowUpResponse(proposal)) {
     return {
       status: 'answered' as const,
       assistantText: proposal.assistantText,
+      providerType: proposal.providerType,
+      providerModel: proposal.providerModel,
     };
   }
-  if (proposal) return { actionProposal: proposal };
+  if (proposal) return { actionProposal: proposal, providerType: proposal.providerType, providerModel: proposal.providerModel };
   return {};
 }
 
-function isFollowUpResponse(value: ActionProposal | FollowUpResponse | null): value is FollowUpResponse {
-  return Boolean(value && 'kind' in value && value.kind === 'follow_up');
+function isFollowUpResponse(value: unknown): value is FollowUpResponse {
+  return Boolean(value && typeof value === 'object' && 'kind' in value && value.kind === 'follow_up');
 }
 
 async function respondNode(state: typeof orchestrationState.State) {
@@ -227,7 +253,7 @@ export async function orchestrateStitchiMessage(
     const conversation = await repo.getConversation(tenantKey, userId, role, conversationId);
     const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
     const fallbackEventId = input.eventId || conversation.eventId || context.selectedEvent?.id || undefined;
-    const fallbackProposal = deriveActionProposal(input.content, fallbackEventId, context, input.metadata);
+    const fallbackProposal = await deriveActionProposal(input.content, userId, fallbackEventId, context, input.metadata);
     if (isFollowUpResponse(fallbackProposal)) {
       result = {
         ...result,
@@ -235,6 +261,8 @@ export async function orchestrateStitchiMessage(
         eventId: fallbackEventId,
         status: 'answered',
         assistantText: fallbackProposal.assistantText,
+        providerType: fallbackProposal.providerType,
+        providerModel: fallbackProposal.providerModel,
       };
     } else if (fallbackProposal) {
       const { actionRun, assistantText } = await createActionRunFromProposal({
@@ -251,7 +279,8 @@ export async function orchestrateStitchiMessage(
         actionRun,
         status: 'action_proposed',
         assistantText,
-        providerType: 'none',
+        providerType: fallbackProposal.providerType,
+        providerModel: fallbackProposal.providerModel,
       };
     }
   }
@@ -317,13 +346,14 @@ export async function orchestrateStitchiMessage(
   };
 }
 
-function deriveActionProposal(
+async function deriveActionProposal(
   content: string,
+  userId: string,
   eventId?: string,
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
-): ActionProposal | FollowUpResponse | null {
-  const commercialProposal = deriveCommercialCenterActionProposalV2(content, context, metadata);
+): Promise<ActionProposal | FollowUpResponse | null> {
+  const commercialProposal = await deriveCommercialCenterActionProposalV2(content, userId, context, metadata);
   if (commercialProposal) return commercialProposal;
   if (!eventId) return null;
   const lower = content.toLowerCase();
@@ -383,11 +413,12 @@ function deriveActionProposal(
   return null;
 }
 
-function deriveCommercialCenterActionProposalV2(
+async function deriveCommercialCenterActionProposalV2(
   content: string,
+  userId: string,
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
-): CommercialDerivation {
+): Promise<CommercialDerivation> {
   const lower = content.toLowerCase();
   if (!isCommercialCenterRequest(lower, metadata)) return null;
 
@@ -475,6 +506,23 @@ function deriveCommercialCenterActionProposalV2(
     }
 
     const stage = inferCommercialStage(lower);
+    const enrichment = await enrichCommercialPlanWithLLM({
+      userId,
+      content,
+      context,
+      revenueLine,
+      title,
+      stage,
+      extractedPlan,
+    });
+    if (isFollowUpResponse(enrichment)) return enrichment;
+    const enrichedTitle = cleanAiText(enrichment.title, title, 260);
+    const enrichedObjective = cleanAiText(enrichment.objective, extractedPlan.objective, 5000);
+    const enrichedAudience = cleanAiText(enrichment.audience, extractedPlan.audience, 5000);
+    const enrichedStrategySummary = buildAiStrategySummary(enrichment, extractedPlan.strategySummary);
+    const enrichedActionPlan = buildAiActionPlan(enrichment, extractedPlan.actionPlan);
+    const aiPreview = buildAiCommercialPreview(enrichment);
+
     if (!revenueLineId) {
       return {
         actionType: 'create_commercial_plan_with_revenue_line',
@@ -490,13 +538,13 @@ function deriveCommercialCenterActionProposalV2(
             linkedEventId: extractedPlan.linkedEventId ?? undefined,
             horizon: inferCommercialHorizon(lower),
             stage,
-            title,
-            objective: extractedPlan.objective,
-            audience: extractedPlan.audience,
+            title: enrichedTitle,
+            objective: enrichedObjective,
+            audience: enrichedAudience,
             budgetTarget: extractedPlan.budgetTarget,
             revenueTarget: extractedPlan.revenueTarget,
-            strategySummary: extractedPlan.strategySummary,
-            actionPlan: extractedPlan.actionPlan,
+            strategySummary: enrichedStrategySummary,
+            actionPlan: enrichedActionPlan,
             status: 'draft',
           },
         },
@@ -504,20 +552,23 @@ function deriveCommercialCenterActionProposalV2(
           revenueLineId: null,
           revenueLineName: revenueLine.name,
           revenueLineSetup: 'will be configured before saving this plan',
-          title,
+          title: enrichedTitle,
           stage,
-          objective: extractedPlan.objective,
-          audience: extractedPlan.audience,
+          objective: enrichedObjective,
+          audience: enrichedAudience,
           budgetTarget: extractedPlan.budgetTarget,
           revenueTarget: extractedPlan.revenueTarget,
-          actionPlan: extractedPlan.actionPlan,
+          actionPlan: enrichedActionPlan,
           linkedEventId: extractedPlan.linkedEventId || null,
           linkedEventName: extractedPlan.linkedEventName || null,
+          ...aiPreview,
           approvalRequired: true,
           externalExecution: 'blocked',
         },
         riskLevel: 'medium',
         reason: `configure ${revenueLine.name} and create a commercial plan`,
+        providerType: enrichment.providerType,
+        providerModel: enrichment.providerModel || undefined,
       };
     }
 
@@ -528,32 +579,35 @@ function deriveCommercialCenterActionProposalV2(
         linkedEventId: extractedPlan.linkedEventId ?? undefined,
         horizon: inferCommercialHorizon(lower),
         stage,
-        title,
-        objective: extractedPlan.objective,
-        audience: extractedPlan.audience,
+        title: enrichedTitle,
+        objective: enrichedObjective,
+        audience: enrichedAudience,
         budgetTarget: extractedPlan.budgetTarget,
         revenueTarget: extractedPlan.revenueTarget,
-        strategySummary: extractedPlan.strategySummary,
-        actionPlan: extractedPlan.actionPlan,
+        strategySummary: enrichedStrategySummary,
+        actionPlan: enrichedActionPlan,
         status: 'draft',
       },
       previewPayload: {
         revenueLineId,
         revenueLineName: revenueLine.name,
-        title,
+        title: enrichedTitle,
         stage,
-        objective: extractedPlan.objective,
-        audience: extractedPlan.audience,
+        objective: enrichedObjective,
+        audience: enrichedAudience,
         budgetTarget: extractedPlan.budgetTarget,
         revenueTarget: extractedPlan.revenueTarget,
-        actionPlan: extractedPlan.actionPlan,
+        actionPlan: enrichedActionPlan,
         linkedEventId: extractedPlan.linkedEventId || null,
         linkedEventName: extractedPlan.linkedEventName || null,
+        ...aiPreview,
         approvalRequired: true,
         externalExecution: 'blocked',
       },
       riskLevel: 'medium',
       reason: `create a commercial plan for ${revenueLine.name}`,
+      providerType: enrichment.providerType,
+      providerModel: enrichment.providerModel || undefined,
     };
   }
 
@@ -876,6 +930,207 @@ function extractCommercialPlanFields(content: string, context?: StitchiReadOnlyC
   };
 }
 
+async function enrichCommercialPlanWithLLM(input: {
+  userId: string;
+  content: string;
+  context?: StitchiReadOnlyContext;
+  revenueLine: ResolvedRevenueLine;
+  title: string;
+  stage: string;
+  extractedPlan: ExtractedCommercialPlan;
+}): Promise<CommercialPlanAiEnrichment | FollowUpResponse> {
+  let provider;
+  try {
+    provider = await resolveUserLLMProvider(input.userId);
+  } catch (err) {
+    if (isProviderRequiredError(err)) {
+      return {
+        kind: 'follow_up',
+        providerType: 'none',
+        assistantText: [
+          'I can prepare this commercial plan only after your AI model is connected.',
+          'Open AI Settings, connect Gemma or another approved provider, then send the request again.',
+          'No commercial plan was created because this operator flow must be AI-assisted.',
+        ].join('\n'),
+      };
+    }
+    throw err;
+  }
+
+  const status = provider.getStatus();
+  if (status.type === 'mock') {
+    return {
+      kind: 'follow_up',
+      providerType: 'none',
+      assistantText: [
+        'I need a real AI model before I prepare this commercial plan.',
+        'Mock AI is not accepted for production commercial operator work.',
+        'Connect Gemma or another approved provider in AI Settings, then send the request again.',
+      ].join('\n'),
+    };
+  }
+  let response;
+  let parsed;
+  try {
+    response = await provider.generate(buildCommercialPlanEnrichmentPrompt(input), {
+      systemPrompt: COMMERCIAL_OPERATOR_SYSTEM_PROMPT,
+      maxTokens: 1100,
+      temperature: 0.25,
+      timeoutMs: 30000,
+    });
+    parsed = parseCommercialPlanEnrichment(response.text);
+  } catch (err) {
+    if (isAiPlanInvalidError(err)) {
+      return {
+        kind: 'follow_up',
+        providerType: 'none',
+        assistantText: [
+          'The AI model responded, but the commercial plan structure did not pass backend validation.',
+          'No commercial plan was created.',
+          'Please send the request again, and I will prepare a new approval card.',
+        ].join('\n'),
+      };
+    }
+    throw err;
+  }
+  return {
+    ...parsed,
+    providerType: response.provider || status.type,
+    providerModel: response.model || status.model || null,
+  };
+}
+
+function buildCommercialPlanEnrichmentPrompt(input: {
+  content: string;
+  context?: StitchiReadOnlyContext;
+  revenueLine: ResolvedRevenueLine;
+  title: string;
+  stage: string;
+  extractedPlan: ExtractedCommercialPlan;
+}): string {
+  return [
+    'Create AI-assisted commercial plan details for Tanaghum.',
+    'Return JSON only. Do not wrap it in markdown.',
+    '',
+    'Required JSON shape:',
+    JSON.stringify({
+      title: 'short plan title',
+      objective: 'clear commercial objective',
+      audience: 'clear target audience',
+      strategySummary: 'concise strategy summary',
+      actionPlan: 'practical execution plan',
+      contentPillars: ['pillar 1', 'pillar 2'],
+      channelPlan: ['channel step 1', 'channel step 2'],
+      ghlFollowUpPlan: 'CRM follow-up plan, no live execution',
+      whatsappReminderPlan: 'WhatsApp reminder plan, no live execution',
+      successMetrics: ['metric 1', 'metric 2'],
+      assumptions: ['assumption 1'],
+    }),
+    '',
+    'Rules:',
+    '- Use the user request and Tanaghum context only.',
+    '- Keep the budget target and revenue target exactly as provided by the backend context. Do not invent or change numbers.',
+    '- Do not claim publishing, CRM writes, WhatsApp sending, calls, or external execution.',
+    '- Make the plan useful for a sales and marketing manager selling courses or events.',
+    '- If GHL, WhatsApp, ads, or analytics are mentioned, describe preparation/readiness only.',
+    '',
+    `Revenue line: ${input.revenueLine.name} (${input.revenueLine.type})`,
+    `Operating stage: ${input.stage}`,
+    `Backend title: ${input.title}`,
+    `Backend objective: ${input.extractedPlan.objective}`,
+    `Backend audience: ${input.extractedPlan.audience}`,
+    `Backend budget target: ${input.extractedPlan.budgetTarget}`,
+    `Backend revenue target: ${input.extractedPlan.revenueTarget}`,
+    `Backend linked event: ${input.extractedPlan.linkedEventName || 'none'}`,
+    '',
+    'User request:',
+    input.content,
+    '',
+    'Tanaghum context:',
+    input.context ? formatReadOnlyContextForPrompt(input.context) : '{}',
+  ].join('\n');
+}
+
+function parseCommercialPlanEnrichment(text: string): z.infer<typeof commercialPlanAiEnrichmentSchema> {
+  const jsonText = extractJsonObject(text);
+  if (!jsonText) {
+    throw new AppError('AI provider did not return a valid commercial plan JSON object.', 502, 'STITCHI_AI_PLAN_INVALID');
+  }
+  try {
+    return commercialPlanAiEnrichmentSchema.parse(JSON.parse(jsonText));
+  } catch {
+    throw new AppError('AI provider returned commercial plan JSON that failed backend validation.', 502, 'STITCHI_AI_PLAN_INVALID');
+  }
+}
+
+function extractJsonObject(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(trimmed);
+  if (fenced?.[1]?.trim().startsWith('{')) return fenced[1].trim();
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
+  return null;
+}
+
+function cleanAiText(value: string | undefined, fallback: string | null, maxLength: number): string | null {
+  const cleaned = cleanText(value || '');
+  if (cleaned) return cleaned.slice(0, maxLength);
+  return fallback ? cleanText(fallback).slice(0, maxLength) : null;
+}
+
+function buildAiStrategySummary(enrichment: CommercialPlanAiEnrichment, fallback: string | null): string | null {
+  const parts = [
+    cleanAiText(enrichment.strategySummary, fallback, 8000),
+    formatAiList('Content pillars', enrichment.contentPillars),
+    formatAiList('Channel plan', enrichment.channelPlan),
+    enrichment.ghlFollowUpPlan ? `GHL follow-up plan: ${cleanText(enrichment.ghlFollowUpPlan)}` : null,
+    enrichment.whatsappReminderPlan ? `WhatsApp reminder plan: ${cleanText(enrichment.whatsappReminderPlan)}` : null,
+    formatAiList('Success metrics', enrichment.successMetrics),
+    formatAiList('Assumptions', enrichment.assumptions),
+  ].filter(Boolean);
+  return parts.join('\n\n').slice(0, 8000) || null;
+}
+
+function buildAiActionPlan(enrichment: CommercialPlanAiEnrichment, fallback: string | null): string | null {
+  const parts = [
+    cleanAiText(enrichment.actionPlan, fallback, 8000),
+    formatAiList('Channel sequence', enrichment.channelPlan),
+    enrichment.ghlFollowUpPlan ? `GHL preparation: ${cleanText(enrichment.ghlFollowUpPlan)}` : null,
+    enrichment.whatsappReminderPlan ? `WhatsApp preparation: ${cleanText(enrichment.whatsappReminderPlan)}` : null,
+  ].filter(Boolean);
+  return parts.join('\n\n').slice(0, 8000) || null;
+}
+
+function buildAiCommercialPreview(enrichment: CommercialPlanAiEnrichment): Record<string, unknown> {
+  return {
+    aiAssisted: true,
+    aiProvider: enrichment.providerType,
+    aiModel: enrichment.providerModel,
+    aiSummary: cleanAiText(enrichment.strategySummary, null, 700),
+    contentPillars: enrichment.contentPillars,
+    channelPlan: enrichment.channelPlan,
+    ghlFollowUpPlan: enrichment.ghlFollowUpPlan,
+    whatsappReminderPlan: enrichment.whatsappReminderPlan,
+    successMetrics: enrichment.successMetrics,
+  };
+}
+
+function formatAiList(label: string, values?: string[]): string | null {
+  const cleaned = (values || []).map(value => cleanText(value)).filter(Boolean).slice(0, 8);
+  if (!cleaned.length) return null;
+  return `${label}:\n${cleaned.map(value => `- ${value}`).join('\n')}`;
+}
+
+function isProviderRequiredError(err: unknown): boolean {
+  return err instanceof AppError && err.code === 'LLM_PROVIDER_REQUIRED';
+}
+
+function isAiPlanInvalidError(err: unknown): boolean {
+  return err instanceof AppError && err.code === 'STITCHI_AI_PLAN_INVALID';
+}
+
 function requiredCommercialPlanFields(plan: ExtractedCommercialPlan): string[] {
   const missing: string[] = [];
   if (!plan.objective) missing.push('objective');
@@ -1164,4 +1419,14 @@ const ORCHESTRATOR_READ_ONLY_PROMPT = [
   'Use only supplied context. If data or credentials are missing, say what is needed.',
   'Do not claim external execution. Do not claim you changed data unless an approved action was executed by backend.',
   'Give concise next steps.',
+].join('\n');
+
+const COMMERCIAL_OPERATOR_SYSTEM_PROMPT = [
+  'You are Stitchi, Tanaghum\'s AI-assisted commercial planning operator.',
+  'You enrich sales and marketing plans for course, event, community, premium, and B2B revenue lines.',
+  'Return valid JSON only, with no markdown and no extra prose.',
+  'Do not claim that external systems were called.',
+  'Do not schedule, publish, send messages, write to CRM, or call leads.',
+  'Do not include secrets, API keys, raw credentials, or unsafe personal data.',
+  'Keep the plan practical for a sales and marketing manager.',
 ].join('\n');

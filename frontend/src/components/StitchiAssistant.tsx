@@ -58,7 +58,11 @@ function text(value: unknown, fallback = ''): string {
 }
 
 function customerLabel(value: unknown, fallback = ''): string {
-  const raw = typeof value === 'number' && Number.isFinite(value) ? String(value) : text(value, fallback);
+  const raw = Array.isArray(value)
+    ? value.map(item => String(item)).filter(Boolean).join('; ')
+    : typeof value === 'number' && Number.isFinite(value)
+      ? String(value)
+      : text(value, fallback);
   if (/^Sprint\s*\d+\s+Acceptance\s+Event/i.test(raw)) return 'Linked live event';
   if (/^Sprint\s*\d+\s+Acceptance\s+Lead/i.test(raw)) return 'Captured lead';
   return raw.replace(/\bSprint\s*\d+\s+Acceptance\s*/gi, '').trim();
@@ -708,11 +712,16 @@ function ActionPreview({ action }: { action: ActionRun }) {
   const rawRows: Array<[string, unknown]> = [
     ['Revenue line', preview.revenueLineName],
     ['Title', preview.title || preview.name],
+    ['AI assisted', preview.aiAssisted ? `${preview.aiProvider || 'AI'}${preview.aiModel ? ` / ${preview.aiModel}` : ''}` : undefined],
     ['Objective', preview.objective],
     ['Audience', preview.audience],
     ['Budget target', preview.budgetTarget],
     ['Revenue target', preview.revenueTarget],
     ['Linked event', preview.linkedEventName],
+    ['AI plan', preview.aiSummary],
+    ['Content pillars', preview.contentPillars],
+    ['Channel plan', preview.channelPlan],
+    ['Success metrics', preview.successMetrics],
     ['Action plan', preview.actionPlan],
   ];
   const rows: Array<[string, string]> = rawRows
@@ -722,17 +731,12 @@ function ActionPreview({ action }: { action: ActionRun }) {
 
   return (
     <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-black/15 p-3">
-      {rows.slice(0, 6).map(([label, value]) => (
+      {rows.map(([label, value]) => (
         <div key={label} className="grid gap-1 text-xs leading-5 sm:grid-cols-[100px_1fr]">
           <span className="font-semibold uppercase tracking-[0.14em] text-white/38">{label}</span>
           <span className="min-w-0 break-words text-white/72">{String(value)}</span>
         </div>
       ))}
-      {rows.length > 6 && (
-        <div className="text-xs leading-5 text-white/45">
-          {String(rows[6][1])}
-        </div>
-      )}
     </div>
   );
 }

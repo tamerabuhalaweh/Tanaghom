@@ -91,6 +91,7 @@ vi.mock('../repository', () => ({
 import * as repo from '../repository';
 import { loadReadOnlyContext } from '../context';
 import { orchestrateStitchiMessage } from '../orchestrator';
+import { AppError } from '@shared/errors';
 
 describe('Stitchi natural-language orchestration', () => {
   beforeEach(() => {
@@ -104,7 +105,19 @@ describe('Stitchi natural-language orchestration', () => {
       apiKeyStatus: 'configured',
     });
     providerMocks.generate.mockResolvedValue({
-      text: 'Review lead flow and KPI readiness.',
+      text: JSON.stringify({
+        title: 'Leadership Course Launch',
+        objective: 'Sell the leadership course to entrepreneurs using warm trust segments.',
+        audience: 'Warm followers and previous buyers.',
+        strategySummary: 'AI-assisted launch plan focused on authority content, warm retargeting, CRM nurturing, and direct reminders.',
+        actionPlan: 'Publish authority content, run warm-audience ads, prepare GHL follow-up, and prepare WhatsApp reminders before purchase deadlines.',
+        contentPillars: ['leadership transformation', 'entrepreneur proof stories', 'course value and urgency'],
+        channelPlan: ['content warm-up', 'paid retargeting', 'GHL nurture', 'WhatsApp reminder preparation'],
+        ghlFollowUpPlan: 'Prepare buyer and warm-follower nurture stages in GHL before sync.',
+        whatsappReminderPlan: 'Prepare reminder templates for approved segments only.',
+        successMetrics: ['qualified leads', 'purchase conversion', 'cost per purchase'],
+        assumptions: ['customer credentials and audience lists are provided separately'],
+      }),
       provider: 'gemma',
       model: 'gemma4-26b-a4b-canary',
     });
@@ -319,21 +332,36 @@ describe('Stitchi natural-language orchestration', () => {
         inputPayload: expect.objectContaining({
           revenueLineId: '00000000-0000-0000-0000-000000000040',
           linkedEventId: '00000000-0000-0000-0000-000000000001',
-          objective: 'sell to entrepreneurs.',
-          audience: 'warm followers and previous buyers.',
+          objective: 'Sell the leadership course to entrepreneurs using warm trust segments.',
+          audience: 'Warm followers and previous buyers.',
           budgetTarget: 5000,
           revenueTarget: 30000,
-          actionPlan: 'content, ads, GHL follow-up, WhatsApp reminders.',
+          actionPlan: expect.stringContaining('GHL follow-up'),
           status: 'draft',
         }),
         previewPayload: expect.objectContaining({
           revenueLineName: 'Online Courses',
           linkedEventName: 'Leadership Event',
+          aiAssisted: true,
+          aiProvider: 'gemma',
+          aiModel: 'gemma4-26b-a4b-canary',
+          contentPillars: expect.arrayContaining(['leadership transformation']),
           externalExecution: 'blocked',
           approvalRequired: true,
         }),
       }),
     );
+    expect(providerMocks.generate).toHaveBeenCalledWith(
+      expect.stringContaining('Create AI-assisted commercial plan details'),
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('AI-assisted commercial planning operator'),
+      }),
+    );
+    expect(result.provider).toMatchObject({
+      status: 'used',
+      type: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
   });
 
   it('configures an unconfigured Online Courses revenue line before proposing the plan', async () => {
@@ -415,7 +443,7 @@ describe('Stitchi natural-language orchestration', () => {
           }),
           plan: expect.objectContaining({
             linkedEventId: '00000000-0000-0000-0000-000000000001',
-            objective: 'sell to entrepreneurs.',
+            objective: 'Sell the leadership course to entrepreneurs using warm trust segments.',
             budgetTarget: 5000,
             revenueTarget: 30000,
             status: 'draft',
@@ -424,6 +452,7 @@ describe('Stitchi natural-language orchestration', () => {
         previewPayload: expect.objectContaining({
           revenueLineName: 'Online Courses',
           revenueLineSetup: 'will be configured before saving this plan',
+          aiAssisted: true,
           externalExecution: 'blocked',
           approvalRequired: true,
         }),
@@ -509,7 +538,7 @@ describe('Stitchi natural-language orchestration', () => {
           }),
           plan: expect.objectContaining({
             linkedEventId: '00000000-0000-0000-0000-000000000001',
-            objective: 'sell to entrepreneurs.',
+            objective: 'Sell the leadership course to entrepreneurs using warm trust segments.',
             budgetTarget: 5000,
             revenueTarget: 30000,
             status: 'draft',
@@ -518,6 +547,7 @@ describe('Stitchi natural-language orchestration', () => {
         previewPayload: expect.objectContaining({
           revenueLineName: 'Online Courses',
           linkedEventName: 'Leadership Event',
+          aiAssisted: true,
           approvalRequired: true,
           externalExecution: 'blocked',
         }),
@@ -544,6 +574,40 @@ describe('Stitchi natural-language orchestration', () => {
       'marketing_manager',
       'conversation-1',
       expect.stringContaining('budget target'),
+      expect.objectContaining({
+        status: 'answered',
+        writesExecuted: false,
+        externalExecution: 'blocked',
+      }),
+    );
+  });
+
+  it('requires a real AI provider before proposing commercial operator work', async () => {
+    providerMocks.resolveUserLLMProvider.mockRejectedValueOnce(
+      new AppError('No production LLM provider is configured for this user.', 424, 'LLM_PROVIDER_REQUIRED'),
+    );
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Objective: sell to entrepreneurs.',
+        'Audience: warm followers and previous buyers.',
+        'Budget target: 5000.',
+        'Revenue target: 30000.',
+        'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('answered');
+    expect(result.provider).toMatchObject({ status: 'required', type: 'none' });
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(providerMocks.generate).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('AI model is connected'),
       expect.objectContaining({
         status: 'answered',
         writesExecuted: false,

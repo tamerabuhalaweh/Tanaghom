@@ -147,6 +147,13 @@ async function installCommercialMocks(page: Page) {
       revenueTarget: 30000,
       actionPlan: 'content, ads, GHL follow-up, WhatsApp reminders.',
       linkedEventName: 'Leadership Masterclass',
+      aiAssisted: true,
+      aiProvider: 'gemma',
+      aiModel: 'gemma4-26b-a4b-canary',
+      aiSummary: 'AI-assisted launch plan for warm followers and previous buyers.',
+      contentPillars: ['authority content', 'entrepreneur proof story'],
+      channelPlan: ['content warm-up', 'GHL follow-up preparation'],
+      successMetrics: ['qualified leads', 'purchase conversion'],
       externalExecution: 'blocked',
       approvalRequired: true,
     },
@@ -359,6 +366,8 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await expect(page.getByText(/I prepared this for review/i)).toBeVisible();
     await expect(page.getByText('Online Courses').last()).toBeVisible();
     await expect(page.getByText('Leadership Course Launch').last()).toBeVisible();
+    await expect(page.getByText(/gemma4-26b-a4b-canary/i).last()).toBeVisible();
+    await expect(page.getByText(/authority content/i).last()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Approve & Save' }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Approve & Save' }).first().click();
     await expect(page.getByText('Saved to Tanaghum. The workspace has been refreshed.')).toBeVisible();
