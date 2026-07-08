@@ -125,6 +125,10 @@ model Tenant {
   connector_field_mappings ConnectorFieldMapping[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
+  stitchi_conversations StitchiConversation[]
+  stitchi_messages StitchiMessage[]
+  stitchi_action_runs StitchiActionRun[]
+  stitchi_action_approvals StitchiActionApproval[]
 
   @@map("tenants")
 }
@@ -286,6 +290,9 @@ model User {
   connector_imports_approved ConnectorImportJob[] @relation("ConnectorImportApprovedBy")
   connector_field_mappings ConnectorFieldMapping[] @relation("ConnectorFieldMappingCreatedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
+  stitchi_conversations StitchiConversation[] @relation("StitchiConversationUser")
+  stitchi_action_runs StitchiActionRun[] @relation("StitchiActionRunUser")
+  stitchi_action_approvals StitchiActionApproval[] @relation("StitchiActionApprovalUser")
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
   @@map("users")
@@ -465,6 +472,40 @@ enum LangGraphWorkflowStatus {
   failed
 }
 
+enum StitchiConversationStatus {
+  active
+  archived
+}
+
+enum StitchiMessageRole {
+  user
+  assistant
+  system
+}
+
+enum StitchiActionRunStatus {
+  proposed
+  awaiting_approval
+  approved
+  rejected
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum StitchiActionRiskLevel {
+  low
+  medium
+  high
+}
+
+enum StitchiApprovalDecision {
+  approved
+  rejected
+  changes_requested
+}
+
 model LangGraphWorkflow {
   id                  String                  @id @default(uuid()) @db.Uuid
   thread_id           String                  @unique
@@ -486,6 +527,99 @@ model LangGraphWorkflow {
   @@index([workflow_type])
   @@index([status])
   @@map("langgraph_workflows")
+}
+
+model StitchiConversation {
+  id         String                    @id @default(uuid()) @db.Uuid
+  tenant_key String
+  user_id    String                    @db.Uuid
+  event_id   String?                   @db.Uuid
+  title      String
+  status     StitchiConversationStatus @default(active)
+  created_at DateTime                  @default(now())
+  updated_at DateTime                  @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenant_key], references: [tenant_key])
+  user        User             @relation("StitchiConversationUser", fields: [user_id], references: [id])
+  event       CommercialEvent? @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  messages    StitchiMessage[]
+  action_runs StitchiActionRun[]
+
+  @@index([tenant_key])
+  @@index([user_id])
+  @@index([event_id])
+  @@index([status])
+  @@map("stitchi_conversations")
+}
+
+model StitchiMessage {
+  id              String             @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  conversation_id String             @db.Uuid
+  role            StitchiMessageRole @default(user)
+  content         String             @db.Text
+  metadata        Json?
+  created_at      DateTime           @default(now())
+
+  tenant       Tenant              @relation(fields: [tenant_key], references: [tenant_key])
+  conversation StitchiConversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_key])
+  @@index([conversation_id])
+  @@index([role])
+  @@index([created_at])
+  @@map("stitchi_messages")
+}
+
+model StitchiActionRun {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  conversation_id     String                 @db.Uuid
+  user_id             String                 @db.Uuid
+  action_type         String
+  status              StitchiActionRunStatus @default(proposed)
+  input_payload       Json
+  preview_payload     Json?
+  result_payload      Json?
+  requires_approval   Boolean                @default(false)
+  risk_level          StitchiActionRiskLevel @default(low)
+  audit_record_id     String?                @db.Uuid
+  langgraph_thread_id String?
+  created_at          DateTime               @default(now())
+  updated_at          DateTime               @updatedAt
+  completed_at        DateTime?
+
+  tenant       Tenant                  @relation(fields: [tenant_key], references: [tenant_key])
+  conversation StitchiConversation     @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  user         User                    @relation("StitchiActionRunUser", fields: [user_id], references: [id])
+  approvals    StitchiActionApproval[]
+
+  @@index([tenant_key])
+  @@index([conversation_id])
+  @@index([user_id])
+  @@index([action_type])
+  @@index([status])
+  @@map("stitchi_action_runs")
+}
+
+model StitchiActionApproval {
+  id             String                  @id @default(uuid()) @db.Uuid
+  tenant_key     String
+  action_run_id  String                  @db.Uuid
+  approver_user_id String                @db.Uuid
+  decision       StitchiApprovalDecision
+  notes          String?                 @db.Text
+  created_at     DateTime                @default(now())
+
+  tenant     Tenant           @relation(fields: [tenant_key], references: [tenant_key])
+  action_run StitchiActionRun @relation(fields: [action_run_id], references: [id], onDelete: Cascade)
+  approver   User             @relation("StitchiActionApprovalUser", fields: [approver_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([action_run_id])
+  @@index([approver_user_id])
+  @@index([decision])
+  @@map("stitchi_action_approvals")
 }
 
 model AgentRep {
@@ -3529,6 +3663,7 @@ model CommercialEvent {
   connector_imports   ConnectorImportJob[]
   connector_field_mappings ConnectorFieldMapping[]
   ghl_lead_sync_runs  GhlLeadSyncRun[]
+  stitchi_conversations StitchiConversation[]
 
   @@index([tenant_key])
   @@index([event_type])

@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
+import { StitchiFloatingAssistant } from './StitchiAssistant';
 
 type NavGroup = 'Product' | 'Setup' | 'Admin';
 type NavItem = {
@@ -60,6 +61,14 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Home',
     description: 'Today, events, leads and sales',
     icon: LayoutDashboard,
+    group: 'Product',
+    roles: PRODUCT_ROLES,
+  },
+  {
+    path: '/stitchi',
+    label: 'Stitchi',
+    description: 'Ask AI to prepare work',
+    icon: Bot,
     group: 'Product',
     roles: PRODUCT_ROLES,
   },
@@ -373,6 +382,8 @@ export default function Layout() {
       <main id="main-content" className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8">
         <Outlet />
       </main>
+
+      <StitchiFloatingAssistant />
 
       <SetupGuide
         open={guideOpen}

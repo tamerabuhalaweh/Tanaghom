@@ -15,6 +15,10 @@ interface ApiOptions {
   token?: string;
 }
 
+interface ApiStreamOptions extends ApiOptions {
+  onEvent: (event: { event: string; data: unknown }) => void;
+}
+
 export class ApiError extends Error {
   code?: string;
   status: number;
@@ -54,6 +58,65 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   }
 
   return res.json();
+}
+
+async function apiStream(path: string, options: ApiStreamOptions): Promise<void> {
+  const { method = 'GET', body, token, onEvent } = options;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const detail =
+      typeof err.error === 'string'
+        ? err.error
+        : typeof err.message === 'string'
+          ? err.message
+          : `API error: ${res.status}`;
+    throw new ApiError(detail, res.status, typeof err.code === 'string' ? err.code : undefined);
+  }
+
+  if (!res.body) throw new ApiError('Streaming response was empty', 502, 'STREAM_BODY_MISSING');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split(/\r?\n\r?\n/);
+      buffer = chunks.pop() || '';
+      chunks.forEach(chunk => emitSseChunk(chunk, onEvent));
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) emitSseChunk(buffer, onEvent);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function emitSseChunk(chunk: string, onEvent: (event: { event: string; data: unknown }) => void) {
+  const lines = chunk.split(/\r?\n/);
+  const eventName = lines.find(line => line.startsWith('event:'))?.slice(6).trim() || 'message';
+  const dataText = lines
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trim())
+    .join('\n');
+  if (!dataText) return;
+  try {
+    onEvent({ event: eventName, data: JSON.parse(dataText) });
+  } catch {
+    onEvent({ event: eventName, data: dataText });
+  }
 }
 
 export const authApi = {
@@ -533,4 +596,39 @@ export const eventCloseoutApi = {
 export const learningRecommendationsApi = {
   forEvent: (eventId: string, token: string) =>
     apiFetch<unknown>(`/learning-recommendations/events/${eventId}`, { token }),
+};
+
+export const stitchiApi = {
+  conversations: (token: string, filters?: { eventId?: string; includeTenant?: boolean }) => {
+    const params = new URLSearchParams();
+    if (filters?.eventId) params.set('eventId', filters.eventId);
+    if (filters?.includeTenant) params.set('includeTenant', 'true');
+    const query = params.toString();
+    return apiFetch<unknown[]>(`/stitchi/conversations${query ? `?${query}` : ''}`, { token });
+  },
+  createConversation: (data: unknown, token: string) =>
+    apiFetch<unknown>('/stitchi/conversations', { method: 'POST', body: data, token }),
+  messages: (conversationId: string, token: string) =>
+    apiFetch<unknown[]>(`/stitchi/conversations/${conversationId}/messages`, { token }),
+  actions: (conversationId: string, token: string) =>
+    apiFetch<unknown[]>(`/stitchi/conversations/${conversationId}/actions`, { token }),
+  orchestrate: (conversationId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/stitchi/conversations/${conversationId}/orchestrate`, { method: 'POST', body: data, token }),
+  respondStream: (
+    conversationId: string,
+    data: unknown,
+    token: string,
+    onEvent: (event: { event: string; data: unknown }) => void,
+  ) => apiStream(`/stitchi/conversations/${conversationId}/respond/stream`, {
+    method: 'POST',
+    body: data,
+    token,
+    onEvent,
+  }),
+  approveAction: (actionId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/stitchi/actions/${actionId}/approve`, { method: 'POST', body: data, token }),
+  rejectAction: (actionId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/stitchi/actions/${actionId}/reject`, { method: 'POST', body: data, token }),
+  executeAction: (actionId: string, token: string) =>
+    apiFetch<unknown>(`/stitchi/actions/${actionId}/execute`, { method: 'POST', token }),
 };

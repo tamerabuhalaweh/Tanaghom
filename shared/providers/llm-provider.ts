@@ -2,6 +2,7 @@ export interface LLMProvider {
   name: string;
   type: 'mock' | 'openai' | 'claude' | 'deepseek' | 'gemma';
   generate(prompt: string, options?: GenerateOptions): Promise<LLMResponse>;
+  streamGenerate(prompt: string, options?: GenerateOptions): AsyncGenerator<LLMStreamEvent>;
   isConfigured(): boolean;
   getStatus(): LLMProviderStatus;
 }
@@ -20,6 +21,10 @@ export interface LLMResponse {
   provider: string;
   usage?: { promptTokens: number; completionTokens: number };
 }
+
+export type LLMStreamEvent =
+  | { type: 'token'; text: string }
+  | { type: 'done'; response: LLMResponse };
 
 export interface LLMProviderStatus {
   name: string;
@@ -57,6 +62,10 @@ export class MockLLMProvider implements LLMProvider {
       model: 'fallback-course-social-v1',
       provider: 'mock',
     };
+  }
+
+  async *streamGenerate(prompt: string, options?: GenerateOptions): AsyncGenerator<LLMStreamEvent> {
+    yield* streamStaticResponse(await this.generate(prompt, options));
   }
 
   isConfigured(): boolean {
@@ -126,6 +135,36 @@ export class OpenAILLMProvider implements LLMProvider {
         completionTokens: data.usage.output_tokens || 0,
       } : undefined,
     };
+  }
+
+  async *streamGenerate(prompt: string, options?: GenerateOptions): AsyncGenerator<LLMStreamEvent> {
+    if (!this.isConfigured()) {
+      throw new Error('OpenAI provider not configured: missing OPENAI_API_KEY');
+    }
+    const model = options?.model || this.model;
+    const response = await fetchWithTimeout('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        input: [
+          ...(options?.systemPrompt ? [{ role: 'system', content: options.systemPrompt }] : []),
+          { role: 'user', content: prompt },
+        ],
+        max_output_tokens: options?.maxTokens || 700,
+        temperature: options?.temperature ?? 0.7,
+        stream: true,
+      }),
+    }, options?.timeoutMs);
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API returned ${response.status}`);
+    }
+
+    yield* streamProviderResponse(response, { model, provider: 'openai' });
   }
 
   isConfigured(): boolean {
@@ -200,6 +239,35 @@ export class ClaudeLLMProvider implements LLMProvider {
     };
   }
 
+  async *streamGenerate(prompt: string, options?: GenerateOptions): AsyncGenerator<LLMStreamEvent> {
+    if (!this.isConfigured()) {
+      throw new Error('Claude provider not configured: missing CLAUDE_API_KEY');
+    }
+    const model = options?.model || this.model;
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': this.apiKey,
+        'anthropic-version': process.env.CLAUDE_API_VERSION || '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: options?.maxTokens || 700,
+        temperature: options?.temperature ?? 0.7,
+        system: options?.systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
+        stream: true,
+      }),
+    }, options?.timeoutMs);
+
+    if (!response.ok) {
+      throw new Error(`Claude API returned ${response.status}`);
+    }
+
+    yield* streamProviderResponse(response, { model, provider: 'claude' });
+  }
+
   isConfigured(): boolean {
     return this.apiKey.length > 0;
   }
@@ -271,6 +339,37 @@ export class DeepSeekLLMProvider implements LLMProvider {
         completionTokens: data.usage.completion_tokens || 0,
       } : undefined,
     };
+  }
+
+  async *streamGenerate(prompt: string, options?: GenerateOptions): AsyncGenerator<LLMStreamEvent> {
+    if (!this.isConfigured()) {
+      throw new Error('DeepSeek provider not configured: missing DEEPSEEK_API_KEY');
+    }
+    const model = options?.model || this.model;
+    const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          ...(options?.systemPrompt ? [{ role: 'system', content: options.systemPrompt }] : []),
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: options?.maxTokens || 700,
+        temperature: options?.temperature ?? 0.7,
+        stream: true,
+        thinking: { type: 'disabled' },
+      }),
+    }, options?.timeoutMs);
+
+    if (!response.ok) {
+      throw new Error(`DeepSeek API returned ${response.status}`);
+    }
+
+    yield* streamProviderResponse(response, { model, provider: 'deepseek' });
   }
 
   isConfigured(): boolean {
@@ -353,6 +452,41 @@ export class GemmaLLMProvider implements LLMProvider {
         completionTokens: data.usage.completion_tokens || 0,
       } : undefined,
     };
+  }
+
+  async *streamGenerate(prompt: string, options?: GenerateOptions): AsyncGenerator<LLMStreamEvent> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemma provider not configured: missing GEMMA_API_KEY');
+    }
+    const model = options?.model || this.model;
+    const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          ...(options?.systemPrompt ? [{ role: 'system', content: options.systemPrompt }] : []),
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: options?.maxTokens || 700,
+        temperature: options?.temperature ?? 0.7,
+        top_p: 0.9,
+        stream: true,
+      }),
+    }, options?.timeoutMs);
+
+    if (!response.ok) {
+      throw new LLMProviderError(
+        `Gemma API returned ${response.status}. The provider may be busy; please try again.`,
+        response.status >= 500 || response.status === 429 ? 502 : 400,
+        'LLM_PROVIDER_UNAVAILABLE',
+      );
+    }
+
+    yield* streamProviderResponse(response, { model, provider: 'gemma' });
   }
 
   isConfigured(): boolean {
@@ -495,6 +629,120 @@ function extractOpenAIText(data: OpenAIResponsePayload): string {
     .map((part) => part.text || '')
     .join('\n')
     .trim() || '';
+}
+
+async function* streamStaticResponse(response: LLMResponse): AsyncGenerator<LLMStreamEvent> {
+  for (const chunk of chunkText(response.text)) {
+    yield { type: 'token', text: chunk };
+  }
+  yield { type: 'done', response };
+}
+
+async function* streamProviderResponse(
+  response: Response,
+  output: { model: string; provider: string },
+): AsyncGenerator<LLMStreamEvent> {
+  let text = '';
+  for await (const payload of iterateSseJson(response)) {
+    const delta = extractStreamingText(payload);
+    if (delta) {
+      text += delta;
+      yield { type: 'token', text: delta };
+    }
+  }
+
+  const normalized = text.trim();
+  if (!normalized) {
+    throw new Error(`${output.provider} API returned no streamed text output`);
+  }
+
+  yield {
+    type: 'done',
+    response: {
+      text: normalized,
+      model: output.model,
+      provider: output.provider,
+    },
+  };
+}
+
+async function* iterateSseJson(response: Response): AsyncGenerator<unknown> {
+  if (!response.body) {
+    throw new Error('Provider streaming response did not include a readable body');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() || '';
+      for (const event of events) {
+        yield* parseSseEvent(event);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      yield* parseSseEvent(buffer);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function* parseSseEvent(rawEvent: string): Generator<unknown> {
+  const dataLines = rawEvent
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim())
+    .filter(Boolean);
+
+  for (const data of dataLines) {
+    if (data === '[DONE]') continue;
+    try {
+      yield JSON.parse(data);
+    } catch {
+      continue;
+    }
+  }
+}
+
+function extractStreamingText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+  const record = payload as Record<string, unknown>;
+
+  if (typeof record.delta === 'string') return record.delta;
+  if (record.delta && typeof record.delta === 'object') {
+    const delta = record.delta as Record<string, unknown>;
+    if (typeof delta.text === 'string') return delta.text;
+    if (typeof delta.content === 'string') return delta.content;
+  }
+
+  if (typeof record.text === 'string' && record.type === 'response.output_text.delta') return record.text;
+  if (typeof record.content === 'string') return record.content;
+
+  const choices = record.choices;
+  if (Array.isArray(choices) && choices.length > 0) {
+    const first = choices[0] as Record<string, unknown>;
+    const delta = first.delta as Record<string, unknown> | undefined;
+    if (delta && typeof delta.content === 'string') return delta.content;
+    const message = first.message as Record<string, unknown> | undefined;
+    if (message && typeof message.content === 'string') return message.content;
+  }
+
+  const contentBlock = record.content_block as Record<string, unknown> | undefined;
+  if (contentBlock && typeof contentBlock.text === 'string') return contentBlock.text;
+
+  return '';
+}
+
+function chunkText(text: string): string[] {
+  const chunks = text.match(/.{1,48}(\s|$)/g)?.map((chunk) => chunk) || [text];
+  return chunks.filter((chunk) => chunk.length > 0);
 }
 
 function extractPromptValue(prompt: string, label: string): string {

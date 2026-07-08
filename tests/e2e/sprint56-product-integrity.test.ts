@@ -39,12 +39,11 @@ describe('Sprint 56 production product integrity contracts', () => {
     const layout = source('frontend', 'src', 'components', 'Layout.tsx');
 
     const navigationContracts = [
-      { path: '/command-center', route: 'command-center', label: 'Dashboard' },
-      { path: '/growth', route: 'growth', label: 'Growth Engine' },
+      { path: '/command-center', route: 'command-center', label: 'Home' },
       { path: '/events', route: 'events', label: 'Events' },
       { path: '/campaigns', route: 'campaigns', label: 'Campaigns' },
-      { path: '/ideas', route: 'ideas', label: 'Content Creator' },
-      { path: '/approvals', route: 'approvals', label: 'Review & Approve' },
+      { path: '/ideas', route: 'ideas', label: 'Content' },
+      { path: '/approvals', route: 'approvals', label: 'Review' },
       { path: '/publishing', route: 'publishing', label: 'Scheduling' },
       { path: '/analytics', route: 'analytics', label: 'Performance' },
       { path: '/my-agent-rep', route: 'my-agent-rep', label: 'My Profile' },
@@ -56,7 +55,7 @@ describe('Sprint 56 production product integrity contracts', () => {
       { path: '/operations', route: 'operations', label: 'Operations' },
       { path: '/runtime-infrastructure', route: 'runtime-infrastructure', label: 'Runtime Evidence' },
       { path: '/smartlabs-voice', route: 'smartlabs-voice', label: 'SmartLabs Voice' },
-      { path: '/mcp-engine', route: 'mcp-engine', label: 'Integrations' },
+      { path: '/mcp-engine', route: 'mcp-engine', label: 'Connector Registry' },
       { path: '/integration-credentials', route: 'integration-credentials', label: 'Integrations' },
       { path: '/safety', route: 'safety', label: 'Security' },
       { path: '/observability', route: 'observability', label: 'Activity Log' },

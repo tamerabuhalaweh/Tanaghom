@@ -54,6 +54,7 @@ import { ghlSetupRouter } from '../modules/ghl-setup/controller';
 import { ghlSyncRouter } from '../modules/ghl-sync/controller';
 import { postizChannelRouter } from '../modules/postiz-channel-selection/controller';
 import { smartlabsValidationRouter } from '../modules/smartlabs-validation/controller';
+import { stitchiRouter } from '../modules/stitchi/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -278,6 +279,7 @@ app.use('/ghl-setup', ghlSetupRouter);
 app.use('/ghl-sync', ghlSyncRouter);
 app.use('/postiz-channels', postizChannelRouter);
 app.use('/smartlabs-validation', smartlabsValidationRouter);
+app.use('/stitchi', stitchiRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {

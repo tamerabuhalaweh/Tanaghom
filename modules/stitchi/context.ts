@@ -1,0 +1,313 @@
+import { prisma } from '@shared/database';
+import type { StitchiConversationSummary } from './types';
+
+export interface StitchiReadOnlyContext {
+  conversation: {
+    id: string;
+    title: string;
+    eventId: string | null;
+  };
+  selectedEvent: EventContext | null;
+  recentEvents: EventContext[];
+  leadSummary: {
+    total: number;
+    byStatus: Record<string, number>;
+    byTemperature: Record<string, number>;
+    purchases: number;
+    knownRevenue: number;
+  };
+  kpiSummary: {
+    records: number;
+    reach: number;
+    impressions: number;
+    interactions: number;
+    clicks: number;
+    formCompletions: number;
+    leads: number;
+    meetingsBooked: number;
+    meetingsAttended: number;
+    purchases: number;
+    noShows: number;
+    spend: number;
+  };
+  riskSummary: {
+    open: number;
+    critical: number;
+    topOpen: Array<{ title: string; severity: string; category: string }>;
+  };
+  connectorSummary: {
+    configuredCredentials: number;
+    connectorJobs: number;
+    readyForSync: number;
+    synced: number;
+    blocked: number;
+  };
+  guardrails: {
+    mode: 'read_only';
+    writesExecuted: false;
+    externalExecution: 'blocked';
+    secretsReturned: false;
+  };
+}
+
+interface EventContext {
+  id: string;
+  name: string;
+  status: string;
+  eventType: string;
+  eventDate: Date;
+  location: string | null;
+  plannedBudget: number | null;
+  revenueTarget: number | null;
+  selectedChannels: string[];
+}
+
+export async function loadReadOnlyContext(
+  tenantKey: string,
+  conversation: StitchiConversationSummary,
+  requestedEventId?: string,
+): Promise<StitchiReadOnlyContext> {
+  const eventId = requestedEventId || conversation.eventId || undefined;
+
+  const [
+    selectedEvent,
+    recentEvents,
+    leads,
+    kpis,
+    openProblems,
+    credentials,
+    connectorJobs,
+  ] = await Promise.all([
+    eventId
+      ? prisma.commercialEvent.findFirst({
+        where: { id: eventId, tenant_key: tenantKey },
+        select: eventSelect,
+      })
+      : Promise.resolve(null),
+    prisma.commercialEvent.findMany({
+      where: { tenant_key: tenantKey },
+      select: eventSelect,
+      orderBy: { event_date: 'desc' },
+      take: 5,
+    }),
+    prisma.leadCaptureRecord.findMany({
+      where: { tenant_key: tenantKey, ...(eventId ? { event_id: eventId } : {}) },
+      select: {
+        lead_status: true,
+        lead_temperature: true,
+        purchase_amount: true,
+      },
+      take: 500,
+    }),
+    prisma.eventKpiRecord.findMany({
+      where: { tenant_key: tenantKey, ...(eventId ? { event_id: eventId } : {}) },
+      select: {
+        reach: true,
+        impressions: true,
+        interactions: true,
+        clicks: true,
+        form_completions: true,
+        leads: true,
+        meetings_booked: true,
+        meetings_attended: true,
+        purchases: true,
+        no_shows: true,
+        spend: true,
+      },
+      take: 500,
+    }),
+    prisma.eventProblem.findMany({
+      where: { tenant_key: tenantKey, ...(eventId ? { event_id: eventId } : {}), status: { in: ['open', 'investigating'] } },
+      select: {
+        title: true,
+        severity: true,
+        category: true,
+      },
+      orderBy: [{ severity: 'desc' }, { created_at: 'desc' }],
+      take: 5,
+    }),
+    prisma.integrationCredential.findMany({
+      where: { tenant_key: tenantKey, is_active: true },
+      select: { id: true },
+      take: 100,
+    }),
+    prisma.connectorImportJob.findMany({
+      where: { tenant_key: tenantKey, ...(eventId ? { event_id: eventId } : {}) },
+      select: {
+        sync_status: true,
+        state: true,
+      },
+      take: 100,
+    }),
+  ]);
+
+  return {
+    conversation: {
+      id: conversation.id,
+      title: conversation.title,
+      eventId: conversation.eventId,
+    },
+    selectedEvent: selectedEvent ? mapEvent(selectedEvent) : null,
+    recentEvents: recentEvents.map(mapEvent),
+    leadSummary: summarizeLeads(leads),
+    kpiSummary: summarizeKpis(kpis),
+    riskSummary: summarizeProblems(openProblems),
+    connectorSummary: summarizeConnectors(credentials.length, connectorJobs),
+    guardrails: {
+      mode: 'read_only',
+      writesExecuted: false,
+      externalExecution: 'blocked',
+      secretsReturned: false,
+    },
+  };
+}
+
+export function formatReadOnlyContextForPrompt(context: StitchiReadOnlyContext): string {
+  return JSON.stringify(context, (_key, value) => {
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    return value;
+  });
+}
+
+const eventSelect = {
+  id: true,
+  name: true,
+  status: true,
+  event_type: true,
+  event_date: true,
+  location: true,
+  planned_budget: true,
+  revenue_target: true,
+  selected_channels: true,
+} as const;
+
+function mapEvent(event: {
+  id: string;
+  name: string;
+  status: unknown;
+  event_type: unknown;
+  event_date: Date;
+  location: string | null;
+  planned_budget: unknown;
+  revenue_target: unknown;
+  selected_channels: string[];
+}): EventContext {
+  return {
+    id: event.id,
+    name: event.name,
+    status: String(event.status),
+    eventType: String(event.event_type),
+    eventDate: event.event_date,
+    location: event.location,
+    plannedBudget: decimalToNumber(event.planned_budget),
+    revenueTarget: decimalToNumber(event.revenue_target),
+    selectedChannels: event.selected_channels,
+  };
+}
+
+function summarizeLeads(leads: Array<{ lead_status: unknown; lead_temperature: unknown; purchase_amount: unknown }>) {
+  const byStatus: Record<string, number> = {};
+  const byTemperature: Record<string, number> = {};
+  let purchases = 0;
+  let knownRevenue = 0;
+
+  for (const lead of leads) {
+    const status = String(lead.lead_status);
+    const temperature = String(lead.lead_temperature);
+    byStatus[status] = (byStatus[status] || 0) + 1;
+    byTemperature[temperature] = (byTemperature[temperature] || 0) + 1;
+    const purchaseAmount = decimalToNumber(lead.purchase_amount) || 0;
+    if (purchaseAmount > 0 || status === 'purchased') purchases += 1;
+    knownRevenue += purchaseAmount;
+  }
+
+  return {
+    total: leads.length,
+    byStatus,
+    byTemperature,
+    purchases,
+    knownRevenue,
+  };
+}
+
+function summarizeKpis(kpis: Array<{
+  reach: number;
+  impressions: number;
+  interactions: number;
+  clicks: number;
+  form_completions: number;
+  leads: number;
+  meetings_booked: number;
+  meetings_attended: number;
+  purchases: number;
+  no_shows: number;
+  spend: unknown;
+}>) {
+  return kpis.reduce((summary, row) => {
+    summary.records += 1;
+    summary.reach += row.reach;
+    summary.impressions += row.impressions;
+    summary.interactions += row.interactions;
+    summary.clicks += row.clicks;
+    summary.formCompletions += row.form_completions;
+    summary.leads += row.leads;
+    summary.meetingsBooked += row.meetings_booked;
+    summary.meetingsAttended += row.meetings_attended;
+    summary.purchases += row.purchases;
+    summary.noShows += row.no_shows;
+    summary.spend += decimalToNumber(row.spend) || 0;
+    return summary;
+  }, {
+    records: 0,
+    reach: 0,
+    impressions: 0,
+    interactions: 0,
+    clicks: 0,
+    formCompletions: 0,
+    leads: 0,
+    meetingsBooked: 0,
+    meetingsAttended: 0,
+    purchases: 0,
+    noShows: 0,
+    spend: 0,
+  });
+}
+
+function summarizeProblems(problems: Array<{ title: string; severity: unknown; category: unknown }>) {
+  return {
+    open: problems.length,
+    critical: problems.filter((problem) => String(problem.severity) === 'critical').length,
+    topOpen: problems.slice(0, 3).map((problem) => ({
+      title: problem.title,
+      severity: String(problem.severity),
+      category: String(problem.category),
+    })),
+  };
+}
+
+function summarizeConnectors(
+  configuredCredentials: number,
+  jobs: Array<{ sync_status: unknown; state: unknown }>,
+) {
+  return {
+    configuredCredentials,
+    connectorJobs: jobs.length,
+    readyForSync: jobs.filter((job) => String(job.sync_status) === 'ready_for_sync' || String(job.state) === 'test_passed').length,
+    synced: jobs.filter((job) => String(job.sync_status) === 'synced').length,
+    blocked: jobs.filter((job) => ['blocked', 'failed'].includes(String(job.sync_status)) || String(job.state) === 'blocked').length,
+  };
+}
+
+function decimalToNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return Number(value);
+  if (typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+    return value.toNumber();
+  }
+  if (typeof value === 'object' && 'toString' in value && typeof value.toString === 'function') {
+    const parsed = Number(value.toString());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}

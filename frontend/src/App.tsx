@@ -41,6 +41,7 @@ import EventStrategyWizard from './pages/EventStrategyWizard'
 import MasterEventsDashboard from './pages/MasterEventsDashboard'
 import HybridEventWorkspace from './pages/HybridEventWorkspace'
 import AieroInspiredPreview from './pages/AieroInspiredPreview'
+import Stitchi from './pages/Stitchi'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
@@ -108,6 +109,7 @@ function App() {
             <Route path="events/advanced" element={<EventDashboard />} />
             <Route path="events/advanced/:eventId" element={<EventDashboard />} />
             <Route path="events/:eventId" element={<HybridEventWorkspace />} />
+            <Route path="stitchi" element={<Stitchi />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
             <Route path="approvals" element={<ApprovalQueue />} />
