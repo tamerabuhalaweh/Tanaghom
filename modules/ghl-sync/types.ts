@@ -104,6 +104,8 @@ export interface GhlSyncRunSummary {
   errors: string[];
   warnings: string[];
   rawPayloadReturned: false;
+  providerEndpoint: string | null;
+  durationMs: number | null;
   startedAt: Date;
   completedAt: Date | null;
 }

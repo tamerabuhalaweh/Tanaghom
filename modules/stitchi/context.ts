@@ -1,4 +1,5 @@
 import { prisma } from '@shared/database';
+import { getGhlSyncStatus } from '../ghl-sync/repository';
 import type { StitchiConversationSummary } from './types';
 
 export interface StitchiReadOnlyContext {
@@ -48,6 +49,21 @@ export interface StitchiReadOnlyContext {
     readyForSync: number;
     synced: number;
     blocked: number;
+  };
+  ghlCrm: {
+    sourceOfTruth: 'gohighlevel';
+    tanaghumRole: 'operating_reporting_layer';
+    credentialStatus: string;
+    mappingStatus: string;
+    readinessStatus: string;
+    readyForReadSync: boolean;
+    readSyncEnabled: boolean;
+    writeBackEnabled: boolean;
+    externalWritesAllowed: false;
+    mirroredLeadCount: number;
+    lastSyncAt: Date | null;
+    requiredActions: string[];
+    rawSecretsReturned: false;
   };
   commercialCenter: {
     configuredRevenueLines: number;
@@ -135,6 +151,7 @@ export async function loadReadOnlyContext(
     openProblems,
     credentials,
     connectorJobs,
+    ghlCrm,
     revenueLines,
     commercialPlans,
     assessmentSignals,
@@ -210,6 +227,7 @@ export async function loadReadOnlyContext(
       },
       take: 100,
     }),
+    loadGhlCrmSummary(tenantKey, eventId),
     commercialClients.commercialRevenueLine?.findMany({
       where: { tenant_key: tenantKey },
       select: {
@@ -267,6 +285,7 @@ export async function loadReadOnlyContext(
     kpiSummary: summarizeKpis(kpis),
     riskSummary: summarizeProblems(openProblems),
     connectorSummary: summarizeConnectors(credentials.length, connectorJobs),
+    ghlCrm,
     commercialCenter: {
       configuredRevenueLines: revenueLines.filter(line => String(line.status) === 'active').length,
       activePlans: commercialPlans.filter(plan => String(plan.status) === 'active').length,
@@ -297,6 +316,43 @@ export async function loadReadOnlyContext(
       secretsReturned: false,
     },
   };
+}
+
+async function loadGhlCrmSummary(tenantKey: string, eventId?: string) {
+  try {
+    const status = await getGhlSyncStatus(tenantKey, eventId);
+    return {
+      sourceOfTruth: 'gohighlevel' as const,
+      tanaghumRole: 'operating_reporting_layer' as const,
+      credentialStatus: status.credentialStatus,
+      mappingStatus: status.mappingStatus,
+      readinessStatus: status.acceptance.status,
+      readyForReadSync: status.acceptance.readyForReadSync,
+      readSyncEnabled: status.readSyncEnabled,
+      writeBackEnabled: status.writeBackEnabled,
+      externalWritesAllowed: false as const,
+      mirroredLeadCount: status.ghlLeadCount,
+      lastSyncAt: status.lastSyncAt,
+      requiredActions: status.requiredActions,
+      rawSecretsReturned: false as const,
+    };
+  } catch {
+    return {
+      sourceOfTruth: 'gohighlevel' as const,
+      tanaghumRole: 'operating_reporting_layer' as const,
+      credentialStatus: 'unknown',
+      mappingStatus: 'unknown',
+      readinessStatus: 'unavailable',
+      readyForReadSync: false,
+      readSyncEnabled: false,
+      writeBackEnabled: false,
+      externalWritesAllowed: false as const,
+      mirroredLeadCount: 0,
+      lastSyncAt: null,
+      requiredActions: ['GoHighLevel CRM readiness could not be loaded. Ask an admin to check Connector Setup.'],
+      rawSecretsReturned: false as const,
+    };
+  }
 }
 
 export function formatReadOnlyContextForPrompt(context: StitchiReadOnlyContext): string {
