@@ -21,6 +21,8 @@ import {
   createRevenueLineSchema,
   updateCommercialPlanSchema,
 } from '@modules/commercial-command-center/types';
+import * as commercialDisciplineService from '@modules/commercial-disciplines/service';
+import { createDisciplineRecordSchema } from '@modules/commercial-disciplines/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -38,6 +40,7 @@ const SUPPORTED_ACTIONS = [
   'create_commercial_plan_with_revenue_line',
   'update_commercial_plan',
   'create_commercial_assessment_signal',
+  'create_commercial_discipline_record',
 ] as const;
 
 export type StitchiExecutableActionType = (typeof SUPPORTED_ACTIONS)[number];
@@ -182,6 +185,11 @@ export async function executeStitchiAction(input: {
       const payload = createAssessmentSignalSchema.parse(input.inputPayload);
       const result = await commercialCenterService.createAssessmentSignal(input.role, input.tenantKey, input.userId, payload);
       return { objectType: 'commercial_assessment_signal', objectId: result.id, result };
+    }
+    case 'create_commercial_discipline_record': {
+      const payload = createDisciplineRecordSchema.parse(input.inputPayload);
+      const result = await commercialDisciplineService.createRecord(input.role, input.tenantKey, input.userId, payload);
+      return { objectType: 'commercial_discipline_record', objectId: result.id, result };
     }
     default:
       throw new ForbiddenError('Stitchi action is not executable');

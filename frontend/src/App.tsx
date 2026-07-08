@@ -43,6 +43,7 @@ import HybridEventWorkspace from './pages/HybridEventWorkspace'
 import AieroInspiredPreview from './pages/AieroInspiredPreview'
 import Stitchi from './pages/Stitchi'
 import CommercialCommandCenter from './pages/CommercialCommandCenter'
+import CommercialDisciplines from './pages/CommercialDisciplines'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
@@ -111,6 +112,7 @@ function App() {
             <Route path="events/advanced/:eventId" element={<EventDashboard />} />
             <Route path="events/:eventId" element={<HybridEventWorkspace />} />
             <Route path="stitchi" element={<Stitchi />} />
+            <Route path="disciplines" element={<CommercialDisciplines />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
             <Route path="approvals" element={<ApprovalQueue />} />

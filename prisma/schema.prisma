@@ -126,6 +126,7 @@ model Tenant {
   commercial_revenue_lines CommercialRevenueLine[]
   commercial_plans CommercialPlan[]
   commercial_assessment_signals CommercialAssessmentSignal[]
+  commercial_discipline_records CommercialDisciplineRecord[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[]
@@ -297,6 +298,8 @@ model User {
   commercial_plans_owned CommercialPlan[] @relation("CommercialPlanOwner")
   commercial_plans_created CommercialPlan[] @relation("CommercialPlanCreatedBy")
   commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
+  commercial_discipline_records_owned CommercialDisciplineRecord[] @relation("CommercialDisciplineRecordOwner")
+  commercial_discipline_records_created CommercialDisciplineRecord[] @relation("CommercialDisciplineRecordCreatedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[] @relation("StitchiConversationUser")
   stitchi_action_runs StitchiActionRun[] @relation("StitchiActionRunUser")
@@ -3675,6 +3678,54 @@ enum CommercialAssessmentStatus {
   dismissed
 }
 
+enum CommercialDisciplineId {
+  brand_positioning
+  acquisition
+  conversion_closing
+  growth_retention
+  commercial_operations
+}
+
+enum CommercialDisciplineRecordCategory {
+  research_note
+  competitor_intelligence
+  brand_voice
+  messaging_library
+  pr_partnership
+  paid_media
+  seo_keyword
+  influencer_partnership
+  attribution
+  approved_script
+  objection_handling
+  closer_feedback
+  cro_note
+  upsell_ascension
+  platinum_elite
+  b2b_account
+  trainer_network
+  loyalty_lifecycle
+  crm_data_quality
+  tech_stack
+  reporting_schedule
+  training_library
+}
+
+enum CommercialDisciplineRecordStatus {
+  draft
+  active
+  blocked
+  completed
+  archived
+}
+
+enum CommercialDisciplineRecordPriority {
+  low
+  medium
+  high
+  critical
+}
+
 enum EventKpiSourceType {
   manual
   imported
@@ -3699,6 +3750,7 @@ model CommercialRevenueLine {
   created_by         User                        @relation("CommercialRevenueLineCreatedBy", fields: [created_by_user_id], references: [id])
   plans              CommercialPlan[]
   assessment_signals CommercialAssessmentSignal[]
+  discipline_records CommercialDisciplineRecord[]
 
   @@unique([tenant_key, revenue_line_type])
   @@index([tenant_key])
@@ -3735,6 +3787,7 @@ model CommercialPlan {
   owner              User?                    @relation("CommercialPlanOwner", fields: [owner_user_id], references: [id])
   created_by         User                     @relation("CommercialPlanCreatedBy", fields: [created_by_user_id], references: [id])
   assessment_signals CommercialAssessmentSignal[]
+  discipline_records CommercialDisciplineRecord[]
 
   @@index([tenant_key])
   @@index([revenue_line_id])
@@ -3773,6 +3826,44 @@ model CommercialAssessmentSignal {
   @@index([status])
   @@index([created_by_user_id])
   @@map("commercial_assessment_signals")
+}
+
+model CommercialDisciplineRecord {
+  id                 String                              @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  discipline         CommercialDisciplineId
+  category           CommercialDisciplineRecordCategory
+  title              String
+  summary            String?                             @db.Text
+  details            String?                             @db.Text
+  status             CommercialDisciplineRecordStatus    @default(active)
+  priority           CommercialDisciplineRecordPriority  @default(medium)
+  source_type        String                              @default("manual")
+  revenue_line_id    String?                             @db.Uuid
+  commercial_plan_id String?                             @db.Uuid
+  event_id           String?                             @db.Uuid
+  owner_user_id      String?                             @db.Uuid
+  created_by_user_id String                              @db.Uuid
+  created_at         DateTime                            @default(now())
+  updated_at         DateTime                            @updatedAt
+
+  tenant       Tenant                 @relation(fields: [tenant_key], references: [tenant_key])
+  revenue_line CommercialRevenueLine? @relation(fields: [revenue_line_id], references: [id], onDelete: SetNull)
+  commercial_plan CommercialPlan?     @relation(fields: [commercial_plan_id], references: [id], onDelete: SetNull)
+  event        CommercialEvent?       @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  owner        User?                  @relation("CommercialDisciplineRecordOwner", fields: [owner_user_id], references: [id])
+  created_by   User                   @relation("CommercialDisciplineRecordCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([discipline])
+  @@index([category])
+  @@index([status])
+  @@index([priority])
+  @@index([revenue_line_id])
+  @@index([commercial_plan_id])
+  @@index([event_id])
+  @@index([owner_user_id])
+  @@map("commercial_discipline_records")
 }
 
 model CommercialEvent {
@@ -3818,7 +3909,8 @@ model CommercialEvent {
     connector_field_mappings ConnectorFieldMapping[]
     ghl_lead_sync_runs  GhlLeadSyncRun[]
     stitchi_conversations StitchiConversation[]
-    commercial_plans    CommercialPlan[]
+  commercial_plans    CommercialPlan[]
+  discipline_records  CommercialDisciplineRecord[]
 
   @@index([tenant_key])
   @@index([event_type])

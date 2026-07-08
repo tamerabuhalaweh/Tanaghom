@@ -612,6 +612,20 @@ export const commercialCommandCenterApi = {
     apiFetch<unknown>('/commercial-command-center/assessment-signals', { method: 'POST', body: data, token }),
 };
 
+export const commercialDisciplinesApi = {
+  workspaces: (token: string) => apiFetch<unknown[]>('/commercial-disciplines/workspaces', { token }),
+  records: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-disciplines/records${params}`, { token });
+  },
+  createRecord: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-disciplines/records', { method: 'POST', body: data, token }),
+  updateRecord: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-disciplines/records/${id}`, { method: 'PUT', body: data, token }),
+  context: (token: string, discipline?: string) =>
+    apiFetch<unknown>(`/commercial-disciplines/context${discipline ? `?discipline=${encodeURIComponent(discipline)}` : ''}`, { token }),
+};
+
 export const eventProblemsApi = {
   list: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';

@@ -353,6 +353,8 @@ async function deriveActionProposal(
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
+  const disciplineProposal = deriveDisciplineActionProposal(content, eventId, context, metadata);
+  if (disciplineProposal) return disciplineProposal;
   const commercialProposal = await deriveCommercialCenterActionProposalV2(content, userId, context, metadata);
   if (commercialProposal) return commercialProposal;
   if (!eventId) return null;
@@ -411,6 +413,63 @@ async function deriveActionProposal(
   }
 
   return null;
+}
+
+function deriveDisciplineActionProposal(
+  content: string,
+  eventId?: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): ActionProposal | null {
+  const lower = content.toLowerCase();
+  if (
+    eventId
+    && /(problem|risk|blocker|issue|delay|no-show|noshow)/i.test(lower)
+    && !/(workspace|discipline|record|library|approved script|objection handling|brand voice|messaging library|crm data quality|reporting schedule|training library)/i.test(lower)
+  ) {
+    return null;
+  }
+  if (!/(brand|positioning|competitor|voice|message|messaging|partnership|acquisition|paid media|seo|keyword|influencer|attribution|conversion|closing|script|objection|closer|cro|growth|retention|upsell|platinum|b2b|trainer|loyalty|operations|crm|data quality|tech stack|reporting|training library|discipline|workspace)/i.test(lower)) {
+    return null;
+  }
+
+  const discipline = inferDiscipline(lower, metadata);
+  const category = inferDisciplineCategory(lower, discipline);
+  const title = firstSentence(content, `${disciplineLabel(discipline)} record`);
+  const revenueLineId = textMetadata(metadata, 'revenueLineId')
+    || context?.commercialCenter?.revenueLines?.[0]?.id
+    || undefined;
+  const commercialPlanId = extractUuidAfter(lower, 'commercial plan') || textMetadata(metadata, 'commercialPlanId') || undefined;
+
+  return {
+    actionType: 'create_commercial_discipline_record',
+    inputPayload: {
+      discipline,
+      category,
+      title,
+      summary: cleanText(content),
+      details: cleanText(content),
+      priority: /(critical|urgent|high|blocker|risk|important)/i.test(lower) ? 'high' : 'medium',
+      status: /(draft|idea|proposal)/i.test(lower) ? 'draft' : 'active',
+      sourceType: 'stitchi',
+      revenueLineId: revenueLineId || undefined,
+      commercialPlanId,
+      eventId: eventId || textMetadata(metadata, 'eventId') || undefined,
+    },
+    previewPayload: {
+      discipline,
+      disciplineLabel: disciplineLabel(discipline),
+      category,
+      title,
+      revenueLineId: revenueLineId || null,
+      commercialPlanId: commercialPlanId || null,
+      eventId: eventId || textMetadata(metadata, 'eventId') || null,
+      approvalRequired: true,
+      externalExecution: 'blocked',
+    },
+    riskLevel: 'medium',
+    reason: `create a ${disciplineLabel(discipline)} workspace record`,
+  };
 }
 
 async function deriveCommercialCenterActionProposalV2(
@@ -836,6 +895,101 @@ function derivePlannerActionProposal(content: string, lower: string, eventId: st
   }
 
   return null;
+}
+
+type DisciplineId =
+  | 'brand_positioning'
+  | 'acquisition'
+  | 'conversion_closing'
+  | 'growth_retention'
+  | 'commercial_operations';
+
+function inferDiscipline(lower: string, metadata?: Record<string, unknown>): DisciplineId {
+  const metadataDiscipline = textMetadata(metadata, 'discipline');
+  if (isDisciplineId(metadataDiscipline)) return metadataDiscipline;
+  if (/(brand|positioning|competitor|voice|message|messaging|\bpr\b|partnership)/i.test(lower)) return 'brand_positioning';
+  if (/(acquisition|paid media|ad |ads|seo|keyword|influencer|attribution|lead source)/i.test(lower)) return 'acquisition';
+  if (/(conversion|closing|script|objection|closer|cro|landing page|sales call)/i.test(lower)) return 'conversion_closing';
+  if (/(growth|retention|upsell|ascension|platinum|b2b|trainer|loyalty|community|renewal)/i.test(lower)) return 'growth_retention';
+  return 'commercial_operations';
+}
+
+function inferDisciplineCategory(lower: string, discipline: DisciplineId):
+  | 'research_note'
+  | 'competitor_intelligence'
+  | 'brand_voice'
+  | 'messaging_library'
+  | 'pr_partnership'
+  | 'paid_media'
+  | 'seo_keyword'
+  | 'influencer_partnership'
+  | 'attribution'
+  | 'approved_script'
+  | 'objection_handling'
+  | 'closer_feedback'
+  | 'cro_note'
+  | 'upsell_ascension'
+  | 'platinum_elite'
+  | 'b2b_account'
+  | 'trainer_network'
+  | 'loyalty_lifecycle'
+  | 'crm_data_quality'
+  | 'tech_stack'
+  | 'reporting_schedule'
+  | 'training_library' {
+  if (discipline === 'brand_positioning') {
+    if (/competitor/i.test(lower)) return 'competitor_intelligence';
+    if (/voice|tone/i.test(lower)) return 'brand_voice';
+    if (/message|messaging|copy/i.test(lower)) return 'messaging_library';
+    if (/pr|partner|partnership/i.test(lower)) return 'pr_partnership';
+    return 'research_note';
+  }
+  if (discipline === 'acquisition') {
+    if (/seo|keyword/i.test(lower)) return 'seo_keyword';
+    if (/influencer|partner/i.test(lower)) return 'influencer_partnership';
+    if (/attribution|source/i.test(lower)) return 'attribution';
+    return 'paid_media';
+  }
+  if (discipline === 'conversion_closing') {
+    if (/objection/i.test(lower)) return 'objection_handling';
+    if (/closer|feedback|reason/i.test(lower)) return 'closer_feedback';
+    if (/cro|landing page|form/i.test(lower)) return 'cro_note';
+    return 'approved_script';
+  }
+  if (discipline === 'growth_retention') {
+    if (/platinum|elite|premium/i.test(lower)) return 'platinum_elite';
+    if (/b2b|corporate|enterprise/i.test(lower)) return 'b2b_account';
+    if (/trainer|certified/i.test(lower)) return 'trainer_network';
+    if (/loyalty|community|renewal|retention/i.test(lower)) return 'loyalty_lifecycle';
+    return 'upsell_ascension';
+  }
+  if (/tech|stack|system|tool/i.test(lower)) return 'tech_stack';
+  if (/report|schedule|cadence/i.test(lower)) return 'reporting_schedule';
+  if (/training|script library|enablement/i.test(lower)) return 'training_library';
+  return 'crm_data_quality';
+}
+
+function isDisciplineId(value: string): value is DisciplineId {
+  return value === 'brand_positioning'
+    || value === 'acquisition'
+    || value === 'conversion_closing'
+    || value === 'growth_retention'
+    || value === 'commercial_operations';
+}
+
+function disciplineLabel(value: DisciplineId): string {
+  return {
+    brand_positioning: 'Brand & Positioning',
+    acquisition: 'Acquisition',
+    conversion_closing: 'Conversion & Closing',
+    growth_retention: 'Growth & Retention',
+    commercial_operations: 'Commercial Operations',
+  }[value];
+}
+
+function textMetadata(metadata: Record<string, unknown> | undefined, key: string): string {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
 type ResolvedRevenueLine = {

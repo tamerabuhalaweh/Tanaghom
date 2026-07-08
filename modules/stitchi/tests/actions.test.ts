@@ -17,12 +17,16 @@ const commercialCenterMocks = vi.hoisted(() => ({
   updatePlan: vi.fn(),
   createAssessmentSignal: vi.fn(),
 }));
+const commercialDisciplineMocks = vi.hoisted(() => ({
+  createRecord: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
 vi.mock('@modules/lead-lifecycle/service', () => leadServiceMocks);
 vi.mock('@modules/event-campaign-planner/service', () => plannerServiceMocks);
 vi.mock('@modules/commercial-command-center/service', () => commercialCenterMocks);
+vi.mock('@modules/commercial-disciplines/service', () => commercialDisciplineMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -43,6 +47,7 @@ describe('Stitchi action registry', () => {
     commercialCenterMocks.createPlan.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialCenterMocks.updatePlan.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialCenterMocks.createAssessmentSignal.mockResolvedValue({ id: 'commercial-signal-1' });
+    commercialDisciplineMocks.createRecord.mockResolvedValue({ id: 'discipline-record-1' });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -62,6 +67,7 @@ describe('Stitchi action registry', () => {
       'create_commercial_plan_with_revenue_line',
       'update_commercial_plan',
       'create_commercial_assessment_signal',
+      'create_commercial_discipline_record',
     ]);
   });
 
@@ -295,6 +301,35 @@ describe('Stitchi action registry', () => {
         status: 'active',
       }),
     );
+  });
+
+  it('executes commercial discipline records through the governed workspace service', async () => {
+    const result = await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'create_commercial_discipline_record',
+      inputPayload: {
+        discipline: 'conversion_closing',
+        category: 'objection_handling',
+        title: 'Handle price objection for leadership course',
+        summary: 'Prepare a response for warm followers who hesitate on price.',
+        priority: 'high',
+        sourceType: 'stitchi',
+      },
+    });
+
+    expect(commercialDisciplineMocks.createRecord).toHaveBeenCalledWith(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      expect.objectContaining({
+        discipline: 'conversion_closing',
+        category: 'objection_handling',
+        title: 'Handle price objection for leadership course',
+      }),
+    );
+    expect(result).toMatchObject({ objectType: 'commercial_discipline_record', objectId: 'discipline-record-1' });
   });
 
   it('rejects unsupported external/write actions', async () => {

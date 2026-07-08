@@ -336,6 +336,37 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('turns a discipline workspace request into an approval-gated workspace record', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Create an objection handling record for entrepreneurs who hesitate on price.',
+      metadata: {
+        revenueLineId: '00000000-0000-0000-0000-000000000040',
+      },
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_commercial_discipline_record',
+        inputPayload: expect.objectContaining({
+          discipline: 'conversion_closing',
+          category: 'objection_handling',
+          revenueLineId: '00000000-0000-0000-0000-000000000040',
+          sourceType: 'stitchi',
+        }),
+        previewPayload: expect.objectContaining({
+          disciplineLabel: 'Conversion & Closing',
+          approvalRequired: true,
+          externalExecution: 'blocked',
+        }),
+      }),
+    );
+  });
+
   it('turns a business-language Online Courses request into an approval-gated commercial plan', async () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
