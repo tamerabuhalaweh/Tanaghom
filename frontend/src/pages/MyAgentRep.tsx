@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/useAuth';
 import {
   DetailGrid,
   EmptyProductState,
+  Field,
   MetricCard,
   Notice,
   PrimaryAction,
@@ -12,6 +13,7 @@ import {
   ProductStatus,
   ProductTable,
 } from '../components/ProductUI';
+import { CURRENCY_OPTIONS, isCurrencyCode, useCurrencyPreference } from '../lib/currency';
 
 type RecordMap = Record<string, unknown>;
 
@@ -29,6 +31,7 @@ function display(value: string): string {
 
 export default function MyAgentRep() {
   const { token, user, agentRep: sessionAgentRep } = useAuth();
+  const { currency, updateCurrency } = useCurrencyPreference();
   const [agentRep, setAgentRep] = useState<RecordMap | null>((sessionAgentRep as RecordMap | null) || null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -148,6 +151,31 @@ export default function MyAgentRep() {
                 },
               ]}
             />
+          </ProductCard>
+
+          <ProductCard
+            title="Display Preferences"
+            subtitle="These settings control how numbers are shown for your account on this browser."
+          >
+            <div className="space-y-4">
+              <Field label="Currency">
+                <select
+                  value={currency}
+                  onChange={(event) => {
+                    const nextCurrency = event.target.value;
+                    if (isCurrencyCode(nextCurrency)) updateCurrency(nextCurrency);
+                  }}
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+                >
+                  {CURRENCY_OPTIONS.map(option => (
+                    <option key={option.code} value={option.code}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Notice tone="info">
+                Currency changes the display format for amounts in dashboards and event workspaces. It does not change stored KPI values or customer billing.
+              </Notice>
+            </div>
           </ProductCard>
 
           <ProductCard

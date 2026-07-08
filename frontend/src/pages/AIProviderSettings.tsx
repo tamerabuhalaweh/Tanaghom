@@ -5,7 +5,7 @@ import { Notice, PrimaryAction, ProductCard, ProductPage, ProductStatus, Seconda
 
 interface ProviderStatus {
   name: string;
-  type: 'mock' | 'openai' | 'claude' | 'deepseek';
+  type: 'mock' | 'openai' | 'claude' | 'deepseek' | 'gemma';
   configured: boolean;
   model: string;
   apiKeyStatus: 'configured' | 'missing';
@@ -14,7 +14,7 @@ interface ProviderStatus {
 
 interface CredentialStatus {
   id: string;
-  provider: 'openai' | 'claude' | 'deepseek';
+  provider: 'openai' | 'claude' | 'deepseek' | 'gemma';
   model: string;
   apiKeyStatus: string;
   keyFingerprint: string;
@@ -28,6 +28,7 @@ const PROVIDERS = [
   { type: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o', keyLabel: 'OpenAI API key' },
   { type: 'claude', name: 'Claude', defaultModel: 'claude-sonnet-4-20250514', keyLabel: 'Claude API key' },
   { type: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-v4-flash', keyLabel: 'DeepSeek API key' },
+  { type: 'gemma', name: 'Gemma', defaultModel: 'gemma4-26b-a4b-canary', keyLabel: 'Gemma API key' },
 ] as const;
 const CONFIGURABLE_PROVIDERS = PROVIDERS.filter((provider) => provider.type !== 'mock');
 type ConfigurableProviderType = (typeof CONFIGURABLE_PROVIDERS)[number]['type'];
@@ -58,7 +59,7 @@ export default function AIProviderSettings() {
     setCredentials(creds.credentials || []);
     setActiveProvider(creds.activeProvider || statusMap.activeProvider || 'mock');
     const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
-    const configurableProvider = nextProvider === 'openai' || nextProvider === 'claude' || nextProvider === 'deepseek' ? nextProvider : 'deepseek';
+    const configurableProvider = nextProvider === 'openai' || nextProvider === 'claude' || nextProvider === 'deepseek' || nextProvider === 'gemma' ? nextProvider : 'gemma';
     const credential = (creds.credentials || []).find((item) => item.provider === configurableProvider);
     const nextMeta = CONFIGURABLE_PROVIDERS.find((provider) => provider.type === configurableProvider) || CONFIGURABLE_PROVIDERS[0];
     setSelectedProvider(configurableProvider);
@@ -81,7 +82,7 @@ export default function AIProviderSettings() {
         const statusMap = status as { providers: ProviderStatus[]; activeProvider: SelectableProviderType };
         const creds = credentialData as { credentials: CredentialStatus[]; activeProvider: SelectableProviderType };
         const nextProvider = creds.activeProvider || statusMap.activeProvider || 'mock';
-        const configurableProvider = nextProvider === 'openai' || nextProvider === 'claude' || nextProvider === 'deepseek' ? nextProvider : 'deepseek';
+        const configurableProvider = nextProvider === 'openai' || nextProvider === 'claude' || nextProvider === 'deepseek' || nextProvider === 'gemma' ? nextProvider : 'gemma';
         const credential = (creds.credentials || []).find((item) => item.provider === configurableProvider);
         const nextMeta = CONFIGURABLE_PROVIDERS.find((provider) => provider.type === configurableProvider) || CONFIGURABLE_PROVIDERS[0];
 
@@ -232,7 +233,7 @@ export default function AIProviderSettings() {
               {
                 step: '1',
                 title: 'Get an API key',
-                desc: 'Sign up with OpenAI, Claude, or DeepSeek and create an API key. Your key stays with you - you paste it once.',
+                desc: 'Use the platform Gemma connection or add your own OpenAI, Claude, DeepSeek, or Gemma key. Your key stays with you - you paste it once.',
               },
               {
                 step: '2',

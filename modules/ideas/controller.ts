@@ -54,7 +54,7 @@ ideasRouter.post('/generate', async (req: Request, res: Response, next: NextFunc
     const providerStatus = llm.getStatus();
     const prompt = buildIdeaPrompt(input);
     const llmResult = await llm.generate(prompt, {
-      maxTokens: 1200,
+      maxTokens: 1600,
       temperature: 0.6,
       systemPrompt: 'You are a commercial social media strategist. Return only valid JSON.',
     });

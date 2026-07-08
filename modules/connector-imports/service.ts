@@ -2,8 +2,9 @@ import { checkConnectorPermission } from './policy';
 import * as repo from './repository';
 import type {
   CreateImportJobInput, ConnectorImportJobSummary,
-  ReadinessSummary, DryRunResult, ImportResult,
+  ReadinessSummary, DryRunResult, ImportResult, ConnectorSyncStatusSummary,
 } from './types';
+import { mediateConnectorDryRunPolicy } from '../runtime-bridges/agentgateway';
 
 export async function getReadiness(role: string, tenantKey: string): Promise<ReadinessSummary> {
   checkConnectorPermission(role, 'connector:read');
@@ -18,6 +19,11 @@ export async function getRequirements(role: string) {
 export async function listJobs(role: string, tenantKey: string, eventId?: string): Promise<ConnectorImportJobSummary[]> {
   checkConnectorPermission(role, 'connector:read');
   return repo.listJobs(tenantKey, eventId);
+}
+
+export async function getSyncStatus(role: string, tenantKey: string, eventId?: string): Promise<ConnectorSyncStatusSummary> {
+  checkConnectorPermission(role, 'connector:read');
+  return repo.getSyncStatus(tenantKey, eventId);
 }
 
 export async function createJob(
@@ -45,7 +51,9 @@ export async function dryRun(
   role: string, tenantKey: string, userId: string, connectorId: string, eventId?: string,
 ): Promise<DryRunResult> {
   checkConnectorPermission(role, 'connector:dry_run');
-  return repo.dryRun(tenantKey, userId, connectorId, eventId);
+  const runtimeMediation = await mediateConnectorDryRunPolicy({ role, tenantKey, userId, connectorId, eventId });
+  const result = await repo.dryRun(tenantKey, userId, connectorId, eventId);
+  return { ...result, runtimeMediation };
 }
 
 export async function approveAndImport(

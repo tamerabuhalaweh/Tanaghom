@@ -51,8 +51,11 @@ import { connectorFieldMappingRouter } from '../modules/connector-field-mapping/
 import { csvImportRouter } from '../modules/csv-import/controller';
 import { connectorReadinessRouter } from '../modules/connector-readiness/controller';
 import { ghlSetupRouter } from '../modules/ghl-setup/controller';
+import { ghlSyncRouter } from '../modules/ghl-sync/controller';
 import { postizChannelRouter } from '../modules/postiz-channel-selection/controller';
 import { smartlabsValidationRouter } from '../modules/smartlabs-validation/controller';
+import { stitchiRouter } from '../modules/stitchi/controller';
+import { commercialCommandCenterRouter } from '../modules/commercial-command-center/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -180,7 +183,7 @@ async function rateLimit(req: express.Request, res: express.Response, next: expr
 
 async function enforceTokenRevocation(req: express.Request, _res: express.Response, next: express.NextFunction): Promise<void> {
   try {
-    if (req.path === '/ops/prometheus') {
+    if (req.path === '/ops/prometheus' || req.path.startsWith('/runtime-bridges/agentgateway/sandbox-policy/')) {
       next();
       return;
     }
@@ -274,8 +277,11 @@ app.use('/connector-mappings', connectorFieldMappingRouter);
 app.use('/csv-import', csvImportRouter);
 app.use('/connector-readiness', connectorReadinessRouter);
 app.use('/ghl-setup', ghlSetupRouter);
+app.use('/ghl-sync', ghlSyncRouter);
 app.use('/postiz-channels', postizChannelRouter);
 app.use('/smartlabs-validation', smartlabsValidationRouter);
+app.use('/stitchi', stitchiRouter);
+app.use('/commercial-command-center', commercialCommandCenterRouter);
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {

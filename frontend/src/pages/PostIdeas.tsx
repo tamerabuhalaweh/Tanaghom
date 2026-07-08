@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { aiProviderApi, ideasApi } from '../api';
+import { aiProviderApi, campaignsApi, ideasApi } from '../api';
 import {
   EmptyProductState,
   Field,
@@ -48,6 +48,8 @@ interface CampaignResponse {
   status: string;
 }
 
+type RecordMap = Record<string, unknown>;
+
 const PLATFORM_OPTIONS = [
   { id: 'linkedin', label: 'LinkedIn' },
   { id: 'instagram', label: 'Instagram' },
@@ -72,6 +74,29 @@ const DEFAULT_BRIEF = {
 function platformLabel(platform: string): string {
   if (platform === 'twitter' || platform === 'x') return 'X / Twitter';
   return platform.charAt(0).toUpperCase() + platform.slice(1);
+}
+
+function text(value: unknown, fallback = 'Not specified'): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function list(value: unknown): RecordMap[] {
+  return Array.isArray(value) ? value as RecordMap[] : [];
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function titleCase(value: unknown): string {
+  return text(value, 'not_available')
+    .replaceAll('_', ' ')
+    .replaceAll('-', ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function campaignTitle(campaign: RecordMap): string {
+  return text(campaign.topic || campaign.title || campaign.name, 'Untitled content');
 }
 
 function buildGoalPayload(brief: typeof DEFAULT_BRIEF): string {
@@ -108,10 +133,27 @@ export default function PostIdeas() {
   const [message, setMessage] = useState('');
   const [providerReady, setProviderReady] = useState(false);
   const [pageLoading, setPageLoading] = useState(Boolean(token));
+  const [contentLibrary, setContentLibrary] = useState<RecordMap[]>([]);
+  const [contentSearch, setContentSearch] = useState('');
+  const [contentStatus, setContentStatus] = useState('');
+  const [contentPlatform, setContentPlatform] = useState('');
 
   const selectedIdea = useMemo(() => ideas.find((idea) => idea.id === selectedIdeaId) || null, [ideas, selectedIdeaId]);
   const goalPayload = buildGoalPayload(brief);
   const audiencePayload = buildAudiencePayload(brief);
+  const filteredContent = useMemo(() => {
+    const search = contentSearch.trim().toLowerCase();
+    return contentLibrary.filter(item => {
+      const platforms = stringList(item.targetPlatforms || item.platforms);
+      const status = text(item.status, '').toLowerCase();
+      const title = campaignTitle(item).toLowerCase();
+      const objective = text(item.objective || item.rawMessage || item.raw_message, '').toLowerCase();
+      if (search && !`${title} ${objective}`.includes(search)) return false;
+      if (contentStatus && status !== contentStatus) return false;
+      if (contentPlatform && !platforms.includes(contentPlatform)) return false;
+      return true;
+    });
+  }, [contentLibrary, contentPlatform, contentSearch, contentStatus]);
 
   useEffect(() => {
     if (!token) return;
@@ -125,6 +167,13 @@ export default function PostIdeas() {
       } catch {
         if (cancelled) return;
         setProviderReady(false);
+      }
+
+      try {
+        const campaigns = await campaignsApi.list(token as string);
+        if (!cancelled) setContentLibrary(list(campaigns));
+      } catch {
+        if (!cancelled) setContentLibrary([]);
       } finally {
         if (!cancelled) setPageLoading(false);
       }
@@ -192,6 +241,17 @@ export default function PostIdeas() {
         goal: goalPayload,
       }, token) as CampaignResponse;
       setCampaign(data);
+      setContentLibrary(current => [
+        {
+          id: data.campaignId,
+          topic: data.title,
+          status: data.status,
+          targetPlatforms: [selectedIdea.platform],
+          objective: selectedIdea.hook,
+          riskCategory: selectedIdea.estimatedReach,
+        },
+        ...current,
+      ]);
       setMessage(`Campaign created: ${data.title}`);
     } catch (error) {
       setMessage(`Campaign creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -257,6 +317,90 @@ export default function PostIdeas() {
           <Link to="/ai-settings" className="font-semibold underline">Go to AI Settings</Link>
         </Notice>
       )}
+
+      <ProductCard
+        title="Content Library"
+        subtitle="Saved campaign content from the backend. Generated ideas appear here after you create a campaign from the selected direction."
+        action={<ProductStatus tone={contentLibrary.length ? 'good' : 'warn'}>{contentLibrary.length} saved item(s)</ProductStatus>}
+      >
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto]">
+          <Field label="Search content">
+            <input
+              value={contentSearch}
+              onChange={event => setContentSearch(event.target.value)}
+              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+              placeholder="Search by title or objective"
+            />
+          </Field>
+          <Field label="Status">
+            <select
+              value={contentStatus}
+              onChange={event => setContentStatus(event.target.value)}
+              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+            >
+              <option value="">All statuses</option>
+              <option value="idea">Idea</option>
+              <option value="drafting">Drafting</option>
+              <option value="pending_review">Pending review</option>
+              <option value="approved">Approved</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="published">Published</option>
+            </select>
+          </Field>
+          <Field label="Platform">
+            <select
+              value={contentPlatform}
+              onChange={event => setContentPlatform(event.target.value)}
+              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
+            >
+              <option value="">All platforms</option>
+              {PLATFORM_OPTIONS.map(platform => <option key={platform.id} value={platform.id}>{platform.label}</option>)}
+            </select>
+          </Field>
+          <div className="flex items-end">
+            <SecondaryAction
+              onClick={() => {
+                setContentSearch('');
+                setContentStatus('');
+                setContentPlatform('');
+              }}
+            >
+              Clear
+            </SecondaryAction>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          {filteredContent.length ? (
+            <ProductTable
+              columns={['Content', 'Platforms', 'Status', 'Risk', 'Next Action']}
+              rows={filteredContent.slice(0, 12).map(item => [
+                <div>
+                  <div className="font-medium text-neutral-950">{campaignTitle(item)}</div>
+                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-neutral-500">{text(item.objective || item.rawMessage || item.raw_message, 'Open the campaign workspace to continue this content.')}</div>
+                </div>,
+                stringList(item.targetPlatforms || item.platforms).length
+                  ? stringList(item.targetPlatforms || item.platforms).map(platformLabel).join(', ')
+                  : 'Not selected',
+                <ProductStatus tone={text(item.status, '').includes('approved') ? 'good' : text(item.status, '').includes('review') ? 'warn' : 'info'}>{titleCase(item.status)}</ProductStatus>,
+                titleCase(item.riskCategory || item.risk_category || 'medium'),
+                <Link
+                  to="/campaigns"
+                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50"
+                >
+                  Continue
+                </Link>,
+              ])}
+            />
+          ) : (
+            <EmptyProductState
+              title="No saved content matches this view"
+              message="Generate ideas, choose the strongest direction, and create a campaign. Saved campaign content will stay visible here."
+              action={<SecondaryAction onClick={() => setContentSearch('')}>Show All Content</SecondaryAction>}
+            />
+          )}
+        </div>
+      </ProductCard>
 
       {/* ---- Quick guide for first-time users ---- */}
       {!ideas.length && !campaign && (

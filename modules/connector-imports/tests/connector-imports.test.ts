@@ -8,9 +8,9 @@ const prismaMocks = vi.hoisted(() => ({
     update: vi.fn(),
   },
   commercialEvent: { findFirst: vi.fn() },
-  integrationCredential: { findFirst: vi.fn() },
+  integrationCredential: { findFirst: vi.fn(), findUnique: vi.fn() },
   auditRecord: { create: vi.fn() },
-  eventKpiRecord: { create: vi.fn() },
+  eventKpiRecord: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
@@ -24,6 +24,7 @@ function mockJob(overrides: Record<string, unknown> = {}) {
     id: 'job-1', tenant_key: 'tenant-a', event_id: 'event-1', connector_id: 'postiz',
     display_name: 'Postiz Import', state: 'draft', credential_state: 'customer_credential_missing',
     notes: null, last_dry_run_at: null, last_dry_run_result: null,
+    sync_status: 'not_started', last_sync_at: null, last_sync_rows: 0, last_sync_error: null, last_sync_audit_record_id: null,
     last_import_at: null, last_import_result: null,
     approved_by_user_id: null, approved_at: null,
     disabled_at: null, disabled_reason: null,
@@ -62,6 +63,7 @@ describe('Connector Imports', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.integrationCredential.findFirst.mockResolvedValue(null);
+    prismaMocks.integrationCredential.findUnique.mockResolvedValue(null);
   });
 
   describe('Readiness', () => {
@@ -120,30 +122,48 @@ describe('Connector Imports', () => {
     });
 
     it('persists last_dry_run_at and last_dry_run_result', async () => {
-      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test' }));
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'meta_analytics' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: new Date() });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
-      await repo.dryRun('tenant-a', 'user-1', 'postiz', 'event-1');
+      await repo.dryRun('tenant-a', 'user-1', 'meta_analytics', 'event-1');
 
       expect(prismaMocks.connectorImportJob.update).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           last_dry_run_at: expect.any(Date),
           last_dry_run_result: expect.objectContaining({ kpiRows: expect.any(Array) }),
+          sync_status: 'blocked',
+          last_sync_error: expect.stringContaining('No read-only adapter'),
         }),
       }));
     });
 
     it('does not fabricate KPI rows without a read-only connector adapter', async () => {
+      prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test', connector_id: 'meta_analytics' }));
+      prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: null });
+      prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
+      prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+
+      const result = await repo.dryRun('tenant-a', 'user-1', 'meta_analytics', 'event-1');
+      expect(result.kpiRows).toEqual([]);
+      expect(result.warnings[0]).toContain('No read-only adapter is implemented');
+    });
+
+    it('records blocked sync status when no read-only adapter exists', async () => {
       prismaMocks.connectorImportJob.findFirst.mockResolvedValue(mockJob({ state: 'ready_for_test' }));
       prismaMocks.integrationCredential.findFirst.mockResolvedValue({ id: 'cred-1', last_validated_at: null });
       prismaMocks.connectorImportJob.update.mockResolvedValue(mockJob());
       prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
 
-      const result = await repo.dryRun('tenant-a', 'user-1', 'postiz', 'event-1');
-      expect(result.kpiRows).toEqual([]);
-      expect(result.warnings[0]).toContain('No read-only adapter is implemented');
+      await repo.dryRun('tenant-a', 'user-1', 'meta_analytics', 'event-1');
+
+      expect(prismaMocks.connectorImportJob.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          sync_status: 'blocked',
+          last_sync_error: expect.stringContaining('No read-only adapter'),
+        }),
+      }));
     });
 
     it('has no writes to EventKpiRecord', async () => {
@@ -251,6 +271,13 @@ describe('Connector Imports', () => {
       const secondCall = prismaMocks.eventKpiRecord.create.mock.calls[1][0];
       expect(secondCall.data.reach).toBe(1200);
       expect(secondCall.data.spend).toBe(200);
+      expect(prismaMocks.connectorImportJob.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          sync_status: 'synced',
+          last_sync_rows: 2,
+          last_sync_audit_record_id: 'audit-1',
+        }),
+      }));
     });
 
     it('creates audit record for approved import', async () => {
@@ -284,6 +311,36 @@ describe('Connector Imports', () => {
     it('blocks invalid transitions', () => {
       expect(VALID_TRANSITIONS.draft).not.toContain('test_passed');
       expect(VALID_TRANSITIONS.test_passed).not.toContain('draft');
+    });
+  });
+
+  describe('Sync status', () => {
+    it('summarizes source totals and connector jobs', async () => {
+      prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1' });
+      prismaMocks.connectorImportJob.findMany.mockResolvedValue([
+        mockJob({
+          connector_id: 'meta_analytics',
+          display_name: 'Meta Sync',
+          state: 'test_passed',
+          credential_state: 'test_passed',
+          sync_status: 'synced',
+          last_sync_at: new Date('2026-07-02T10:00:00Z'),
+          last_sync_rows: 3,
+        }),
+      ]);
+      prismaMocks.eventKpiRecord.findMany.mockResolvedValue([
+        { source_type: 'manual', source_name: 'manual' },
+        { source_type: 'imported', source_name: 'csv_manual' },
+        { source_type: 'connector', source_name: 'meta_analytics' },
+      ]);
+
+      const status = await repo.getSyncStatus('tenant-a', 'event-1');
+
+      expect(status.primarySource).toBe('connector');
+      expect(status.sourceTotals).toEqual({ manualRecords: 1, importedRecords: 1, connectorRecords: 1 });
+      expect(status.jobTotals.synced).toBe(1);
+      expect(status.connectorRowsImported).toBe(3);
+      expect(status.jobs[0].connectorId).toBe('meta_analytics');
     });
   });
 });

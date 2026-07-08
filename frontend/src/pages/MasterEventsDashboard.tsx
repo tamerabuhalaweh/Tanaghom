@@ -2,22 +2,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { masterEventsApi } from '../api';
 import {
+  AieroActionButton,
+  AieroGhostButton,
+  AieroMetricCard,
+  AieroPage,
+  AieroPanel,
+  AieroStatusPill,
+} from '../components/AieroUX';
+import {
   BarList,
   EmptyProductState,
   ExecutiveGauge,
-  ExecutiveKpiCard,
   Field,
   FunnelChart,
   MetricCard,
   Notice,
   PrimaryAction,
   ProductCard,
-  ProductPage,
   ProductStatus,
   ProductTable,
   SecondaryAction,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
+import { formatCurrency } from '../lib/currency';
 
 type RecordMap = Record<string, unknown>;
 
@@ -65,7 +72,7 @@ function titleCase(value: string): string {
 }
 
 function money(value: unknown): string {
-  return `${Math.round(numberValue(value)).toLocaleString()} SAR`;
+  return formatCurrency(value);
 }
 
 function percent(value: number): string {
@@ -78,6 +85,35 @@ function formatDate(value: unknown): string {
   const date = new Date(String(value));
   if (Number.isNaN(date.getTime())) return 'Not set';
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatDateTime(value: unknown): string {
+  if (!value) return 'Not synced';
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return 'Not synced';
+  return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+const internalCustomerTextPattern = /\b(sprint\s*\d+|acceptance|smoke)\b/i;
+
+function isInternalCustomerText(value: unknown): boolean {
+  return typeof value === 'string' && internalCustomerTextPattern.test(value);
+}
+
+function sourceLabel(value: unknown): string {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'Connector';
+  if (source === 'imported') return 'Import';
+  if (source === 'manual') return 'Manual fallback';
+  return 'No KPI';
+}
+
+function sourceTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'good';
+  if (source === 'imported') return 'info';
+  if (source === 'manual') return 'warn';
+  return 'default';
 }
 
 function filterPayload(filters: Record<string, string>): Record<string, string> {
@@ -109,7 +145,56 @@ function calculatePurchaseConversion(totals: RecordMap): number {
 }
 
 function getEventName(row: RecordMap): string {
-  return text(row.eventName, 'Unnamed event');
+  const rawName = text(row.eventName, '');
+  if (rawName && !isInternalCustomerText(rawName)) return rawName;
+  const eventDate = row.eventDate || row.date;
+  const date = formatDate(eventDate);
+  return date === 'Not set' ? 'Customer event' : `Customer event - ${date}`;
+}
+
+function buildNextActions(totals: RecordMap, dataSourceSummary: RecordMap, events: RecordMap[]) {
+  const actions: { title: string; meta: string; status: string; tone: 'good' | 'warn' | 'danger' | 'info' }[] = [];
+  if (!numberValue(dataSourceSummary.connectorRecords) && !numberValue(dataSourceSummary.importedRecords)) {
+    actions.push({
+      title: 'Connect campaign data',
+      meta: 'Add customer-owned Meta, YouTube, Formaloo, GHL, Postiz, or CSV imports so performance is verified.',
+      status: 'Data',
+      tone: 'warn',
+    });
+  }
+  if (numberValue(totals.noShowRate) > 0.2) {
+    actions.push({
+      title: 'Reduce meeting no-shows',
+      meta: `${Math.round(numberValue(totals.noShowRate) * 100)}% no-show rate needs WhatsApp, email, or sales follow-up action.`,
+      status: 'Sales',
+      tone: 'danger',
+    });
+  }
+  if (numberValue(totals.totalLeads) && !numberValue(totals.purchases)) {
+    actions.push({
+      title: 'Turn leads into purchases',
+      meta: 'Leads exist, but purchases are not moving yet. Review lead stages, sales tasks, and CRM mapping.',
+      status: 'Revenue',
+      tone: 'warn',
+    });
+  }
+  if (!events.length) {
+    actions.push({
+      title: 'Create the first event',
+      meta: 'Start with the event date, offer, audience, budget, and target location.',
+      status: 'Start',
+      tone: 'info',
+    });
+  }
+  if (!actions.length) {
+    actions.push({
+      title: 'Review top performing event',
+      meta: 'Use the event comparison table to continue the event with the strongest revenue or lead signal.',
+      status: 'Review',
+      tone: 'good',
+    });
+  }
+  return actions;
 }
 
 export default function MasterEventsDashboard() {
@@ -153,6 +238,7 @@ export default function MasterEventsDashboard() {
   }, [token]);
 
   const totals = useMemo(() => (dashboard?.totals || {}) as RecordMap, [dashboard]);
+  const dataSourceSummary = useMemo(() => (dashboard?.dataSourceSummary || {}) as RecordMap, [dashboard]);
   const events = list(dashboard?.events);
   const bestPerforming = (dashboard?.bestPerforming || {}) as RecordMap;
   const byChannel = mapEntries(dashboard?.byChannel);
@@ -161,6 +247,7 @@ export default function MasterEventsDashboard() {
   const byGeography = mapEntries(dashboard?.byGeography);
   const purchaseConversion = calculatePurchaseConversion(totals);
   const noShowPct = numberValue(totals.noShowRate) * 100;
+  const nextActions = buildNextActions(totals, dataSourceSummary, events);
 
   const funnelStages = useMemo(
     () => [
@@ -194,58 +281,102 @@ export default function MasterEventsDashboard() {
 
   if (pageLoading) {
     return (
-      <ProductPage eyebrow="Events" title="Master Events Dashboard" subtitle="Loading cross-event results...">
+      <AieroPage eyebrow="Home" title="Business Control Room" subtitle="Loading cross-event results...">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[1, 2, 3, 4].map(item => <div key={item} className="skeleton-pulse h-36 rounded-xl" />)}
+          {[1, 2, 3, 4].map(item => <div key={item} className="h-36 rounded-[1.25rem] border border-white/10 bg-white/[0.08]" />)}
         </div>
-      </ProductPage>
+      </AieroPage>
     );
   }
 
   return (
-    <ProductPage
-      eyebrow="Executive Event Results"
-      title="Master Events Dashboard"
-      subtitle="Compare every course, camp, and live event by leads, meetings, purchases, spend efficiency, channels, and audience source."
+    <AieroPage
+      eyebrow="Home"
+      title="Business Control Room"
+      subtitle="See what needs action today across events, leads, spend, meetings, purchases, and campaign data sources."
       action={(
         <>
-          <ProductStatus tone="info">{numberValue(dashboard?.filteredEvents)} shown</ProductStatus>
-          <PrimaryAction onClick={() => navigate('/events/new')}>Create Event</PrimaryAction>
+          <AieroStatusPill accent="blue">{numberValue(dashboard?.filteredEvents)} shown</AieroStatusPill>
+          <AieroActionButton onClick={() => navigate('/events/new')}>Create Event</AieroActionButton>
         </>
       )}
     >
       {message && <Notice tone="danger">{message}</Notice>}
 
-      <div className="grid gap-4 xl:grid-cols-4">
-        <ExecutiveKpiCard
-          label="Total Leads"
-          value={numberValue(totals.totalLeads).toLocaleString()}
-          detail={`${numberValue(totals.formCompletions).toLocaleString()} form completions`}
-          tone={numberValue(totals.totalLeads) ? 'good' : 'warn'}
-          series={[numberValue(totals.formCompletions), numberValue(totals.totalLeads), numberValue(totals.meetingsBooked), numberValue(totals.purchases)]}
-        />
-        <ExecutiveKpiCard
-          label="Meetings Booked"
-          value={numberValue(totals.meetingsBooked).toLocaleString()}
-          detail={`${numberValue(totals.meetingsAttended).toLocaleString()} attended / ${numberValue(totals.noShows).toLocaleString()} no-show`}
-          tone={numberValue(totals.meetingsBooked) ? 'info' : 'warn'}
-          series={[numberValue(totals.totalLeads), numberValue(totals.meetingsBooked), numberValue(totals.meetingsAttended), numberValue(totals.noShows)]}
-        />
-        <ExecutiveKpiCard
-          label="Purchases"
-          value={numberValue(totals.purchases).toLocaleString()}
-          detail={`${money(totals.revenue)} recorded revenue`}
-          tone={numberValue(totals.purchases) ? 'good' : 'warn'}
-          series={[numberValue(totals.meetingsBooked), numberValue(totals.meetingsAttended), numberValue(totals.purchases)]}
-        />
-        <ExecutiveKpiCard
-          label="Cost Per Lead"
-          value={money(totals.costPerLead)}
-          detail={`${money(totals.actualSpend)} actual spend`}
-          tone={numberValue(totals.costPerLead) ? 'info' : 'default'}
-          series={[numberValue(totals.plannedBudget), numberValue(totals.actualSpend), numberValue(totals.totalLeads)]}
-        />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+        <AieroPanel className="bg-[#121122]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-white/55">Today</div>
+          <h2 className="mt-2 max-w-2xl text-4xl font-semibold leading-tight tracking-tight">Keep events moving from attention to purchase.</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">
+            Use this page to decide what needs work now: data connections, lead follow-up, no-show recovery, spend efficiency, and sales conversion.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <AieroMetricCard label="Events" value={events.length} detail="Active event workspace" accent="teal" />
+            <AieroMetricCard label="Leads" value={numberValue(totals.totalLeads).toLocaleString()} detail="Captured and imported interest" accent="rose" />
+            <AieroMetricCard label="Purchases" value={numberValue(totals.purchases).toLocaleString()} detail="Closed sales outcomes" accent="violet" />
+          </div>
+        </AieroPanel>
+
+        <AieroPanel title="Next Actions" subtitle="The shortest path to improve event results.">
+          <div className="space-y-3">
+            {nextActions.map(action => (
+              <div key={action.title} className="rounded-2xl border border-white/10 bg-white/[0.05] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-white">{action.title}</div>
+                    <p className="mt-1 text-sm leading-6 text-white/55">{action.meta}</p>
+                  </div>
+                  <AieroStatusPill accent={action.tone === 'danger' ? 'rose' : action.tone === 'good' ? 'teal' : action.tone === 'info' ? 'blue' : 'amber'}>
+                    {action.status}
+                  </AieroStatusPill>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <AieroActionButton onClick={() => navigate('/events')}>Open Events</AieroActionButton>
+            <AieroGhostButton onClick={() => navigate('/integration-credentials')}>Connect Data</AieroGhostButton>
+          </div>
+        </AieroPanel>
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-4">
+        <AieroMetricCard label="Total Leads" value={numberValue(totals.totalLeads).toLocaleString()} detail={`${numberValue(totals.formCompletions).toLocaleString()} form completions`} accent="teal" />
+        <AieroMetricCard label="Meetings Booked" value={numberValue(totals.meetingsBooked).toLocaleString()} detail={`${numberValue(totals.meetingsAttended).toLocaleString()} attended / ${numberValue(totals.noShows).toLocaleString()} no-show`} accent="amber" />
+        <AieroMetricCard label="Purchases" value={numberValue(totals.purchases).toLocaleString()} detail={`${money(totals.revenue)} recorded revenue`} accent="rose" />
+        <AieroMetricCard label="Cost Per Lead" value={money(totals.costPerLead)} detail={`${money(totals.actualSpend)} actual spend`} accent="violet" />
+      </div>
+
+      <AieroPanel
+        title="Production Data Backbone"
+        subtitle="Portfolio-level source control for KPI records. Connector data is the production target; approved imports are a bridge; manual entries are fallback corrections."
+        action={<AieroStatusPill accent={numberValue(dataSourceSummary.connectorRecords) ? 'teal' : numberValue(dataSourceSummary.importedRecords) ? 'blue' : 'amber'}>{numberValue(dataSourceSummary.connectorRecords) ? 'Connector Data Active' : numberValue(dataSourceSummary.importedRecords) ? 'Import Bridge Active' : 'Manual Fallback Active'}</AieroStatusPill>}
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <AieroMetricCard label="Connector Records" value={numberValue(dataSourceSummary.connectorRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingConnectorData)} event(s) connected`} accent="teal" />
+          <AieroMetricCard label="Approved Imports" value={numberValue(dataSourceSummary.importedRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingImportedData)} event(s) using imports`} accent="blue" />
+          <AieroMetricCard label="Manual Fallback" value={numberValue(dataSourceSummary.manualRecords)} detail={`${numberValue(dataSourceSummary.eventsUsingManualFallback)} event(s) fallback`} accent="amber" />
+          <AieroMetricCard label="Synced Jobs" value={numberValue(dataSourceSummary.syncedConnectorJobs)} detail={`${numberValue(dataSourceSummary.readyConnectorJobs)} ready / ${numberValue(dataSourceSummary.failedConnectorJobs)} failed`} accent="violet" />
+          <AieroMetricCard label="Last Sync" value={formatDateTime(dataSourceSummary.lastConnectorSyncAt)} detail={`${numberValue(dataSourceSummary.connectorRowsImported)} row(s) imported`} accent="rose" />
+        </div>
+      </AieroPanel>
+
+      {!numberValue(dataSourceSummary.connectorRecords) && (
+        <Notice tone="warn">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold">Verified metrics pending</div>
+              <div className="mt-1">
+                Connect Meta/Instagram, YouTube, Formaloo, GoHighLevel, Postiz, WhatsApp, or SmartLabs from Data Sources.
+                After credentials, mapping, dry-run, and approval, connector data will populate these dashboards.
+              </div>
+            </div>
+            <AieroGhostButton onClick={() => navigate('/integration-credentials')}>
+              Open Data Sources
+            </AieroGhostButton>
+          </div>
+        </Notice>
+      )}
 
       <ProductCard title="Filters" subtitle="Narrow the dashboard without changing or importing external data.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -338,13 +469,13 @@ export default function MasterEventsDashboard() {
               <MetricCard label="Best Audience" value={titleCase(text(bestPerforming.bestAudienceSource, 'Unknown'))} detail="Highest lead volume" tone={bestPerforming.bestAudienceSource ? 'good' : 'default'} />
               <MetricCard
                 label="Highest Revenue Event"
-                value={text((bestPerforming.highestRevenueEvent as RecordMap | undefined)?.eventName, 'Not enough data')}
+                value={bestPerforming.highestRevenueEvent ? getEventName(bestPerforming.highestRevenueEvent as RecordMap) : 'Not enough data'}
                 detail={money((bestPerforming.highestRevenueEvent as RecordMap | undefined)?.revenue)}
                 tone={bestPerforming.highestRevenueEvent ? 'good' : 'default'}
               />
               <MetricCard
                 label="Lowest Cost Per Lead"
-                value={text((bestPerforming.lowestCostPerLeadEvent as RecordMap | undefined)?.eventName, 'Not enough data')}
+                value={bestPerforming.lowestCostPerLeadEvent ? getEventName(bestPerforming.lowestCostPerLeadEvent as RecordMap) : 'Not enough data'}
                 detail={money((bestPerforming.lowestCostPerLeadEvent as RecordMap | undefined)?.costPerLead)}
                 tone={bestPerforming.lowestCostPerLeadEvent ? 'info' : 'default'}
               />
@@ -419,15 +550,15 @@ export default function MasterEventsDashboard() {
             </ProductCard>
           </div>
 
-          <ProductCard title="Event Comparison" subtitle="Drill into one event to operate the campaign, sales workflow, KPI entry, and closeout evidence.">
+          <ProductCard title="Event Comparison" subtitle="Drill into one event to operate the campaign, sales workflow, KPI source, and closeout evidence.">
             <ProductTable
-              columns={['Event', 'Type', 'Status', 'Date', 'Location', 'Leads', 'Meetings', 'Purchases', 'Revenue', 'Action']}
+              columns={['Event', 'Type', 'Status', 'Data Source', 'Date', 'Leads', 'Meetings', 'Purchases', 'Revenue', 'Action']}
               rows={events.map(row => [
                 getEventName(row),
                 titleCase(text(row.eventType, 'Unknown')),
                 titleCase(text(row.status, 'Unknown')),
+                <ProductStatus key={`${String(row.eventId)}-source`} tone={sourceTone(row.primaryDataSource)}>{sourceLabel(row.primaryDataSource)}</ProductStatus>,
                 formatDate(row.eventDate),
-                text(row.geography, 'Not set'),
                 numberValue(row.totalLeads).toLocaleString(),
                 numberValue(row.meetingsBooked).toLocaleString(),
                 numberValue(row.purchases).toLocaleString(),
@@ -438,10 +569,10 @@ export default function MasterEventsDashboard() {
           </ProductCard>
 
           <Notice tone="info">
-            This page reads Tanaghum event, KPI, and lead lifecycle records only. Live Meta, YouTube, Formaloo, GHL, WhatsApp, and SmartLabs ingestion remains customer-configured and separately authorized.
+            Production target: connector-synced KPI data. Approved imports are a transition bridge. Manual entries are fallback corrections and should not be the long-term source of truth for customer reporting.
           </Notice>
         </>
       )}
-    </ProductPage>
+    </AieroPage>
   );
 }

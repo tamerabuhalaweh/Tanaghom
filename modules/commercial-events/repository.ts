@@ -344,6 +344,9 @@ export async function listEventLeads(tenantKey: string, eventId: string) {
       platform: true,
       lead_name_placeholder: true,
       lead_email_placeholder: true,
+      source_of_truth: true,
+      external_source_provider: true,
+      external_last_synced_at: true,
       created_at: true,
     },
     orderBy: { created_at: 'desc' },
@@ -356,13 +359,16 @@ export async function listEventLeads(tenantKey: string, eventId: string) {
     platform: lead.platform || 'manual',
     leadName: lead.lead_name_placeholder,
     leadEmail: lead.lead_email_placeholder,
+    sourceOfTruth: lead.source_of_truth,
+    externalSourceProvider: lead.external_source_provider,
+    externalLastSyncedAt: lead.external_last_synced_at,
     createdAt: lead.created_at,
   }));
 }
 
 export async function getEventDashboard(tenantKey: string, eventId: string): Promise<EventDashboardSummary> {
   const event = await getEventById(tenantKey, eventId);
-  const [kpiRecords, campaigns, leads] = await Promise.all([
+  const [kpiRecords, campaigns, leads, connectorJobs] = await Promise.all([
     prisma.eventKpiRecord.findMany({
       where: { tenant_key: tenantKey, event_id: eventId },
       orderBy: [{ metric_date: 'desc' }, { created_at: 'desc' }],
@@ -370,6 +376,11 @@ export async function getEventDashboard(tenantKey: string, eventId: string): Pro
     }),
     listEventCampaigns(tenantKey, eventId),
     listEventLeads(tenantKey, eventId),
+    prisma.connectorImportJob.findMany({
+      where: { tenant_key: tenantKey, event_id: eventId },
+      orderBy: [{ last_sync_at: 'desc' }, { updated_at: 'desc' }],
+      take: 50,
+    }),
   ]);
 
   const records = kpiRecords.map(record => mapKpiRecord(record as unknown as Record<string, unknown>));
@@ -419,11 +430,7 @@ export async function getEventDashboard(tenantKey: string, eventId: string): Pro
     kpiRecords: records,
     campaigns,
     leads,
-    sourceStatus: {
-      manualRecords: records.filter(record => record.sourceType === 'manual').length,
-      importedRecords: records.filter(record => record.sourceType === 'imported').length,
-      connectorRecords: records.filter(record => record.sourceType === 'connector').length,
-    },
+    sourceStatus: buildSourceStatus(records, connectorJobs as unknown as Record<string, unknown>[]),
   };
 
   return dashboard;
@@ -520,6 +527,52 @@ function aggregateRecords(records: EventKpiRecordSummary[]) {
       spend: 0,
     },
   );
+}
+
+function buildSourceStatus(
+  records: EventKpiRecordSummary[],
+  connectorJobs: Record<string, unknown>[],
+): EventDashboardSummary['sourceStatus'] {
+  const manualRecords = records.filter(record => record.sourceType === 'manual').length;
+  const importedRecords = records.filter(record => record.sourceType === 'imported' || record.sourceName === 'csv_manual').length;
+  const connectorRecords = records.filter(record => record.sourceType === 'connector' && record.sourceName !== 'csv_manual').length;
+  const primarySource = connectorRecords > 0
+    ? 'connector'
+    : importedRecords > 0
+      ? 'imported'
+      : manualRecords > 0
+        ? 'manual'
+        : 'none';
+  const jobs = connectorJobs.map(job => ({
+    id: job.id as string,
+    connectorId: job.connector_id as string,
+    displayName: job.display_name as string,
+    state: job.state as string,
+    credentialState: job.credential_state as string,
+    syncStatus: (job.sync_status as string | undefined) ?? 'not_started',
+    lastDryRunAt: (job.last_dry_run_at as Date | null) ?? null,
+    lastSyncAt: (job.last_sync_at as Date | null) ?? null,
+    lastSyncRows: Number(job.last_sync_rows || 0),
+    lastSyncError: (job.last_sync_error as string | null) ?? null,
+  }));
+  const lastConnectorSyncAt = jobs.reduce<Date | null>((latest, job) => {
+    if (!job.lastSyncAt) return latest;
+    if (!latest || job.lastSyncAt > latest) return job.lastSyncAt;
+    return latest;
+  }, null);
+
+  return {
+    manualRecords,
+    importedRecords,
+    connectorRecords,
+    primarySource,
+    manualFallbackActive: primarySource === 'manual' || (manualRecords > 0 && connectorRecords === 0),
+    connectorFirstReady: connectorRecords > 0 || jobs.some(job => job.syncStatus === 'synced'),
+    lastConnectorSyncAt,
+    connectorRowsImported: jobs.reduce((sum, job) => sum + job.lastSyncRows, 0),
+    connectorErrors: jobs.filter(job => job.lastSyncError).map(job => `${job.displayName}: ${job.lastSyncError}`),
+    connectorJobs: jobs,
+  };
 }
 
 function buildChannelPerformance(records: EventKpiRecordSummary[]) {

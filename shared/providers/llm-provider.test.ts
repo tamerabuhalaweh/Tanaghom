@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaudeLLMProvider, DeepSeekLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
+import { ClaudeLLMProvider, DeepSeekLLMProvider, GemmaLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -99,6 +99,107 @@ describe('LLM provider adapter', () => {
     expect(response.usage).toEqual({ promptTokens: 14, completionTokens: 9 });
   });
 
+  it('calls Gemma OpenAI-compatible Chat Completions API when configured', async () => {
+    process.env.GEMMA_API_KEY = 'test-gemma-key';
+    process.env.GEMMA_BASE_URL = 'https://api.thesmartlabs.net/gemma4/v1';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Gemma live generated draft' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 6 },
+      }),
+    } as Response);
+
+    const provider = new GemmaLLMProvider();
+    const response = await provider.generate('Campaign brief', { model: 'gemma4-26b-a4b-canary', timeoutMs: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.thesmartlabs.net/gemma4/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-gemma-key' }),
+      }),
+    );
+    expect(response.text).toBe('Gemma live generated draft');
+    expect(response.provider).toBe('gemma');
+    expect(response.usage).toEqual({ promptTokens: 10, completionTokens: 6 });
+  });
+
+  it('streams Gemma OpenAI-compatible chat completion tokens', async () => {
+    process.env.GEMMA_API_KEY = 'test-gemma-key';
+    process.env.GEMMA_BASE_URL = 'https://api.thesmartlabs.net/gemma4/v1';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseResponse([
+      'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+
+    const provider = new GemmaLLMProvider();
+    const events = [];
+    for await (const event of provider.streamGenerate('Campaign brief', { model: 'gemma4-26b-a4b-canary', timeoutMs: 1000 })) {
+      events.push(event);
+    }
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.thesmartlabs.net/gemma4/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"stream":true'),
+      }),
+    );
+    expect(events).toEqual([
+      { type: 'token', text: 'Hello' },
+      { type: 'token', text: ' world' },
+      { type: 'done', response: { text: 'Hello world', model: 'gemma4-26b-a4b-canary', provider: 'gemma' } },
+    ]);
+  });
+
+  it('streams OpenAI Responses API output_text delta events', async () => {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseResponse([
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"A"}\n\n',
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"B"}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+
+    const provider = new OpenAILLMProvider();
+    const events = [];
+    for await (const event of provider.streamGenerate('Campaign brief', { model: 'gpt-test', timeoutMs: 1000 })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      { type: 'token', text: 'A' },
+      { type: 'token', text: 'B' },
+      { type: 'done', response: { text: 'AB', model: 'gpt-test', provider: 'openai' } },
+    ]);
+  });
+
+  it('retries transient Gemma provider failures before returning content', async () => {
+    process.env.GEMMA_API_KEY = 'test-gemma-key';
+    process.env.GEMMA_BASE_URL = 'https://api.thesmartlabs.net/gemma4/v1';
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: { message: 'temporary upstream error' } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: 'Gemma retry generated draft' } }],
+        }),
+      } as Response);
+
+    const provider = new GemmaLLMProvider();
+    const response = await provider.generate('Campaign brief', { timeoutMs: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.text).toBe('Gemma retry generated draft');
+    expect(response.provider).toBe('gemma');
+  });
+
   it('does not call external providers when credentials are missing', async () => {
     delete process.env.OPENAI_API_KEY;
     const fetchMock = vi.spyOn(globalThis, 'fetch');
@@ -108,3 +209,18 @@ describe('LLM provider adapter', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+function sseResponse(chunks: string[]): Response {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk));
+      }
+      controller.close();
+    },
+  }), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}

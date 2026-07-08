@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { connectorMappingsApi, csvImportApi, eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, leadsApi, learningRecommendationsApi } from '../api';
+import { connectorMappingsApi, csvImportApi, eventCloseoutApi, eventPlannerApi, eventProblemsApi, eventsApi, ghlSyncApi, leadsApi, learningRecommendationsApi } from '../api';
 import {
   BarList,
   DetailGrid,
@@ -19,6 +19,7 @@ import {
   SecondaryAction,
 } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
+import { formatCurrency } from '../lib/currency';
 
 type RecordMap = Record<string, unknown>;
 type LeadStatus = 'new_lead' | 'contacted' | 'meeting_booked' | 'meeting_attended' | 'no_show' | 'purchased' | 'lost' | 'follow_up_needed' | 'qualified' | 'nurturing' | 'converted' | 'archived';
@@ -226,8 +227,39 @@ function formatDate(value: unknown): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function formatDateTime(value: unknown): string {
+  if (!value) return 'Not synced';
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return 'Not synced';
+  return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function sourceLabel(value: unknown): string {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'Connector Data';
+  if (source === 'imported') return 'Approved Import';
+  if (source === 'manual') return 'Fallback Manual';
+  return 'No KPI Data';
+}
+
+function sourceTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  const source = text(value, 'none');
+  if (source === 'connector') return 'good';
+  if (source === 'imported') return 'info';
+  if (source === 'manual') return 'warn';
+  return 'default';
+}
+
+function crmSourceLabel(lead: RecordMap): string {
+  return text(lead.sourceOfTruth) === 'gohighlevel' ? 'GHL CRM' : 'Tanaghum Local';
+}
+
+function crmSourceTone(lead: RecordMap): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+  return text(lead.sourceOfTruth) === 'gohighlevel' ? 'good' : 'info';
+}
+
 function money(value: unknown): string {
-  return `${numberValue(value).toLocaleString()} SAR`;
+  return formatCurrency(value);
 }
 
 function percent(value: unknown): string {
@@ -333,6 +365,7 @@ export default function EventDashboard() {
   const [closeoutReport, setCloseoutReport] = useState<RecordMap | null>(null);
   const [learningSummary, setLearningSummary] = useState<RecordMap | null>(null);
   const [learningError, setLearningError] = useState('');
+  const [ghlSyncStatus, setGhlSyncStatus] = useState<RecordMap | null>(null);
   const [emailPlans, setEmailPlans] = useState<RecordMap[]>([]);
   const [whatsappPlans, setWhatsappPlans] = useState<RecordMap[]>([]);
   const [upsellPlans, setUpsellPlans] = useState<RecordMap[]>([]);
@@ -471,7 +504,7 @@ export default function EventDashboard() {
     if (nextEventId) {
       setCloseoutReport(null);
       setLearningError('');
-      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData, mappingData, recommendationData] = await Promise.all([
+      const [data, leadData, problemSummary, problems, emailData, whatsappData, upsellData, contentData, salesTaskData, mappingData, recommendationData, ghlSyncData] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
         eventProblemsApi.dashboard(nextEventId, token),
@@ -485,6 +518,7 @@ export default function EventDashboard() {
         learningRecommendationsApi.forEvent(nextEventId, token).catch(error => ({
           __learningError: error instanceof Error ? error.message : 'Learning recommendations failed to load',
         })),
+        ghlSyncApi.status(token, nextEventId),
       ]);
       setDashboard(data as RecordMap);
       setSalesLeads(list(leadData));
@@ -503,6 +537,7 @@ export default function EventDashboard() {
       setContentRequirements(list(contentData));
       setSalesTasks(list(salesTaskData));
       setConnectorMappings(list(mappingData).filter(mapping => !mapping.eventId || String(mapping.eventId) === nextEventId));
+      setGhlSyncStatus(ghlSyncData as RecordMap);
       if (recommendationData && typeof recommendationData === 'object' && '__learningError' in recommendationData) {
         setLearningSummary(null);
         setLearningError(text((recommendationData as RecordMap).__learningError, 'Learning recommendations failed to load'));
@@ -551,6 +586,15 @@ export default function EventDashboard() {
   const event = useMemo(() => (dashboard?.event || {}) as RecordMap, [dashboard]);
   const kpis = (dashboard?.kpis || {}) as RecordMap;
   const sourceStatus = (dashboard?.sourceStatus || {}) as RecordMap;
+  const connectorJobs = list(sourceStatus.connectorJobs);
+  const connectorErrors = list(sourceStatus.connectorErrors);
+  const primarySource = text(sourceStatus.primarySource, 'none');
+  const ghlLastRun = (ghlSyncStatus?.lastRun || {}) as RecordMap;
+  const ghlRequiredActions = Array.isArray(ghlSyncStatus?.requiredActions) ? ghlSyncStatus.requiredActions as string[] : [];
+  const ghlLeadCount = numberValue(ghlSyncStatus?.ghlLeadCount);
+  const ghlReady = text(ghlSyncStatus?.credentialStatus) === 'configured'
+    && text(ghlSyncStatus?.mappingStatus) === 'ready'
+    && Boolean(ghlSyncStatus?.readSyncEnabled);
   const funnel = list(dashboard?.funnel);
   const channelPerformance = list(dashboard?.channelPerformance);
   const leadTemperatureBreakdown = list(dashboard?.leadTemperature);
@@ -1191,6 +1235,38 @@ export default function EventDashboard() {
     }
   }
 
+  async function previewGhlPull() {
+    if (!token || !selectedEventId) return;
+    setLoading('ghl-preview');
+    setMessage('');
+    try {
+      const result = await ghlSyncApi.pullPreview(token, { eventId: selectedEventId, limit: 50 }) as RecordMap;
+      const run = result.run as RecordMap | undefined;
+      setMessage(`GHL preview ${text(run?.status, 'completed')}: ${numberValue(run?.contactsPulled)} contacts, ${numberValue(run?.opportunitiesPulled)} opportunities, and ${numberValue(run?.appointmentsPulled)} appointment(s) checked.`);
+      await load(selectedEventId);
+    } catch (error) {
+      setMessage(`Could not preview GHL sync: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function runGhlPullSync() {
+    if (!token || !selectedEventId) return;
+    setLoading('ghl-sync');
+    setMessage('');
+    try {
+      const result = await ghlSyncApi.pullSync(token, { eventId: selectedEventId, limit: 100 }) as RecordMap;
+      const run = result.run as RecordMap | undefined;
+      setMessage(`GHL sync ${text(run?.status, 'completed')}: ${numberValue(run?.leadsUpserted)} lead mirrors updated from CRM source of truth.`);
+      await load(selectedEventId);
+    } catch (error) {
+      setMessage(`Could not sync GHL leads: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
   async function transitionSelectedLead(toStatus: LeadStatus, reason: string) {
     if (!token || !selectedLead) return;
     setLoading(`transition-${toStatus}`);
@@ -1258,7 +1334,7 @@ export default function EventDashboard() {
       subtitle="Track each course, camp, or live event from campaign launch to leads, meetings, purchases, no-shows, and learning."
       action={(
         <>
-          <ProductStatus tone="info">Amro Workspace</ProductStatus>
+          <ProductStatus tone="info">Event Workspace</ProductStatus>
           <SecondaryAction onClick={() => navigate('/events/master')}>Portfolio Dashboard</SecondaryAction>
           <PrimaryAction onClick={() => navigate('/events/new')}>Create Event</PrimaryAction>
         </>
@@ -1266,16 +1342,33 @@ export default function EventDashboard() {
     >
       {message && <Notice tone={message.toLowerCase().includes('could not') || message.toLowerCase().includes('failed') ? 'danger' : 'good'}>{message}</Notice>}
 
+      {primarySource !== 'connector' && (
+        <Notice tone="warn">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold">Verified metrics pending</div>
+              <div className="mt-1">
+                To read real campaign data, connect the customer-owned provider in Data Sources, map the fields,
+                run a dry-run preview, then approve the import into this event.
+              </div>
+            </div>
+            <SecondaryAction onClick={() => navigate('/integration-credentials')}>
+              Open Data Sources
+            </SecondaryAction>
+          </div>
+        </Notice>
+      )}
+
       {events.length === 0 ? (
         <EmptyProductState
           title="No events yet"
-          message="Create the first event strategy, then this page becomes Amro's operating dashboard for leads, spend, meetings, purchases, and follow-up."
+          message="Create the first event strategy, then this page becomes your operating dashboard for leads, spend, meetings, purchases, and follow-up."
           action={<PrimaryAction onClick={() => navigate('/events/new')}>Create Event Strategy</PrimaryAction>}
         />
       ) : (
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-4">
-            <ProductCard title="Event Queue" subtitle="Choose the event Amro is operating today.">
+            <ProductCard title="Event Queue" subtitle="Choose the event your team is operating today.">
               <div className="space-y-3">
                 {events.map(item => {
                   const active = String(item.id) === selectedEventId;
@@ -1299,7 +1392,7 @@ export default function EventDashboard() {
               </div>
             </ProductCard>
 
-            <ProductCard title="Manual KPI Update" subtitle="Use this until official Meta, YouTube, Formaloo, GHL, and WhatsApp connectors are enabled.">
+            <ProductCard title="Fallback KPI Correction" subtitle="Use only for corrections or temporary provider outages. Production data should come from approved connectors or imports.">
               <div className="space-y-4">
                 <Field label="Date">
                   <input
@@ -1351,7 +1444,7 @@ export default function EventDashboard() {
                   />
                 </Field>
                 <PrimaryAction onClick={saveKpi} disabled={loading === 'save-kpi'}>
-                  {loading === 'save-kpi' ? 'Saving...' : 'Save KPI Update'}
+                  {loading === 'save-kpi' ? 'Saving...' : 'Save Fallback Correction'}
                 </PrimaryAction>
               </div>
             </ProductCard>
@@ -1540,35 +1633,35 @@ export default function EventDashboard() {
             </div>
 
             <ProductCard
-              title="Connector Data Status"
-              subtitle="Shows whether this event is using manual records, approved CSV imports, or future live connector records."
-              action={<ProductStatus tone={numberValue(sourceStatus.connectorRecords) ? 'good' : numberValue(sourceStatus.importedRecords) ? 'info' : 'warn'}>{numberValue(sourceStatus.connectorRecords) ? 'Approved Import Active' : numberValue(sourceStatus.importedRecords) ? 'Imported Data Active' : 'Manual Data Active'}</ProductStatus>}
+              title="Production KPI Backbone"
+              subtitle="Shows whether this event is powered by automated connector records, approved customer imports, or fallback manual corrections."
+              action={<ProductStatus tone={sourceTone(primarySource)}>{sourceLabel(primarySource)}</ProductStatus>}
             >
               <div className="grid gap-3 md:grid-cols-4">
                 <MetricCard label="Saved mappings" value={eventConnectorMappings.length} detail="Event-scoped import mappings" tone={eventConnectorMappings.length ? 'good' : 'warn'} />
-                <MetricCard label="Manual records" value={numberValue(sourceStatus.manualRecords)} detail="Entered by the team" tone={numberValue(sourceStatus.manualRecords) ? 'info' : 'default'} />
-                <MetricCard label="Imported records" value={numberValue(sourceStatus.importedRecords)} detail="Approved CSV/import jobs" tone={numberValue(sourceStatus.importedRecords) ? 'good' : 'default'} />
-                <MetricCard label="Connector records" value={numberValue(sourceStatus.connectorRecords)} detail="Approved connector or CSV import records" tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'} />
+                <MetricCard label="Connector records" value={numberValue(sourceStatus.connectorRecords)} detail={`${numberValue(sourceStatus.connectorRowsImported)} row(s) imported`} tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'} />
+                <MetricCard label="Approved imports" value={numberValue(sourceStatus.importedRecords)} detail="CSV or customer export bridge" tone={numberValue(sourceStatus.importedRecords) ? 'info' : 'default'} />
+                <MetricCard label="Fallback manual" value={numberValue(sourceStatus.manualRecords)} detail={sourceStatus.manualFallbackActive ? 'Fallback is active' : 'Correction path only'} tone={sourceStatus.manualFallbackActive ? 'warn' : 'default'} />
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
                 {[
                   {
-                    title: 'Manual KPI Entry',
-                    status: numberValue(sourceStatus.manualRecords) ? 'Recording Data' : 'Available',
-                    detail: 'Fast path for Amro while customer-owned connectors are being configured.',
-                    tone: numberValue(sourceStatus.manualRecords) ? 'info' : 'default',
+                    title: 'Connector Sync',
+                    status: sourceStatus.connectorFirstReady ? 'Active or Synced' : 'Not Active Yet',
+                    detail: `Last sync: ${formatDateTime(sourceStatus.lastConnectorSyncAt)}.`,
+                    tone: sourceStatus.connectorFirstReady ? 'good' : 'warn',
                   },
                   {
-                    title: 'CSV Import',
+                    title: 'Approved Import Bridge',
                     status: eventConnectorMappings.length ? 'Mapping Ready' : 'Needs Mapping',
-                    detail: 'Use exported rows from Formaloo, Meta, YouTube, GHL, WhatsApp, or sheets.',
+                    detail: 'Use exported rows only while provider API sync is being configured.',
                     tone: eventConnectorMappings.length ? 'good' : 'warn',
                   },
                   {
-                    title: 'Live Connectors',
-                    status: 'Customer Credentials Required',
-                    detail: 'Official integrations remain tenant-owned and cannot run without credentials.',
-                    tone: 'warn',
+                    title: 'Manual Correction',
+                    status: sourceStatus.manualFallbackActive ? 'Fallback Active' : 'Fallback Only',
+                    detail: 'Allowed for corrections and emergencies, not the production source of truth.',
+                    tone: sourceStatus.manualFallbackActive ? 'warn' : 'default',
                   },
                 ].map(item => (
                   <div key={item.title} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
@@ -1580,6 +1673,64 @@ export default function EventDashboard() {
                   </div>
                 ))}
               </div>
+              {connectorErrors.length > 0 && (
+                <Notice tone="warn">Connector issues: {connectorErrors.map(error => text(error)).join('; ')}</Notice>
+              )}
+              {connectorJobs.length > 0 && (
+                <div className="mt-4">
+                  <ProductTable
+                    columns={['Connector', 'State', 'Sync', 'Rows', 'Last Sync']}
+                    rows={connectorJobs.slice(0, 6).map(job => [
+                      text(job.displayName, text(job.connectorId)),
+                      titleCase(text(job.state, 'not_started')),
+                      titleCase(text(job.syncStatus, 'not_started')),
+                      numberValue(job.lastSyncRows).toLocaleString(),
+                      formatDateTime(job.lastSyncAt),
+                    ])}
+                  />
+                </div>
+              )}
+            </ProductCard>
+
+            <ProductCard
+              title="GoHighLevel Lead Source"
+              subtitle="GoHighLevel is the CRM source of truth. Tanaghum mirrors the lead state for campaign operations and reporting."
+              action={<ProductStatus tone={ghlReady ? 'good' : 'warn'}>{ghlReady ? 'Ready To Sync' : 'Setup Required'}</ProductStatus>}
+            >
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <MetricCard label="CRM Leads Mirrored" value={ghlLeadCount} detail="GHL-owned leads in this event" tone={ghlLeadCount ? 'good' : 'default'} />
+                <MetricCard label="Credential" value={titleCase(text(ghlSyncStatus?.credentialStatus, 'missing'))} detail="Tenant-owned API key only" tone={text(ghlSyncStatus?.credentialStatus) === 'configured' ? 'good' : 'warn'} />
+                <MetricCard label="Mapping" value={titleCase(text(ghlSyncStatus?.mappingStatus, 'missing'))} detail="Tags and stages to lead status" tone={text(ghlSyncStatus?.mappingStatus) === 'ready' ? 'good' : 'warn'} />
+                <MetricCard label="Last Sync" value={formatDateTime(ghlSyncStatus?.lastSyncAt)} detail={`${numberValue(ghlLastRun.contactsPulled)} contact(s) checked`} tone={ghlSyncStatus?.lastSyncAt ? 'good' : 'default'} />
+                <MetricCard label="Meetings Checked" value={numberValue(ghlLastRun.appointmentsPulled)} detail="GHL appointments read during last run" tone={numberValue(ghlLastRun.appointmentsPulled) ? 'info' : 'default'} />
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="font-semibold text-neutral-950">CRM Sync Contract</div>
+                  <p className="mt-2 text-sm leading-6 text-neutral-500">
+                    Pull contacts, opportunities, tags, stages, meeting status, and purchases from the customer's GHL location. Tanaghum uses the mirrored data for dashboards, tasks, and reporting.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <ProductStatus tone="good">GHL source of truth</ProductStatus>
+                    <ProductStatus tone="info">Tanaghum reporting layer</ProductStatus>
+                    <ProductStatus tone={ghlSyncStatus?.writeBackEnabled ? 'warn' : 'default'}>{ghlSyncStatus?.writeBackEnabled ? 'Write-back gated' : 'Write-back off'}</ProductStatus>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-neutral-200 bg-white p-4">
+                  <div className="font-semibold text-neutral-950">Actions</div>
+                  <div className="mt-4 grid gap-2">
+                    <SecondaryAction onClick={previewGhlPull} disabled={loading === 'ghl-preview'}>
+                      {loading === 'ghl-preview' ? 'Checking...' : 'Preview GHL Pull'}
+                    </SecondaryAction>
+                    <PrimaryAction onClick={runGhlPullSync} disabled={loading === 'ghl-sync'}>
+                      {loading === 'ghl-sync' ? 'Syncing...' : 'Sync From GHL'}
+                    </PrimaryAction>
+                  </div>
+                </div>
+              </div>
+              {ghlRequiredActions.length > 0 && (
+                <Notice tone="warn">{ghlRequiredActions.join(' ')}</Notice>
+              )}
             </ProductCard>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -1601,7 +1752,7 @@ export default function EventDashboard() {
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-              <ProductCard title="Next Required Actions" subtitle="Operational actions for Amro and the sales/content teams.">
+              <ProductCard title="Next Required Actions" subtitle="Operational actions for the sales and content teams.">
                 {nextActions.length ? (
                   <ReadableQueue
                     items={nextActions.map(action => ({
@@ -1728,7 +1879,7 @@ export default function EventDashboard() {
                 ) : null}
 
                 <Notice tone="info">
-                  Recommendations do not change ads, budgets, CRM, WhatsApp, voice, or content workflows automatically. Amro or an authorized manager decides what to apply.
+                  Recommendations do not change ads, budgets, CRM, WhatsApp, voice, or content workflows automatically. An authorized manager decides what to apply.
                 </Notice>
               </div>
             </ProductCard>
@@ -1814,7 +1965,7 @@ export default function EventDashboard() {
                         value={emailPlanForm.contentDraft}
                         onChange={event => setEmailPlanForm(current => ({ ...current, contentDraft: event.target.value }))}
                         className="min-h-24 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                        placeholder="Write the draft message Amro's team wants to review."
+                        placeholder="Write the draft message the team wants to review."
                       />
                     </Field>
                     <div className="flex flex-wrap gap-2">
@@ -2174,303 +2325,326 @@ export default function EventDashboard() {
                 </div>
               )}
             >
-              <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="text-sm font-semibold text-neutral-950">Record a barrier</div>
-                    <p className="mt-1 text-sm leading-6 text-neutral-500">
-                      Use this when the team hears an objection, spots weak form completion, loses meetings to no-shows, or finds a campaign execution blocker.
-                    </p>
+              <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
+                <div className="min-w-0 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-neutral-950">Record a blocker</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">
+                        Capture the problem once so the team can see why leads, meetings, spend, or sales moved.
+                      </p>
+                    </div>
+                    <ProductStatus tone="info">Event evidence</ProductStatus>
                   </div>
-                  <Field label="Barrier title">
-                    <input
-                      value={problemForm.title}
-                      onChange={event => setProblemForm(current => ({ ...current, title: event.target.value }))}
-                      className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      placeholder="Example: WhatsApp follow-up is taking more than 24 hours"
-                    />
-                  </Field>
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                    <Field label="Area">
-                      <select
-                        value={problemForm.category}
-                        onChange={event => setProblemForm(current => ({ ...current, category: event.target.value as ProblemCategory }))}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      >
-                        {PROBLEM_CATEGORIES.map(category => <option key={category} value={category}>{titleCase(category)}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Severity">
-                      <select
-                        value={problemForm.severity}
-                        onChange={event => setProblemForm(current => ({ ...current, severity: event.target.value as ProblemSeverity }))}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      >
-                        {PROBLEM_SEVERITIES.map(severity => <option key={severity} value={severity}>{titleCase(severity)}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Source">
-                      <select
-                        value={problemForm.source}
-                        onChange={event => setProblemForm(current => ({ ...current, source: event.target.value as ProblemSource }))}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      >
-                        {PROBLEM_SOURCES.map(source => <option key={source} value={source}>{titleCase(source)}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Owner">
+
+                  <div className="mt-4 space-y-4">
+                    <Field label="Blocker title">
                       <input
-                        value={problemForm.ownerRole}
-                        onChange={event => setProblemForm(current => ({ ...current, ownerRole: event.target.value }))}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                        placeholder="sales_manager"
+                        value={problemForm.title}
+                        onChange={event => setProblemForm(current => ({ ...current, title: event.target.value }))}
+                        className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="WhatsApp follow-up is taking more than 24 hours"
                       />
                     </Field>
-                  </div>
-                  <Field label="What happened?">
-                    <textarea
-                      value={problemForm.description}
-                      onChange={event => setProblemForm(current => ({ ...current, description: event.target.value }))}
-                      className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      placeholder="Short team note, form insight, call feedback, or execution issue."
-                    />
-                  </Field>
-                  <Field label="Business impact">
-                    <textarea
-                      value={problemForm.impactSummary}
-                      onChange={event => setProblemForm(current => ({ ...current, impactSummary: event.target.value }))}
-                      className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      placeholder="Example: fewer qualified meetings, weaker show-up rate, or higher cost per lead."
-                    />
-                  </Field>
-                  <Field label="Recommended action">
-                    <textarea
-                      value={problemForm.recommendedAction}
-                      onChange={event => setProblemForm(current => ({ ...current, recommendedAction: event.target.value }))}
-                      className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      placeholder="Example: assign same-day WhatsApp callback and test a stronger FOMO message."
-                    />
-                  </Field>
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                    <Field label="Related lead">
-                      <select
-                        value={problemForm.relatedLeadId}
-                        onChange={event => setProblemForm(current => ({ ...current, relatedLeadId: event.target.value }))}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">None</option>
-                        {salesLeads.map(lead => <option key={String(lead.id)} value={String(lead.id)}>{leadName(lead)}</option>)}
-                      </select>
+
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                      <Field label="Area">
+                        <select
+                          value={problemForm.category}
+                          onChange={event => setProblemForm(current => ({ ...current, category: event.target.value as ProblemCategory }))}
+                          className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        >
+                          {PROBLEM_CATEGORIES.map(category => <option key={category} value={category}>{titleCase(category)}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Severity">
+                        <select
+                          value={problemForm.severity}
+                          onChange={event => setProblemForm(current => ({ ...current, severity: event.target.value as ProblemSeverity }))}
+                          className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        >
+                          {PROBLEM_SEVERITIES.map(severity => <option key={severity} value={severity}>{titleCase(severity)}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Source">
+                        <select
+                          value={problemForm.source}
+                          onChange={event => setProblemForm(current => ({ ...current, source: event.target.value as ProblemSource }))}
+                          className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        >
+                          {PROBLEM_SOURCES.map(source => <option key={source} value={source}>{titleCase(source)}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Owner">
+                        <input
+                          value={problemForm.ownerRole}
+                          onChange={event => setProblemForm(current => ({ ...current, ownerRole: event.target.value }))}
+                          className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                          placeholder="sales_manager"
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label="What happened?">
+                      <textarea
+                        value={problemForm.description}
+                        onChange={event => setProblemForm(current => ({ ...current, description: event.target.value }))}
+                        className="min-h-24 w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Short team note, form insight, call feedback, or execution issue."
+                      />
                     </Field>
-                    <Field label="Related campaign">
-                      <select
-                        value={problemForm.relatedCampaignId}
-                        onChange={event => setProblemForm(current => ({ ...current, relatedCampaignId: event.target.value }))}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">None</option>
-                        {campaigns.map(campaign => <option key={String(campaign.id)} value={String(campaign.id)}>{text(campaign.title, 'Event campaign')}</option>)}
-                      </select>
+                    <Field label="Business impact">
+                      <textarea
+                        value={problemForm.impactSummary}
+                        onChange={event => setProblemForm(current => ({ ...current, impactSummary: event.target.value }))}
+                        className="min-h-24 w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Fewer qualified meetings, weaker show-up rate, or higher cost per lead."
+                      />
                     </Field>
+                    <Field label="Recommended action">
+                      <textarea
+                        value={problemForm.recommendedAction}
+                        onChange={event => setProblemForm(current => ({ ...current, recommendedAction: event.target.value }))}
+                        className="min-h-24 w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        placeholder="Assign same-day WhatsApp callback and test stronger FOMO message."
+                      />
+                    </Field>
+
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                      <Field label="Related lead">
+                        <select
+                          value={problemForm.relatedLeadId}
+                          onChange={event => setProblemForm(current => ({ ...current, relatedLeadId: event.target.value }))}
+                          className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        >
+                          <option value="">None</option>
+                          {salesLeads.map(lead => <option key={String(lead.id)} value={String(lead.id)}>{leadName(lead)}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Related campaign">
+                        <select
+                          value={problemForm.relatedCampaignId}
+                          onChange={event => setProblemForm(current => ({ ...current, relatedCampaignId: event.target.value }))}
+                          className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                        >
+                          <option value="">None</option>
+                          {campaigns.map(campaign => <option key={String(campaign.id)} value={String(campaign.id)}>{text(campaign.title, 'Event campaign')}</option>)}
+                        </select>
+                      </Field>
+                    </div>
+
+                    <Field label="Due date">
+                      <input
+                        type="datetime-local"
+                        value={problemForm.dueDate}
+                        onChange={event => setProblemForm(current => ({ ...current, dueDate: event.target.value }))}
+                        className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                      />
+                    </Field>
+                    <PrimaryAction onClick={createProblem} disabled={loading === 'create-problem' || !problemForm.title.trim()}>
+                      {loading === 'create-problem' ? 'Recording...' : 'Record Blocker'}
+                    </PrimaryAction>
                   </div>
-                  <Field label="Due date">
-                    <input
-                      type="datetime-local"
-                      value={problemForm.dueDate}
-                      onChange={event => setProblemForm(current => ({ ...current, dueDate: event.target.value }))}
-                      className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                    />
-                  </Field>
-                  <PrimaryAction onClick={createProblem} disabled={loading === 'create-problem' || !problemForm.title.trim()}>
-                    {loading === 'create-problem' ? 'Recording...' : 'Record Barrier'}
-                  </PrimaryAction>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <MetricCard label="Active Barriers" value={openProblemCount} detail="Open or being investigated" tone={openProblemCount ? 'warn' : 'good'} />
-                    <MetricCard label="Critical" value={criticalProblemCount} detail="Needs leadership attention" tone={criticalProblemCount ? 'danger' : 'good'} />
-                    <MetricCard label="Total Logged" value={numberValue(problemDashboard?.totalProblems)} detail="Event-scoped records" tone="info" />
+                <div className="min-w-0 space-y-4">
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+                    <MetricCard label="Active" value={openProblemCount} detail="Open or investigating" tone={openProblemCount ? 'warn' : 'good'} />
+                    <MetricCard label="Critical" value={criticalProblemCount} detail="Leadership attention" tone={criticalProblemCount ? 'danger' : 'good'} />
+                    <MetricCard label="Logged" value={numberValue(problemDashboard?.totalProblems)} detail="Event evidence records" tone="info" />
                   </div>
 
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="text-sm font-semibold text-neutral-950">Top blockers</div>
-                    <p className="mt-1 text-sm leading-6 text-neutral-500">Highest-severity active barriers for this event.</p>
-                    <div className="mt-4">
-                    {problemTopBlockers.length ? (
-                      <ReadableQueue
-                        items={problemTopBlockers.map(problem => ({
-                          title: text(problem.title, 'Untitled barrier'),
-                          meta: `${titleCase(text(problem.category, 'other'))} / owned by ${text(problem.ownerRole, 'unassigned')}`,
-                          status: titleCase(text(problem.severity, 'medium')),
-                          tone: problemSeverityTone(problemSeverity(problem.severity)),
-                        }))}
-                      />
-                    ) : (
-                      <EmptyProductState
-                        title="No active barriers"
-                        message="When the team records objections, funnel issues, creative delays, no-show risks, or sales blockers, the most urgent items appear here."
-                      />
-                    )}
+                  <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                    <div className="min-w-0 rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Top blockers</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Highest-severity items to fix first.</p>
+                      <div className="mt-4 min-w-0">
+                        {problemTopBlockers.length ? (
+                          <ReadableQueue
+                            items={problemTopBlockers.map(problem => ({
+                              title: text(problem.title, 'Untitled barrier'),
+                              meta: `${titleCase(text(problem.category, 'other'))} / ${text(problem.ownerRole, 'unassigned')}`,
+                              status: titleCase(text(problem.severity, 'medium')),
+                              tone: problemSeverityTone(problemSeverity(problem.severity)),
+                            }))}
+                          />
+                        ) : (
+                          <EmptyProductState
+                            title="No active blockers"
+                            message="When the team logs objections, form issues, creative delays, or no-show risks, the most urgent ones appear here."
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 rounded-lg border border-neutral-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-neutral-950">Where it is stuck</div>
+                      <p className="mt-1 text-sm leading-6 text-neutral-500">Grouped by campaign, sales, funnel, content, and integration areas.</p>
+                      <div className="mt-4 min-w-0">
+                        {Object.keys(problemCountsByCategory).length ? (
+                          <BarList
+                            items={PROBLEM_CATEGORIES
+                              .map(category => ({
+                                label: titleCase(category),
+                                value: numberValue(problemCountsByCategory[category]),
+                                tone: category === 'sales' || category === 'funnel' ? 'warn' as const : 'info' as const,
+                              }))
+                              .filter(item => item.value > 0)}
+                          />
+                        ) : (
+                          <EmptyProductState message="No category signal yet. Record the first blocker to start closeout evidence." />
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="text-sm font-semibold text-neutral-950">Barrier categories</div>
-                    <p className="mt-1 text-sm leading-6 text-neutral-500">Where the event is getting stuck.</p>
-                    <div className="mt-4">
-                    {Object.keys(problemCountsByCategory).length ? (
-                      <BarList
-                        items={PROBLEM_CATEGORIES
-                          .map(category => ({
-                            label: titleCase(category),
-                            value: numberValue(problemCountsByCategory[category]),
-                            tone: category === 'sales' || category === 'funnel' ? 'warn' as const : 'info' as const,
-                          }))
-                          .filter(item => item.value > 0)}
-                      />
-                    ) : (
-                      <EmptyProductState message="No category signals yet. Record the first barrier to start building closeout evidence." />
-                    )}
+                  <div className="min-w-0 rounded-lg border border-neutral-200 bg-white p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-neutral-950">Blocker board</div>
+                        <p className="mt-1 text-sm leading-6 text-neutral-500">Select an item to update owner, impact, recommendation, or resolution.</p>
+                      </div>
+                      {selectedProblem && (
+                        <ProductStatus tone={problemStatusTone(problemStatus(selectedProblem.status))}>
+                          {titleCase(text(selectedProblem.status, 'open'))}
+                        </ProductStatus>
+                      )}
                     </div>
-                  </div>
 
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="text-sm font-semibold text-neutral-950">Barrier list</div>
-                    <p className="mt-1 text-sm leading-6 text-neutral-500">Select a barrier to update ownership, impact, next action, or status.</p>
-                    <div className="mt-4">
-                    {eventProblems.length ? (
-                      <div className="max-h-[440px] overflow-y-auto divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
-                        {eventProblems.map(problem => {
-                          const active = String(problem.id) === String(selectedProblem?.id || '');
-                          const status = problemStatus(problem.status);
-                          const severity = problemSeverity(problem.severity);
-                          return (
-                            <button
-                              key={String(problem.id)}
-                              type="button"
-                              onClick={() => selectProblemForWork(problem)}
-                              className={`w-full p-4 text-left transition ${active ? 'bg-neutral-950 text-white' : 'bg-white hover:bg-neutral-50'}`}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="font-semibold">{text(problem.title, 'Untitled barrier')}</div>
-                                  <div className={`mt-1 text-sm leading-5 ${active ? 'text-white/65' : 'text-neutral-500'}`}>
-                                    {titleCase(text(problem.category, 'other'))} / {text(problem.ownerRole, 'unassigned')}
+                    <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                      <div className="min-w-0">
+                        {eventProblems.length ? (
+                          <div className="max-h-[420px] overflow-y-auto rounded-lg border border-neutral-200 bg-white">
+                            {eventProblems.map(problem => {
+                              const active = String(problem.id) === String(selectedProblem?.id || '');
+                              const status = problemStatus(problem.status);
+                              const severity = problemSeverity(problem.severity);
+                              return (
+                                <button
+                                  key={String(problem.id)}
+                                  type="button"
+                                  onClick={() => selectProblemForWork(problem)}
+                                  className={`w-full border-b border-neutral-100 p-4 text-left last:border-b-0 ${active ? 'bg-neutral-950 text-white' : 'bg-white hover:bg-neutral-50'}`}
+                                >
+                                  <div className="flex min-w-0 items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="line-clamp-2 font-semibold">{text(problem.title, 'Untitled barrier')}</div>
+                                      <div className={`mt-1 line-clamp-2 text-sm leading-5 ${active ? 'text-white/65' : 'text-neutral-500'}`}>
+                                        {titleCase(text(problem.category, 'other'))} / {text(problem.ownerRole, 'unassigned')}
+                                      </div>
+                                    </div>
+                                    <div className="flex shrink-0 flex-col items-end gap-2">
+                                      <ProductStatus tone={active ? 'muted' : problemSeverityTone(severity)}>{titleCase(severity)}</ProductStatus>
+                                      <ProductStatus tone={active ? 'muted' : problemStatusTone(status)}>{titleCase(status)}</ProductStatus>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="flex shrink-0 flex-col items-end gap-2">
-                                  <ProductStatus tone={active ? 'muted' : problemSeverityTone(severity)}>{titleCase(severity)}</ProductStatus>
-                                  <ProductStatus tone={active ? 'muted' : problemStatusTone(status)}>{titleCase(status)}</ProductStatus>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <EmptyProductState
+                            title="No blockers recorded"
+                            message="Start by recording the most important objection or campaign blocker the team has seen for this event."
+                          />
+                        )}
                       </div>
-                    ) : (
-                      <EmptyProductState
-                        title="No barriers recorded"
-                        message="Start by recording the most important objection or campaign blocker the team has seen for this event."
-                      />
-                    )}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="text-sm font-semibold text-neutral-950">Selected barrier action</div>
-                    <p className="mt-1 text-sm leading-6 text-neutral-500">Keep ownership, impact, and resolution evidence clean for the closeout report.</p>
-                    <div className="mt-4">
-                    {selectedProblem ? (
-                      <div className="space-y-4">
-                        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                          <div className="text-sm font-semibold text-neutral-950">{text(selectedProblem.title, 'Selected barrier')}</div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <ProductStatus tone={problemSeverityTone(problemSeverity(selectedProblem.severity))}>{titleCase(text(selectedProblem.severity, 'medium'))}</ProductStatus>
-                            <ProductStatus tone={problemStatusTone(problemStatus(selectedProblem.status))}>{titleCase(text(selectedProblem.status, 'open'))}</ProductStatus>
-                            <ProductStatus tone="info">{titleCase(text(selectedProblem.category, 'other'))}</ProductStatus>
+                      <div className="min-w-0 rounded-lg border border-neutral-100 bg-neutral-50 p-4">
+                        {selectedProblem ? (
+                          <div className="min-w-0 space-y-4">
+                            <div>
+                              <div className="text-sm font-semibold text-neutral-950">{text(selectedProblem.title, 'Selected blocker')}</div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <ProductStatus tone={problemSeverityTone(problemSeverity(selectedProblem.severity))}>{titleCase(text(selectedProblem.severity, 'medium'))}</ProductStatus>
+                                <ProductStatus tone={problemStatusTone(problemStatus(selectedProblem.status))}>{titleCase(text(selectedProblem.status, 'open'))}</ProductStatus>
+                                <ProductStatus tone="info">{titleCase(text(selectedProblem.category, 'other'))}</ProductStatus>
+                              </div>
+                            </div>
+
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                              <Field label="Severity">
+                                <select
+                                  value={problemUpdateForm.severity}
+                                  onChange={event => setProblemUpdateForm(current => ({ ...current, severity: event.target.value as ProblemSeverity }))}
+                                  className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                                >
+                                  {PROBLEM_SEVERITIES.map(severity => <option key={severity} value={severity}>{titleCase(severity)}</option>)}
+                                </select>
+                              </Field>
+                              <Field label="Owner">
+                                <input
+                                  value={problemUpdateForm.ownerRole}
+                                  onChange={event => setProblemUpdateForm(current => ({ ...current, ownerRole: event.target.value }))}
+                                  className="w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                                  placeholder="sales_manager"
+                                />
+                              </Field>
+                            </div>
+
+                            <Field label="Impact">
+                              <textarea
+                                value={problemUpdateForm.impactSummary}
+                                onChange={event => setProblemUpdateForm(current => ({ ...current, impactSummary: event.target.value }))}
+                                className="min-h-20 w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                              />
+                            </Field>
+                            <Field label="Recommended action">
+                              <textarea
+                                value={problemUpdateForm.recommendedAction}
+                                onChange={event => setProblemUpdateForm(current => ({ ...current, recommendedAction: event.target.value }))}
+                                className="min-h-20 w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                              />
+                            </Field>
+                            <PrimaryAction onClick={updateSelectedProblem} disabled={loading === 'update-problem'}>
+                              {loading === 'update-problem' ? 'Saving...' : 'Save Update'}
+                            </PrimaryAction>
+
+                            <div className="border-t border-neutral-200 pt-4">
+                              <Field label="Resolution note">
+                                <textarea
+                                  value={problemUpdateForm.resolutionNotes}
+                                  onChange={event => setProblemUpdateForm(current => ({ ...current, resolutionNotes: event.target.value }))}
+                                  className="min-h-20 w-full min-w-0 rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                                  placeholder="Required when resolving or dismissing."
+                                />
+                              </Field>
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                {problemStatus(selectedProblem.status) === 'open' && (
+                                  <SecondaryAction onClick={() => transitionSelectedProblem('investigating')} disabled={loading === 'problem-investigating'}>
+                                    Start Investigation
+                                  </SecondaryAction>
+                                )}
+                                {problemStatus(selectedProblem.status) === 'investigating' && (
+                                  <SecondaryAction onClick={() => transitionSelectedProblem('open')} disabled={loading === 'problem-open'}>
+                                    Reopen
+                                  </SecondaryAction>
+                                )}
+                                {(problemStatus(selectedProblem.status) === 'open' || problemStatus(selectedProblem.status) === 'investigating') && (
+                                  <>
+                                    <SecondaryAction onClick={() => transitionSelectedProblem('resolved')} disabled={loading === 'problem-resolved'}>
+                                      Resolve
+                                    </SecondaryAction>
+                                    <SecondaryAction onClick={() => transitionSelectedProblem('dismissed')} disabled={loading === 'problem-dismissed'}>
+                                      Dismiss
+                                    </SecondaryAction>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <Field label="Severity">
-                          <select
-                            value={problemUpdateForm.severity}
-                            onChange={event => setProblemUpdateForm(current => ({ ...current, severity: event.target.value as ProblemSeverity }))}
-                            className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                          >
-                            {PROBLEM_SEVERITIES.map(severity => <option key={severity} value={severity}>{titleCase(severity)}</option>)}
-                          </select>
-                        </Field>
-                        <Field label="Owner">
-                          <input
-                            value={problemUpdateForm.ownerRole}
-                            onChange={event => setProblemUpdateForm(current => ({ ...current, ownerRole: event.target.value }))}
-                            className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                            placeholder="sales_manager"
+                        ) : (
+                          <EmptyProductState
+                            title="Select or record a blocker"
+                            message="Choose an item from the board, or record the first blocker for this event."
                           />
-                        </Field>
-                        <Field label="Impact">
-                          <textarea
-                            value={problemUpdateForm.impactSummary}
-                            onChange={event => setProblemUpdateForm(current => ({ ...current, impactSummary: event.target.value }))}
-                            className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                          />
-                        </Field>
-                        <Field label="Recommended action">
-                          <textarea
-                            value={problemUpdateForm.recommendedAction}
-                            onChange={event => setProblemUpdateForm(current => ({ ...current, recommendedAction: event.target.value }))}
-                            className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                          />
-                        </Field>
-                        <PrimaryAction onClick={updateSelectedProblem} disabled={loading === 'update-problem'}>
-                          {loading === 'update-problem' ? 'Saving...' : 'Save Barrier Update'}
-                        </PrimaryAction>
-                        <div className="border-t border-neutral-100 pt-4">
-                          <Field label="Resolution note">
-                            <textarea
-                              value={problemUpdateForm.resolutionNotes}
-                              onChange={event => setProblemUpdateForm(current => ({ ...current, resolutionNotes: event.target.value }))}
-                              className="min-h-20 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                              placeholder="Required when resolving or dismissing."
-                            />
-                          </Field>
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {problemStatus(selectedProblem.status) === 'open' && (
-                              <SecondaryAction onClick={() => transitionSelectedProblem('investigating')} disabled={loading === 'problem-investigating'}>
-                                Start Investigation
-                              </SecondaryAction>
-                            )}
-                            {problemStatus(selectedProblem.status) === 'investigating' && (
-                              <SecondaryAction onClick={() => transitionSelectedProblem('open')} disabled={loading === 'problem-open'}>
-                                Reopen
-                              </SecondaryAction>
-                            )}
-                            {(problemStatus(selectedProblem.status) === 'open' || problemStatus(selectedProblem.status) === 'investigating') && (
-                              <>
-                                <SecondaryAction onClick={() => transitionSelectedProblem('resolved')} disabled={loading === 'problem-resolved'}>
-                                  Resolve
-                                </SecondaryAction>
-                                <SecondaryAction onClick={() => transitionSelectedProblem('dismissed')} disabled={loading === 'problem-dismissed'}>
-                                  Dismiss
-                                </SecondaryAction>
-                              </>
-                            )}
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    ) : (
-                      <EmptyProductState
-                        title="Select or record a barrier"
-                        message="Choose an item from the list, or record the first blocker for this event."
-                      />
-                    )}
                     </div>
                   </div>
 
                   <Notice tone="info">
-                    These records become closeout evidence. They explain why campaigns, forms, meetings, no-shows, and purchases moved the way they did.
+                    These records become closeout evidence for the event: why campaigns, forms, meetings, no-shows, purchases, and spend changed.
                   </Notice>
                 </div>
               </div>
@@ -3106,15 +3280,16 @@ export default function EventDashboard() {
             <ProductCard title="Leads For This Event" subtitle="Only leads linked to this event are shown. No other event data is mixed in.">
               {(salesLeads.length || leads.length) ? (
                 <ProductTable
-                  columns={['Lead', 'Channel', 'Temperature', 'Status', 'Next Action', 'Email', 'Created']}
+                  columns={['Lead', 'CRM Source', 'Channel', 'Temperature', 'Status', 'Next Action', 'Email', 'Synced']}
                   rows={(salesLeads.length ? salesLeads : leads).map(lead => [
                     leadName(lead),
+                    <ProductStatus key={`${String(lead.id)}-crm-source`} tone={crmSourceTone(lead)}>{crmSourceLabel(lead)}</ProductStatus>,
                     titleCase(text(lead.channelAttribution || lead.platform, 'manual')),
                     titleCase(leadTemp(lead.leadTemperature)),
                     titleCase(leadStatus(lead.leadStatus || lead.status)),
                     text(lead.nextAction, 'Not set'),
                     text(lead.leadEmail, 'Not provided'),
-                    formatDate(lead.createdAt),
+                    text(lead.sourceOfTruth) === 'gohighlevel' ? formatDateTime(lead.externalLastSyncedAt) : formatDate(lead.createdAt),
                   ])}
                 />
               ) : (
@@ -3124,9 +3299,10 @@ export default function EventDashboard() {
 
             <ProductCard title="KPI Evidence" subtitle="Every dashboard number comes from manual/imported/connector records.">
               <div className="mb-4 flex flex-wrap gap-2">
-                <ProductStatus tone="info">{numberValue(sourceStatus.manualRecords)} manual</ProductStatus>
-                <ProductStatus tone="info">{numberValue(sourceStatus.importedRecords)} imported</ProductStatus>
+                <ProductStatus tone={sourceTone(primarySource)}>{sourceLabel(primarySource)}</ProductStatus>
                 <ProductStatus tone="info">{numberValue(sourceStatus.connectorRecords)} connector</ProductStatus>
+                <ProductStatus tone="info">{numberValue(sourceStatus.importedRecords)} imported</ProductStatus>
+                <ProductStatus tone={sourceStatus.manualFallbackActive ? 'warn' : 'info'}>{numberValue(sourceStatus.manualRecords)} fallback manual</ProductStatus>
               </div>
               {kpiRecords.length ? (
                 <ProductTable

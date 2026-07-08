@@ -1,13 +1,84 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/auth';
-import { AppError, UnauthorizedError } from '@shared/errors';
+import { AppError, ForbiddenError, UnauthorizedError } from '@shared/errors';
 import { auditLog } from '@shared/logging';
 import { getActiveIntegrationCredential } from '../integration-credentials/service';
 
 export const runtimeBridgesRouter = Router();
 
 type RuntimeProvider = 'openclaw' | 'agentgateway' | 'agentscope';
+type RuntimeFlag = { name: string; enabled: boolean; purpose: string };
+
+const RUNTIME_METADATA: Record<RuntimeProvider, {
+  displayName: string;
+  intendedRole: string;
+  activeExecutionLabel: string;
+  productionGate: string;
+  flags: RuntimeFlag[];
+}> = {
+  openclaw: {
+    displayName: 'OpenClaw',
+    intendedRole: 'Adjacent channel/orchestration bridge that must call STITCH APIs and cannot own business state.',
+    activeExecutionLabel: 'Workflow orchestration',
+    productionGate: 'Deploy runtime, configure tenant endpoint, prove one read-only or approval-gated workflow end to end.',
+    flags: [
+      {
+        name: 'OPENCLAW_ORCHESTRATION_ENABLED',
+        enabled: process.env.OPENCLAW_ORCHESTRATION_ENABLED === 'true',
+        purpose: 'Allows the STITCH backend bridge to call OpenClaw orchestration endpoint.',
+      },
+    ],
+  },
+  agentgateway: {
+    displayName: 'agentgateway',
+    intendedRole: 'Network mediation/proxy for approved tool calls. No Tanaghum production traffic is routed through it yet.',
+    activeExecutionLabel: 'Gateway traffic routing',
+    productionGate: 'Deploy gateway, route one low-risk connector through policy, prove audit and deny behavior.',
+    flags: [
+      {
+        name: 'AGENTGATEWAY_TRAFFIC_ENABLED',
+        enabled: process.env.AGENTGATEWAY_TRAFFIC_ENABLED === 'true',
+        purpose: 'Reserved gate for future policy-routed connector traffic.',
+      },
+      {
+        name: 'AGENTGATEWAY_DRY_RUN_POLICY_ENABLED',
+        enabled: process.env.AGENTGATEWAY_DRY_RUN_POLICY_ENABLED === 'true',
+        purpose: 'Routes connector dry-run policy checks through agentgateway before STITCH executes the dry-run.',
+      },
+    ],
+  },
+  agentscope: {
+    displayName: 'AgentScope',
+    intendedRole: 'Optional agent runtime/session isolation layer. It is not executing production agents yet.',
+    activeExecutionLabel: 'Agent session processing',
+    productionGate: 'Deploy runtime, define tenant/session boundary, prove one governed agent session with audit.',
+    flags: [
+      {
+        name: 'AGENTSCOPE_PROCESS_ENABLED',
+        enabled: process.env.AGENTSCOPE_PROCESS_ENABLED === 'true',
+        purpose: 'Allows the STITCH backend bridge to call AgentScope processing endpoint.',
+      },
+    ],
+  },
+};
+
+const agentgatewaySandboxPolicySchema = z.object({
+  operation: z.literal('connector_import.dry_run'),
+  connectorId: z.string().trim().min(1).max(120),
+  eventId: z.string().nullable().optional(),
+  authority: z.object({
+    sourceOfTruth: z.literal('STITCH'),
+    tenantKey: z.string().trim().min(1).max(80),
+    humanUserId: z.string().trim().min(1).max(120),
+    role: z.string().trim().min(1).max(80),
+  }),
+  safety: z.object({
+    dryRunOnly: z.literal(true),
+    externalWritesAllowed: z.literal(false),
+    importWritesAllowed: z.literal(false),
+  }),
+});
 
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
@@ -15,15 +86,92 @@ function getPayload(req: Request): JwtPayload {
   return verifyToken(authHeader.substring(7));
 }
 
+function requireRuntimeOpsRole(role: string) {
+  if (!['admin', 'cco'].includes(role)) {
+    throw new ForbiddenError('Admin/Ops runtime infrastructure evidence requires admin or CCO access');
+  }
+}
+
+runtimeBridgesRouter.get('/agentgateway/sandbox-policy/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    provider: 'agentgateway',
+    adapter: 'sandbox_policy',
+    productionGateway: false,
+    supportedOperation: 'connector_import.dry_run',
+    externalWritesAllowed: false,
+    _label: 'Sandbox policy adapter for the first agentgateway dry-run mediation pilot',
+  });
+});
+
+runtimeBridgesRouter.post('/agentgateway/sandbox-policy/connector-dry-run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const configuredToken = process.env.AGENTGATEWAY_SANDBOX_POLICY_TOKEN;
+    if (!configuredToken) {
+      throw new AppError('agentgateway sandbox policy token is not configured.', 424, 'AGENTGATEWAY_SANDBOX_POLICY_NOT_CONFIGURED');
+    }
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${configuredToken}`) {
+      throw new UnauthorizedError('Invalid agentgateway sandbox policy token');
+    }
+
+    const input = agentgatewaySandboxPolicySchema.parse(req.body);
+    const supportedConnectors = new Set([
+      'postiz',
+      'gohighlevel',
+      'formaloo',
+      'meta_analytics',
+      'youtube_analytics',
+      'whatsapp_provider',
+      'telegram_provider',
+      'smartlabs_voice',
+    ]);
+
+    if (!supportedConnectors.has(input.connectorId)) {
+      res.status(200).json({
+        decision: 'deny',
+        reason: `Unsupported connector for sandbox policy: ${input.connectorId}`,
+        provider: 'agentgateway',
+        adapter: 'sandbox_policy',
+        productionGateway: false,
+        dryRunOnly: true,
+        externalWritesAllowed: false,
+      });
+      return;
+    }
+
+    res.json({
+      decision: 'allow',
+      reason: `Sandbox policy allowed ${input.connectorId} dry-run preview only. No import, publishing, CRM write, messaging, voice, or external write is authorized.`,
+      provider: 'agentgateway',
+      adapter: 'sandbox_policy',
+      productionGateway: false,
+      operation: input.operation,
+      connectorId: input.connectorId,
+      tenantKey: input.authority.tenantKey,
+      dryRunOnly: true,
+      externalWritesAllowed: false,
+      importWritesAllowed: false,
+      rawSecretsReturned: false,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 runtimeBridgesRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const session = resolveSessionContext(getPayload(req));
+    const payload = getPayload(req);
+    requireRuntimeOpsRole(payload.role);
+    const session = resolveSessionContext(payload);
     const providers: RuntimeProvider[] = ['openclaw', 'agentgateway', 'agentscope'];
     const statuses = await Promise.all(providers.map((provider) => getRuntimeStatus(provider, session.tenantKey)));
     res.json({
       sourceOfTruth: 'STITCH',
+      customerFacing: false,
+      productionActive: statuses.some(status => status.productionActive === true),
       statuses,
-      _label: 'Runtime bridge status loaded from tenant credentials and live health checks',
+      _label: 'Admin/Ops runtime infrastructure evidence loaded from tenant credentials, environment gates, and live health checks',
     });
   } catch (err) {
     next(err);
@@ -32,7 +180,9 @@ runtimeBridgesRouter.get('/status', async (req: Request, res: Response, next: Ne
 
 runtimeBridgesRouter.post('/openclaw/orchestrate', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const session = resolveSessionContext(getPayload(req));
+    const payload = getPayload(req);
+    requireRuntimeOpsRole(payload.role);
+    const session = resolveSessionContext(payload);
     if (process.env.OPENCLAW_ORCHESTRATION_ENABLED !== 'true') {
       throw new AppError('OpenClaw orchestration is disabled. Set OPENCLAW_ORCHESTRATION_ENABLED=true after runtime credentials and approval policy are configured.', 424, 'OPENCLAW_ORCHESTRATION_DISABLED');
     }
@@ -84,7 +234,9 @@ runtimeBridgesRouter.post('/openclaw/orchestrate', async (req: Request, res: Res
 
 runtimeBridgesRouter.post('/agentscope/process', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const session = resolveSessionContext(getPayload(req));
+    const payload = getPayload(req);
+    requireRuntimeOpsRole(payload.role);
+    const session = resolveSessionContext(payload);
     if (process.env.AGENTSCOPE_PROCESS_ENABLED !== 'true') {
       throw new AppError('AgentScope processing is disabled. Set AGENTSCOPE_PROCESS_ENABLED=true after runtime deployment and policy approval.', 424, 'AGENTSCOPE_PROCESS_DISABLED');
     }
@@ -123,25 +275,44 @@ runtimeBridgesRouter.post('/agentscope/process', async (req: Request, res: Respo
 });
 
 async function getRuntimeStatus(provider: RuntimeProvider, tenantKey: string) {
+  const metadata = RUNTIME_METADATA[provider];
+  const lastCheckedAt = new Date().toISOString();
   const credential = await getActiveIntegrationCredential(provider, 'runtime_endpoint', tenantKey);
   if (!credential) {
     return {
       provider,
+      displayName: metadata.displayName,
+      intendedRole: metadata.intendedRole,
       configured: false,
       reachable: false,
       statusCode: null,
+      productionActive: false,
+      activeExecutionLabel: metadata.activeExecutionLabel,
+      flags: metadata.flags,
+      lastCheckedAt,
+      blocker: 'Runtime endpoint credential is missing.',
+      productionGate: metadata.productionGate,
       label: 'Requires Credentials',
       rawSecretsReturned: false,
     };
   }
   const baseUrl = credential.secrets.baseUrl;
   const healthPath = credential.secrets.healthPath || '/health';
+  const flagsEnabled = metadata.flags.every(flag => flag.enabled);
   if (!baseUrl) {
     return {
       provider,
+      displayName: metadata.displayName,
+      intendedRole: metadata.intendedRole,
       configured: true,
       reachable: false,
       statusCode: null,
+      productionActive: false,
+      activeExecutionLabel: metadata.activeExecutionLabel,
+      flags: metadata.flags,
+      lastCheckedAt,
+      blocker: 'Runtime credential exists but baseUrl is missing.',
+      productionGate: metadata.productionGate,
       label: 'Missing baseUrl',
       rawSecretsReturned: false,
     };
@@ -153,20 +324,41 @@ async function getRuntimeStatus(provider: RuntimeProvider, tenantKey: string) {
       headers: credential.secrets.apiKey ? { Authorization: `Bearer ${credential.secrets.apiKey}` } : undefined,
       signal: AbortSignal.timeout(5000),
     });
+    const reachable = response.ok;
     return {
       provider,
+      displayName: metadata.displayName,
+      intendedRole: metadata.intendedRole,
       configured: true,
-      reachable: response.ok,
+      reachable,
       statusCode: response.status,
-      label: response.ok ? 'Runtime Reachable' : 'Runtime Health Failed',
+      productionActive: reachable && flagsEnabled,
+      activeExecutionLabel: metadata.activeExecutionLabel,
+      flags: metadata.flags,
+      lastCheckedAt,
+      blocker: reachable
+        ? flagsEnabled
+          ? 'Runtime is reachable and execution flag is enabled. A governed production pilot is still required before customer use.'
+          : 'Runtime is reachable, but execution flag is disabled.'
+        : 'Runtime credential exists, but health check failed.',
+      productionGate: metadata.productionGate,
+      label: reachable ? 'Runtime Reachable' : 'Runtime Health Failed',
       rawSecretsReturned: false,
     };
   } catch (err) {
     return {
       provider,
+      displayName: metadata.displayName,
+      intendedRole: metadata.intendedRole,
       configured: true,
       reachable: false,
       statusCode: null,
+      productionActive: false,
+      activeExecutionLabel: metadata.activeExecutionLabel,
+      flags: metadata.flags,
+      lastCheckedAt,
+      blocker: 'Runtime credential exists, but health check could not reach the service.',
+      productionGate: metadata.productionGate,
       label: err instanceof Error ? err.message : 'Runtime health check failed',
       rawSecretsReturned: false,
     };

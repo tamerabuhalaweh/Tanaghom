@@ -19,6 +19,8 @@ import { encryptSecret } from '@shared/crypto/secret-vault';
 const previousNodeEnv = process.env.NODE_ENV;
 const previousAllowMock = process.env.ALLOW_MOCK_LLM;
 const previousVaultKey = process.env.SECRET_VAULT_ENCRYPTION_KEY;
+const previousLlmProvider = process.env.LLM_PROVIDER;
+const previousGemmaKey = process.env.GEMMA_API_KEY;
 
 describe('production LLM provider resolution', () => {
   beforeEach(() => {
@@ -34,6 +36,10 @@ describe('production LLM provider resolution', () => {
     else process.env.ALLOW_MOCK_LLM = previousAllowMock;
     if (previousVaultKey === undefined) delete process.env.SECRET_VAULT_ENCRYPTION_KEY;
     else process.env.SECRET_VAULT_ENCRYPTION_KEY = previousVaultKey;
+    if (previousLlmProvider === undefined) delete process.env.LLM_PROVIDER;
+    else process.env.LLM_PROVIDER = previousLlmProvider;
+    if (previousGemmaKey === undefined) delete process.env.GEMMA_API_KEY;
+    else process.env.GEMMA_API_KEY = previousGemmaKey;
   });
 
   it('does not silently fall back to mock in production', async () => {
@@ -42,6 +48,36 @@ describe('production LLM provider resolution', () => {
     await expect(resolveUserLLMProvider('user-1')).rejects.toMatchObject({
       statusCode: 424,
       code: 'LLM_PROVIDER_REQUIRED',
+    });
+  });
+
+  it('uses the configured environment provider when production users have no personal selection', async () => {
+    process.env.LLM_PROVIDER = 'gemma';
+    process.env.GEMMA_API_KEY = 'server-gemma-key';
+    prismaMocks.agentRep.findUnique.mockResolvedValue({ metadata: {} });
+    prismaMocks.llmProviderCredential.findUnique.mockResolvedValue(null);
+
+    const provider = await resolveUserLLMProvider('user-1');
+
+    expect(provider.getStatus()).toMatchObject({
+      type: 'gemma',
+      configured: true,
+      apiKeyStatus: 'configured',
+    });
+  });
+
+  it('uses the configured environment provider when production users still have mock selected', async () => {
+    process.env.LLM_PROVIDER = 'gemma';
+    process.env.GEMMA_API_KEY = 'server-gemma-key';
+    prismaMocks.agentRep.findUnique.mockResolvedValue({ metadata: { llmProvider: 'mock' } });
+    prismaMocks.llmProviderCredential.findUnique.mockResolvedValue(null);
+
+    const provider = await resolveUserLLMProvider('user-1');
+
+    expect(provider.getStatus()).toMatchObject({
+      type: 'gemma',
+      configured: true,
+      apiKeyStatus: 'configured',
     });
   });
 

@@ -156,7 +156,48 @@ describe('integration credential vault', () => {
     expect(result.rawSecretsReturned).toBe(false);
   });
 
-  it('requires admin or CCO access', async () => {
-    await expect(listIntegrationCredentials('specialist')).rejects.toThrow(/Admin or CCO/);
+  it('accepts Formaloo customer credentials and keeps client secret encrypted', async () => {
+    prismaMocks.integrationCredential.upsert.mockImplementation(async ({ create }) => ({
+      id: 'cred-formaloo',
+      tenant_key: create.tenant_key,
+      provider: create.provider,
+      credential_type: create.credential_type,
+      connection_key: create.connection_key,
+      display_name: create.display_name,
+      encrypted_payload: create.encrypted_payload,
+      secret_fingerprints: create.secret_fingerprints,
+      metadata: create.metadata,
+      created_by_user_id: create.created_by_user_id,
+      is_active: true,
+      created_at: new Date('2026-06-25T00:00:00Z'),
+      updated_at: new Date('2026-06-25T00:00:00Z'),
+      last_validated_at: null,
+    }));
+
+    const result = await upsertIntegrationCredential('marketing_manager', 'user-1', {
+      tenantKey: 'default',
+      provider: 'formaloo',
+      credentialType: 'api_key',
+      connectionKey: 'default',
+      displayName: 'Formaloo Forms',
+      secrets: { clientKey: 'formaloo-client', clientSecret: 'formaloo-secret', formId: 'form-1' },
+      metadata: { source: 'connector_setup' },
+    });
+
+    const saved = prismaMocks.integrationCredential.upsert.mock.calls[0][0].create;
+    expect(JSON.stringify(saved.encrypted_payload)).not.toContain('formaloo-secret');
+    expect(result.provider).toBe('formaloo');
+    expect(result.secretFields).toEqual(['clientKey', 'clientSecret', 'formId']);
+    expect(result.rawSecretsReturned).toBe(false);
+  });
+
+  it('allows connector setup roles and still blocks unrelated roles', async () => {
+    prismaMocks.integrationCredential.findMany.mockResolvedValue([]);
+
+    await expect(listIntegrationCredentials('admin')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('cco')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('department_head')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('marketing_manager')).resolves.toEqual([]);
+    await expect(listIntegrationCredentials('specialist')).rejects.toThrow(/Connector setup access/);
   });
 });

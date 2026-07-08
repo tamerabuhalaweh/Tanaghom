@@ -3,8 +3,8 @@ import { ForbiddenError } from '@shared/errors';
 export const GHL_SETUP_PERMISSIONS: Record<string, string[]> = {
   admin: ['ghl_setup:read', 'ghl_setup:write'],
   cco: ['ghl_setup:read', 'ghl_setup:write'],
-  department_head: ['ghl_setup:read'],
-  marketing_manager: ['ghl_setup:read'],
+  department_head: ['ghl_setup:read', 'ghl_setup:write'],
+  marketing_manager: ['ghl_setup:read', 'ghl_setup:write'],
   social_media_manager: ['ghl_setup:read'],
   sales_manager: ['ghl_setup:read'],
   lead_qualification_manager: ['ghl_setup:read'],

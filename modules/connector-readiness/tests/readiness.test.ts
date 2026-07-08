@@ -22,8 +22,7 @@ describe('Connector Readiness', () => {
 
   it('reports missing when no credentials exist', async () => {
     const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
-    const configurable = result.providers.filter(p => p.nextAction !== 'YouTube Analytics not yet configurable');
-    for (const p of configurable) {
+    for (const p of result.providers) {
       expect(p.credentialState).toBe('missing');
     }
   });
@@ -74,11 +73,24 @@ describe('Connector Readiness', () => {
     expect(tg?.credentialState).toBe('validated');
   });
 
-  it('YouTube is explicitly not configurable', async () => {
-    prismaMocks.integrationCredential.findFirst.mockResolvedValue(null);
+  it('YouTube Analytics resolves from youtube_analytics credential', async () => {
+    prismaMocks.integrationCredential.findFirst.mockImplementation((args: Record<string, unknown>) => {
+      if (args.where?.provider === 'youtube_analytics' && args.where?.credential_type === 'oauth_token') {
+        return Promise.resolve({ id: 'c1', last_validated_at: new Date() });
+      }
+      return Promise.resolve(null);
+    });
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({ id: 'm1' });
+    prismaMocks.connectorImportJob.findFirst.mockResolvedValue({
+      id: 'j1',
+      last_dry_run_result: { kpiRows: [{ metricDate: '2026-07-01', channel: 'youtube' }] },
+      state: 'test_passed',
+    });
+
     const result = await repo.getEventConnectorReadiness('tenant-a', 'event-1');
     const yt = result.providers.find(p => p.providerId === 'youtube_analytics');
-    expect(yt?.nextAction).toContain('not yet supported');
+    expect(yt?.credentialState).toBe('validated');
+    expect(yt?.nextAction).toBe('Ready for use');
   });
 
   it('credentials + mapping without event dry-run is not Ready for use', async () => {
@@ -199,8 +211,8 @@ describe('Connector Readiness', () => {
 
   it('credential lookup uses correct provider for each connector', () => {
     const expected: Record<string, string> = {
-      meta_analytics: 'social_oauth',
-      youtube_analytics: 'youtube',
+      meta_analytics: 'meta_analytics or social_oauth fallback',
+      youtube_analytics: 'youtube_analytics',
       formaloo: 'formaloo',
       gohighlevel: 'gohighlevel',
       whatsapp_provider: 'whatsapp',

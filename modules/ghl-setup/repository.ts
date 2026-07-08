@@ -1,4 +1,7 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
+import { getActiveIntegrationCredential } from '../integration-credentials/service';
+import { LEAD_STATUSES, LEAD_TEMPERATURES } from '../lead-lifecycle/types';
 import type {
   CredentialStatus,
   GhlCredentialStatus,
@@ -7,7 +10,34 @@ import type {
   GhlPipelineMapping,
   GhlLocationMapping,
   MappingReadinessState,
+  GhlTagTarget,
 } from './types';
+
+export interface GhlSetupRuntimeConfig {
+  baseUrl: string;
+  apiKey: string;
+  locationId: string;
+  source: 'tenant_vault' | 'missing';
+}
+
+export async function resolveGhlSetupRuntimeConfig(tenantKey: string): Promise<GhlSetupRuntimeConfig> {
+  const credential = await getActiveIntegrationCredential('gohighlevel', 'api_key', tenantKey);
+  if (!credential) {
+    return {
+      baseUrl: process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com',
+      apiKey: '',
+      locationId: '',
+      source: 'missing',
+    };
+  }
+
+  return {
+    baseUrl: String(credential.secrets.baseUrl || process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com'),
+    apiKey: String(credential.secrets.apiKey || ''),
+    locationId: String(credential.secrets.locationId || ''),
+    source: 'tenant_vault',
+  };
+}
 
 export async function getGhlCredentialStatus(tenantKey: string): Promise<GhlCredentialStatus> {
   const credential = await prisma.integrationCredential.findUnique({
@@ -87,7 +117,7 @@ export async function getGhlMappingReadiness(tenantKey: string): Promise<GhlMapp
       tags.push({
         ghlTagId: String(fields.ghlTagId || ''),
         ghlTagName: String(fields.ghlTagName || ''),
-        internalTag: String(fields.internalTag || ''),
+        internalTag: normalizeTagTarget(fields.internalTag),
         direction: (fields.direction as GhlTagMapping['direction']) || 'bidirectional',
         status: mapping.validation_status === 'valid' ? 'mapped' : 'pending',
       });
@@ -163,6 +193,7 @@ export async function saveTagMapping(
   userId: string,
   mapping: Omit<GhlTagMapping, 'status'>,
 ): Promise<void> {
+  const validation = validateGhlTagMapping(mapping);
   await prisma.connectorFieldMapping.create({
     data: {
       tenant_key: tenantKey,
@@ -175,7 +206,8 @@ export async function saveTagMapping(
         internalTag: mapping.internalTag,
         direction: mapping.direction,
       },
-      validation_status: 'untested',
+      validation_status: validation.valid ? 'valid' : 'invalid',
+      validation_errors: validation.valid ? Prisma.JsonNull : validation.errors as unknown as Prisma.InputJsonValue,
       created_by_user_id: userId,
     },
   });
@@ -186,6 +218,7 @@ export async function savePipelineMapping(
   userId: string,
   mapping: Omit<GhlPipelineMapping, 'status'>,
 ): Promise<void> {
+  const validation = validateGhlPipelineMapping(mapping);
   await prisma.connectorFieldMapping.create({
     data: {
       tenant_key: tenantKey,
@@ -199,7 +232,8 @@ export async function savePipelineMapping(
         ghlStageName: mapping.ghlStageName,
         internalStage: mapping.internalStage,
       },
-      validation_status: 'untested',
+      validation_status: validation.valid ? 'valid' : 'invalid',
+      validation_errors: validation.valid ? Prisma.JsonNull : validation.errors as unknown as Prisma.InputJsonValue,
       created_by_user_id: userId,
     },
   });
@@ -210,6 +244,7 @@ export async function saveLocationMapping(
   userId: string,
   mapping: Omit<GhlLocationMapping, 'status'>,
 ): Promise<void> {
+  const validation = validateLocationMapping(mapping);
   await prisma.connectorFieldMapping.create({
     data: {
       tenant_key: tenantKey,
@@ -219,8 +254,64 @@ export async function saveLocationMapping(
         ghlLocationId: mapping.ghlLocationId,
         displayName: mapping.displayName,
       },
-      validation_status: 'untested',
+      validation_status: validation.valid ? 'valid' : 'invalid',
+      validation_errors: validation.valid ? Prisma.JsonNull : validation.errors as unknown as Prisma.InputJsonValue,
       created_by_user_id: userId,
     },
   });
+}
+
+export async function markGhlCredentialValidated(tenantKey: string, validatedAt = new Date()): Promise<void> {
+  await prisma.integrationCredential.update({
+    where: {
+      tenant_key_provider_credential_type_connection_key: {
+        tenant_key: tenantKey,
+        provider: 'gohighlevel',
+        credential_type: 'api_key',
+        connection_key: 'default',
+      },
+    },
+    data: {
+      last_validated_at: validatedAt,
+    },
+  });
+}
+
+function normalizeTagTarget(value: unknown): GhlTagTarget {
+  const target = String(value || 'new_lead');
+  if (isLeadStatusOrTemperature(target)) return target;
+  return 'new_lead';
+}
+
+function isLeadStatusOrTemperature(value: string): value is GhlTagTarget {
+  return (LEAD_STATUSES as readonly string[]).includes(value) || (LEAD_TEMPERATURES as readonly string[]).includes(value);
+}
+
+function validateGhlTagMapping(mapping: Omit<GhlTagMapping, 'status'>): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!mapping.ghlTagId.trim()) errors.push('GHL tag id is required');
+  if (!mapping.ghlTagName.trim()) errors.push('GHL tag name is required');
+  if (!isLeadStatusOrTemperature(mapping.internalTag)) {
+    errors.push(`Unsupported Tanaghum lead tag target: ${mapping.internalTag}`);
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+function validateGhlPipelineMapping(mapping: Omit<GhlPipelineMapping, 'status'>): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!mapping.ghlPipelineId.trim()) errors.push('GHL pipeline id is required');
+  if (!mapping.ghlPipelineName.trim()) errors.push('GHL pipeline name is required');
+  if (!mapping.ghlStageId.trim()) errors.push('GHL stage id is required');
+  if (!mapping.ghlStageName.trim()) errors.push('GHL stage name is required');
+  if (!(LEAD_STATUSES as readonly string[]).includes(mapping.internalStage)) {
+    errors.push(`Unsupported Tanaghum sales stage target: ${mapping.internalStage}`);
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+function validateLocationMapping(mapping: Omit<GhlLocationMapping, 'status'>): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!mapping.ghlLocationId.trim()) errors.push('GHL location id is required');
+  if (!mapping.displayName.trim()) errors.push('GHL location display name is required');
+  return { valid: errors.length === 0, errors };
 }

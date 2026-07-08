@@ -13,7 +13,7 @@ vi.mock('@shared/events', () => ({ eventBus: { emit: vi.fn() } }));
 vi.mock('@modules/ai-provider/controller', () => ({
   resolveUserLLMProvider: vi.fn(async () => {
     throw new AppError(
-      'No production LLM provider is configured for this user. Configure DeepSeek, OpenAI, or Claude in AI Provider settings.',
+      'No production LLM provider is configured for this user. Configure Gemma, DeepSeek, OpenAI, or Claude in AI Provider settings.',
       424,
       'LLM_PROVIDER_REQUIRED',
     );

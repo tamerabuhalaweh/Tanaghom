@@ -15,6 +15,10 @@ interface ApiOptions {
   token?: string;
 }
 
+interface ApiStreamOptions extends ApiOptions {
+  onEvent: (event: { event: string; data: unknown }) => void;
+}
+
 export class ApiError extends Error {
   code?: string;
   status: number;
@@ -54,6 +58,65 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   }
 
   return res.json();
+}
+
+async function apiStream(path: string, options: ApiStreamOptions): Promise<void> {
+  const { method = 'GET', body, token, onEvent } = options;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const detail =
+      typeof err.error === 'string'
+        ? err.error
+        : typeof err.message === 'string'
+          ? err.message
+          : `API error: ${res.status}`;
+    throw new ApiError(detail, res.status, typeof err.code === 'string' ? err.code : undefined);
+  }
+
+  if (!res.body) throw new ApiError('Streaming response was empty', 502, 'STREAM_BODY_MISSING');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split(/\r?\n\r?\n/);
+      buffer = chunks.pop() || '';
+      chunks.forEach(chunk => emitSseChunk(chunk, onEvent));
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) emitSseChunk(buffer, onEvent);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function emitSseChunk(chunk: string, onEvent: (event: { event: string; data: unknown }) => void) {
+  const lines = chunk.split(/\r?\n/);
+  const eventName = lines.find(line => line.startsWith('event:'))?.slice(6).trim() || 'message';
+  const dataText = lines
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trim())
+    .join('\n');
+  if (!dataText) return;
+  try {
+    onEvent({ event: eventName, data: JSON.parse(dataText) });
+  } catch {
+    onEvent({ event: eventName, data: dataText });
+  }
 }
 
 export const authApi = {
@@ -319,6 +382,10 @@ export const connectorImportsApi = {
     const params = eventId ? `?${new URLSearchParams({ eventId }).toString()}` : '';
     return apiFetch<unknown>(`/connector-imports/jobs${params}`, { token });
   },
+  syncStatus: (token: string, eventId?: string) => {
+    const params = eventId ? `?${new URLSearchParams({ eventId }).toString()}` : '';
+    return apiFetch<unknown>(`/connector-imports/sync-status${params}`, { token });
+  },
   createJob: (data: unknown, token: string) =>
     apiFetch<unknown>('/connector-imports/jobs', { method: 'POST', body: data, token }),
   markReady: (id: string, data: unknown, token: string) =>
@@ -329,6 +396,13 @@ export const connectorImportsApi = {
     apiFetch<unknown>('/connector-imports/dry-run', { method: 'POST', body: data, token }),
   approveImport: (data: unknown, token: string) =>
     apiFetch<unknown>('/connector-imports/approve-import', { method: 'POST', body: data, token }),
+};
+
+export const connectorReadinessApi = {
+  global: (token: string) => apiFetch<unknown>('/connector-readiness/global', { token }),
+  event: (eventId: string, token: string) => apiFetch<unknown>(`/connector-readiness/events/${eventId}`, { token }),
+  validateProvider: (providerId: string, token: string) =>
+    apiFetch<unknown>(`/connector-readiness/validate/${providerId}`, { method: 'POST', token }),
 };
 
 export const socialOAuthApi = {
@@ -407,6 +481,9 @@ export const ghlSetupApi = {
   wizard: (token: string) => apiFetch<unknown>('/ghl-setup/wizard', { token }),
   credentialStatus: (token: string) => apiFetch<unknown>('/ghl-setup/credential-status', { token }),
   mappingReadiness: (token: string) => apiFetch<unknown>('/ghl-setup/mapping-readiness', { token }),
+  testConnection: (token: string) => apiFetch<unknown>('/ghl-setup/test-connection', { method: 'POST', token }),
+  validateMappings: (token: string) => apiFetch<unknown>('/ghl-setup/validate-mappings', { method: 'POST', token }),
+  liveValidation: (token: string) => apiFetch<unknown>('/ghl-setup/live-validation', { method: 'POST', token }),
   saveTags: (mappings: unknown[], token: string) =>
     apiFetch<unknown>('/ghl-setup/tags', { method: 'POST', body: { mappings }, token }),
   savePipelines: (mappings: unknown[], token: string) =>
@@ -414,6 +491,14 @@ export const ghlSetupApi = {
   saveLocation: (data: unknown, token: string) =>
     apiFetch<unknown>('/ghl-setup/location', { method: 'POST', body: data, token }),
   blockedWrite: (token: string) => apiFetch<unknown>('/ghl-setup/write', { method: 'POST', token }),
+};
+
+export const ghlSyncApi = {
+  status: (token: string, eventId?: string) => apiFetch<unknown>(`/ghl-sync/status${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`, { token }),
+  pullPreview: (token: string, data: { eventId?: string; limit?: number }) => apiFetch<unknown>('/ghl-sync/pull-preview', { method: 'POST', body: data, token }),
+  pullSync: (token: string, data: { eventId?: string; limit?: number }) => apiFetch<unknown>('/ghl-sync/pull-sync', { method: 'POST', body: data, token }),
+  writeBackPreview: (token: string, data: { leadId: string }) => apiFetch<unknown>('/ghl-sync/write-back-preview', { method: 'POST', body: data, token }),
+  writeBack: (token: string, data: { leadId: string }) => apiFetch<unknown>('/ghl-sync/write-back', { method: 'POST', body: data, token }),
 };
 
 export const ideasApi = {
@@ -491,6 +576,32 @@ export const masterEventsApi = {
   },
 };
 
+export const commercialCommandCenterApi = {
+  dashboard: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown>(`/commercial-command-center/dashboard${params}`, { token });
+  },
+  revenueLines: (token: string) => apiFetch<unknown[]>('/commercial-command-center/revenue-lines', { token }),
+  revenueLineDashboard: (revenueLineType: string, token: string) =>
+    apiFetch<unknown>(`/commercial-command-center/revenue-lines/${encodeURIComponent(revenueLineType)}/dashboard`, { token }),
+  createRevenueLine: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-command-center/revenue-lines', { method: 'POST', body: data, token }),
+  plans: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-command-center/plans${params}`, { token });
+  },
+  createPlan: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-command-center/plans', { method: 'POST', body: data, token }),
+  updatePlan: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-command-center/plans/${id}`, { method: 'PUT', body: data, token }),
+  assessmentSignals: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-command-center/assessment-signals${params}`, { token });
+  },
+  createAssessmentSignal: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-command-center/assessment-signals', { method: 'POST', body: data, token }),
+};
+
 export const eventProblemsApi = {
   list: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
@@ -511,4 +622,39 @@ export const eventCloseoutApi = {
 export const learningRecommendationsApi = {
   forEvent: (eventId: string, token: string) =>
     apiFetch<unknown>(`/learning-recommendations/events/${eventId}`, { token }),
+};
+
+export const stitchiApi = {
+  conversations: (token: string, filters?: { eventId?: string; includeTenant?: boolean }) => {
+    const params = new URLSearchParams();
+    if (filters?.eventId) params.set('eventId', filters.eventId);
+    if (filters?.includeTenant) params.set('includeTenant', 'true');
+    const query = params.toString();
+    return apiFetch<unknown[]>(`/stitchi/conversations${query ? `?${query}` : ''}`, { token });
+  },
+  createConversation: (data: unknown, token: string) =>
+    apiFetch<unknown>('/stitchi/conversations', { method: 'POST', body: data, token }),
+  messages: (conversationId: string, token: string) =>
+    apiFetch<unknown[]>(`/stitchi/conversations/${conversationId}/messages`, { token }),
+  actions: (conversationId: string, token: string) =>
+    apiFetch<unknown[]>(`/stitchi/conversations/${conversationId}/actions`, { token }),
+  orchestrate: (conversationId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/stitchi/conversations/${conversationId}/orchestrate`, { method: 'POST', body: data, token }),
+  respondStream: (
+    conversationId: string,
+    data: unknown,
+    token: string,
+    onEvent: (event: { event: string; data: unknown }) => void,
+  ) => apiStream(`/stitchi/conversations/${conversationId}/respond/stream`, {
+    method: 'POST',
+    body: data,
+    token,
+    onEvent,
+  }),
+  approveAction: (actionId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/stitchi/actions/${actionId}/approve`, { method: 'POST', body: data, token }),
+  rejectAction: (actionId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/stitchi/actions/${actionId}/reject`, { method: 'POST', body: data, token }),
+  executeAction: (actionId: string, token: string) =>
+    apiFetch<unknown>(`/stitchi/actions/${actionId}/execute`, { method: 'POST', token }),
 };

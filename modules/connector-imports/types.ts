@@ -34,6 +34,17 @@ export const CREDENTIAL_STATES = [
 
 export type CredentialState = (typeof CREDENTIAL_STATES)[number];
 
+export const CONNECTOR_SYNC_STATUSES = [
+  'not_started',
+  'requires_credentials',
+  'ready_for_sync',
+  'synced',
+  'failed',
+  'blocked',
+] as const;
+
+export type ConnectorSyncStatus = (typeof CONNECTOR_SYNC_STATUSES)[number];
+
 export const VALID_TRANSITIONS: Record<ImportJobState, ImportJobState[]> = {
   draft: ['requires_credentials', 'ready_for_test', 'disabled'],
   requires_credentials: ['ready_for_test', 'disabled'],
@@ -63,8 +74,8 @@ export const CONNECTOR_REQUIREMENTS: Record<ConnectorId, {
   },
   formaloo: {
     label: 'Formaloo',
-    requiredCredentialFields: ['apiKey', 'formId'],
-    optionalCredentialFields: ['workspaceId'],
+    requiredCredentialFields: ['clientKey', 'clientSecret', 'formId'],
+    optionalCredentialFields: ['workspaceId', 'baseUrl'],
     purpose: 'Import form submissions and survey responses from Formaloo.',
   },
   meta_analytics: {
@@ -75,8 +86,8 @@ export const CONNECTOR_REQUIREMENTS: Record<ConnectorId, {
   },
   youtube_analytics: {
     label: 'YouTube Analytics',
-    requiredCredentialFields: ['apiKey', 'channelId'],
-    optionalCredentialFields: [],
+    requiredCredentialFields: ['accessToken', 'channelId'],
+    optionalCredentialFields: ['contentOwnerId'],
     purpose: 'Import read-only YouTube channel and video analytics.',
   },
   whatsapp_provider: {
@@ -143,6 +154,11 @@ export interface ConnectorImportJobSummary {
   notes: string | null;
   lastDryRunAt: Date | null;
   lastDryRunResult: Record<string, unknown> | null;
+  syncStatus: ConnectorSyncStatus;
+  lastSyncAt: Date | null;
+  lastSyncRows: number;
+  lastSyncError: string | null;
+  lastSyncAuditRecordId: string | null;
   lastImportAt: Date | null;
   lastImportResult: Record<string, unknown> | null;
   approvedByUserId: string | null;
@@ -173,6 +189,45 @@ export interface ReadinessSummary {
   totalBlocked: number;
 }
 
+export interface ConnectorSyncJobSummary {
+  id: string;
+  connectorId: string;
+  displayName: string;
+  eventId: string | null;
+  state: ImportJobState;
+  credentialState: CredentialState;
+  syncStatus: ConnectorSyncStatus;
+  lastDryRunAt: Date | null;
+  lastSyncAt: Date | null;
+  lastSyncRows: number;
+  lastSyncError: string | null;
+  lastSyncAuditRecordId: string | null;
+}
+
+export interface ConnectorSyncStatusSummary {
+  tenantKey: string;
+  eventId: string | null;
+  primarySource: 'connector' | 'imported' | 'manual' | 'none';
+  manualFallbackActive: boolean;
+  sourceTotals: {
+    manualRecords: number;
+    importedRecords: number;
+    connectorRecords: number;
+  };
+  jobTotals: {
+    totalJobs: number;
+    readyForSync: number;
+    synced: number;
+    failed: number;
+    blocked: number;
+    requiresCredentials: number;
+  };
+  lastConnectorSyncAt: Date | null;
+  connectorRowsImported: number;
+  connectorErrors: string[];
+  jobs: ConnectorSyncJobSummary[];
+}
+
 export interface DryRunKpiRow {
   metricDate: string;
   channel: string;
@@ -196,6 +251,31 @@ export interface DryRunResult {
   kpiRows: DryRunKpiRow[];
   leadAttributions: number;
   warnings: string[];
+  providerStatus?: {
+    provider: string;
+    adapter: string;
+    readOnly: true;
+    externalWritesAllowed: false;
+    rawSecretsReturned: false;
+    channelsFound?: number;
+    selectedIntegrationId?: string | null;
+    selectedChannel?: Record<string, unknown> | null;
+    analyticsFetched?: boolean;
+    analyticsMetricLabels?: string[];
+    source?: string;
+  };
+  runtimeMediation?: {
+    provider: 'agentgateway';
+    operation: 'connector_import.dry_run';
+    enabled: boolean;
+    mediated: boolean;
+    decision: 'not_enabled' | 'allowed' | 'denied';
+    reason: string;
+    statusCode: number | null;
+    dryRunOnly: true;
+    externalWritesAllowed: false;
+    rawSecretsReturned: false;
+  };
 }
 
 export interface ImportResult {

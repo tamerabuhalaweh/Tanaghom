@@ -34,6 +34,10 @@ export interface EventComparisonRow {
   costPerLead: number;
   bestChannel: string | null;
   bestAudienceSource: string | null;
+  primaryDataSource: 'connector' | 'imported' | 'manual' | 'none';
+  manualFallbackActive: boolean;
+  lastConnectorSyncAt: Date | null;
+  connectorRowsImported: number;
 }
 
 export interface MasterDashboardSummary {
@@ -63,6 +67,20 @@ export interface MasterDashboardSummary {
     bestAudienceSource: string | null;
     highestRevenueEvent: { eventId: string; eventName: string; revenue: number } | null;
     lowestCostPerLeadEvent: { eventId: string; eventName: string; costPerLead: number } | null;
+  };
+  dataSourceSummary: {
+    manualRecords: number;
+    importedRecords: number;
+    connectorRecords: number;
+    eventsUsingConnectorData: number;
+    eventsUsingImportedData: number;
+    eventsUsingManualFallback: number;
+    readyConnectorJobs: number;
+    syncedConnectorJobs: number;
+    failedConnectorJobs: number;
+    blockedConnectorJobs: number;
+    connectorRowsImported: number;
+    lastConnectorSyncAt: Date | null;
   };
   events: EventComparisonRow[];
 }

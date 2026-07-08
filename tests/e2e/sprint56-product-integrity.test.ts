@@ -39,12 +39,11 @@ describe('Sprint 56 production product integrity contracts', () => {
     const layout = source('frontend', 'src', 'components', 'Layout.tsx');
 
     const navigationContracts = [
-      { path: '/command-center', route: 'command-center', label: 'Dashboard' },
-      { path: '/growth', route: 'growth', label: 'Growth Engine' },
+      { path: '/command-center', route: 'command-center', label: 'Home' },
       { path: '/events', route: 'events', label: 'Events' },
       { path: '/campaigns', route: 'campaigns', label: 'Campaigns' },
-      { path: '/ideas', route: 'ideas', label: 'Content Creator' },
-      { path: '/approvals', route: 'approvals', label: 'Review & Approve' },
+      { path: '/ideas', route: 'ideas', label: 'Content' },
+      { path: '/approvals', route: 'approvals', label: 'Review' },
       { path: '/publishing', route: 'publishing', label: 'Scheduling' },
       { path: '/analytics', route: 'analytics', label: 'Performance' },
       { path: '/my-agent-rep', route: 'my-agent-rep', label: 'My Profile' },
@@ -54,9 +53,10 @@ describe('Sprint 56 production product integrity contracts', () => {
       { path: '/tenant-admin', route: 'tenant-admin', label: 'Tenant Admin' },
       { path: '/agent-skills', route: 'agent-skills', label: 'Agent Skills' },
       { path: '/operations', route: 'operations', label: 'Operations' },
+      { path: '/runtime-infrastructure', route: 'runtime-infrastructure', label: 'Runtime Evidence' },
       { path: '/smartlabs-voice', route: 'smartlabs-voice', label: 'SmartLabs Voice' },
-      { path: '/mcp-engine', route: 'mcp-engine', label: 'Integrations' },
-      { path: '/integration-credentials', route: 'integration-credentials', label: 'Connector Setup' },
+      { path: '/mcp-engine', route: 'mcp-engine', label: 'Connector Registry' },
+      { path: '/integration-credentials', route: 'integration-credentials', label: 'Integrations' },
       { path: '/safety', route: 'safety', label: 'Security' },
       { path: '/observability', route: 'observability', label: 'Activity Log' },
     ];
@@ -74,6 +74,57 @@ describe('Sprint 56 production product integrity contracts', () => {
     for (const staleCustomerLabel of ['AI Draft Studio', 'My AI Rep', 'Approvals & Publishing', 'Campaigns Briefs']) {
       expect(layout, `${staleCustomerLabel} must not remain in primary navigation`).not.toContain(staleCustomerLabel);
     }
+  });
+
+  it('keeps runtime infrastructure evidence separated from customer integrations', () => {
+    const app = source('frontend', 'src', 'App.tsx');
+    const layout = source('frontend', 'src', 'components', 'Layout.tsx');
+    const integrationCredentials = source('frontend', 'src', 'pages', 'IntegrationCredentials.tsx');
+    const runtimeInfrastructure = source('frontend', 'src', 'pages', 'RuntimeInfrastructure.tsx');
+    const runtimeController = source('modules', 'runtime-bridges', 'controller.ts');
+
+    expect(app).toContain('path="runtime-infrastructure"');
+    expect(app).toContain('adminOnly(<RuntimeInfrastructure />)');
+    expect(layout).toContain("label: 'Runtime Evidence'");
+    expect(layout).toContain("path: '/runtime-infrastructure'");
+    expect(integrationCredentials).not.toContain('runtimeBridgesApi');
+    expect(integrationCredentials).not.toContain('OpenClaw Runtime');
+    expect(runtimeInfrastructure).toContain('OpenClaw');
+    expect(runtimeInfrastructure).toContain('agentgateway');
+    expect(runtimeInfrastructure).toContain('AgentScope');
+    expect(runtimeInfrastructure).toContain('Not Production Active');
+    expect(runtimeController).toContain('requireRuntimeOpsRole(payload.role)');
+    expect(runtimeController).toContain('productionActive');
+    expect(runtimeController).toContain('customerFacing: false');
+  });
+
+  it('keeps non-admin event workspaces from calling forbidden problem dashboard APIs', () => {
+    const hybridWorkspace = source('frontend', 'src', 'pages', 'HybridEventWorkspace.tsx');
+
+    expect(hybridWorkspace).toContain('canLoadProblemDashboard(role)');
+    expect(hybridWorkspace).toContain('localProblemDashboard(normalizedProblems)');
+    expect(hybridWorkspace).toContain("limitedByRole: true");
+    expect(hybridWorkspace).toContain("eventProblemsApi.dashboard(nextEventId, token).catch(() => null)");
+    expect(hybridWorkspace).not.toContain("eventProblemsApi.dashboard(nextEventId, token).catch(() => ({}))");
+  });
+
+  it('keeps agentgateway as the selected low-risk runtime pilot for connector dry-runs', () => {
+    const connectorService = source('modules', 'connector-imports', 'service.ts');
+    const agentgateway = source('modules', 'runtime-bridges', 'agentgateway.ts');
+    const runtimeController = source('modules', 'runtime-bridges', 'controller.ts');
+    const backend = source('src', 'index.ts');
+
+    expect(connectorService).toContain('mediateConnectorDryRunPolicy');
+    expect(connectorService).toContain('runtimeMediation');
+    expect(agentgateway).toContain('AGENTGATEWAY_DRY_RUN_POLICY_ENABLED');
+    expect(agentgateway).toContain("operation: 'connector_import.dry_run'");
+    expect(agentgateway).toContain('externalWritesAllowed: false');
+    expect(agentgateway).toContain('rawSecretsReturned: false');
+    expect(runtimeController).toContain('AGENTGATEWAY_DRY_RUN_POLICY_ENABLED');
+    expect(runtimeController).toContain("'/agentgateway/sandbox-policy/connector-dry-run'");
+    expect(runtimeController).toContain('AGENTGATEWAY_SANDBOX_POLICY_TOKEN');
+    expect(runtimeController).toContain('productionGateway: false');
+    expect(backend).toContain("req.path.startsWith('/runtime-bridges/agentgateway/sandbox-policy/')");
   });
 
   it('keeps Tenant Admin subscription, export, and deletion controls connected to API clients', () => {
@@ -218,7 +269,7 @@ describe('Sprint 56 production product integrity contracts', () => {
     for (const customerCue of [
       'Event Revenue Operations',
       'Event Queue',
-      'Manual KPI Update',
+      'Fallback KPI Correction',
       'Event Funnel',
       'Budget Control',
       'Channel Performance',

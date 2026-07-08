@@ -44,6 +44,33 @@ export interface EventConnectorReadiness {
   missingCount: number;
 }
 
+export const READ_VALIDATION_PROVIDER_IDS = [
+  'meta_analytics',
+  'youtube_analytics',
+  'formaloo',
+] as const;
+
+export type ReadValidationProviderId = (typeof READ_VALIDATION_PROVIDER_IDS)[number];
+
+export interface ReadAccessValidationResult {
+  providerId: ReadValidationProviderId;
+  displayName: string;
+  status: 'requires_credentials' | 'validated' | 'failed' | 'requires_provider_contract';
+  message: string;
+  requiredActions: string[];
+  checkedAt: Date;
+  readOnly: true;
+  externalWritesAllowed: false;
+  rawSecretsReturned: false;
+  rawPayloadReturned: false;
+  evidence: {
+    rowsFound?: number;
+    metricLabels?: string[];
+    accountReference?: string | null;
+    providerEndpoint?: string;
+  };
+}
+
 export const PROVIDER_METADATA: Record<ProviderId, {
   displayName: string;
   oauthRequired: boolean;
@@ -75,9 +102,8 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     importSupported: true,
     writeBackSupported: false,
     writeBackBlocker: 'YouTube Ads write-back not authorized in this environment',
-    configurable: false,
-    notConfigurableAction: 'YouTube Analytics credential provider not yet supported. Requires YouTube API key and channel ID configuration.',
-    missingCredentialAction: 'YouTube Analytics not yet configurable',
+    configurable: true,
+    missingCredentialAction: 'Enter YouTube Analytics OAuth access token and channel ID',
   },
   formaloo: {
     displayName: 'Formaloo',
@@ -88,7 +114,7 @@ export const PROVIDER_METADATA: Record<ProviderId, {
     writeBackSupported: false,
     writeBackBlocker: 'Formaloo write-back not supported',
     configurable: true,
-    missingCredentialAction: 'Enter Formaloo API key and form ID',
+    missingCredentialAction: 'Enter Formaloo client key, client secret, and form ID',
   },
   gohighlevel: {
     displayName: 'GoHighLevel',

@@ -2,9 +2,13 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
+import { LEAD_STATUSES, LEAD_TEMPERATURES } from '../lead-lifecycle/types';
 import * as service from './service';
 
 export const ghlSetupRouter = Router();
+
+const tagTargetValues = [...LEAD_STATUSES, ...LEAD_TEMPERATURES] as [string, ...string[]];
+const leadStatusValues = [...LEAD_STATUSES] as [string, ...string[]];
 
 function getPayload(req: Request): JwtPayload {
   const authHeader = req.headers.authorization;
@@ -52,10 +56,43 @@ ghlSetupRouter.get('/mapping-readiness', async (req: Request, res: Response, nex
   }
 });
 
+ghlSetupRouter.post('/test-connection', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
+    const result = await service.testGhlConnection(payload.role, payload.sub, tenantKey);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+ghlSetupRouter.post('/validate-mappings', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
+    const result = await service.validateMappingAcceptance(payload.role, tenantKey);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+ghlSetupRouter.post('/live-validation', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
+    const result = await service.validateGhlLiveCredentials(payload.role, payload.sub, tenantKey);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 const tagMappingSchema = z.object({
   ghlTagId: z.string().min(1),
   ghlTagName: z.string().min(1),
-  internalTag: z.string().min(1),
+  internalTag: z.enum(tagTargetValues),
   direction: z.enum(['inbound', 'outbound', 'bidirectional']).default('bidirectional'),
 });
 
@@ -76,7 +113,7 @@ const pipelineMappingSchema = z.object({
   ghlPipelineName: z.string().min(1),
   ghlStageId: z.string().min(1),
   ghlStageName: z.string().min(1),
-  internalStage: z.string().min(1),
+  internalStage: z.enum(leadStatusValues),
 });
 
 ghlSetupRouter.post('/pipelines', async (req: Request, res: Response, next: NextFunction) => {

@@ -4,7 +4,7 @@ import { checkGhlSetupReadPermission, checkGhlSetupWritePermission } from '../po
 
 describe('GHL Setup RBAC (real policy)', () => {
   const readRoles = ['admin', 'cco', 'department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'specialist', 'reviewer', 'viewer'];
-  const writeRoles = ['admin', 'cco'];
+  const writeRoles = ['admin', 'cco', 'department_head', 'marketing_manager'];
 
   for (const role of readRoles) {
     it(`${role} can read GHL setup`, () => {
@@ -26,7 +26,7 @@ describe('GHL Setup RBAC (real policy)', () => {
     expect(() => checkGhlSetupWritePermission('unknown')).toThrow(ForbiddenError);
   });
 
-  const readOnlyRoles = ['department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'specialist', 'reviewer', 'viewer'];
+  const readOnlyRoles = ['social_media_manager', 'sales_manager', 'lead_qualification_manager', 'specialist', 'reviewer', 'viewer'];
 
   for (const role of readOnlyRoles) {
     it(`${role} cannot write GHL setup mappings`, () => {

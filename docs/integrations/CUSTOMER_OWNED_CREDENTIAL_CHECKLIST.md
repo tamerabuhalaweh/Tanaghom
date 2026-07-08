@@ -29,12 +29,19 @@ No customer credential should be committed to the repository, placed in document
 | WhatsApp | Provider account, phone number ID, templates, token, consent process | Message send/read depending on provider | Message status and replies if configured | Outbound messages | Consent, template approval, execution authorization | Blocked until customer provider credentials and policy approval exist |
 | Telegram | Bot token, allowed chat/channel IDs, consent/operator rules | Bot API access for approved chats | Message status and replies if configured | Outbound messages | Execution authorization | Blocked until customer token and allowed destinations exist |
 | SmartLabs Voice | SmartLabs API key, agent ID, optional voice ID/TTS backend | SmartLabs REST API access | Agent list, conversation response, voice output when authorized | Voice/chat conversation or TTS call | Explicit test/customer authorization | Connector path exists; must be tested with tenant SmartLabs key |
-| OpenClaw | Endpoint URL, API key if used, allowed channel scope | Orchestration/channel bridge only | STITCH-approved workflow handoff metadata | No autonomous external writes | STITCH approval and MCP boundary | Not source of truth; production runtime integration not yet complete |
-| agentgateway | Gateway endpoint, policy config, routing secrets | Network mediation for approved tools | Tool request/response metadata | Only policy-approved calls | STITCH/SAIF/MCP policy | Not production runtime infrastructure yet |
-| AgentScope | Runtime endpoint/config if adopted | Agent runtime and memory isolation configuration | Agent execution metadata | No direct business writes | STITCH approval | Not production runtime infrastructure yet |
 | SMTP / Email | SMTP host, port, username, password, from address | Email delivery | Invite/reset email delivery status | Sends account email only | Admin configuration | Required for production email invite/reset delivery |
 | Off-Server Backups | S3/compatible bucket or rsync target, credentials, retention policy | Backup target write access | Database backup artifacts | Backup copy only | Operations approval | Local backup supported; off-server copy requires customer/ops target |
 | Alerts / Uptime | Webhook/email destination, uptime monitor target | Alert delivery endpoint | Health/readiness events | Alert messages | Operations approval | Monitoring exists; external routing requires destination |
+
+## Internal Runtime Infrastructure
+
+These services are not customer-owned business connectors and must not appear in the normal customer setup checklist. They are Admin/Ops runtime infrastructure that can be adopted later when there is a clear production use case, deployment owner, and acceptance test.
+
+| Runtime service | Intended role | Current implementation truth | Customer-facing status | Next production gate |
+| --- | --- | --- | --- | --- |
+| OpenClaw | Adjacent channel/orchestration bridge that must call Tanaghum/STITCH APIs | Runtime bridge scaffold exists and is disabled by default. It is not orchestrating production workflows. | Admin/Ops evidence only | Deploy runtime, configure endpoint, prove one read-only or approval-gated workflow end to end |
+| agentgateway | Network mediation/proxy for approved tool calls | No production traffic is routed through agentgateway yet. | Admin/Ops evidence only | Deploy gateway, route one low-risk connector through policy, prove audit and deny behavior |
+| AgentScope | Optional agent runtime/session isolation layer | Runtime bridge scaffold exists and is disabled by default. It is not executing production agents. | Admin/Ops evidence only | Deploy runtime, define tenant/session boundary, prove one governed agent session with audit |
 
 ## Per-Connector Setup Evidence
 
@@ -148,5 +155,6 @@ These blockers are expected until the customer provides the needed account or ap
 - YouTube analytics requires Google/YouTube credential setup.
 - GHL writes require customer-selected integration level, tags, and location/pipeline mapping.
 - WhatsApp, Telegram, and SmartLabs execution require customer credentials and explicit authorization.
+- OpenClaw, agentgateway, and AgentScope are internal runtime follow-ups, not customer connector blockers.
 - Off-server backup copy requires a backup destination.
 - External alert routing requires webhook or email destination.

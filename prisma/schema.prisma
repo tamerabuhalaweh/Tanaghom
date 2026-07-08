@@ -119,11 +119,19 @@ model Tenant {
   event_content_requirements EventContentRequirement[]
   event_sales_tasks EventSalesTask[]
   lead_lifecycle_events LeadLifecycleEvent[]
+  ghl_lead_sync_runs GhlLeadSyncRun[]
   event_problems EventProblem[]
   connector_import_jobs ConnectorImportJob[]
   connector_field_mappings ConnectorFieldMapping[]
+  commercial_revenue_lines CommercialRevenueLine[]
+  commercial_plans CommercialPlan[]
+  commercial_assessment_signals CommercialAssessmentSignal[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
+  stitchi_conversations StitchiConversation[]
+  stitchi_messages StitchiMessage[]
+  stitchi_action_runs StitchiActionRun[]
+  stitchi_action_approvals StitchiActionApproval[]
 
   @@map("tenants")
 }
@@ -278,12 +286,21 @@ model User {
   event_content_requirements_created EventContentRequirement[]
   event_sales_tasks_created EventSalesTask[]
   lead_lifecycle_events LeadLifecycleEvent[]
+  ghl_lead_sync_runs GhlLeadSyncRun[] @relation("GhlLeadSyncRunCreatedBy")
   event_problems_created EventProblem[] @relation("EventProblemCreatedBy")
   event_problems_resolved EventProblem[] @relation("EventProblemResolvedBy")
   connector_imports_created ConnectorImportJob[] @relation("ConnectorImportCreatedBy")
   connector_imports_approved ConnectorImportJob[] @relation("ConnectorImportApprovedBy")
   connector_field_mappings ConnectorFieldMapping[] @relation("ConnectorFieldMappingCreatedBy")
+  commercial_revenue_lines_owned CommercialRevenueLine[] @relation("CommercialRevenueLineOwner")
+  commercial_revenue_lines_created CommercialRevenueLine[] @relation("CommercialRevenueLineCreatedBy")
+  commercial_plans_owned CommercialPlan[] @relation("CommercialPlanOwner")
+  commercial_plans_created CommercialPlan[] @relation("CommercialPlanCreatedBy")
+  commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
+  stitchi_conversations StitchiConversation[] @relation("StitchiConversationUser")
+  stitchi_action_runs StitchiActionRun[] @relation("StitchiActionRunUser")
+  stitchi_action_approvals StitchiActionApproval[] @relation("StitchiActionApprovalUser")
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
   @@map("users")
@@ -355,6 +372,7 @@ enum LlmProviderType {
   openai
   claude
   deepseek
+  gemma
 }
 
 model LlmProviderCredential {
@@ -462,6 +480,40 @@ enum LangGraphWorkflowStatus {
   failed
 }
 
+enum StitchiConversationStatus {
+  active
+  archived
+}
+
+enum StitchiMessageRole {
+  user
+  assistant
+  system
+}
+
+enum StitchiActionRunStatus {
+  proposed
+  awaiting_approval
+  approved
+  rejected
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum StitchiActionRiskLevel {
+  low
+  medium
+  high
+}
+
+enum StitchiApprovalDecision {
+  approved
+  rejected
+  changes_requested
+}
+
 model LangGraphWorkflow {
   id                  String                  @id @default(uuid()) @db.Uuid
   thread_id           String                  @unique
@@ -483,6 +535,99 @@ model LangGraphWorkflow {
   @@index([workflow_type])
   @@index([status])
   @@map("langgraph_workflows")
+}
+
+model StitchiConversation {
+  id         String                    @id @default(uuid()) @db.Uuid
+  tenant_key String
+  user_id    String                    @db.Uuid
+  event_id   String?                   @db.Uuid
+  title      String
+  status     StitchiConversationStatus @default(active)
+  created_at DateTime                  @default(now())
+  updated_at DateTime                  @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenant_key], references: [tenant_key])
+  user        User             @relation("StitchiConversationUser", fields: [user_id], references: [id])
+  event       CommercialEvent? @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  messages    StitchiMessage[]
+  action_runs StitchiActionRun[]
+
+  @@index([tenant_key])
+  @@index([user_id])
+  @@index([event_id])
+  @@index([status])
+  @@map("stitchi_conversations")
+}
+
+model StitchiMessage {
+  id              String             @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  conversation_id String             @db.Uuid
+  role            StitchiMessageRole @default(user)
+  content         String             @db.Text
+  metadata        Json?
+  created_at      DateTime           @default(now())
+
+  tenant       Tenant              @relation(fields: [tenant_key], references: [tenant_key])
+  conversation StitchiConversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_key])
+  @@index([conversation_id])
+  @@index([role])
+  @@index([created_at])
+  @@map("stitchi_messages")
+}
+
+model StitchiActionRun {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  conversation_id     String                 @db.Uuid
+  user_id             String                 @db.Uuid
+  action_type         String
+  status              StitchiActionRunStatus @default(proposed)
+  input_payload       Json
+  preview_payload     Json?
+  result_payload      Json?
+  requires_approval   Boolean                @default(false)
+  risk_level          StitchiActionRiskLevel @default(low)
+  audit_record_id     String?                @db.Uuid
+  langgraph_thread_id String?
+  created_at          DateTime               @default(now())
+  updated_at          DateTime               @updatedAt
+  completed_at        DateTime?
+
+  tenant       Tenant                  @relation(fields: [tenant_key], references: [tenant_key])
+  conversation StitchiConversation     @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  user         User                    @relation("StitchiActionRunUser", fields: [user_id], references: [id])
+  approvals    StitchiActionApproval[]
+
+  @@index([tenant_key])
+  @@index([conversation_id])
+  @@index([user_id])
+  @@index([action_type])
+  @@index([status])
+  @@map("stitchi_action_runs")
+}
+
+model StitchiActionApproval {
+  id             String                  @id @default(uuid()) @db.Uuid
+  tenant_key     String
+  action_run_id  String                  @db.Uuid
+  approver_user_id String                @db.Uuid
+  decision       StitchiApprovalDecision
+  notes          String?                 @db.Text
+  created_at     DateTime                @default(now())
+
+  tenant     Tenant           @relation(fields: [tenant_key], references: [tenant_key])
+  action_run StitchiActionRun @relation(fields: [action_run_id], references: [id], onDelete: Cascade)
+  approver   User             @relation("StitchiActionApprovalUser", fields: [approver_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([action_run_id])
+  @@index([approver_user_id])
+  @@index([decision])
+  @@map("stitchi_action_approvals")
 }
 
 model AgentRep {
@@ -2974,6 +3119,27 @@ enum LeadTemperature {
   buyer
 }
 
+enum LeadSourceOfTruth {
+  tanaghum
+  gohighlevel
+}
+
+enum GhlLeadSyncMode {
+  pull_preview
+  pull_sync
+  write_back_preview
+  write_back
+}
+
+enum GhlLeadSyncStatus {
+  requires_credentials
+  mapping_required
+  blocked
+  previewed
+  synced
+  failed
+}
+
 enum AudienceSource {
   follower
   non_follower
@@ -3041,6 +3207,16 @@ model LeadCaptureRecord {
   purchase_amount              Decimal?     @db.Decimal(12, 2)
   purchase_reference           String?
 
+  source_of_truth              LeadSourceOfTruth @default(tanaghum)
+  external_source_provider     String?
+  external_source_id           String?
+  external_opportunity_id      String?
+  external_pipeline_id         String?
+  external_stage_id            String?
+  external_tags                String[]     @default([])
+  external_last_synced_at      DateTime?
+  external_sync_fingerprint    String?
+
   created_by_user_id           String       @db.Uuid
   created_by_agent_rep_id      String       @db.Uuid
   created_at                   DateTime     @default(now())
@@ -3058,6 +3234,11 @@ model LeadCaptureRecord {
   @@index([tenant_key])
   @@index([lead_status])
   @@index([lead_temperature])
+  @@index([source_of_truth])
+  @@index([external_source_provider])
+  @@index([external_source_id])
+  @@index([external_opportunity_id])
+  @@index([external_last_synced_at])
   @@index([audience_source])
   @@index([channel_attribution])
   @@index([campaign_id])
@@ -3090,6 +3271,40 @@ model LeadLifecycleEvent {
   @@index([to_status])
   @@index([created_at])
   @@map("lead_lifecycle_events")
+}
+
+model GhlLeadSyncRun {
+  id                    String            @id @default(uuid()) @db.Uuid
+  tenant_key            String
+  event_id              String?           @db.Uuid
+  mode                  GhlLeadSyncMode
+  status                GhlLeadSyncStatus
+  source_of_truth       LeadSourceOfTruth @default(gohighlevel)
+  contacts_pulled       Int               @default(0)
+  opportunities_pulled  Int               @default(0)
+  appointments_pulled   Int               @default(0)
+  leads_upserted        Int               @default(0)
+  tags_mapped           Int               @default(0)
+  stages_mapped         Int               @default(0)
+  write_backs_prepared  Int               @default(0)
+  errors                Json?
+  warnings              Json?
+  raw_payload_returned  Boolean           @default(false)
+  created_by_user_id    String            @db.Uuid
+  started_at            DateTime          @default(now())
+  completed_at          DateTime?
+
+  tenant     Tenant           @relation(fields: [tenant_key], references: [tenant_key])
+  event      CommercialEvent? @relation(fields: [event_id], references: [id])
+  created_by User             @relation("GhlLeadSyncRunCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([mode])
+  @@index([status])
+  @@index([created_by_user_id])
+  @@index([started_at])
+  @@map("ghl_lead_sync_runs")
 }
 
 model LeadSourceAttribution {
@@ -3408,10 +3623,154 @@ enum CommercialEventStatus {
   cancelled
 }
 
+enum CommercialRevenueLineType {
+  live_event
+  online_course
+  b2b
+  platinum_elite
+  certified_trainer_network
+  loyalty_community
+}
+
+enum CommercialRevenueLineStatus {
+  active
+  paused
+  archived
+}
+
+enum CommercialOperatingStage {
+  assess
+  strategy_planning
+  implementation_engagement
+}
+
+enum CommercialPlanHorizon {
+  three_year
+  one_year
+  quarterly
+  product_or_event
+}
+
+enum CommercialPlanStatus {
+  draft
+  active
+  paused
+  completed
+  archived
+}
+
+enum CommercialAssessmentSeverity {
+  info
+  watch
+  risk
+  critical
+}
+
+enum CommercialAssessmentStatus {
+  open
+  reviewing
+  resolved
+  dismissed
+}
+
 enum EventKpiSourceType {
   manual
   imported
   connector
+}
+
+model CommercialRevenueLine {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  revenue_line_type  CommercialRevenueLineType
+  name               String
+  description        String?                     @db.Text
+  status             CommercialRevenueLineStatus @default(active)
+  system_of_record   String                      @default("tanaghum")
+  owner_user_id      String?                     @db.Uuid
+  created_by_user_id String                      @db.Uuid
+  created_at         DateTime                    @default(now())
+  updated_at         DateTime                    @updatedAt
+
+  tenant             Tenant                      @relation(fields: [tenant_key], references: [tenant_key])
+  owner              User?                       @relation("CommercialRevenueLineOwner", fields: [owner_user_id], references: [id])
+  created_by         User                        @relation("CommercialRevenueLineCreatedBy", fields: [created_by_user_id], references: [id])
+  plans              CommercialPlan[]
+  assessment_signals CommercialAssessmentSignal[]
+
+  @@unique([tenant_key, revenue_line_type])
+  @@index([tenant_key])
+  @@index([revenue_line_type])
+  @@index([status])
+  @@index([owner_user_id])
+  @@map("commercial_revenue_lines")
+}
+
+model CommercialPlan {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  revenue_line_id    String                   @db.Uuid
+  linked_event_id    String?                  @db.Uuid
+  horizon            CommercialPlanHorizon
+  stage              CommercialOperatingStage @default(assess)
+  title              String
+  objective          String?                  @db.Text
+  audience           String?                  @db.Text
+  budget_target      Decimal?                 @db.Decimal(12, 2)
+  revenue_target     Decimal?                 @db.Decimal(12, 2)
+  kpi_targets        Json?
+  strategy_summary   String?                  @db.Text
+  action_plan        String?                  @db.Text
+  status             CommercialPlanStatus     @default(draft)
+  owner_user_id      String?                  @db.Uuid
+  created_by_user_id String                   @db.Uuid
+  created_at         DateTime                 @default(now())
+  updated_at         DateTime                 @updatedAt
+
+  tenant             Tenant                   @relation(fields: [tenant_key], references: [tenant_key])
+  revenue_line       CommercialRevenueLine    @relation(fields: [revenue_line_id], references: [id], onDelete: Cascade)
+  linked_event       CommercialEvent?         @relation(fields: [linked_event_id], references: [id], onDelete: SetNull)
+  owner              User?                    @relation("CommercialPlanOwner", fields: [owner_user_id], references: [id])
+  created_by         User                     @relation("CommercialPlanCreatedBy", fields: [created_by_user_id], references: [id])
+  assessment_signals CommercialAssessmentSignal[]
+
+  @@index([tenant_key])
+  @@index([revenue_line_id])
+  @@index([linked_event_id])
+  @@index([horizon])
+  @@index([stage])
+  @@index([status])
+  @@index([owner_user_id])
+  @@map("commercial_plans")
+}
+
+model CommercialAssessmentSignal {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  revenue_line_id    String?                      @db.Uuid
+  commercial_plan_id String?                      @db.Uuid
+  source_type        String                       @default("manual")
+  title              String
+  severity           CommercialAssessmentSeverity @default(watch)
+  finding            String?                      @db.Text
+  recommended_action String?                      @db.Text
+  status             CommercialAssessmentStatus   @default(open)
+  created_by_user_id String                       @db.Uuid
+  created_at         DateTime                     @default(now())
+  updated_at         DateTime                     @updatedAt
+
+  tenant             Tenant                       @relation(fields: [tenant_key], references: [tenant_key])
+  revenue_line       CommercialRevenueLine?       @relation(fields: [revenue_line_id], references: [id], onDelete: SetNull)
+  commercial_plan    CommercialPlan?              @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  created_by         User                         @relation("CommercialAssessmentSignalCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([revenue_line_id])
+  @@index([commercial_plan_id])
+  @@index([severity])
+  @@index([status])
+  @@index([created_by_user_id])
+  @@map("commercial_assessment_signals")
 }
 
 model CommercialEvent {
@@ -3453,8 +3812,11 @@ model CommercialEvent {
   content_requirements EventContentRequirement[]
   sales_tasks         EventSalesTask[]
   problems            EventProblem[]
-  connector_imports   ConnectorImportJob[]
-  connector_field_mappings ConnectorFieldMapping[]
+    connector_imports   ConnectorImportJob[]
+    connector_field_mappings ConnectorFieldMapping[]
+    ghl_lead_sync_runs  GhlLeadSyncRun[]
+    stitchi_conversations StitchiConversation[]
+    commercial_plans    CommercialPlan[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -3776,6 +4138,15 @@ enum ConnectorCredentialState {
   blocked_by_provider_approval
 }
 
+enum ConnectorSyncStatus {
+  not_started
+  requires_credentials
+  ready_for_sync
+  synced
+  failed
+  blocked
+}
+
 model ConnectorImportJob {
   id                  String                  @id @default(uuid()) @db.Uuid
   tenant_key          String
@@ -3788,6 +4159,11 @@ model ConnectorImportJob {
   notes               String?                @db.Text
   last_dry_run_at     DateTime?
   last_dry_run_result Json?
+  sync_status         ConnectorSyncStatus    @default(not_started)
+  last_sync_at        DateTime?
+  last_sync_rows      Int                    @default(0)
+  last_sync_error     String?                @db.Text
+  last_sync_audit_record_id String?          @db.Uuid
   last_import_at      DateTime?
   last_import_result  Json?
   approved_by_user_id String?                @db.Uuid
@@ -3809,6 +4185,8 @@ model ConnectorImportJob {
   @@index([mapping_id])
   @@index([connector_id])
   @@index([state])
+  @@index([sync_status])
+  @@index([last_sync_at])
   @@index([created_by_user_id])
   @@map("connector_import_jobs")
 }

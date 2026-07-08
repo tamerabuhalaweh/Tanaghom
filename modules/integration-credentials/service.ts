@@ -8,6 +8,10 @@ import { auditLog } from '@shared/logging';
 export const integrationProviderSchema = z.enum([
   'postiz',
   'gohighlevel',
+  'formaloo',
+  'meta_analytics',
+  'youtube',
+  'youtube_analytics',
   'whatsapp',
   'telegram',
   'voice_chat',
@@ -71,9 +75,11 @@ export interface DecryptedIntegrationCredential {
   metadata: Record<string, unknown>;
 }
 
+const CREDENTIAL_SETUP_ROLES = new Set(['admin', 'cco', 'department_head', 'marketing_manager']);
+
 export function requireCredentialAdmin(role: string): void {
-  if (role !== 'admin' && role !== 'cco') {
-    throw new ForbiddenError('Admin or CCO access required for tenant integration credentials');
+  if (!CREDENTIAL_SETUP_ROLES.has(role)) {
+    throw new ForbiddenError('Connector setup access required for tenant integration credentials');
   }
 }
 

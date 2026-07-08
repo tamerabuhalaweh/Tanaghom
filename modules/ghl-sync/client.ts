@@ -1,0 +1,324 @@
+import { ExternalServiceError } from '@shared/errors';
+import type { GhlAppointment, GhlContact, GhlOpportunity, GhlPullResult } from './types';
+
+export interface GhlClientConfig {
+  baseUrl: string;
+  apiKey: string;
+  locationId: string;
+  version: string;
+}
+
+export interface GhlClient {
+  pull(limit: number): Promise<GhlPullResult>;
+  upsertContact(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: unknown }>;
+}
+
+export interface GhlConnectionTestResult {
+  checkedContacts: number;
+  rawPayloadReturned: false;
+}
+
+export interface GhlRemoteTagReference {
+  id: string;
+  name: string;
+}
+
+export interface GhlRemotePipelineStageReference {
+  pipelineId: string;
+  pipelineName: string;
+  stageId: string;
+  stageName: string;
+}
+
+export interface GhlLiveReadValidationResult {
+  canReadContacts: boolean;
+  checkedContacts: number;
+  canReadOpportunities: boolean;
+  checkedOpportunities: number;
+  canReadTags: boolean;
+  tagsFound: number;
+  canReadPipelines: boolean;
+  pipelinesFound: number;
+  stagesFound: number;
+  remoteTags: GhlRemoteTagReference[];
+  remotePipelineStages: GhlRemotePipelineStageReference[];
+  warnings: string[];
+  rawPayloadReturned: false;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function firstString(record: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function firstNumber(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() && !Number.isNaN(Number(value))) return Number(value);
+  }
+  return null;
+}
+
+function extractItems(body: unknown, keys: string[]): unknown[] {
+  const record = asRecord(body);
+  for (const key of keys) {
+    const direct = asArray(record[key]);
+    if (direct.length) return direct;
+  }
+  const data = asRecord(record.data);
+  for (const key of keys) {
+    const nested = asArray(data[key]);
+    if (nested.length) return nested;
+  }
+  return [];
+}
+
+function normalizeRemoteTag(input: unknown): GhlRemoteTagReference | null {
+  const record = asRecord(input);
+  const id = firstString(record, ['id', 'tagId', '_id']);
+  const name = firstString(record, ['name', 'tagName', 'label']);
+  if (!id || !name) return null;
+  return { id, name };
+}
+
+function flattenStages(input: unknown[]): unknown[] {
+  return input.flatMap(item => Array.isArray(item) ? item : [item]);
+}
+
+function normalizePipelineStages(input: unknown): GhlRemotePipelineStageReference[] {
+  const pipeline = asRecord(input);
+  const pipelineId = firstString(pipeline, ['id', 'pipelineId', '_id']);
+  const pipelineName = firstString(pipeline, ['name', 'pipelineName']);
+  if (!pipelineId || !pipelineName) return [];
+
+  return flattenStages(asArray(pipeline.stages))
+    .map(stageInput => {
+      const stage = asRecord(stageInput);
+      const stageId = firstString(stage, ['id', 'stageId', 'pipelineStageId', '_id']);
+      const stageName = firstString(stage, ['name', 'stageName']);
+      if (!stageId || !stageName) return null;
+      return { pipelineId, pipelineName, stageId, stageName };
+    })
+    .filter((stage): stage is GhlRemotePipelineStageReference => Boolean(stage));
+}
+
+function normalizeContact(input: unknown): GhlContact | null {
+  const record = asRecord(input);
+  const id = firstString(record, ['id', 'contactId', '_id']);
+  if (!id) return null;
+  const tags = asArray(record.tags)
+    .map(tag => typeof tag === 'string' ? tag : firstString(asRecord(tag), ['name', 'id']))
+    .filter((tag): tag is string => Boolean(tag));
+  return {
+    id,
+    firstName: firstString(record, ['firstName', 'first_name']),
+    lastName: firstString(record, ['lastName', 'last_name']),
+    name: firstString(record, ['name', 'fullName', 'full_name']),
+    email: firstString(record, ['email']),
+    phone: firstString(record, ['phone']),
+    source: firstString(record, ['source']),
+    tags,
+  };
+}
+
+function normalizeOpportunity(input: unknown): GhlOpportunity | null {
+  const record = asRecord(input);
+  const id = firstString(record, ['id', 'opportunityId', '_id']);
+  const contactId = firstString(record, ['contactId', 'contact_id']);
+  if (!id || !contactId) return null;
+  return {
+    id,
+    contactId,
+    pipelineId: firstString(record, ['pipelineId', 'pipeline_id']),
+    stageId: firstString(record, ['pipelineStageId', 'pipeline_stage_id', 'stageId', 'stage_id']),
+    status: firstString(record, ['status']),
+    monetaryValue: firstNumber(record, ['monetaryValue', 'monetary_value', 'value']),
+    name: firstString(record, ['name', 'title']),
+    updatedAt: firstString(record, ['updatedAt', 'updated_at']),
+  };
+}
+
+function normalizeAppointment(input: unknown, fallbackContactId: string): GhlAppointment | null {
+  const record = asRecord(input);
+  const id = firstString(record, ['id', 'appointmentId', 'eventId', '_id']);
+  const contactId = firstString(record, ['contactId', 'contact_id']) || fallbackContactId;
+  if (!id || !contactId) return null;
+  return {
+    id,
+    contactId,
+    status: firstString(record, ['status', 'appointmentStatus']),
+    title: firstString(record, ['title', 'name', 'appointmentTitle']),
+    calendarId: firstString(record, ['calendarId', 'calendar_id']),
+    startTime: firstString(record, ['startTime', 'start_time', 'startDate', 'start_date', 'date']),
+    endTime: firstString(record, ['endTime', 'end_time', 'endDate', 'end_date']),
+  };
+}
+
+export class LeadConnectorClient implements GhlClient {
+  constructor(private readonly config: GhlClientConfig) {}
+
+  async testConnection(): Promise<GhlConnectionTestResult> {
+    const contactsBody = await this.request('/contacts/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        locationId: this.config.locationId,
+        skip: 0,
+        limit: 1,
+      }),
+    });
+    return {
+      checkedContacts: extractItems(contactsBody, ['contacts', 'items', 'results']).length,
+      rawPayloadReturned: false,
+    };
+  }
+
+  async validateReadAccess(): Promise<GhlLiveReadValidationResult> {
+    const warnings: string[] = [];
+    const contactsResult = await this.readValidationEndpoint('/contacts/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        locationId: this.config.locationId,
+        skip: 0,
+        limit: 1,
+      }),
+    });
+    const opportunitiesResult = await this.readValidationEndpoint(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=1`, {
+      method: 'GET',
+    });
+    const tagsResult = await this.readValidationEndpoint(`/locations/${encodeURIComponent(this.config.locationId)}/tags`, {
+      method: 'GET',
+    });
+    const pipelinesResult = await this.readValidationEndpoint(`/opportunities/pipelines?locationId=${encodeURIComponent(this.config.locationId)}`, {
+      method: 'GET',
+    });
+
+    if (!contactsResult.ok) warnings.push(`Contacts read check failed with status ${contactsResult.status}.`);
+    if (!opportunitiesResult.ok) warnings.push(`Opportunities read check failed with status ${opportunitiesResult.status}.`);
+    if (!tagsResult.ok) warnings.push(`Tags read check failed with status ${tagsResult.status}.`);
+    if (!pipelinesResult.ok) warnings.push(`Pipeline read check failed with status ${pipelinesResult.status}.`);
+
+    const contactItems = contactsResult.ok ? extractItems(contactsResult.body, ['contacts', 'items', 'results']) : [];
+    const opportunityItems = opportunitiesResult.ok ? extractItems(opportunitiesResult.body, ['opportunities', 'items', 'results']) : [];
+    const remoteTags = tagsResult.ok
+      ? extractItems(tagsResult.body, ['tags', 'items', 'results']).map(normalizeRemoteTag).filter((tag): tag is GhlRemoteTagReference => Boolean(tag))
+      : [];
+    const pipelines = pipelinesResult.ok ? extractItems(pipelinesResult.body, ['pipelines', 'items', 'results']) : [];
+    const remotePipelineStages = pipelines.flatMap(normalizePipelineStages);
+
+    return {
+      canReadContacts: contactsResult.ok,
+      checkedContacts: contactItems.length,
+      canReadOpportunities: opportunitiesResult.ok,
+      checkedOpportunities: opportunityItems.length,
+      canReadTags: tagsResult.ok,
+      tagsFound: remoteTags.length,
+      canReadPipelines: pipelinesResult.ok,
+      pipelinesFound: pipelines.length,
+      stagesFound: remotePipelineStages.length,
+      remoteTags,
+      remotePipelineStages,
+      warnings,
+      rawPayloadReturned: false,
+    };
+  }
+
+  async pull(limit: number): Promise<GhlPullResult> {
+    const [contactsBody, opportunitiesBody] = await Promise.all([
+      this.request('/contacts/search', {
+        method: 'POST',
+        body: JSON.stringify({
+          locationId: this.config.locationId,
+          skip: 0,
+          limit,
+        }),
+      }),
+      this.request(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=${limit}`, {
+        method: 'GET',
+      }),
+    ]);
+
+    const contacts = extractItems(contactsBody, ['contacts', 'items', 'results'])
+      .map(normalizeContact)
+      .filter((contact): contact is GhlContact => Boolean(contact))
+      .slice(0, limit);
+    const contactIds = new Set(contacts.map(contact => contact.id));
+    const opportunities = extractItems(opportunitiesBody, ['opportunities', 'items', 'results'])
+      .map(normalizeOpportunity)
+      .filter((opportunity): opportunity is GhlOpportunity => opportunity !== null && contactIds.has(opportunity.contactId));
+
+    const warnings: string[] = [];
+    const appointmentResults = await Promise.allSettled(
+      contacts.map(contact => this.request(`/contacts/${encodeURIComponent(contact.id)}/appointments`, { method: 'GET' })
+        .then(body => extractItems(body, ['appointments', 'events', 'items', 'results'])
+          .map(item => normalizeAppointment(item, contact.id))
+          .filter((appointment): appointment is GhlAppointment => Boolean(appointment)))),
+    );
+    const appointments: GhlAppointment[] = [];
+    appointmentResults.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        appointments.push(...result.value);
+      } else {
+        warnings.push(`Could not read appointments for contact ${contacts[index]?.id || index + 1}. Lead contact and opportunity sync continued.`);
+      }
+    });
+
+    return { contacts, opportunities, appointments, warnings, rawReturned: false };
+  }
+
+  async upsertContact(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: unknown }> {
+    const response = await fetch(`${this.config.baseUrl}/contacts/upsert`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({ statusText: response.statusText }));
+    return { ok: response.ok, status: response.status, body };
+  }
+
+  private async request(path: string, init: RequestInit): Promise<unknown> {
+    const response = await fetch(`${this.config.baseUrl}${path}`, {
+      ...init,
+      headers: {
+        ...this.headers(),
+        ...(init.headers || {}),
+      },
+    });
+    const body = await response.json().catch(() => ({ statusText: response.statusText }));
+    if (!response.ok) {
+      throw new ExternalServiceError('GoHighLevel', `API returned ${response.status}`);
+    }
+    return body;
+  }
+
+  private async readValidationEndpoint(path: string, init: RequestInit): Promise<{ ok: boolean; status: number; body: unknown }> {
+    const response = await fetch(`${this.config.baseUrl}${path}`, {
+      ...init,
+      headers: {
+        ...this.headers(),
+        ...(init.headers || {}),
+      },
+    });
+    const body = await response.json().catch(() => ({ statusText: response.statusText }));
+    return { ok: response.ok, status: response.status, body };
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.config.apiKey}`,
+      Version: this.config.version,
+      'Content-Type': 'application/json',
+    };
+  }
+}

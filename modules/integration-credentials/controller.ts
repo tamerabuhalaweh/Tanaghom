@@ -18,6 +18,9 @@ function getPayload(req: Request): JwtPayload {
   return verifyToken(authHeader.substring(7));
 }
 
+// Customer/business integration requirements only. Internal runtime endpoints
+// (OpenClaw, agentgateway, AgentScope) are handled through Admin/Ops runtime
+// evidence, not the customer connector setup matrix.
 const REQUIRED_CREDENTIALS = [
   {
     provider: 'postiz',
@@ -35,6 +38,33 @@ const REQUIRED_CREDENTIALS = [
     label: 'GoHighLevel API Key',
     requiredFields: ['apiKey', 'locationId'],
     purpose: 'Connect this tenant to its own GoHighLevel location. CRM writes remain policy-gated and require explicit tenant configuration.',
+  },
+  {
+    provider: 'meta_analytics',
+    credentialType: 'api_key',
+    connectionKey: 'default',
+    label: 'Meta Ads Read Access',
+    requiredFields: ['accessToken', 'adAccountId'],
+    optionalFields: ['pageId', 'graphApiVersion'],
+    purpose: 'Read Meta/Facebook/Instagram ads performance for event dashboards. The token must be customer-owned and read-only for ads insights.',
+  },
+  {
+    provider: 'youtube_analytics',
+    credentialType: 'oauth_token',
+    connectionKey: 'default',
+    label: 'YouTube Analytics Read Access',
+    requiredFields: ['accessToken', 'channelId'],
+    optionalFields: ['contentOwnerId'],
+    purpose: 'Read YouTube Analytics reports for customer channel performance. Requires a customer-owned OAuth token with analytics read scope.',
+  },
+  {
+    provider: 'formaloo',
+    credentialType: 'api_key',
+    connectionKey: 'default',
+    label: 'Formaloo Forms Read Access',
+    requiredFields: ['clientKey', 'clientSecret', 'formId'],
+    optionalFields: ['workspaceId', 'baseUrl'],
+    purpose: 'Prepare Formaloo form submission imports for event lead and form-completion reporting. Live API calls require the exact customer Formaloo API contract.',
   },
   {
     provider: 'whatsapp',
@@ -92,30 +122,6 @@ const REQUIRED_CREDENTIALS = [
     label: 'X OAuth Client',
     requiredFields: ['clientId', 'clientSecret', 'redirectUri', 'authorizationUrl', 'tokenUrl', 'accountInfoUrl', 'scope'],
     purpose: 'Connect official X/Twitter accounts through OAuth authorization code flow.',
-  },
-  {
-    provider: 'openclaw',
-    credentialType: 'runtime_endpoint',
-    connectionKey: 'default',
-    label: 'OpenClaw Runtime',
-    requiredFields: ['baseUrl', 'apiKey'],
-    purpose: 'Call OpenClaw as an adjacent orchestration/channel layer while STITCH remains authority.',
-  },
-  {
-    provider: 'agentgateway',
-    credentialType: 'runtime_endpoint',
-    connectionKey: 'default',
-    label: 'agentgateway Endpoint',
-    requiredFields: ['baseUrl'],
-    purpose: 'Route MCP traffic through an external gateway/proxy once deployed.',
-  },
-  {
-    provider: 'agentscope',
-    credentialType: 'runtime_endpoint',
-    connectionKey: 'default',
-    label: 'AgentScope Runtime',
-    requiredFields: ['baseUrl', 'apiKey'],
-    purpose: 'Use external sandboxed agent runtime endpoints once deployed.',
   },
 ] as const;
 
