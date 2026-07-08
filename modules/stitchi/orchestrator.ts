@@ -969,12 +969,12 @@ function inferRevenueLineType(lower: string): 'live_event' | 'online_course' | '
 }
 
 function inferExplicitRevenueLineType(lower: string): ReturnType<typeof inferRevenueLineType> | undefined {
-  if (/(live event|events|event campaign|on stage|workshop|camp)/i.test(lower)) return 'live_event';
   if (/(online course|online courses|course|courses|leadership course)/i.test(lower)) return 'online_course';
   if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
   if (/(platinum|elite|premium|vip)/i.test(lower)) return 'platinum_elite';
   if (/(certified trainer|trainer network)/i.test(lower)) return 'certified_trainer_network';
   if (/(loyalty|community|retention|referral)/i.test(lower)) return 'loyalty_community';
+  if (/(live event|events|event campaign|on stage|workshop|camp)/i.test(lower)) return 'live_event';
   return undefined;
 }
 

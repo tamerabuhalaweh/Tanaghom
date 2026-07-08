@@ -431,6 +431,100 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('does not mistake a linked live event request for the Online Courses revenue line', async () => {
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce({
+      currentUser: {
+        id: 'user-1',
+        name: 'Marketing Manager',
+        email: 'manager@example.com',
+        role: 'marketing_manager',
+        departmentName: 'Commercial',
+      },
+      selectedEvent: { id: '00000000-0000-0000-0000-000000000001', name: 'Leadership Event' },
+      recentEvents: [
+        {
+          id: '00000000-0000-0000-0000-000000000001',
+          name: 'Leadership Event',
+          status: 'active',
+          eventType: 'live_event',
+          eventDate: new Date('2026-08-02T00:00:00Z'),
+          location: 'Amman',
+          plannedBudget: 5000,
+          revenueTarget: 30000,
+          selectedChannels: ['instagram', 'email'],
+        },
+      ],
+      leadSummary: { total: 3 },
+      kpiSummary: { records: 1 },
+      riskSummary: { open: 0 },
+      connectorSummary: { configuredCredentials: 1, connectorJobs: 0 },
+      commercialCenter: {
+        configuredRevenueLines: 1,
+        activePlans: 0,
+        openAssessmentSignals: 0,
+        revenueLines: [
+          {
+            id: '00000000-0000-0000-0000-000000000050',
+            type: 'live_event',
+            name: 'Live Events',
+            status: 'active',
+            planCount: 1,
+            openSignals: 0,
+          },
+        ],
+        recentPlans: [],
+      },
+      guardrails: {
+        mode: 'read_only',
+        writesExecuted: false,
+        externalExecution: 'blocked',
+        secretsReturned: false,
+      },
+    });
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Objective: sell to entrepreneurs.',
+        'Audience: warm followers and previous buyers.',
+        'Budget target: 5000.',
+        'Revenue target: 30000.',
+        'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+        'Link it to the next available live event if suitable.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_commercial_plan_with_revenue_line',
+        inputPayload: expect.objectContaining({
+          revenueLine: expect.objectContaining({
+            revenueLineType: 'online_course',
+            name: 'Online Courses',
+          }),
+          plan: expect.objectContaining({
+            linkedEventId: '00000000-0000-0000-0000-000000000001',
+            objective: 'sell to entrepreneurs.',
+            budgetTarget: 5000,
+            revenueTarget: 30000,
+            status: 'draft',
+          }),
+        }),
+        previewPayload: expect.objectContaining({
+          revenueLineName: 'Online Courses',
+          linkedEventName: 'Leadership Event',
+          approvalRequired: true,
+          externalExecution: 'blocked',
+        }),
+      }),
+    );
+  });
+
   it('asks for the missing budget before preparing a commercial plan action', async () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
