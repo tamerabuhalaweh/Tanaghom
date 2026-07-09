@@ -17,6 +17,21 @@ import {
 
 type RecordMap = Record<string, unknown>;
 
+const RETENTION_OPTIONS = [
+  { value: 'legal_review_required', label: 'Legal review required' },
+  { value: 'one_year', label: '1 year' },
+  { value: 'three_years', label: '3 years' },
+  { value: 'seven_years', label: '7 years' },
+  { value: 'forever_after_legal_approval', label: 'Forever after legal approval' },
+];
+
+const PRIVACY_REVIEW_STATUS_OPTIONS = [
+  { value: 'pending_customer_legal_review', label: 'Waiting for customer legal review' },
+  { value: 'in_review', label: 'In legal review' },
+  { value: 'approved', label: 'Approved by customer legal' },
+  { value: 'needs_changes', label: 'Needs policy changes' },
+];
+
 function text(value: unknown, fallback = 'Not available'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
@@ -52,6 +67,7 @@ export default function TenantAdmin() {
   const [subscriptionState, setSubscriptionState] = useState<RecordMap | null>(null);
   const [plans, setPlans] = useState<RecordMap[]>([]);
   const [deletionReadiness, setDeletionReadiness] = useState<RecordMap | null>(null);
+  const [privacyGovernance, setPrivacyGovernance] = useState<RecordMap | null>(null);
   const [exportSummary, setExportSummary] = useState<RecordMap | null>(null);
   const [name, setName] = useState('');
   const [lifecycleReason, setLifecycleReason] = useState('');
@@ -63,18 +79,28 @@ export default function TenantAdmin() {
   const [deletionReason, setDeletionReason] = useState('');
   const [retentionApproved, setRetentionApproved] = useState(false);
   const [exportReviewed, setExportReviewed] = useState(false);
+  const [retentionMode, setRetentionMode] = useState('legal_review_required');
+  const [privacyReviewStatus, setPrivacyReviewStatus] = useState('pending_customer_legal_review');
+  const [legalBasisNotes, setLegalBasisNotes] = useState('');
+  const [customerLegalOwner, setCustomerLegalOwner] = useState('');
+  const [dpoOrPrivacyContact, setDpoOrPrivacyContact] = useState('');
+  const [storeConversationLogs, setStoreConversationLogs] = useState(true);
+  const [storeVoiceCallTranscripts, setStoreVoiceCallTranscripts] = useState(true);
+  const [storeSocialDmLogs, setStoreSocialDmLogs] = useState(true);
+  const [storeCrmLeadData, setStoreCrmLeadData] = useState(true);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function load() {
     if (!token) return;
-    const [summaryResult, isolationResult, lifecycleResult, plansResult, subscriptionResult, deletionResult] = await Promise.all([
+    const [summaryResult, isolationResult, lifecycleResult, plansResult, subscriptionResult, deletionResult, privacyResult] = await Promise.all([
       tenantAdminApi.summary(token),
       tenantAdminApi.isolationReport(token),
       tenantAdminApi.lifecycle(token),
       tenantAdminApi.plans(token),
       tenantAdminApi.subscription(token),
       tenantAdminApi.deletionReadiness(token),
+      tenantAdminApi.privacyGovernance(token),
     ]);
     const nextSummary = summaryResult as RecordMap;
     const nextSubscriptionState = subscriptionResult as RecordMap;
@@ -85,6 +111,7 @@ export default function TenantAdmin() {
     setPlans(Array.isArray((plansResult as RecordMap).plans) ? (plansResult as RecordMap).plans as RecordMap[] : []);
     setSubscriptionState(nextSubscriptionState);
     setDeletionReadiness(deletionResult as RecordMap);
+    applyPrivacyState(privacyResult as RecordMap);
     setName(text(objectValue(nextSummary.tenant).name, ''));
     setSubscriptionPlanKey(text(currentSubscription.planKey, 'commercial_social_production'));
     setSubscriptionStatus(text(currentSubscription.status, 'active'));
@@ -98,13 +125,14 @@ export default function TenantAdmin() {
     let cancelled = false;
     async function run() {
       try {
-        const [summaryResult, isolationResult, lifecycleResult, plansResult, subscriptionResult, deletionResult] = await Promise.all([
+        const [summaryResult, isolationResult, lifecycleResult, plansResult, subscriptionResult, deletionResult, privacyResult] = await Promise.all([
           tenantAdminApi.summary(token as string),
           tenantAdminApi.isolationReport(token as string),
           tenantAdminApi.lifecycle(token as string),
           tenantAdminApi.plans(token as string),
           tenantAdminApi.subscription(token as string),
           tenantAdminApi.deletionReadiness(token as string),
+          tenantAdminApi.privacyGovernance(token as string),
         ]);
         if (cancelled) return;
         const nextSummary = summaryResult as RecordMap;
@@ -116,6 +144,7 @@ export default function TenantAdmin() {
         setPlans(Array.isArray((plansResult as RecordMap).plans) ? (plansResult as RecordMap).plans as RecordMap[] : []);
         setSubscriptionState(nextSubscriptionState);
         setDeletionReadiness(deletionResult as RecordMap);
+        applyPrivacyState(privacyResult as RecordMap);
         setName(text(objectValue(nextSummary.tenant).name, ''));
         setSubscriptionPlanKey(text(currentSubscription.planKey, 'commercial_social_production'));
         setSubscriptionStatus(text(currentSubscription.status, 'active'));
@@ -131,6 +160,20 @@ export default function TenantAdmin() {
       cancelled = true;
     };
   }, [token]);
+
+  function applyPrivacyState(result: RecordMap) {
+    setPrivacyGovernance(result);
+    const policy = objectValue(result.policy);
+    setRetentionMode(text(policy.retentionMode, 'legal_review_required'));
+    setPrivacyReviewStatus(text(result.reviewStatus, 'pending_customer_legal_review'));
+    setLegalBasisNotes(text(policy.legalBasisNotes, ''));
+    setCustomerLegalOwner(text(policy.customerLegalOwner, ''));
+    setDpoOrPrivacyContact(text(policy.dpoOrPrivacyContact, ''));
+    setStoreConversationLogs(policy.storeConversationLogs !== false);
+    setStoreVoiceCallTranscripts(policy.storeVoiceCallTranscripts !== false);
+    setStoreSocialDmLogs(policy.storeSocialDmLogs !== false);
+    setStoreCrmLeadData(policy.storeCrmLeadData !== false);
+  }
 
   async function saveTenantName() {
     if (!token || !name.trim()) return;
@@ -183,6 +226,33 @@ export default function TenantAdmin() {
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to update subscription');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function savePrivacyGovernance() {
+    if (!token) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const result = await tenantAdminApi.updatePrivacyGovernance({
+        retentionMode,
+        storeConversationLogs,
+        storeVoiceCallTranscripts,
+        storeSocialDmLogs,
+        storeCrmLeadData,
+        exportDeleteRoles: ['admin', 'cco'],
+        legalBasisNotes: legalBasisNotes.trim() || null,
+        customerLegalOwner: customerLegalOwner.trim() || null,
+        dpoOrPrivacyContact: dpoOrPrivacyContact.trim() || null,
+        reviewStatus: privacyReviewStatus,
+      }, token) as RecordMap;
+      applyPrivacyState(result);
+      setMessage(text(result._label, 'Privacy and retention policy saved.'));
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to save privacy and retention policy');
     } finally {
       setSaving(false);
     }
@@ -252,6 +322,11 @@ export default function TenantAdmin() {
   const deletionCounts = objectValue(deletionReadiness?.counts);
   const deletionBlockers = Array.isArray(deletionReadiness?.blockers) ? deletionReadiness.blockers as string[] : [];
   const deletionReady = deletionReadiness?.deletionReady === true;
+  const privacyPolicy = objectValue(privacyGovernance?.policy);
+  const privacyChecklist = Array.isArray(privacyGovernance?.checklist) ? privacyGovernance.checklist as RecordMap[] : [];
+  const storedDataCategories = Array.isArray(privacyGovernance?.storedDataCategories) ? privacyGovernance.storedDataCategories as RecordMap[] : [];
+  const allowedActors = objectValue(privacyGovernance?.allowedActors);
+  const automationGate = text(privacyGovernance?.automationGate, 'blocked');
 
   return (
     <ProductPage
@@ -393,6 +468,114 @@ export default function TenantAdmin() {
               Update Subscription
             </PrimaryAction>
             <Notice tone="info">This controls Tanaghum tenant access and entitlements. It does not collect payment until a payment provider is connected.</Notice>
+          </div>
+        </div>
+      </ProductCard>
+
+      <ProductCard
+        title="Privacy, Retention & Export/Delete Policy"
+        subtitle="This explains what customer data Tanaghum stores, why it is stored, who can export or request deletion, and what still needs customer legal approval."
+        action={<ProductStatus tone={automationGate === 'ready' ? 'good' : automationGate === 'review_required' ? 'warn' : 'danger'}>{automationGate.replaceAll('_', ' ')}</ProductStatus>}
+      >
+        <div className="space-y-5">
+          <Notice tone="info">
+            {text(privacyGovernance?.explanation, 'Legal review means the customer confirms what personal data is stored, why it is stored, how long it is retained, and who can export or request deletion.')}
+          </Notice>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="space-y-4">
+              <DetailGrid items={[
+                { label: 'Customer authority', value: Array.isArray(allowedActors.customerRoles) ? (allowedActors.customerRoles as string[]).join(', ') : 'CEO, GM, CCO' },
+                { label: 'System roles today', value: Array.isArray(allowedActors.implementedSystemRoles) ? (allowedActors.implementedSystemRoles as string[]).join(', ') : 'admin, cco' },
+                { label: 'Retention mode', value: humanize(privacyPolicy.retentionMode, 'Legal review required') },
+                { label: 'Review status', value: humanize(privacyGovernance?.reviewStatus, 'Pending customer legal review') },
+              ]} />
+              <ProductTable
+                columns={['Stored data', 'Status', 'Why it is stored']}
+                rows={storedDataCategories.map(category => [
+                  text(category.label),
+                  <ProductStatus tone={category.enabled === false ? 'warn' : 'good'}>{category.enabled === false ? 'Off' : 'On'}</ProductStatus>,
+                  text(category.why),
+                ])}
+              />
+              <ProductTable
+                columns={['Readiness check', 'Status', 'What it means']}
+                rows={privacyChecklist.map(item => [
+                  text(item.label),
+                  <ProductStatus tone={tone(text(item.status))}>{humanize(item.status)}</ProductStatus>,
+                  text(item.detail),
+                ])}
+              />
+              <Notice tone={automationGate === 'ready' ? 'good' : 'warn'}>
+                {text(privacyGovernance?.liveAutomationPolicy, 'Live social, CRM, voice, and AI-agent workflows remain gated until privacy/legal review is documented.')}
+              </Notice>
+            </div>
+            <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+              <Field label="Retention choice">
+                <select
+                  value={retentionMode}
+                  onChange={(event) => setRetentionMode(event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+                >
+                  {RETENTION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Customer legal review status">
+                <select
+                  value={privacyReviewStatus}
+                  onChange={(event) => setPrivacyReviewStatus(event.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+                >
+                  {PRIVACY_REVIEW_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Customer legal/privacy owner">
+                <input
+                  value={customerLegalOwner}
+                  onChange={(event) => setCustomerLegalOwner(event.target.value)}
+                  placeholder="Name or role responsible for privacy approval"
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+                />
+              </Field>
+              <Field label="Privacy contact">
+                <input
+                  value={dpoOrPrivacyContact}
+                  onChange={(event) => setDpoOrPrivacyContact(event.target.value)}
+                  placeholder="Email or privacy contact"
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+                />
+              </Field>
+              <Field label="Business reason for storing data">
+                <textarea
+                  value={legalBasisNotes}
+                  onChange={(event) => setLegalBasisNotes(event.target.value)}
+                  rows={4}
+                  placeholder="Example: Store conversations and lead activity for audit, sales quality, customer support, and executive reporting."
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+                />
+              </Field>
+              <div className="grid gap-2 text-sm text-neutral-700">
+                {[
+                  ['Conversation logs', storeConversationLogs, setStoreConversationLogs],
+                  ['Voice call transcripts/summaries', storeVoiceCallTranscripts, setStoreVoiceCallTranscripts],
+                  ['Social DM/comment records', storeSocialDmLogs, setStoreSocialDmLogs],
+                  ['CRM lead and purchase data', storeCrmLeadData, setStoreCrmLeadData],
+                ].map(([label, checked, setter]) => (
+                  <label key={String(label)} className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(checked)}
+                      onChange={(event) => (setter as (next: boolean) => void)(event.target.checked)}
+                      className="mt-1"
+                    />
+                    {String(label)}
+                  </label>
+                ))}
+              </div>
+              <PrimaryAction disabled={saving} onClick={savePrivacyGovernance}>
+                {saving ? 'Saving...' : 'Save Privacy Policy'}
+              </PrimaryAction>
+              <Notice tone="warn">{text(privacyGovernance?.legalDisclaimer, 'This is not legal advice. Final UAE PDPL/data-protection acceptance must come from customer legal counsel.')}</Notice>
+            </div>
           </div>
         </div>
       </ProductCard>

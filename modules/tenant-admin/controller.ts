@@ -6,9 +6,13 @@ import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import {
   buildDeletionReadiness,
+  buildPrivacyReviewChecklist,
+  canManageTenantPrivacy,
   readTenantExportEvidence,
   recordTenantExportEvidence,
   sanitizeTenantExportValue,
+  TENANT_PRIVACY_REVIEW_STATUSES,
+  TENANT_RETENTION_MODES,
 } from './lifecycle';
 import {
   DEFAULT_PRODUCTION_ENTITLEMENTS,
@@ -28,6 +32,12 @@ function getPayload(req: Request): JwtPayload {
 function requireAdmin(role: string): void {
   if (role !== 'admin' && role !== 'cco') {
     throw new ForbiddenError('Admin or CCO access required');
+  }
+}
+
+function requirePrivacyAdmin(role: string): void {
+  if (!canManageTenantPrivacy(role)) {
+    throw new ForbiddenError('Executive privacy admin access required');
   }
 }
 
@@ -243,6 +253,113 @@ tenantAdminRouter.get('/lifecycle', async (req: Request, res: Response, next: Ne
       },
       rawSecretsReturned: false,
       _label: 'Tenant lifecycle status',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const tenantPrivacyPolicySchema = z.object({
+  retentionMode: z.enum(TENANT_RETENTION_MODES).default('legal_review_required'),
+  customRetentionDays: z.coerce.number().int().min(1).max(36500).nullable().optional(),
+  storeConversationLogs: z.boolean().default(true),
+  storeVoiceCallTranscripts: z.boolean().default(true),
+  storeSocialDmLogs: z.boolean().default(true),
+  storeCrmLeadData: z.boolean().default(true),
+  exportDeleteRoles: z.array(z.enum(['admin', 'cco'])).min(1).max(2).default(['admin', 'cco']),
+  legalBasisNotes: z.string().trim().max(1500).nullable().optional(),
+  customerLegalOwner: z.string().trim().max(220).nullable().optional(),
+  dpoOrPrivacyContact: z.string().trim().max(220).nullable().optional(),
+  reviewStatus: z.enum(TENANT_PRIVACY_REVIEW_STATUSES).default('pending_customer_legal_review'),
+});
+
+async function buildPrivacyGovernanceResponse(tenantKey: string) {
+  const tenant = await prisma.tenant.upsert({
+    where: { tenant_key: tenantKey },
+    create: {
+      tenant_key: tenantKey,
+      name: tenantKey === 'default' ? 'Tanaghum Default Tenant' : tenantKey,
+      status: 'active',
+    },
+    update: {},
+  });
+  const review = buildPrivacyReviewChecklist(tenant.privacy_policy, tenant.privacy_review_status);
+  return {
+    tenantKey,
+    reviewStatus: review.reviewStatus,
+    automationGate: review.automationGate,
+    policy: review.policy,
+    checklist: review.checklist,
+    explanation: review.explanation,
+    allowedActors: {
+      customerRoles: ['CEO', 'GM', 'CCO'],
+      implementedSystemRoles: ['admin', 'cco'],
+      gmRoleNote: 'A dedicated GM system role is not configured yet. Until then, GM-level export/delete authority must use an admin or CCO account.',
+    },
+    storedDataCategories: [
+      { key: 'conversation_logs', label: 'Stitchi and agent conversation logs', enabled: review.policy.storeConversationLogs, why: 'Auditability of AI-assisted work and customer-facing agent actions.' },
+      { key: 'crm_leads', label: 'CRM leads and sales outcomes', enabled: review.policy.storeCrmLeadData, why: 'Commercial reporting, follow-up, purchases, meetings, and no-show analysis.' },
+      { key: 'voice_calls', label: 'Voice call transcripts or summaries', enabled: review.policy.storeVoiceCallTranscripts, why: 'Lead handling quality, sales coaching, and audit evidence.' },
+      { key: 'social_dms', label: 'Social DM/comment records', enabled: review.policy.storeSocialDmLogs, why: 'Customer support, social lead qualification, and AI response review.' },
+    ],
+    liveAutomationPolicy: review.automationGate === 'ready'
+      ? 'Live social, CRM, voice, and AI-agent workflows may be enabled when connector credentials and business approvals are also ready.'
+      : 'Live social, CRM, voice, and AI-agent workflows remain gated until privacy/legal review is documented.',
+    legalDisclaimer: 'Tanaghum records the customer privacy decision and readiness evidence. This is not legal advice; final UAE PDPL/data-protection acceptance must come from customer legal counsel.',
+    rawSecretsReturned: false,
+    _label: 'Privacy and retention governance loaded',
+  };
+}
+
+tenantAdminRouter.get('/privacy-governance', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    requirePrivacyAdmin(payload.role);
+    const tenantKey = payload.tenantKey || 'default';
+    res.json(await buildPrivacyGovernanceResponse(tenantKey));
+  } catch (err) {
+    next(err);
+  }
+});
+
+tenantAdminRouter.put('/privacy-governance', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    requirePrivacyAdmin(payload.role);
+    const tenantKey = payload.tenantKey || 'default';
+    const input = tenantPrivacyPolicySchema.parse(req.body);
+    const { reviewStatus, ...policy } = input;
+    const tenant = await prisma.tenant.upsert({
+      where: { tenant_key: tenantKey },
+      create: {
+        tenant_key: tenantKey,
+        name: tenantKey === 'default' ? 'Tanaghum Default Tenant' : tenantKey,
+        status: 'active',
+        privacy_policy: {
+          schemaVersion: 'tenant-privacy-policy.v1',
+          ...policy,
+        },
+        privacy_review_status: reviewStatus,
+        privacy_review_updated_at: new Date(),
+        privacy_review_updated_by_user_id: payload.sub,
+      },
+      update: {
+        privacy_policy: {
+          schemaVersion: 'tenant-privacy-policy.v1',
+          ...policy,
+        },
+        privacy_review_status: reviewStatus,
+        privacy_review_updated_at: new Date(),
+        privacy_review_updated_by_user_id: payload.sub,
+      },
+    });
+    auditLog(
+      { actor: `user:${payload.sub}`, action: 'tenant_privacy_policy_updated', object_type: 'tenant', object_id: tenant.id, result: 'success' },
+      `Tenant privacy policy updated for ${tenantKey}: ${reviewStatus}`,
+    );
+    res.json({
+      ...await buildPrivacyGovernanceResponse(tenantKey),
+      _label: 'Privacy and retention policy saved. Live automation remains gated until the checklist is ready.',
     });
   } catch (err) {
     next(err);
@@ -856,6 +973,9 @@ async function buildTenantExportBundle(tenantKey: string) {
       tenantKey: tenant.tenant_key,
       name: tenant.name,
       status: tenant.status,
+      privacyReviewStatus: tenant.privacy_review_status,
+      privacyPolicy: tenant.privacy_policy,
+      privacyReviewUpdatedAt: tenant.privacy_review_updated_at,
       createdAt: tenant.created_at,
       updatedAt: tenant.updated_at,
     },
@@ -935,8 +1055,24 @@ async function buildTenantDeletionReadiness(tenantKey: string) {
   ]);
 
   const exportEvidence = readTenantExportEvidence(tenantKey);
+  const readiness = buildDeletionReadiness({
+    tenantStatus: tenant?.status || 'missing',
+    activeUsers,
+    activeMemberships,
+    activeCredentials,
+    activeSubscriptions,
+    pendingApprovals,
+    pendingPackages,
+    exportGenerated: Boolean(exportEvidence),
+  });
+  const privacyReview = buildPrivacyReviewChecklist(tenant?.privacy_policy, tenant?.privacy_review_status || 'pending_customer_legal_review');
+  const privacyBlockers = privacyReview.reviewStatus === 'approved'
+    ? []
+    : ['Formal privacy/legal review must be approved before deletion review can proceed.'];
   return {
     status: tenant?.status || 'missing',
+    privacyReviewStatus: privacyReview.reviewStatus,
+    privacyAutomationGate: privacyReview.automationGate,
     exportEvidence: exportEvidence ? {
       generatedAt: exportEvidence.generatedAt,
       bundleHash: exportEvidence.bundleHash,
@@ -950,16 +1086,9 @@ async function buildTenantDeletionReadiness(tenantKey: string) {
       pendingApprovals,
       pendingPackages,
     },
-    ...buildDeletionReadiness({
-      tenantStatus: tenant?.status || 'missing',
-      activeUsers,
-      activeMemberships,
-      activeCredentials,
-      activeSubscriptions,
-      pendingApprovals,
-      pendingPackages,
-      exportGenerated: Boolean(exportEvidence),
-    }),
+    ...readiness,
+    deletionReady: readiness.deletionReady && privacyBlockers.length === 0,
+    blockers: [...readiness.blockers, ...privacyBlockers],
   };
 }
 

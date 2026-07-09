@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   buildDeletionReadiness,
+  buildPrivacyReviewChecklist,
   buildTenantPurgeEvaluation,
+  canManageTenantPrivacy,
+  normalizeTenantPrivacyPolicy,
   readTenantExportEvidence,
   recordTenantExportEvidence,
   safeTenantKeySegment,
@@ -196,5 +199,50 @@ describe('tenant lifecycle production controls', () => {
   it('ignores non-object entitlement overrides', () => {
     expect(mergeEntitlements({ maxUsers: 10 }, null)).toEqual({ maxUsers: 10 });
     expect(mergeEntitlements({ maxUsers: 10 }, ['bad'])).toEqual({ maxUsers: 10 });
+  });
+
+  it('limits privacy/export/delete governance to executive admin roles', () => {
+    expect(canManageTenantPrivacy('admin')).toBe(true);
+    expect(canManageTenantPrivacy('cco')).toBe(true);
+    expect(canManageTenantPrivacy('department_head')).toBe(false);
+    expect(canManageTenantPrivacy('marketing_manager')).toBe(false);
+    expect(canManageTenantPrivacy('sales_manager')).toBe(false);
+  });
+
+  it('normalizes tenant privacy policy without accepting unsafe role expansion', () => {
+    const policy = normalizeTenantPrivacyPolicy({
+      retentionMode: 'forever_after_legal_approval',
+      exportDeleteRoles: ['admin', 'department_head', 'cco'],
+      legalBasisNotes: 'Audit AI-assisted customer conversations and CRM follow-up.',
+      customerLegalOwner: 'Customer Legal',
+      storeConversationLogs: true,
+      storeVoiceCallTranscripts: false,
+    });
+
+    expect(policy.retentionMode).toBe('forever_after_legal_approval');
+    expect(policy.exportDeleteRoles).toEqual(['admin', 'cco']);
+    expect(policy.storeConversationLogs).toBe(true);
+    expect(policy.storeVoiceCallTranscripts).toBe(false);
+    expect(policy.legalBasisNotes).toContain('Audit AI-assisted');
+  });
+
+  it('keeps live automation gated until privacy/legal review is approved', () => {
+    const pending = buildPrivacyReviewChecklist({
+      retentionMode: 'forever_after_legal_approval',
+      legalBasisNotes: 'Store records for audit and reporting.',
+      customerLegalOwner: 'Customer Legal',
+    }, 'pending_customer_legal_review');
+
+    expect(pending.automationGate).toBe('blocked');
+    expect(pending.checklist.some(item => item.key === 'formal_review' && item.status === 'blocked')).toBe(true);
+
+    const approved = buildPrivacyReviewChecklist({
+      retentionMode: 'seven_years',
+      legalBasisNotes: 'Store records for audit and reporting.',
+      customerLegalOwner: 'Customer Legal',
+    }, 'approved');
+
+    expect(approved.automationGate).toBe('ready');
+    expect(approved.checklist.find(item => item.key === 'formal_review')?.status).toBe('ready');
   });
 });

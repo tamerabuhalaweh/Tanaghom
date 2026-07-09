@@ -323,6 +323,9 @@ export const tenantAdminApi = {
   deletionReadiness: (token: string) => apiFetch<unknown>('/admin/tenant/deletion-readiness', { token }),
   requestDeletion: (data: unknown, token: string) =>
     apiFetch<unknown>('/admin/tenant/deletion-request', { method: 'POST', body: data, token }),
+  privacyGovernance: (token: string) => apiFetch<unknown>('/admin/tenant/privacy-governance', { token }),
+  updatePrivacyGovernance: (data: unknown, token: string) =>
+    apiFetch<unknown>('/admin/tenant/privacy-governance', { method: 'PUT', body: data, token }),
   updateLifecycle: (data: unknown, token: string) =>
     apiFetch<unknown>('/admin/tenant/lifecycle', { method: 'POST', body: data, token }),
 };

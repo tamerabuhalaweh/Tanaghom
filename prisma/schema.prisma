@@ -97,6 +97,10 @@ model Tenant {
   tenant_key  String       @unique
   name        String
   status      TenantStatus @default(active)
+  privacy_policy Json         @default("{}")
+  privacy_review_status String @default("pending_customer_legal_review")
+  privacy_review_updated_at DateTime?
+  privacy_review_updated_by_user_id String? @db.Uuid
   created_at  DateTime     @default(now())
   updated_at  DateTime     @updatedAt
 
