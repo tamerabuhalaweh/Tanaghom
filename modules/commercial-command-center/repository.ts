@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
 import { NotFoundError, ValidationError } from '@shared/errors';
 import {
+  COMMERCIAL_CURRENCIES,
   REVENUE_LINE_CATALOG,
   type CommercialAssessmentSignalSummary,
   type CommercialCommandCenterDashboard,
@@ -116,6 +117,7 @@ export async function createPlan(
       title: input.title,
       objective: input.objective ?? null,
       audience: input.audience ?? null,
+      currency: input.currency || 'USD',
       budget_target: input.budgetTarget != null ? new Prisma.Decimal(input.budgetTarget) : null,
       revenue_target: input.revenueTarget != null ? new Prisma.Decimal(input.revenueTarget) : null,
       kpi_targets: input.kpiTargets == null ? Prisma.JsonNull : toJsonObject(input.kpiTargets),
@@ -156,6 +158,7 @@ export async function updatePlan(
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.objective !== undefined ? { objective: input.objective } : {}),
       ...(input.audience !== undefined ? { audience: input.audience } : {}),
+      ...(input.currency !== undefined ? { currency: input.currency } : {}),
       ...(input.budgetTarget !== undefined ? { budget_target: input.budgetTarget != null ? new Prisma.Decimal(input.budgetTarget) : null } : {}),
       ...(input.revenueTarget !== undefined ? { revenue_target: input.revenueTarget != null ? new Prisma.Decimal(input.revenueTarget) : null } : {}),
       ...(input.kpiTargets !== undefined ? { kpi_targets: input.kpiTargets == null ? Prisma.JsonNull : toJsonObject(input.kpiTargets) } : {}),
@@ -418,6 +421,8 @@ export async function getRevenueLineDashboard(
     || linkedEvents.reduce((total, event) => total + (decimalToNumber(event.revenue_target) || 0), 0);
   const plannedBudget = plans.reduce((total, plan) => total + (plan.budgetTarget || 0), 0)
     || linkedEvents.reduce((total, event) => total + (decimalToNumber(event.planned_budget) || 0), 0);
+  const currencyBreakdown = buildCurrencyBreakdown(plans);
+  const uniquePlanCurrencies = [...new Set(plans.map(plan => plan.currency))];
   const knownSpend = kpis.reduce((total, row) => total + (decimalToNumber(row.spend) || 0), 0);
   const knownRevenue = leads.reduce((total, lead) => total + (decimalToNumber(lead.purchase_amount) || 0), 0);
   const kpiLeads = kpis.reduce((total, row) => total + row.leads, 0);
@@ -452,6 +457,8 @@ export async function getRevenueLineDashboard(
     rollups: {
       plannedRevenueTarget,
       knownRevenue,
+      currency: uniquePlanCurrencies.length === 0 ? 'USD' : uniquePlanCurrencies.length === 1 ? uniquePlanCurrencies[0] : 'mixed',
+      currencyBreakdown,
       plannedBudget,
       knownSpend,
       budgetVariance: plannedBudget > 0 ? round2(plannedBudget - knownSpend) : null,
@@ -482,6 +489,11 @@ export async function getRevenueLineDashboard(
       blocked: connectorJobs.filter(job => ['blocked', 'failed'].includes(String(job.sync_status)) || String(job.state) === 'blocked').length,
     },
     nextAction: chooseNextAction(revenueLine.configured, eventIds.length, kpis.length, leads.length, plans.length),
+    reporting: {
+      primaryDimension: 'revenue_line',
+      countryGrouping: false,
+      supportedCurrencies: [...COMMERCIAL_CURRENCIES],
+    },
   };
 }
 
@@ -524,6 +536,7 @@ function mergeRevenueLineCatalog(
       name: catalogLine.label,
       description: catalogLine.purpose,
       status: 'not_configured',
+      availability: catalogLine.availability,
       systemOfRecord: 'tanaghum',
       ownerUserId: null,
       configured: false,
@@ -555,6 +568,7 @@ function mapRevenueLine(line: {
     name: line.name,
     description: line.description,
     status: String(line.status) as CommercialRevenueLineSummary['status'],
+    availability: REVENUE_LINE_CATALOG.find(catalogLine => catalogLine.type === String(line.revenue_line_type))?.availability || 'future',
     systemOfRecord: line.system_of_record,
     ownerUserId: line.owner_user_id,
     configured: true,
@@ -577,6 +591,7 @@ function mapPlan(plan: {
   title: string;
   objective: string | null;
   audience: string | null;
+  currency?: unknown;
   budget_target: unknown;
   revenue_target: unknown;
   kpi_targets: unknown;
@@ -603,6 +618,7 @@ function mapPlan(plan: {
     title: plan.title,
     objective: plan.objective,
     audience: plan.audience,
+    currency: String(plan.currency || 'USD') as CommercialPlanSummary['currency'],
     budgetTarget: decimalToNumber(plan.budget_target),
     revenueTarget: decimalToNumber(plan.revenue_target),
     kpiTargets: plan.kpi_targets,
@@ -730,6 +746,23 @@ function mapEventBridge(
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function buildCurrencyBreakdown(plans: CommercialPlanSummary[]): CommercialRevenueLineDashboard['rollups']['currencyBreakdown'] {
+  const byCurrency = new Map<CommercialPlanSummary['currency'], { plannedRevenueTarget: number; plannedBudget: number; planCount: number }>();
+  for (const plan of plans) {
+    const current = byCurrency.get(plan.currency) || { plannedRevenueTarget: 0, plannedBudget: 0, planCount: 0 };
+    current.plannedRevenueTarget += plan.revenueTarget || 0;
+    current.plannedBudget += plan.budgetTarget || 0;
+    current.planCount += 1;
+    byCurrency.set(plan.currency, current);
+  }
+  return [...byCurrency.entries()].map(([currency, values]) => ({
+    currency,
+    plannedRevenueTarget: round2(values.plannedRevenueTarget),
+    plannedBudget: round2(values.plannedBudget),
+    planCount: values.planCount,
+  }));
 }
 
 function isCustomerVisibleRecordName(name: string): boolean {

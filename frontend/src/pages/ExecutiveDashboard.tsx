@@ -27,6 +27,8 @@ const REVENUE_LINE_OPTIONS = [
   { value: '', label: 'All revenue lines' },
   { value: 'live_event', label: 'Live Events' },
   { value: 'online_course', label: 'Online Courses' },
+  { value: 'book', label: 'Books' },
+  { value: 'merchandise', label: 'Merchandise' },
   { value: 'b2b', label: 'B2B' },
   { value: 'platinum_elite', label: 'Platinum Elite' },
   { value: 'certified_trainer_network', label: 'Certified Trainer Network' },

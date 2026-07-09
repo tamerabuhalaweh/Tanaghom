@@ -56,7 +56,7 @@ function configuredLine(type = 'online_course') {
   };
 }
 
-function plan(eventId = 'event-1', eventName = 'Course Launch') {
+function plan(eventId = 'event-1', eventName = 'Course Launch', currency = 'USD') {
   return {
     id: 'plan-1',
     tenant_key: 'tenant-a',
@@ -69,6 +69,7 @@ function plan(eventId = 'event-1', eventName = 'Course Launch') {
     title: 'Quarterly course launch',
     objective: 'Grow course revenue',
     audience: 'Warm leads',
+    currency,
     budget_target: 1000,
     revenue_target: 5000,
     kpi_targets: {},
@@ -131,6 +132,7 @@ describe('Commercial Command Center revenue-line dashboard', () => {
     expect(dashboard.rollups).toMatchObject({
       plannedRevenueTarget: 5000,
       knownRevenue: 1500,
+      currency: 'USD',
       plannedBudget: 1000,
       knownSpend: 500,
       budgetVariance: 500,
@@ -155,6 +157,48 @@ describe('Commercial Command Center revenue-line dashboard', () => {
     });
     expect(dashboard.availableEvents[0]?.name).toBe('Course Launch');
     expect(dashboard.connectorStatus).toMatchObject({ jobs: 2, readyForSync: 1, synced: 1, blocked: 0 });
+    expect(dashboard.reporting).toMatchObject({
+      primaryDimension: 'revenue_line',
+      countryGrouping: false,
+      supportedCurrencies: ['USD', 'AED'],
+    });
+    expect(dashboard.rollups.currencyBreakdown).toEqual([
+      { currency: 'USD', plannedRevenueTarget: 5000, plannedBudget: 1000, planCount: 1 },
+    ]);
+  });
+
+  it('keeps AED and USD plan targets separated in the currency breakdown', async () => {
+    prismaMocks.commercialRevenueLine.findUnique.mockResolvedValue(configuredLine('book'));
+    prismaMocks.commercialPlan.findMany.mockResolvedValue([
+      { ...plan('event-1', 'Book Launch', 'AED'), revenue_line: { revenue_line_type: 'book', name: 'Books' }, revenue_target: 12000, budget_target: 2000 },
+      { ...plan('event-1', 'Book Launch', 'USD'), revenue_line: { revenue_line_type: 'book', name: 'Books' }, id: 'plan-2', revenue_target: 3000, budget_target: 800 },
+    ]);
+    prismaMocks.commercialEvent.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'event-1',
+          name: 'Book Launch',
+          status: 'active',
+          event_type: 'virtual_event',
+          event_date: now,
+          planned_budget: 0,
+          revenue_target: 0,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    prismaMocks.eventKpiRecord.findMany.mockResolvedValue([]);
+    prismaMocks.leadCaptureRecord.findMany.mockResolvedValue([]);
+    prismaMocks.connectorImportJob.findMany.mockResolvedValue([]);
+
+    const dashboard = await getRevenueLineDashboard('tenant-a', 'book');
+
+    expect(dashboard.rollups.currency).toBe('mixed');
+    expect(dashboard.rollups.currencyBreakdown).toEqual([
+      { currency: 'AED', plannedRevenueTarget: 12000, plannedBudget: 2000, planCount: 1 },
+      { currency: 'USD', plannedRevenueTarget: 3000, plannedBudget: 800, planCount: 1 },
+    ]);
+    expect(dashboard.reporting.primaryDimension).toBe('revenue_line');
+    expect(dashboard.reporting.countryGrouping).toBe(false);
   });
 
   it('shows available tenant events as link choices without counting them as linked data', async () => {

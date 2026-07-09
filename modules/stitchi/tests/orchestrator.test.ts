@@ -641,6 +641,111 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('prepares an AI-assisted Books plan with AED currency', async () => {
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce({
+      currentUser: {
+        id: 'user-1',
+        name: 'Marketing Manager',
+        email: 'manager@example.com',
+        role: 'marketing_manager',
+        departmentName: 'Commercial',
+      },
+      selectedEvent: null,
+      recentEvents: [],
+      leadSummary: { total: 0 },
+      kpiSummary: { records: 0 },
+      riskSummary: { open: 0 },
+      connectorSummary: { configuredCredentials: 0, connectorJobs: 0 },
+      commercialCenter: {
+        configuredRevenueLines: 0,
+        activePlans: 0,
+        openAssessmentSignals: 0,
+        revenueLines: [
+          {
+            id: null,
+            type: 'book',
+            name: 'Books',
+            status: 'not_configured',
+            planCount: 0,
+            openSignals: 0,
+          },
+        ],
+        recentPlans: [],
+      },
+      guardrails: {
+        mode: 'read_only',
+        writesExecuted: false,
+        externalExecution: 'blocked',
+        secretsReturned: false,
+      },
+    });
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Create a Books plan for a leadership book launch.',
+        'Objective: sell the new book to warm followers.',
+        'Audience: readers, previous buyers, and entrepreneurs.',
+        'Budget target: 5000 AED.',
+        'Revenue target: 30000 AED.',
+        'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_commercial_plan_with_revenue_line',
+        inputPayload: expect.objectContaining({
+          revenueLine: expect.objectContaining({
+            revenueLineType: 'book',
+            name: 'Books',
+          }),
+          plan: expect.objectContaining({
+            currency: 'AED',
+            budgetTarget: 5000,
+            revenueTarget: 30000,
+          }),
+        }),
+        previewPayload: expect.objectContaining({
+          revenueLineName: 'Books',
+          currency: 'AED',
+          aiAssisted: true,
+        }),
+      }),
+    );
+  });
+
+  it('does not create operational work for future merchandise lines before leadership enables them', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Create a Merchandise plan for a product drop.',
+        'Objective: sell branded shirts.',
+        'Audience: fans and previous buyers.',
+        'Budget target: 5000.',
+        'Revenue target: 30000.',
+        'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('Merchandise is captured as a future revenue line'),
+      expect.objectContaining({
+        status: 'answered',
+        externalExecution: 'blocked',
+      }),
+    );
+  });
+
   it('requires a real AI provider before proposing commercial operator work', async () => {
     providerMocks.resolveUserLLMProvider.mockRejectedValueOnce(
       new AppError('No production LLM provider is configured for this user.', 424, 'LLM_PROVIDER_REQUIRED'),

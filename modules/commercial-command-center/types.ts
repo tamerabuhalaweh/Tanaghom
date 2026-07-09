@@ -3,12 +3,15 @@ import { z } from 'zod';
 export const COMMERCIAL_REVENUE_LINE_TYPES = [
   'live_event',
   'online_course',
+  'book',
+  'merchandise',
   'b2b',
   'platinum_elite',
   'certified_trainer_network',
   'loyalty_community',
 ] as const;
 
+export const COMMERCIAL_CURRENCIES = ['USD', 'AED'] as const;
 export const COMMERCIAL_REVENUE_LINE_STATUSES = ['active', 'paused', 'archived'] as const;
 export const COMMERCIAL_OPERATING_STAGES = ['assess', 'strategy_planning', 'implementation_engagement'] as const;
 export const COMMERCIAL_PLAN_HORIZONS = ['three_year', 'one_year', 'quarterly', 'product_or_event'] as const;
@@ -17,6 +20,7 @@ export const COMMERCIAL_ASSESSMENT_SEVERITIES = ['info', 'watch', 'risk', 'criti
 export const COMMERCIAL_ASSESSMENT_STATUSES = ['open', 'reviewing', 'resolved', 'dismissed'] as const;
 
 export type CommercialRevenueLineType = (typeof COMMERCIAL_REVENUE_LINE_TYPES)[number];
+export type CommercialCurrency = (typeof COMMERCIAL_CURRENCIES)[number];
 export type CommercialRevenueLineStatus = (typeof COMMERCIAL_REVENUE_LINE_STATUSES)[number];
 export type CommercialOperatingStage = (typeof COMMERCIAL_OPERATING_STAGES)[number];
 export type CommercialPlanHorizon = (typeof COMMERCIAL_PLAN_HORIZONS)[number];
@@ -28,36 +32,55 @@ export const REVENUE_LINE_CATALOG: Array<{
   type: CommercialRevenueLineType;
   label: string;
   purpose: string;
+  availability: 'active' | 'future';
 }> = [
   {
     type: 'live_event',
     label: 'Live Events',
     purpose: 'Operate event campaigns, audience strategy, leads, meetings, attendance and purchases.',
+    availability: 'active',
   },
   {
     type: 'online_course',
     label: 'Online Courses',
     purpose: 'Plan evergreen and launch-based course sales with content, funnel and CRM follow-up.',
+    availability: 'active',
+  },
+  {
+    type: 'book',
+    label: 'Books',
+    purpose: 'Track book launches, bundles, reader funnels, order campaigns and book-to-program conversion.',
+    availability: 'active',
+  },
+  {
+    type: 'merchandise',
+    label: 'Merchandise',
+    purpose: 'Prepare merchandise drops, product bundles, stock-aware campaigns and buyer follow-up.',
+    availability: 'future',
   },
   {
     type: 'b2b',
     label: 'B2B',
     purpose: 'Manage corporate training, consulting offers, enterprise leads and account follow-up.',
+    availability: 'future',
   },
   {
     type: 'platinum_elite',
     label: 'Platinum Elite',
     purpose: 'Track premium programs, high-value buyers, exclusivity and conversion readiness.',
+    availability: 'future',
   },
   {
     type: 'certified_trainer_network',
     label: 'Certified Trainer Network',
     purpose: 'Coordinate certified trainer pipeline, enablement content and commercial opportunities.',
+    availability: 'future',
   },
   {
     type: 'loyalty_community',
     label: 'Loyalty & Community',
     purpose: 'Grow repeat purchase, community engagement, referrals and customer retention.',
+    availability: 'future',
   },
 ];
 
@@ -78,6 +101,7 @@ export const createCommercialPlanSchema = z.object({
   title: z.string().trim().min(1).max(260),
   objective: z.string().trim().max(5000).nullable().optional(),
   audience: z.string().trim().max(5000).nullable().optional(),
+  currency: z.enum(COMMERCIAL_CURRENCIES).default('USD').optional(),
   budgetTarget: z.number().min(0).nullable().optional(),
   revenueTarget: z.number().min(0).nullable().optional(),
   kpiTargets: z.record(z.unknown()).nullable().optional(),
@@ -95,6 +119,7 @@ export const updateCommercialPlanSchema = z.object({
   title: z.string().trim().min(1).max(260).optional(),
   objective: z.string().trim().max(5000).nullable().optional(),
   audience: z.string().trim().max(5000).nullable().optional(),
+  currency: z.enum(COMMERCIAL_CURRENCIES).optional(),
   budgetTarget: z.number().min(0).nullable().optional(),
   revenueTarget: z.number().min(0).nullable().optional(),
   kpiTargets: z.record(z.unknown()).nullable().optional(),
@@ -150,6 +175,7 @@ export interface CommercialRevenueLineSummary {
   name: string;
   description: string | null;
   status: CommercialRevenueLineStatus | 'not_configured';
+  availability: 'active' | 'future';
   systemOfRecord: string;
   ownerUserId: string | null;
   configured: boolean;
@@ -172,6 +198,7 @@ export interface CommercialPlanSummary {
   title: string;
   objective: string | null;
   audience: string | null;
+  currency: CommercialCurrency;
   budgetTarget: number | null;
   revenueTarget: number | null;
   kpiTargets: unknown;
@@ -246,6 +273,13 @@ export interface CommercialRevenueLineDashboard {
   rollups: {
     plannedRevenueTarget: number;
     knownRevenue: number;
+    currency: CommercialCurrency | 'mixed';
+    currencyBreakdown: Array<{
+      currency: CommercialCurrency;
+      plannedRevenueTarget: number;
+      plannedBudget: number;
+      planCount: number;
+    }>;
     plannedBudget: number;
     knownSpend: number;
     budgetVariance: number | null;
@@ -279,5 +313,10 @@ export interface CommercialRevenueLineDashboard {
     label: string;
     description: string;
     path: string | null;
+  };
+  reporting: {
+    primaryDimension: 'revenue_line';
+    countryGrouping: false;
+    supportedCurrencies: CommercialCurrency[];
   };
 }

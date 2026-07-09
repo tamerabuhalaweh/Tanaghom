@@ -103,9 +103,10 @@ export interface StitchiReadOnlyContext {
       stage: string;
       revenueLine: string;
       status: string;
-      budgetTarget: number | null;
-      revenueTarget: number | null;
-      linkedEventId: string | null;
+        budgetTarget: number | null;
+        revenueTarget: number | null;
+        currency: string;
+        linkedEventId: string | null;
     }>;
   };
   commercialExecutive: {
@@ -170,6 +171,7 @@ export async function loadReadOnlyContext(
         id: string;
         budget_target: unknown;
         revenue_target: unknown;
+        currency?: unknown;
         linked_event_id: string | null;
         revenue_line: { name: string };
       }>>;
@@ -306,6 +308,7 @@ export async function loadReadOnlyContext(
         id: true,
         budget_target: true,
         revenue_target: true,
+        currency: true,
         linked_event_id: true,
         revenue_line: { select: { name: true } },
       },
@@ -376,6 +379,7 @@ export async function loadReadOnlyContext(
         status: String(plan.status),
         budgetTarget: decimalToNumber(plan.budget_target),
         revenueTarget: decimalToNumber(plan.revenue_target),
+        currency: String(plan.currency || 'USD'),
         linkedEventId: plan.linked_event_id,
       })),
     },

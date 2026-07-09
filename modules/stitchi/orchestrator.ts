@@ -5,7 +5,7 @@ import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { AppError } from '@shared/errors';
 import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
-import type { CommercialRevenueLineType } from '@modules/commercial-command-center/types';
+import type { CommercialCurrency, CommercialRevenueLineType } from '@modules/commercial-command-center/types';
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext, type StitchiReadOnlyContext } from './context';
 import { checkStitchiPermission } from './policy';
 import * as repo from './repository';
@@ -353,10 +353,10 @@ async function deriveActionProposal(
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
-  const disciplineProposal = deriveDisciplineActionProposal(content, eventId, context, metadata);
-  if (disciplineProposal) return disciplineProposal;
   const commercialProposal = await deriveCommercialCenterActionProposalV2(content, userId, context, metadata);
   if (commercialProposal) return commercialProposal;
+  const disciplineProposal = deriveDisciplineActionProposal(content, eventId, context, metadata);
+  if (disciplineProposal) return disciplineProposal;
   if (!eventId) return null;
   const lower = content.toLowerCase();
   const plannerProposal = derivePlannerActionProposal(content, lower, eventId);
@@ -526,6 +526,18 @@ async function deriveCommercialCenterActionProposalV2(
     };
   }
 
+  const targetLineType = revenueLine?.type || fallbackRevenueLineType;
+  if (!revenueLineId && isFutureRevenueLineType(targetLineType)) {
+    return {
+      kind: 'follow_up',
+      assistantText: [
+        `${revenueLineLabel(targetLineType)} is captured as a future revenue line, not an active operating line yet.`,
+        'I can help record discovery notes, but leadership needs to enable this revenue line before I prepare plans, budgets, or revenue targets for daily execution.',
+        'For active work today, choose Live Events, Online Courses, or Books.',
+      ].join('\n'),
+    };
+  }
+
   if (/(risk|signal|assess|assessment|finding|problem|gap)/i.test(lower)) {
     return {
       actionType: 'create_commercial_assessment_signal',
@@ -604,6 +616,7 @@ async function deriveCommercialCenterActionProposalV2(
             title: enrichedTitle,
             objective: enrichedObjective,
             audience: enrichedAudience,
+            currency: extractedPlan.currency,
             budgetTarget: extractedPlan.budgetTarget,
             revenueTarget: extractedPlan.revenueTarget,
             strategySummary: enrichedStrategySummary,
@@ -619,6 +632,7 @@ async function deriveCommercialCenterActionProposalV2(
           stage,
           objective: enrichedObjective,
           audience: enrichedAudience,
+          currency: extractedPlan.currency,
           budgetTarget: extractedPlan.budgetTarget,
           revenueTarget: extractedPlan.revenueTarget,
           actionPlan: enrichedActionPlan,
@@ -645,6 +659,7 @@ async function deriveCommercialCenterActionProposalV2(
         title: enrichedTitle,
         objective: enrichedObjective,
         audience: enrichedAudience,
+        currency: extractedPlan.currency,
         budgetTarget: extractedPlan.budgetTarget,
         revenueTarget: extractedPlan.revenueTarget,
         strategySummary: enrichedStrategySummary,
@@ -658,6 +673,7 @@ async function deriveCommercialCenterActionProposalV2(
         stage,
         objective: enrichedObjective,
         audience: enrichedAudience,
+        currency: extractedPlan.currency,
         budgetTarget: extractedPlan.budgetTarget,
         revenueTarget: extractedPlan.revenueTarget,
         actionPlan: enrichedActionPlan,
@@ -1002,6 +1018,7 @@ type ResolvedRevenueLine = {
 type ExtractedCommercialPlan = {
   objective: string | null;
   audience: string | null;
+  currency: CommercialCurrency;
   budgetTarget: number | null;
   revenueTarget: number | null;
   actionPlan: string | null;
@@ -1011,8 +1028,17 @@ type ExtractedCommercialPlan = {
 };
 
 function isCommercialCenterRequest(lower: string, metadata?: Record<string, unknown>): boolean {
-  if (typeof metadata?.revenueLineId === 'string' || typeof metadata?.revenueLineType === 'string') return true;
-  return /(commercial|revenue line|business line|online course|online courses|course|courses|b2b|platinum|trainer network|loyalty|community|three-year|quarterly|department|leadership course|course launch|commercial plan)/i.test(lower);
+  if (typeof metadata?.revenueLineType === 'string') return true;
+  if (
+    typeof metadata?.revenueLineId === 'string'
+    && /(commercial plan|plan|strategy|target|budget|revenue|launch|pipeline|forecast|report|dashboard|assessment|signal|quarterly|three-year)/i.test(lower)
+  ) {
+    return true;
+  }
+  if (/(commercial plan|revenue line|business line|online course|online courses|course launch|leadership course|book launch|books?|merchandise|merch|b2b|platinum|trainer network|loyalty|community)/i.test(lower)) {
+    return true;
+  }
+  return /(commercial|three-year|quarterly|department)/i.test(lower) && /(plan|strategy|target|budget|revenue|launch|pipeline|forecast|report|dashboard|assessment|signal|risk|gap)/i.test(lower);
 }
 
 function resolveRevenueLine(
@@ -1061,6 +1087,8 @@ function asCommercialRevenueLineType(value: string): CommercialRevenueLineType |
   if (
     value === 'live_event'
     || value === 'online_course'
+    || value === 'book'
+    || value === 'merchandise'
     || value === 'b2b'
     || value === 'platinum_elite'
     || value === 'certified_trainer_network'
@@ -1074,6 +1102,7 @@ function asCommercialRevenueLineType(value: string): CommercialRevenueLineType |
 function extractCommercialPlanFields(content: string, context?: StitchiReadOnlyContext): ExtractedCommercialPlan {
   const objective = extractLabelValue(content, ['objective', 'goal', 'purpose']);
   const audience = extractLabelValue(content, ['audience', 'target audience', 'segment']);
+  const currency = extractCommercialCurrency(content);
   const budgetTarget = extractMoneyValue(content, ['budget target', 'budget', 'spend target']);
   const revenueTarget = extractMoneyValue(content, ['revenue target', 'sales target', 'target revenue']);
   const actionPlan = extractLabelValue(content, ['action plan', 'plan', 'next actions']);
@@ -1081,6 +1110,7 @@ function extractCommercialPlanFields(content: string, context?: StitchiReadOnlyC
   return {
     objective,
     audience,
+    currency,
     budgetTarget,
     revenueTarget,
     actionPlan,
@@ -1201,6 +1231,7 @@ function buildCommercialPlanEnrichmentPrompt(input: {
     `Backend audience: ${input.extractedPlan.audience}`,
     `Backend budget target: ${input.extractedPlan.budgetTarget}`,
     `Backend revenue target: ${input.extractedPlan.revenueTarget}`,
+    `Backend currency: ${input.extractedPlan.currency}`,
     `Backend linked event: ${input.extractedPlan.linkedEventName || 'none'}`,
     '',
     'User request:',
@@ -1350,6 +1381,12 @@ function extractMoneyValue(content: string, labels: string[]): number | null {
   return null;
 }
 
+function extractCommercialCurrency(content: string): CommercialCurrency {
+  if (/\b(AED|UAE\s*dirham|dirhams?)\b/i.test(content)) return 'AED';
+  if (/\b(USD|US\s*dollar|dollars?)\b|\$/i.test(content)) return 'USD';
+  return 'USD';
+}
+
 function inferLinkedEvent(content: string, context?: StitchiReadOnlyContext): { id: string; name: string } | null {
   const events = context?.recentEvents || [];
   if (!events.length) return null;
@@ -1374,7 +1411,9 @@ function capitalizeWords(value: string): string {
   return value.replace(/\b[a-z]/g, char => char.toUpperCase());
 }
 
-function inferRevenueLineType(lower: string): 'live_event' | 'online_course' | 'b2b' | 'platinum_elite' | 'certified_trainer_network' | 'loyalty_community' {
+function inferRevenueLineType(lower: string): CommercialRevenueLineType {
+  if (/(book|books|book launch|reader funnel|publication|author)/i.test(lower)) return 'book';
+  if (/(merchandise|merch|product drop|bundle|t-shirt|shirt|hoodie)/i.test(lower)) return 'merchandise';
   if (/(online course|course|ÙƒÙˆØ±Ø³|Ø¯ÙˆØ±Ø©)/i.test(lower)) return 'online_course';
   if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
   if (/(platinum|elite|premium|vip)/i.test(lower)) return 'platinum_elite';
@@ -1384,6 +1423,8 @@ function inferRevenueLineType(lower: string): 'live_event' | 'online_course' | '
 }
 
 function inferExplicitRevenueLineType(lower: string): ReturnType<typeof inferRevenueLineType> | undefined {
+  if (/(book|books|book launch|reader funnel|publication|author)/i.test(lower)) return 'book';
+  if (/(merchandise|merch|product drop|bundle|t-shirt|shirt|hoodie)/i.test(lower)) return 'merchandise';
   if (/(online course|online courses|course|courses|leadership course)/i.test(lower)) return 'online_course';
   if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
   if (/(platinum|elite|premium|vip)/i.test(lower)) return 'platinum_elite';
@@ -1397,12 +1438,22 @@ function revenueLineLabel(type: ReturnType<typeof inferRevenueLineType>): string
   const labels: Record<ReturnType<typeof inferRevenueLineType>, string> = {
     live_event: 'Live Events',
     online_course: 'Online Courses',
+    book: 'Books',
+    merchandise: 'Merchandise',
     b2b: 'B2B',
     platinum_elite: 'Platinum Elite',
     certified_trainer_network: 'Certified Trainer Network',
     loyalty_community: 'Loyalty & Community',
   };
   return labels[type];
+}
+
+function isFutureRevenueLineType(type: CommercialRevenueLineType): boolean {
+  return type === 'merchandise'
+    || type === 'b2b'
+    || type === 'platinum_elite'
+    || type === 'certified_trainer_network'
+    || type === 'loyalty_community';
 }
 
 function inferCommercialStage(lower: string): 'assess' | 'strategy_planning' | 'implementation_engagement' {

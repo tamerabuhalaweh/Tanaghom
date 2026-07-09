@@ -3635,10 +3635,17 @@ enum CommercialEventStatus {
 enum CommercialRevenueLineType {
   live_event
   online_course
+  book
+  merchandise
   b2b
   platinum_elite
   certified_trainer_network
   loyalty_community
+}
+
+enum CommercialCurrency {
+  USD
+  AED
 }
 
 enum CommercialRevenueLineStatus {
@@ -3802,6 +3809,7 @@ model CommercialPlan {
   title              String
   objective          String?                  @db.Text
   audience           String?                  @db.Text
+  currency           CommercialCurrency       @default(USD)
   budget_target      Decimal?                 @db.Decimal(12, 2)
   revenue_target     Decimal?                 @db.Decimal(12, 2)
   kpi_targets        Json?

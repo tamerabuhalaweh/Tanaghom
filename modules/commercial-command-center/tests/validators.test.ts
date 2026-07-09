@@ -10,12 +10,12 @@ import {
 describe('Commercial Command Center validators', () => {
   it('validates revenue line creation using SRD revenue line vocabulary', () => {
     expect(validateCreateRevenueLine({
-      revenueLineType: 'online_course',
-      name: 'Online Courses',
-      description: 'Evergreen and launch-based course revenue.',
+      revenueLineType: 'book',
+      name: 'Books',
+      description: 'Book launches and reader-to-program revenue.',
     })).toMatchObject({
-      revenueLineType: 'online_course',
-      name: 'Online Courses',
+      revenueLineType: 'book',
+      name: 'Books',
     });
   });
 
@@ -32,23 +32,36 @@ describe('Commercial Command Center validators', () => {
       horizon: 'quarterly',
       stage: 'strategy_planning',
       title: 'Quarterly online course growth plan',
+      currency: 'AED',
       budgetTarget: 5000,
       revenueTarget: 25000,
     })).toMatchObject({
       horizon: 'quarterly',
       stage: 'strategy_planning',
       title: 'Quarterly online course growth plan',
+      currency: 'AED',
     });
+  });
+
+  it('rejects unsupported commercial plan currencies', () => {
+    expect(() => validateCreateCommercialPlan({
+      revenueLineId: '00000000-0000-0000-0000-000000000001',
+      horizon: 'quarterly',
+      title: 'Unsupported currency plan',
+      currency: 'SAR',
+    })).toThrow(ValidationError);
   });
 
   it('validates partial commercial plan updates', () => {
     expect(validateUpdateCommercialPlan({
       stage: 'implementation_engagement',
       status: 'active',
+      currency: 'USD',
       budgetTarget: 12000,
     })).toMatchObject({
       stage: 'implementation_engagement',
       status: 'active',
+      currency: 'USD',
       budgetTarget: 12000,
     });
   });

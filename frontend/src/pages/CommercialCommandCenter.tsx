@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BriefcaseBusiness,
+  BookOpen,
   CalendarDays,
   GraduationCap,
   HeartHandshake,
   LineChart,
   Network,
+  ShoppingBag,
   Sparkles,
   Target,
   Users,
@@ -58,11 +60,18 @@ const STAGES = [
 const REVENUE_ICONS = {
   live_event: CalendarDays,
   online_course: GraduationCap,
+  book: BookOpen,
+  merchandise: ShoppingBag,
   b2b: BriefcaseBusiness,
   platinum_elite: Sparkles,
   certified_trainer_network: Network,
   loyalty_community: HeartHandshake,
 };
+
+const PLAN_CURRENCIES = [
+  { code: 'USD', label: 'USD - US Dollar' },
+  { code: 'AED', label: 'AED - UAE Dirham' },
+] as const;
 
 function list(value: unknown): RecordMap[] {
   return Array.isArray(value) ? value as RecordMap[] : [];
@@ -113,14 +122,15 @@ function titleCase(value: string): string {
 
 function statusTone(status: string): 'good' | 'warn' | 'muted' | 'info' {
   if (status === 'active') return 'good';
+  if (status === 'future') return 'info';
   if (status === 'not_configured' || status === 'draft') return 'warn';
   if (status === 'paused') return 'info';
   return 'muted';
 }
 
-function formatMoney(value: unknown): string {
+function formatMoney(value: unknown, currency?: string): string {
   const parsed = nullableNumber(value);
-  return parsed == null ? 'Not available' : formatCurrency(parsed);
+  return parsed == null ? 'Not available' : formatCurrency(parsed, currency === 'AED' || currency === 'USD' ? currency : undefined);
 }
 
 function percent(value: unknown): string {
@@ -151,6 +161,7 @@ function makePlanDraft(lineId = '') {
     horizon: 'quarterly',
     stage: 'strategy_planning',
     status: 'draft',
+    currency: 'USD',
     objective: '',
     audience: '',
     budgetTarget: '',
@@ -175,6 +186,8 @@ export default function CommercialCommandCenter() {
   const configuredRevenueLines = revenueLines.filter(line => Boolean(line.configured) && text(line.status) !== 'archived');
   const selectedLine = object(lineDashboard?.revenueLine || revenueLines.find(line => text(line.revenueLineType) === selectedType));
   const rollups = object(lineDashboard?.rollups);
+  const rollupCurrency = text(rollups.currency, 'USD');
+  const currencyBreakdown = list(rollups.currencyBreakdown);
   const dataStatus = object(lineDashboard?.dataStatus);
   const plans = list(lineDashboard?.plans);
   const linkedEvents = list(lineDashboard?.linkedEvents);
@@ -273,6 +286,7 @@ export default function CommercialCommandCenter() {
       horizon: text(plan.horizon, 'quarterly'),
       stage: text(plan.stage, 'strategy_planning'),
       status: text(plan.status, 'draft'),
+      currency: text(plan.currency, 'USD'),
       objective: text(plan.objective),
       audience: text(plan.audience),
       budgetTarget: nullableNumber(plan.budgetTarget)?.toString() || '',
@@ -297,6 +311,7 @@ export default function CommercialCommandCenter() {
       horizon: planDraft.horizon,
       stage: planDraft.stage,
       status: planDraft.status,
+      currency: planDraft.currency,
       objective: planDraft.objective || null,
       audience: planDraft.audience || null,
       budgetTarget: planDraft.budgetTarget ? Number(planDraft.budgetTarget) : null,
@@ -351,9 +366,24 @@ export default function CommercialCommandCenter() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-4">
-        <AieroMetricCard label="Revenue target" value={loading ? '-' : formatMoney(rollups.plannedRevenueTarget)} detail="Planned across this business line" accent="teal" />
-        <AieroMetricCard label="Known revenue" value={loading ? '-' : formatMoney(rollups.knownRevenue)} detail="From real lead/purchase records" accent="violet" />
-        <AieroMetricCard label="Known spend" value={loading ? '-' : formatMoney(rollups.knownSpend)} detail="From KPI/import records" accent="amber" />
+        <AieroMetricCard
+          label="Revenue target"
+          value={loading ? '-' : rollupCurrency === 'mixed' ? 'Mixed currencies' : formatMoney(rollups.plannedRevenueTarget, rollupCurrency)}
+          detail="Grouped by product/revenue line"
+          accent="teal"
+        />
+        <AieroMetricCard
+          label="Known revenue"
+          value={loading ? '-' : rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.knownRevenue, rollupCurrency)}
+          detail="From real lead/purchase records"
+          accent="violet"
+        />
+        <AieroMetricCard
+          label="Known spend"
+          value={loading ? '-' : rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.knownSpend, rollupCurrency)}
+          detail="From KPI/import records"
+          accent="amber"
+        />
         <AieroMetricCard label="Leads / purchases" value={loading ? '-' : `${numberValue(rollups.leads)} / ${numberValue(rollups.purchases)}`} detail={`${percent(rollups.leadToPurchaseRate)} conversion`} accent="rose" />
       </div>
 
@@ -367,6 +397,7 @@ export default function CommercialCommandCenter() {
               const type = text(line.revenueLineType);
               const Icon = REVENUE_ICONS[type as keyof typeof REVENUE_ICONS] || Users;
               const status = text(line.status, 'not_configured');
+              const future = text(line.availability) === 'future' && !line.configured;
               const active = type === selectedType;
               return (
                 <button
@@ -387,8 +418,8 @@ export default function CommercialCommandCenter() {
                         {numberValue(line.planCount)} plans, {numberValue(line.openSignalCount)} signals
                       </span>
                     </span>
-                    <ProductStatus tone={statusTone(status)}>
-                      {status === 'not_configured' ? 'Setup' : titleCase(status)}
+                    <ProductStatus tone={statusTone(future ? 'future' : status)}>
+                      {future ? 'Future' : status === 'not_configured' ? 'Setup' : titleCase(status)}
                     </ProductStatus>
                   </div>
                 </button>
@@ -400,7 +431,7 @@ export default function CommercialCommandCenter() {
         <AieroPanel
           title={text(selectedLine.name, 'Selected revenue line')}
           subtitle={text(selectedLine.description, 'Configure this revenue line and start planning.')}
-          action={<ProductStatus tone={statusTone(text(selectedLine.status, 'not_configured'))}>{text(selectedLine.status) === 'not_configured' ? 'Needs setup' : titleCase(text(selectedLine.status))}</ProductStatus>}
+          action={<ProductStatus tone={statusTone(text(selectedLine.availability) === 'future' && !selectedLine.configured ? 'future' : text(selectedLine.status, 'not_configured'))}>{text(selectedLine.availability) === 'future' && !selectedLine.configured ? 'Future line' : text(selectedLine.status) === 'not_configured' ? 'Needs setup' : titleCase(text(selectedLine.status))}</ProductStatus>}
         >
           <div className="grid gap-5 lg:grid-cols-[0.72fr_1fr]">
             <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
@@ -422,19 +453,24 @@ export default function CommercialCommandCenter() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <Fact label="Budget variance" value={formatMoney(rollups.budgetVariance)} />
-              <Fact label="Cost per lead" value={formatMoney(rollups.costPerLead)} />
-              <Fact label="Cost per purchase" value={formatMoney(rollups.costPerPurchase)} />
+              <Fact label="Budget variance" value={rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.budgetVariance, rollupCurrency)} />
+              <Fact label="Cost per lead" value={rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.costPerLead, rollupCurrency)} />
+              <Fact label="Cost per purchase" value={rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.costPerPurchase, rollupCurrency)} />
               <Fact label="Meetings / no-shows" value={`${numberValue(rollups.meetingsBooked)} / ${numberValue(rollups.noShows)}`} />
             </div>
           </div>
 
-          {text(selectedLine.status) === 'not_configured' && (
+          {text(selectedLine.status) === 'not_configured' && text(selectedLine.availability) !== 'future' && (
             <div className="mt-5">
               <AieroActionButton onClick={() => configureRevenueLine(selectedLine)} disabled={saving}>
                 Configure this revenue line
               </AieroActionButton>
             </div>
+          )}
+          {text(selectedLine.status) === 'not_configured' && text(selectedLine.availability) === 'future' && (
+            <p className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-white/58">
+              This revenue line is captured for future expansion. Ask Stitchi for discovery notes, but do not operate it as an active line until leadership enables it.
+            </p>
           )}
         </AieroPanel>
       </div>
@@ -523,6 +559,17 @@ export default function CommercialCommandCenter() {
                 <option value="product_or_event">Product or event</option>
                 <option value="one_year">One year</option>
                 <option value="three_year">Three year</option>
+              </select>
+            </Field>
+            <Field label="Plan currency">
+              <select
+                value={planDraft.currency}
+                onChange={event => setPlanDraft(current => ({ ...current, currency: event.target.value }))}
+                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
+              >
+                {PLAN_CURRENCIES.map(option => (
+                  <option key={option.code} value={option.code}>{option.label}</option>
+                ))}
               </select>
             </Field>
             <Field label="Stage">
@@ -618,8 +665,8 @@ export default function CommercialCommandCenter() {
                     <ProductStatus tone={statusTone(text(plan.status))}>{titleCase(text(plan.status))}</ProductStatus>
                   </div>
                   <div className={`mt-3 grid gap-2 text-xs sm:grid-cols-2 ${text(plan.id) === planDraft.id ? 'text-white/58' : 'text-neutral-500'}`}>
-                    <span>Budget: {formatMoney(plan.budgetTarget)}</span>
-                    <span>Target: {formatMoney(plan.revenueTarget)}</span>
+                    <span>Budget: {formatMoney(plan.budgetTarget, text(plan.currency, 'USD'))}</span>
+                    <span>Target: {formatMoney(plan.revenueTarget, text(plan.currency, 'USD'))}</span>
                   </div>
                   <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${text(plan.id) === planDraft.id ? 'bg-white/10 text-white/70' : 'bg-white text-neutral-500'}`}>
                     {text(plan.linkedEventName)
@@ -637,6 +684,21 @@ export default function CommercialCommandCenter() {
           )}
         </AieroLightPanel>
       </div>
+
+      {currencyBreakdown.length > 0 && (
+        <AieroLightPanel title="Currency view" subtitle="Targets are shown by product/revenue line and currency. Tanaghum does not convert currencies without an approved finance rule.">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {currencyBreakdown.map(row => (
+              <div key={text(row.currency)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{text(row.currency)}</div>
+                <div className="mt-2 text-xl font-semibold text-neutral-950">{formatMoney(row.plannedRevenueTarget, text(row.currency))}</div>
+                <div className="mt-1 text-sm text-neutral-500">Revenue target across {numberValue(row.planCount)} plan(s)</div>
+                <div className="mt-3 text-sm text-neutral-700">Budget: {formatMoney(row.plannedBudget, text(row.currency))}</div>
+              </div>
+            ))}
+          </div>
+        </AieroLightPanel>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
         <AieroLightPanel
@@ -656,8 +718,8 @@ export default function CommercialCommandCenter() {
                     <ProductStatus tone={statusTone(text(event.status))}>{titleCase(text(event.status))}</ProductStatus>
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-neutral-500">
-                    <span>Budget: {formatMoney(event.plannedBudget)}</span>
-                    <span>Target: {formatMoney(event.revenueTarget)}</span>
+                    <span>Budget: {formatMoney(event.plannedBudget, rollupCurrency)}</span>
+                    <span>Target: {formatMoney(event.revenueTarget, rollupCurrency)}</span>
                   </div>
                   <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs text-neutral-500">
                     {numberValue(event.linkedPlanCount)} supporting plan{numberValue(event.linkedPlanCount) === 1 ? '' : 's'}
