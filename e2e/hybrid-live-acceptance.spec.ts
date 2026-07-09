@@ -22,7 +22,6 @@ const accounts = {
 
 const customerPaths = [
   '/command-center',
-  '/stitchi',
   '/ideas',
   '/campaigns',
   '/approvals',
@@ -91,6 +90,34 @@ async function assertCustomerPageHealth(page: Page, path: string) {
 test.describe('Hybrid live customer acceptance', () => {
   test.skip(!liveEnabled, 'Set E2E_HYBRID_LIVE=true or run npm run test:e2e:hybrid-live to test deployed Hybrid.');
 
+  test('Stitchi proposes an AI-assisted commercial plan without executing it before approval', async ({ page }) => {
+    test.setTimeout(90000);
+    const monitor = installLiveMonitors(page);
+    await login(page, accounts.manager);
+
+    monitor.reset();
+    await page.goto('/stitchi', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /Tell Stitchi what work you want done/i })).toBeVisible();
+
+    await page.getByPlaceholder(/What should I focus|Ask Stitchi|Create/i).first().fill([
+      'Stitchi, create an Online Courses plan for a leadership course launch.',
+      'Objective: sell to entrepreneurs.',
+      'Audience: warm followers and previous buyers.',
+      'Budget target: 5000.',
+      'Revenue target: 30000.',
+      'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+      'Link it to the next available live event if suitable.',
+    ].join('\n'));
+    await page.getByRole('button', { name: /Ask Stitchi|Ask$/i }).last().click();
+
+    await expect(page.getByText(/I prepared this for review/i).first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(/No data has been changed yet/i).first()).toBeVisible();
+    await expect(page.getByText(/gemma4-26b-a4b-canary/i).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Approve|Save/i }).first()).toBeVisible();
+    await expect(page.locator('main')).not.toContainText(customerVisibleInternalTextPattern);
+    monitor.assertClean('Stitchi safe plan proposal');
+  });
+
   test('manager, specialist, and admin can log in and load the customer workspace without console/API failures', async ({ page }) => {
     test.setTimeout(120000);
     const monitor = installLiveMonitors(page);
@@ -132,33 +159,5 @@ test.describe('Hybrid live customer acceptance', () => {
       await expect(page.getByRole('heading', { name: /Connect Business Systems/i })).toBeVisible();
       monitor.assertClean(`${account.email} connector setup`);
     }
-  });
-
-  test('Stitchi proposes an AI-assisted commercial plan without executing it before approval', async ({ page }) => {
-    test.setTimeout(90000);
-    const monitor = installLiveMonitors(page);
-    await login(page, accounts.manager);
-
-    monitor.reset();
-    await page.goto('/stitchi', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /Tell Stitchi what work you want done/i })).toBeVisible();
-
-    await page.getByPlaceholder(/What should I focus|Ask Stitchi|Create/i).first().fill([
-      'Stitchi, create an Online Courses plan for a leadership course launch.',
-      'Objective: sell to entrepreneurs.',
-      'Audience: warm followers and previous buyers.',
-      'Budget target: 5000.',
-      'Revenue target: 30000.',
-      'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
-      'Link it to the next available live event if suitable.',
-    ].join('\n'));
-    await page.getByRole('button', { name: /Ask Stitchi|Ask$/i }).last().click();
-
-    await expect(page.getByText(/I prepared this for review/i)).toBeVisible({ timeout: 30000 });
-    await expect(page.getByText(/No data has been changed yet/i).first()).toBeVisible();
-    await expect(page.getByText(/gemma4-26b-a4b-canary/i).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /Approve|Save/i }).first()).toBeVisible();
-    await expect(page.locator('main')).not.toContainText(customerVisibleInternalTextPattern);
-    monitor.assertClean('Stitchi safe plan proposal');
   });
 });
