@@ -137,11 +137,11 @@ export interface RoutingRule {
 }
 
 export const ROUTING_RULES: RoutingRule[] = [
-  { riskCategory: 'low', targetType: 'campaign', approvalType: 'department_review', requiredDepartment: null, requiredRole: 'reviewer' },
-  { riskCategory: 'medium', targetType: 'campaign', approvalType: 'department_review', requiredDepartment: null, requiredRole: 'department_head' },
+  { riskCategory: 'low', targetType: 'campaign', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
+  { riskCategory: 'medium', targetType: 'campaign', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
   { riskCategory: 'high', targetType: 'campaign', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
-  { riskCategory: 'low', targetType: 'content_item', approvalType: 'department_review', requiredDepartment: null, requiredRole: 'reviewer' },
-  { riskCategory: 'medium', targetType: 'content_item', approvalType: 'brand_review', requiredDepartment: 'Brand & Market Intelligence', requiredRole: 'department_head' },
+  { riskCategory: 'low', targetType: 'content_item', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
+  { riskCategory: 'medium', targetType: 'content_item', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
   { riskCategory: 'high', targetType: 'content_item', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
 ];
 

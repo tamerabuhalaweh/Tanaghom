@@ -219,7 +219,7 @@ describe('Stitchi repository foundation', () => {
 
   it('approves only proposed or awaiting-approval actions', async () => {
     prismaMocks.stitchiActionRun.findFirst.mockResolvedValue(actionRun({ status: 'completed' }));
-    await expect(repo.decideActionRun('tenant-a', 'manager-1', 'marketing_manager', 'action-1', 'approved', {}))
+    await expect(repo.decideActionRun('tenant-a', 'manager-1', 'cco', 'action-1', 'approved', {}))
       .rejects.toThrow(ValidationError);
   });
 
@@ -228,7 +228,7 @@ describe('Stitchi repository foundation', () => {
     prismaMocks.stitchiActionRun.update.mockResolvedValue(actionRun({ status: 'approved' }));
     prismaMocks.stitchiActionApproval.create.mockResolvedValue(approval());
 
-    const result = await repo.decideActionRun('tenant-a', 'manager-1', 'marketing_manager', 'action-1', 'approved', {
+    const result = await repo.decideActionRun('tenant-a', 'manager-1', 'cco', 'action-1', 'approved', {
       notes: 'Approved after review',
     });
 

@@ -54,6 +54,7 @@ const PRODUCT_ROLES = [
 ];
 
 const ADMIN_ROLES = ['admin', 'cco'];
+const EXECUTIVE_ROLES = ['admin', 'cco'];
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager'];
 
 const NAV_ITEMS: NavItem[] = [
@@ -79,7 +80,7 @@ const NAV_ITEMS: NavItem[] = [
     description: 'Revenue, spend and executive reports',
     icon: BarChart3,
     group: 'Product',
-    roles: PRODUCT_ROLES,
+    roles: EXECUTIVE_ROLES,
   },
   {
     path: '/disciplines',
@@ -111,7 +112,7 @@ const NAV_ITEMS: NavItem[] = [
     description: 'Review and approve content',
     icon: ClipboardCheck,
     group: 'Product',
-    roles: ['admin', 'cco', 'department_head', 'social_media_manager', 'marketing_manager', 'reviewer'],
+    roles: EXECUTIVE_ROLES,
   },
   {
     path: '/publishing',

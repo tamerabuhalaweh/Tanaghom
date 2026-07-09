@@ -1,44 +1,55 @@
 import { describe, it, expect } from 'vitest';
 import { ForbiddenError } from '@shared/errors';
+import { checkApprovalPermission } from '../policy';
+import { getRoutingRule } from '../types';
 
 // Approval workflow tests — validates permissions, routing, SAIF integration, and Session Context Lock
 
 describe('Approval Permissions', () => {
-  const PERMISSIONS: Record<string, string[]> = {
-    admin: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject', 'approvals:escalate', 'approvals:cancel'],
-    cco: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject', 'approvals:escalate', 'approvals:cancel'],
-    department_head: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject', 'approvals:escalate'],
-    specialist: ['approvals:create', 'approvals:read'],
-    reviewer: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject'],
-    viewer: ['approvals:read'],
-  };
-
-  function checkPermission(role: string, permission: string): void {
-    const allowed = PERMISSIONS[role];
-    if (!allowed || !allowed.includes(permission)) {
-      throw new ForbiddenError(`Role '${role}' does not have permission '${permission}'`);
-    }
-  }
-
   describe('admin', () => {
-    it('can create approvals', () => expect(() => checkPermission('admin', 'approvals:create')).not.toThrow());
-    it('can approve', () => expect(() => checkPermission('admin', 'approvals:approve')).not.toThrow());
-    it('can reject', () => expect(() => checkPermission('admin', 'approvals:reject')).not.toThrow());
-    it('can escalate', () => expect(() => checkPermission('admin', 'approvals:escalate')).not.toThrow());
-    it('can cancel', () => expect(() => checkPermission('admin', 'approvals:cancel')).not.toThrow());
+    it('can create approvals', () => expect(() => checkApprovalPermission('admin', 'approvals:create')).not.toThrow());
+    it('can approve', () => expect(() => checkApprovalPermission('admin', 'approvals:approve')).not.toThrow());
+    it('can reject', () => expect(() => checkApprovalPermission('admin', 'approvals:reject')).not.toThrow());
+    it('can escalate', () => expect(() => checkApprovalPermission('admin', 'approvals:escalate')).not.toThrow());
+    it('can cancel', () => expect(() => checkApprovalPermission('admin', 'approvals:cancel')).not.toThrow());
+  });
+
+  describe('cco', () => {
+    it('can approve and reject approvals', () => {
+      expect(() => checkApprovalPermission('cco', 'approvals:approve')).not.toThrow();
+      expect(() => checkApprovalPermission('cco', 'approvals:reject')).not.toThrow();
+    });
+  });
+
+  describe('department_head', () => {
+    it('can submit and escalate, but cannot approve or reject', () => {
+      expect(() => checkApprovalPermission('department_head', 'approvals:create')).not.toThrow();
+      expect(() => checkApprovalPermission('department_head', 'approvals:escalate')).not.toThrow();
+      expect(() => checkApprovalPermission('department_head', 'approvals:approve')).toThrow(ForbiddenError);
+      expect(() => checkApprovalPermission('department_head', 'approvals:reject')).toThrow(ForbiddenError);
+    });
   });
 
   describe('specialist', () => {
-    it('can create approvals', () => expect(() => checkPermission('specialist', 'approvals:create')).not.toThrow());
-    it('can read approvals', () => expect(() => checkPermission('specialist', 'approvals:read')).not.toThrow());
-    it('cannot approve', () => expect(() => checkPermission('specialist', 'approvals:approve')).toThrow(ForbiddenError));
-    it('cannot reject', () => expect(() => checkPermission('specialist', 'approvals:reject')).toThrow(ForbiddenError));
+    it('can create approvals', () => expect(() => checkApprovalPermission('specialist', 'approvals:create')).not.toThrow());
+    it('can read approvals', () => expect(() => checkApprovalPermission('specialist', 'approvals:read')).not.toThrow());
+    it('cannot approve', () => expect(() => checkApprovalPermission('specialist', 'approvals:approve')).toThrow(ForbiddenError));
+    it('cannot reject', () => expect(() => checkApprovalPermission('specialist', 'approvals:reject')).toThrow(ForbiddenError));
   });
 
+  for (const role of ['marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'reviewer']) {
+    it(`${role} can submit/read but cannot approve`, () => {
+      expect(() => checkApprovalPermission(role, 'approvals:create')).not.toThrow();
+      expect(() => checkApprovalPermission(role, 'approvals:read')).not.toThrow();
+      expect(() => checkApprovalPermission(role, 'approvals:approve')).toThrow(ForbiddenError);
+      expect(() => checkApprovalPermission(role, 'approvals:reject')).toThrow(ForbiddenError);
+    });
+  }
+
   describe('viewer', () => {
-    it('can read approvals', () => expect(() => checkPermission('viewer', 'approvals:read')).not.toThrow());
-    it('cannot create approvals', () => expect(() => checkPermission('viewer', 'approvals:create')).toThrow(ForbiddenError));
-    it('cannot approve', () => expect(() => checkPermission('viewer', 'approvals:approve')).toThrow(ForbiddenError));
+    it('can read approvals', () => expect(() => checkApprovalPermission('viewer', 'approvals:read')).not.toThrow());
+    it('cannot create approvals', () => expect(() => checkApprovalPermission('viewer', 'approvals:create')).toThrow(ForbiddenError));
+    it('cannot approve', () => expect(() => checkApprovalPermission('viewer', 'approvals:approve')).toThrow(ForbiddenError));
   });
 });
 
@@ -73,28 +84,15 @@ describe('Approval State Transitions', () => {
 });
 
 describe('Risk-Based Routing', () => {
-  const ROUTING_RULES = [
-    { riskCategory: 'low', targetType: 'campaign', approvalType: 'department_review', requiredDepartment: null, requiredRole: 'reviewer' },
-    { riskCategory: 'medium', targetType: 'campaign', approvalType: 'department_review', requiredDepartment: null, requiredRole: 'department_head' },
-    { riskCategory: 'high', targetType: 'campaign', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
-    { riskCategory: 'low', targetType: 'content_item', approvalType: 'department_review', requiredDepartment: null, requiredRole: 'reviewer' },
-    { riskCategory: 'medium', targetType: 'content_item', approvalType: 'brand_review', requiredDepartment: 'Brand & Market Intelligence', requiredRole: 'department_head' },
-    { riskCategory: 'high', targetType: 'content_item', approvalType: 'cco_review', requiredDepartment: null, requiredRole: 'cco' },
-  ];
-
-  function getRoutingRule(riskCategory: string, targetType: string) {
-    return ROUTING_RULES.find(r => r.riskCategory === riskCategory && r.targetType === targetType);
-  }
-
-  it('low-risk campaign routes to reviewer', () => {
+  it('low-risk campaign routes to CCO-level approval', () => {
     const rule = getRoutingRule('low', 'campaign');
-    expect(rule?.requiredRole).toBe('reviewer');
-    expect(rule?.approvalType).toBe('department_review');
+    expect(rule?.requiredRole).toBe('cco');
+    expect(rule?.approvalType).toBe('cco_review');
   });
 
-  it('medium-risk campaign routes to department_head', () => {
+  it('medium-risk campaign routes to CCO-level approval', () => {
     const rule = getRoutingRule('medium', 'campaign');
-    expect(rule?.requiredRole).toBe('department_head');
+    expect(rule?.requiredRole).toBe('cco');
   });
 
   it('high-risk campaign routes to CCO', () => {
@@ -103,9 +101,10 @@ describe('Risk-Based Routing', () => {
     expect(rule?.approvalType).toBe('cco_review');
   });
 
-  it('medium-risk content_item routes to Brand & Market Intelligence', () => {
+  it('medium-risk content_item routes to CCO-level approval', () => {
     const rule = getRoutingRule('medium', 'content_item');
-    expect(rule?.requiredDepartment).toBe('Brand & Market Intelligence');
+    expect(rule?.requiredDepartment).toBeNull();
+    expect(rule?.requiredRole).toBe('cco');
   });
 
   it('high-risk content_item routes to CCO', () => {

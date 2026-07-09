@@ -22,7 +22,7 @@ const ALL_USER_ROLES = [
   'viewer',
 ] as const;
 
-const APPROVER_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager'] as const;
+const APPROVER_ROLES = ['admin', 'cco'] as const;
 
 export const STITCHI_PERMISSIONS: Record<string, StitchiPermission[]> = Object.fromEntries(
   ALL_USER_ROLES.map(role => [

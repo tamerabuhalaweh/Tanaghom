@@ -47,6 +47,7 @@ import CommercialDisciplines from './pages/CommercialDisciplines'
 import ExecutiveDashboard from './pages/ExecutiveDashboard'
 
 const ADMIN_ROLES = ['admin', 'cco']
+const EXECUTIVE_ROLES = ['admin', 'cco']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
 
 function LoadingWorkspace() {
@@ -90,6 +91,10 @@ function adminOnly(element: React.ReactNode) {
   return <RequireRole roles={ADMIN_ROLES}>{element}</RequireRole>
 }
 
+function executiveOnly(element: React.ReactNode) {
+  return <RequireRole roles={EXECUTIVE_ROLES}>{element}</RequireRole>
+}
+
 function connectorSetup(element: React.ReactNode) {
   return <RequireRole roles={CONNECTOR_SETUP_ROLES}>{element}</RequireRole>
 }
@@ -113,11 +118,11 @@ function App() {
             <Route path="events/advanced/:eventId" element={<EventDashboard />} />
             <Route path="events/:eventId" element={<HybridEventWorkspace />} />
             <Route path="stitchi" element={<Stitchi />} />
-            <Route path="executive" element={<ExecutiveDashboard />} />
+            <Route path="executive" element={executiveOnly(<ExecutiveDashboard />)} />
             <Route path="disciplines" element={<CommercialDisciplines />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
-            <Route path="approvals" element={<ApprovalQueue />} />
+            <Route path="approvals" element={executiveOnly(<ApprovalQueue />)} />
             <Route path="saif" element={adminOnly(<SaifDecisions />)} />
             <Route path="capabilities" element={adminOnly(<CapabilityResolution />)} />
             <Route path="mcp" element={adminOnly(<McpMediation />)} />
@@ -145,13 +150,13 @@ function App() {
             <Route path="ghl-wizard" element={connectorSetup(<GhlWizard />)} />
             <Route path="dashboard" element={<MasterEventsDashboard />} />
             <Route path="command-center" element={<CommercialCommandCenter />} />
-            <Route path="ceo-dashboard" element={<ExecutiveDashboard />} />
+            <Route path="ceo-dashboard" element={executiveOnly(<ExecutiveDashboard />)} />
             <Route path="content-workflow" element={<DemoCommandCenter />} />
             <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />
             <Route path="content" element={<PostIdeas />} />
             <Route path="ideas" element={<PostIdeas />} />
             <Route path="draft-studio" element={<PostIdeas />} />
-            <Route path="review" element={<ApprovalQueue />} />
+            <Route path="review" element={executiveOnly(<ApprovalQueue />)} />
             <Route path="scheduling" element={<PublishingPrep />} />
             <Route path="performance" element={<Analytics />} />
             <Route path="*" element={<NotFound />} />

@@ -192,8 +192,8 @@ describe('Stitchi service RBAC', () => {
       },
     });
 
-    await service.approveActionRun('marketing_manager', 'tenant-a', 'manager-1', 'action-1', {});
-    expect(repo.decideActionRun).toHaveBeenCalledWith('tenant-a', 'manager-1', 'marketing_manager', 'action-1', 'approved', {});
+    await service.approveActionRun('cco', 'tenant-a', 'manager-1', 'action-1', {});
+    expect(repo.decideActionRun).toHaveBeenCalledWith('tenant-a', 'manager-1', 'cco', 'action-1', 'approved', {});
   });
 
   it('starts a LangGraph approval workflow for executable action proposals', async () => {
@@ -283,11 +283,11 @@ describe('Stitchi service RBAC', () => {
       completedAt: new Date(),
     });
 
-    const result = await service.executeApprovedActionRun('marketing_manager', 'tenant-a', 'user-1', 'action-1');
+    const result = await service.executeApprovedActionRun('cco', 'tenant-a', 'user-1', 'action-1');
 
-    expect(repo.markActionRunRunning).toHaveBeenCalledWith('tenant-a', 'user-1', 'marketing_manager', 'action-1');
+    expect(repo.markActionRunRunning).toHaveBeenCalledWith('tenant-a', 'user-1', 'cco', 'action-1');
     expect(actionMocks.executeStitchiAction).toHaveBeenCalledWith(expect.objectContaining({
-      role: 'marketing_manager',
+      role: 'cco',
       tenantKey: 'tenant-a',
       userId: 'user-1',
       actionType: 'create_event_problem',
@@ -378,11 +378,11 @@ describe('Stitchi service RBAC', () => {
       completedAt: new Date(),
     });
 
-    const result = await service.approveAndExecuteActionRun('marketing_manager', 'tenant-a', 'manager-1', 'action-1', {
+    const result = await service.approveAndExecuteActionRun('cco', 'tenant-a', 'manager-1', 'action-1', {
       notes: 'Approved and saved from Stitchi assistant',
     });
 
-    expect(repo.decideActionRun).toHaveBeenCalledWith('tenant-a', 'manager-1', 'marketing_manager', 'action-1', 'approved', {
+    expect(repo.decideActionRun).toHaveBeenCalledWith('tenant-a', 'manager-1', 'cco', 'action-1', 'approved', {
       notes: 'Approved and saved from Stitchi assistant',
     });
     expect(actionMocks.executeStitchiAction).toHaveBeenCalledWith(expect.objectContaining({

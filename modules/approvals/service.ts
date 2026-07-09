@@ -2,27 +2,12 @@ import { ForbiddenError } from '@shared/errors';
 import { auditLog, createIdentityLineage } from '@shared/logging';
 import { recordCommercialWorkflowAudit } from '@modules/commercial-workflow/evidence';
 import * as repo from './repository';
+import { checkApprovalPermission } from './policy';
 import { validateCriticalDimensions } from '../saif-decisions/repository';
 import type {
   CreateApprovalInput, ApprovalDecisionInput, EscalationInput, CancellationInput,
   ApprovalDecisionPacket, ApprovalSummary,
 } from './types';
-
-const PERMISSIONS: Record<string, string[]> = {
-  admin: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject', 'approvals:escalate', 'approvals:cancel'],
-  cco: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject', 'approvals:escalate', 'approvals:cancel'],
-  department_head: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject', 'approvals:escalate'],
-  specialist: ['approvals:create', 'approvals:read'],
-  reviewer: ['approvals:create', 'approvals:read', 'approvals:approve', 'approvals:reject'],
-  viewer: ['approvals:read'],
-};
-
-function checkPermission(role: string, permission: string): void {
-  const allowed = PERMISSIONS[role];
-  if (!allowed || !allowed.includes(permission)) {
-    throw new ForbiddenError(`Role '${role}' does not have permission '${permission}'`);
-  }
-}
 
 function validateSessionContextLock(
   sessionUserId: string,
@@ -45,7 +30,7 @@ function validateApproverNotFunctionalAgent(agentType: string): void {
 }
 
 export async function submitForApproval(requesterRole: string, tenantKey: string, input: CreateApprovalInput): Promise<ApprovalSummary> {
-  checkPermission(requesterRole, 'approvals:create');
+  checkApprovalPermission(requesterRole, 'approvals:create');
 
   const approval = await repo.createApproval(input, tenantKey);
 
@@ -86,12 +71,12 @@ export async function submitForApproval(requesterRole: string, tenantKey: string
 }
 
 export async function getApproval(requesterRole: string, tenantKey: string, id: string): Promise<ApprovalSummary> {
-  checkPermission(requesterRole, 'approvals:read');
+  checkApprovalPermission(requesterRole, 'approvals:read');
   return repo.getApprovalById(id, tenantKey);
 }
 
 export async function getApprovalDecisionPacket(requesterRole: string, tenantKey: string, id: string): Promise<ApprovalDecisionPacket> {
-  checkPermission(requesterRole, 'approvals:read');
+  checkApprovalPermission(requesterRole, 'approvals:read');
   return repo.getApprovalDecisionPacket(id, tenantKey);
 }
 
@@ -104,7 +89,7 @@ export async function listApprovals(requesterRole: string, filters?: {
   approverUserId?: string;
   requiredDepartment?: string;
 }): Promise<ApprovalSummary[]> {
-  checkPermission(requesterRole, 'approvals:read');
+  checkApprovalPermission(requesterRole, 'approvals:read');
   return repo.listApprovals(filters);
 }
 
@@ -117,7 +102,7 @@ export async function approve(
   sessionAgentType: string,
   input: ApprovalDecisionInput,
 ): Promise<ApprovalSummary> {
-  checkPermission(requesterRole, 'approvals:approve');
+  checkApprovalPermission(requesterRole, 'approvals:approve');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.approverUserId, input.approverAgentRepId);
   validateApproverNotFunctionalAgent(sessionAgentType);
 
@@ -176,7 +161,7 @@ export async function reject(
   sessionAgentType: string,
   input: ApprovalDecisionInput,
 ): Promise<ApprovalSummary> {
-  checkPermission(requesterRole, 'approvals:reject');
+  checkApprovalPermission(requesterRole, 'approvals:reject');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.approverUserId, input.approverAgentRepId);
   validateApproverNotFunctionalAgent(sessionAgentType);
 
@@ -224,7 +209,7 @@ export async function requestChanges(
   sessionAgentType: string,
   input: ApprovalDecisionInput,
 ): Promise<ApprovalSummary> {
-  checkPermission(requesterRole, 'approvals:approve');
+  checkApprovalPermission(requesterRole, 'approvals:approve');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.approverUserId, input.approverAgentRepId);
   validateApproverNotFunctionalAgent(sessionAgentType);
 
@@ -271,7 +256,7 @@ export async function escalate(
   sessionAgentRepId: string,
   input: EscalationInput,
 ): Promise<ApprovalSummary> {
-  checkPermission(requesterRole, 'approvals:escalate');
+  checkApprovalPermission(requesterRole, 'approvals:escalate');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.escalatedByUserId, input.escalatedByAgentRepId);
 
   const result = await repo.escalate(approvalId, tenantKey, input);
@@ -304,7 +289,7 @@ export async function cancel(
   sessionAgentRepId: string,
   input: CancellationInput,
 ): Promise<ApprovalSummary> {
-  checkPermission(requesterRole, 'approvals:cancel');
+  checkApprovalPermission(requesterRole, 'approvals:cancel');
   validateSessionContextLock(sessionUserId, sessionAgentRepId, input.cancelledByUserId, input.cancelledByAgentRepId);
 
   const result = await repo.cancel(approvalId, tenantKey, input);

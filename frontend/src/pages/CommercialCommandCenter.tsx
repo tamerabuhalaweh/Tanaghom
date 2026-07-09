@@ -171,9 +171,19 @@ function makePlanDraft(lineId = '') {
   };
 }
 
+function normalizeRoleFromUser(user: unknown): string {
+  if (!user || typeof user !== 'object') return 'unknown';
+  const value = (user as RecordMap).role;
+  return typeof value === 'string' && value.trim()
+    ? value.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_')
+    : 'unknown';
+}
+
 export default function CommercialCommandCenter() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
+  const userRole = normalizeRoleFromUser(user);
+  const canManagePlans = ['admin', 'cco', 'department_head'].includes(userRole);
   const [dashboard, setDashboard] = useState<RecordMap | null>(null);
   const [selectedType, setSelectedType] = useState('live_event');
   const [lineDashboard, setLineDashboard] = useState<RecordMap | null>(null);
@@ -259,6 +269,10 @@ export default function CommercialCommandCenter() {
 
   async function configureRevenueLine(line: RecordMap) {
     if (!token) return;
+    if (!canManagePlans) {
+      setMessage('Ask Stitchi to prepare this work for leadership approval. Direct setup is limited to workspace leaders.');
+      return;
+    }
     setSaving(true);
     setMessage('');
     try {
@@ -278,6 +292,7 @@ export default function CommercialCommandCenter() {
   }
 
   function editPlan(plan: RecordMap) {
+    if (!canManagePlans) return;
     setPlanDraft({
       id: text(plan.id),
       revenueLineId: text(plan.revenueLineId),
@@ -298,6 +313,10 @@ export default function CommercialCommandCenter() {
 
   async function savePlan() {
     if (!token) return;
+    if (!canManagePlans) {
+      setMessage('Ask Stitchi to prepare this plan for leadership approval. Direct editing is limited to workspace leaders.');
+      return;
+    }
     setMessage('');
     if (!planDraft.revenueLineId || !planDraft.title.trim()) {
       setMessage('Choose a revenue line and enter a clear plan title.');
@@ -462,9 +481,15 @@ export default function CommercialCommandCenter() {
 
           {text(selectedLine.status) === 'not_configured' && text(selectedLine.availability) !== 'future' && (
             <div className="mt-5">
-              <AieroActionButton onClick={() => configureRevenueLine(selectedLine)} disabled={saving}>
-                Configure this revenue line
-              </AieroActionButton>
+              {canManagePlans ? (
+                <AieroActionButton onClick={() => configureRevenueLine(selectedLine)} disabled={saving}>
+                  Configure this revenue line
+                </AieroActionButton>
+              ) : (
+                <AieroGhostButton onClick={() => navigate(stitchiPath('Prepare the setup request for this revenue line.'))}>
+                  Ask Stitchi to prepare setup
+                </AieroGhostButton>
+              )}
             </div>
           )}
           {text(selectedLine.status) === 'not_configured' && text(selectedLine.availability) === 'future' && (
@@ -494,10 +519,12 @@ export default function CommercialCommandCenter() {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
         <AieroLightPanel
-          title={planDraft.id ? 'Edit commercial plan' : 'Create commercial plan'}
-          subtitle="Keep the plan clear enough for a manager to run and for Stitchi to help with later."
-          action={planDraft.id ? <SecondaryAction onClick={() => setPlanDraft(makePlanDraft(text(selectedLine.id)))}>New plan</SecondaryAction> : null}
+          title={canManagePlans ? (planDraft.id ? 'Edit commercial plan' : 'Create commercial plan') : 'Prepare a plan request'}
+          subtitle={canManagePlans ? 'Keep the plan clear enough for a manager to run and for Stitchi to help with later.' : 'Your role can review plans and ask Stitchi to prepare work for leadership approval.'}
+          action={canManagePlans && planDraft.id ? <SecondaryAction onClick={() => setPlanDraft(makePlanDraft(text(selectedLine.id)))}>New plan</SecondaryAction> : null}
         >
+          {canManagePlans ? (
+          <>
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="Revenue line">
               <select
@@ -641,18 +668,35 @@ export default function CommercialCommandCenter() {
             </AieroActionButton>
             <SecondaryAction onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}>Ask Stitchi to prepare</SecondaryAction>
           </div>
+          </>
+          ) : (
+            <div className="rounded-[1.25rem] border border-neutral-200 bg-neutral-50 p-5">
+              <h3 className="text-lg font-semibold text-neutral-950">Ask Stitchi to prepare the plan</h3>
+              <p className="mt-2 text-sm leading-6 text-neutral-600">
+                Stitchi can capture your objective, audience, budget target, revenue target, action plan, and linked event, then create an approval card for leadership. No data is saved until it is approved.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <AieroActionButton onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}>
+                  Ask Stitchi
+                </AieroActionButton>
+                <SecondaryAction onClick={() => navigate('/stitchi')}>Open Stitchi</SecondaryAction>
+              </div>
+            </div>
+          )}
         </AieroLightPanel>
 
-        <AieroLightPanel title="Planning records" subtitle="Click a plan to edit it. These are internal operating records, not external execution.">
+        <AieroLightPanel title="Planning records" subtitle={canManagePlans ? 'Click a plan to edit it. These are internal operating records, not external execution.' : 'Review active plans. Ask Stitchi to prepare changes for leadership approval.'}>
           {plans.length ? (
             <div className="space-y-3">
               {plans.map(plan => (
                 <button
                   key={text(plan.id)}
                   type="button"
-                  onClick={() => editPlan(plan)}
+                  onClick={() => {
+                    if (canManagePlans) editPlan(plan);
+                  }}
                   className={`w-full rounded-2xl border p-4 text-left transition ${
-                    text(plan.id) === planDraft.id ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-950 hover:border-neutral-300'
+                    text(plan.id) === planDraft.id && canManagePlans ? 'border-neutral-950 bg-neutral-950 text-white' : `border-neutral-200 bg-neutral-50 text-neutral-950 ${canManagePlans ? 'hover:border-neutral-300' : 'cursor-default'}`
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">

@@ -24,14 +24,14 @@ describe('Stitchi RBAC policy', () => {
     });
   }
 
-  for (const role of ['admin', 'cco', 'department_head', 'marketing_manager']) {
+  for (const role of ['admin', 'cco']) {
     it(`${role} can approve and execute Stitchi actions`, () => {
       expect(() => checkStitchiPermission(role, 'stitchi:approve_action')).not.toThrow();
       expect(() => checkStitchiPermission(role, 'stitchi:execute_action')).not.toThrow();
     });
   }
 
-  for (const role of ['social_media_manager', 'sales_manager', 'lead_qualification_manager', 'specialist', 'reviewer', 'viewer']) {
+  for (const role of ['department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'specialist', 'reviewer', 'viewer']) {
     it(`${role} cannot approve or execute Stitchi actions`, () => {
       expect(() => checkStitchiPermission(role, 'stitchi:approve_action')).toThrow(ForbiddenError);
       expect(() => checkStitchiPermission(role, 'stitchi:execute_action')).toThrow(ForbiddenError);
