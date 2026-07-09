@@ -95,6 +95,17 @@ describe('Stitchi read-only context loader', () => {
         revenue_target: decimal('120000'),
         selected_channels: ['instagram', 'email'],
       },
+      {
+        id: 'event-test',
+        name: 'Sprint 65 Acceptance Event 1783076057587',
+        status: 'draft',
+        event_type: 'business_camp',
+        event_date: new Date('2026-08-03T00:00:00Z'),
+        location: 'Dubai',
+        planned_budget: decimal('35000'),
+        revenue_target: decimal('120000'),
+        selected_channels: ['instagram'],
+      },
     ]);
     prismaMocks.leadCaptureRecord.findMany.mockResolvedValue([
       { lead_status: 'meeting_booked', lead_temperature: 'hot', purchase_amount: decimal('0') },
@@ -212,6 +223,7 @@ describe('Stitchi read-only context loader', () => {
       where: { tenant_key: 'tenant-a', event_id: 'event-1' },
     }));
     expect(context.selectedEvent?.name).toBe('Leadership Course Launch');
+    expect(context.recentEvents.map(event => event.name)).toEqual(['Leadership Course Launch']);
     expect(context.leadSummary.total).toBe(2);
     expect(context.leadSummary.byStatus.purchased).toBe(1);
     expect(context.leadSummary.knownRevenue).toBe(2500);
@@ -271,5 +283,6 @@ describe('Stitchi read-only context loader', () => {
     expect(promptContext).not.toContain('api_key');
     expect(promptContext).toContain('gohighlevel');
     expect(promptContext).toContain('requires_mapping');
+    expect(promptContext).not.toMatch(/Sprint\s*65|Acceptance Event/i);
   });
 });

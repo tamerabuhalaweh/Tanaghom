@@ -56,14 +56,14 @@ function configuredLine(type = 'online_course') {
   };
 }
 
-function plan(eventId = 'event-1') {
+function plan(eventId = 'event-1', eventName = 'Course Launch') {
   return {
     id: 'plan-1',
     tenant_key: 'tenant-a',
     revenue_line_id: 'line-1',
     revenue_line: { revenue_line_type: 'online_course', name: 'Online Courses' },
     linked_event_id: eventId,
-    linked_event: eventId ? { name: 'Course Launch' } : null,
+    linked_event: eventId ? { name: eventName } : null,
     horizon: 'quarterly',
     stage: 'implementation_engagement',
     title: 'Quarterly course launch',
@@ -197,6 +197,42 @@ describe('Commercial Command Center revenue-line dashboard', () => {
     });
     expect(dashboard.dataStatus.hasLinkedEvents).toBe(false);
     expect(dashboard.dataStatus.missingDataSources).toContain('Link an event or campaign so this revenue line has operating data.');
+  });
+
+  it('does not expose old acceptance event names through linked plan summaries', async () => {
+    prismaMocks.commercialRevenueLine.findUnique.mockResolvedValue(configuredLine());
+    prismaMocks.commercialPlan.findMany.mockResolvedValue([
+      plan('event-test', 'Sprint 65 Acceptance Event 1783076057587'),
+    ]);
+    prismaMocks.commercialEvent.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'event-test',
+          name: 'Sprint 65 Acceptance Event 1783076057587',
+          status: 'draft',
+          event_type: 'tagyeer_wa_irtaqi',
+          event_date: now,
+          planned_budget: 35000,
+          revenue_target: 120000,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'event-production',
+          name: 'Leadership Course Live Workshop',
+          status: 'planning',
+          event_type: 'tagyeer_wa_irtaqi',
+          event_date: now,
+          planned_budget: 2000,
+          revenue_target: 12000,
+        },
+      ]);
+
+    const dashboard = await getRevenueLineDashboard('tenant-a', 'online_course');
+
+    expect(dashboard.plans[0]?.linkedEventId).toBe('event-test');
+    expect(dashboard.plans[0]?.linkedEventName).toBeNull();
+    expect(JSON.stringify(dashboard)).not.toMatch(/Sprint\s*65|Acceptance Event/i);
   });
 
   it('uses all tenant events for the live-event revenue line', async () => {

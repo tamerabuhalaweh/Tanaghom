@@ -349,7 +349,7 @@ export async function loadReadOnlyContext(
       eventId: conversation.eventId,
     },
     selectedEvent: selectedEvent ? mapEvent(selectedEvent) : null,
-    recentEvents: recentEvents.map(mapEvent),
+    recentEvents: recentEvents.filter(event => isCustomerVisibleRecordName(event.name)).map(mapEvent),
     leadSummary: summarizeLeads(leads),
     kpiSummary: summarizeKpis(kpis),
     riskSummary: summarizeProblems(openProblems),
@@ -477,7 +477,7 @@ function mapEvent(event: {
 }): EventContext {
   return {
     id: event.id,
-    name: event.name,
+    name: isCustomerVisibleRecordName(event.name) ? event.name : 'Linked live event',
     status: String(event.status),
     eventType: String(event.event_type),
     eventDate: event.event_date,
@@ -486,6 +486,10 @@ function mapEvent(event: {
     revenueTarget: decimalToNumber(event.revenue_target),
     selectedChannels: event.selected_channels,
   };
+}
+
+function isCustomerVisibleRecordName(name: string): boolean {
+  return !/\b(sprint\s*\d+|acceptance|smoke test|test tenant|customer review event)\b/i.test(name);
 }
 
 function summarizeLeads(leads: Array<{ lead_status: unknown; lead_temperature: unknown; purchase_amount: unknown }>) {

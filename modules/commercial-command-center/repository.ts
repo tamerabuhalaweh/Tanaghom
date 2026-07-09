@@ -595,7 +595,9 @@ function mapPlan(plan: {
     revenueLineType: String(plan.revenue_line.revenue_line_type) as CommercialPlanSummary['revenueLineType'],
     revenueLineName: plan.revenue_line.name,
     linkedEventId: plan.linked_event_id,
-    linkedEventName: plan.linked_event?.name || null,
+    linkedEventName: plan.linked_event && isCustomerVisibleRecordName(plan.linked_event.name)
+      ? plan.linked_event.name
+      : null,
     horizon: String(plan.horizon) as CommercialPlanSummary['horizon'],
     stage: String(plan.stage) as CommercialPlanSummary['stage'],
     title: plan.title,
@@ -715,7 +717,7 @@ function mapEventBridge(
 ): CommercialEventBridgeSummary {
   return {
     id: event.id,
-    name: event.name,
+    name: isCustomerVisibleRecordName(event.name) ? event.name : 'Linked live event',
     status: String(event.status),
     eventType: String(event.event_type),
     eventDate: event.event_date,

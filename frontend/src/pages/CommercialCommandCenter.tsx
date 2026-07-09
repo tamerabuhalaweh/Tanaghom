@@ -76,6 +76,17 @@ function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
+function customerLabel(value: unknown, fallback = ''): string {
+  const raw = text(value, fallback);
+  if (/^Sprint\s*\d+\s+Acceptance\s+Event/i.test(raw)) return 'Linked live event';
+  if (/^Sprint\s*\d+\s+Acceptance\s+Lead/i.test(raw)) return 'Captured lead';
+  return raw
+    .replace(/\bSprint\s*\d+\s+Acceptance\s*/gi, '')
+    .replace(/\bSprint\s*\d+\b/gi, 'this launch')
+    .replace(/\bAcceptance\s+(Event|Lead|Truth)\b/gi, '$1')
+    .trim();
+}
+
 function maybeText(value: unknown): string | undefined {
   const safe = text(value);
   return safe || undefined;
@@ -612,7 +623,7 @@ export default function CommercialCommandCenter() {
                   </div>
                   <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${text(plan.id) === planDraft.id ? 'bg-white/10 text-white/70' : 'bg-white text-neutral-500'}`}>
                     {text(plan.linkedEventName)
-                      ? `Supports event: ${text(plan.linkedEventName)}`
+                      ? `Supports event: ${customerLabel(plan.linkedEventName)}`
                       : 'No event linked yet'}
                   </div>
                 </button>
@@ -639,7 +650,7 @@ export default function CommercialCommandCenter() {
                 <div key={text(event.id)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-semibold text-neutral-950">{text(event.name, 'Untitled event')}</div>
+                      <div className="font-semibold text-neutral-950">{customerLabel(event.name, 'Linked live event')}</div>
                       <div className="mt-1 text-sm text-neutral-500">{dateLabel(event.eventDate)}</div>
                     </div>
                     <ProductStatus tone={statusTone(text(event.status))}>{titleCase(text(event.status))}</ProductStatus>

@@ -65,7 +65,11 @@ function customerLabel(value: unknown, fallback = ''): string {
       : text(value, fallback);
   if (/^Sprint\s*\d+\s+Acceptance\s+Event/i.test(raw)) return 'Linked live event';
   if (/^Sprint\s*\d+\s+Acceptance\s+Lead/i.test(raw)) return 'Captured lead';
-  return raw.replace(/\bSprint\s*\d+\s+Acceptance\s*/gi, '').trim();
+  return raw
+    .replace(/\bSprint\s*\d+\s+Acceptance\s*/gi, '')
+    .replace(/\bSprint\s*\d+\b/gi, 'this launch')
+    .replace(/\bAcceptance\s+(Event|Lead|Truth)\b/gi, '$1')
+    .trim();
 }
 
 function normalizeRole(role: string): string {
