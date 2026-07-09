@@ -1,24 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-
-const liveEnabled = process.env.E2E_HYBRID_LIVE === 'true' || process.env.E2E_ACCEPTANCE === 'true';
-
-const accounts = {
-  manager: {
-    email: process.env.E2E_MANAGER_EMAIL || 'brand.head@tanaghum.com',
-    password: process.env.E2E_MANAGER_PASSWORD || 'password123',
-    expectedRole: /department head/i,
-  },
-  specialist: {
-    email: process.env.E2E_SPECIALIST_EMAIL || 'demand.specialist@tanaghum.com',
-    password: process.env.E2E_SPECIALIST_PASSWORD || 'password123',
-    expectedRole: /specialist/i,
-  },
-  admin: {
-    email: process.env.E2E_ADMIN_EMAIL || 'admin@tanaghum.com',
-    password: process.env.E2E_ADMIN_PASSWORD || 'password123',
-    expectedRole: /admin/i,
-  },
-} as const;
+import {
+  hybridLiveAccounts,
+  hybridLiveEnabled,
+  type HybridLiveAccount,
+} from './fixtures/hybrid-live-accounts';
 
 const customerPaths = [
   '/command-center',
@@ -62,7 +47,7 @@ function installLiveMonitors(page: Page) {
   };
 }
 
-async function login(page: Page, account: typeof accounts[keyof typeof accounts]) {
+async function login(page: Page, account: HybridLiveAccount) {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await page.getByRole('textbox', { name: 'Email' }).fill(account.email);
   await page.getByRole('textbox', { name: 'Password' }).fill(account.password);
@@ -88,12 +73,12 @@ async function assertCustomerPageHealth(page: Page, path: string) {
 }
 
 test.describe('Hybrid live customer acceptance', () => {
-  test.skip(!liveEnabled, 'Set E2E_HYBRID_LIVE=true or run npm run test:e2e:hybrid-live to test deployed Hybrid.');
+  test.skip(!hybridLiveEnabled, 'Set E2E_HYBRID_LIVE=true or run npm run test:e2e:hybrid-live to test deployed Hybrid.');
 
   test('Stitchi proposes an AI-assisted commercial plan without executing it before approval', async ({ page }) => {
     test.setTimeout(90000);
     const monitor = installLiveMonitors(page);
-    await login(page, accounts.manager);
+    await login(page, hybridLiveAccounts.manager);
 
     monitor.reset();
     await page.goto('/stitchi', { waitUntil: 'domcontentloaded' });
@@ -122,7 +107,7 @@ test.describe('Hybrid live customer acceptance', () => {
     test.setTimeout(120000);
     const monitor = installLiveMonitors(page);
 
-    for (const [role, account] of Object.entries(accounts)) {
+    for (const [role, account] of Object.entries(hybridLiveAccounts)) {
       monitor.reset();
       await page.context().clearCookies();
       await page.evaluate(() => localStorage.clear()).catch(() => undefined);
@@ -142,14 +127,14 @@ test.describe('Hybrid live customer acceptance', () => {
     test.setTimeout(60000);
     const monitor = installLiveMonitors(page);
 
-    await login(page, accounts.specialist);
+    await login(page, hybridLiveAccounts.specialist);
     monitor.reset();
     await page.goto('/integration-credentials', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => undefined);
     await expect(page).toHaveURL(/\/events(?:$|[?#])/);
     monitor.assertClean('specialist connector redirect');
 
-    for (const account of [accounts.manager, accounts.admin]) {
+    for (const account of [hybridLiveAccounts.manager, hybridLiveAccounts.admin]) {
       await page.context().clearCookies();
       await page.evaluate(() => localStorage.clear()).catch(() => undefined);
       await login(page, account);
