@@ -3943,10 +3943,19 @@ model CommercialExecutiveReportSchedule {
   cadence                CommercialExecutiveReportCadence
   timezone               String                                    @default("UTC")
   recipients             String[]                                  @default([])
+  recipient_roles        String[]                                  @default([])
   delivery_channels      CommercialExecutiveReportDeliveryChannel[] @default([dashboard])
+  report_language        String                                    @default("English")
+  report_sections        String[]                                  @default([])
+  kpi_policy             Json?
+  working_days_only      Boolean                                   @default(true)
+  send_hour              Int                                       @default(9)
+  send_minute            Int                                       @default(0)
   status                 CommercialExecutiveReportScheduleStatus    @default(active)
-  approval_required      Boolean                                   @default(true)
+  approval_required      Boolean                                   @default(false)
   next_run_at            DateTime?
+  last_delivery_attempt_at DateTime?
+  last_delivery_status   String?
   last_preview_report_id String?                                   @db.Uuid
   created_by_user_id     String                                    @db.Uuid
   created_at             DateTime                                  @default(now())

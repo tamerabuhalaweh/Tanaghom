@@ -400,7 +400,7 @@ function summarizeExecutiveReporting(
   const latest = reports[0] || null;
   const requiredActions: string[] = [];
   if (!latest) requiredActions.push('Generate the first CEO commercial report preview.');
-  if (!schedules.length) requiredActions.push('Configure an executive report schedule after the customer confirms recipients and cadence.');
+  if (!schedules.length) requiredActions.push('Configure the daily 9 AM executive report workflow for CEO, GM, and CCO.');
   if (latest && latest.confidence === 'low') requiredActions.push('Improve report confidence by connecting/importing CRM, analytics, and course data.');
   return {
     recentReports: reports.length,

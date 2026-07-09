@@ -1,20 +1,28 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
+import { getEmailDeliveryStatus } from '@shared/notifications/email';
 import type {
   CreateExecutiveReportPreviewInput,
   CreateExecutiveReportScheduleInput,
   ExecutiveAlert,
   ExecutiveDashboard,
   ExecutiveDashboardQueryInput,
+  ExecutiveReportDeliveryChannel,
+  ExecutiveReportDeliveryReadiness,
   ExecutiveMetricSummary,
   ExecutiveReportCadence,
+  ExecutiveReportLanguage,
+  ExecutiveReportRecipientRole,
   ExecutiveReportScheduleSummary,
+  ExecutiveReportSection,
   ExecutiveReportSummary,
   ListExecutiveReportsQueryInput,
   ListExecutiveReportSchedulesQueryInput,
 } from './types';
+import { DEFAULT_EXECUTIVE_REPORT_SECTIONS as DEFAULT_REPORT_SECTIONS } from './types';
 
 const CUSTOMER_VISIBLE_TEST_NAME_PATTERN = /\b(sprint\s*\d+|acceptance|smoke test|test tenant|customer review event)\b/i;
+const DEFAULT_REPORT_RECIPIENT_ROLES: ExecutiveReportRecipientRole[] = ['admin', 'cco'];
 
 export async function getExecutiveDashboard(
   tenantKey: string,
@@ -103,7 +111,7 @@ export async function listSchedules(
     orderBy: [{ status: 'asc' }, { created_at: 'desc' }],
     take: 50,
   });
-  return schedules.map(mapSchedule);
+  return mapSchedulesWithContext(tenantKey, schedules);
 }
 
 export async function createSchedule(
@@ -111,20 +119,36 @@ export async function createSchedule(
   userId: string,
   input: CreateExecutiveReportScheduleInput,
 ): Promise<ExecutiveReportScheduleSummary> {
+  const cadence = input.cadence || 'daily';
+  const timezone = input.timezone || 'Asia/Dubai';
+  const recipientRoles = normalizeRecipientRoles(input.recipientRoles);
+  const deliveryChannels = normalizeDeliveryChannels(input.deliveryChannels);
+  const reportSections = normalizeReportSections(input.reportSections);
+  const workingDaysOnly = input.workingDaysOnly ?? true;
+  const sendHour = input.sendHour ?? 9;
+  const sendMinute = input.sendMinute ?? 0;
   const schedule = await prisma.commercialExecutiveReportSchedule.create({
     data: {
       tenant_key: tenantKey,
-      cadence: input.cadence,
-      timezone: input.timezone || 'UTC',
+      cadence,
+      timezone,
       recipients: input.recipients || [],
-      delivery_channels: input.deliveryChannels || ['dashboard'],
+      recipient_roles: recipientRoles,
+      delivery_channels: deliveryChannels,
+      report_language: input.reportLanguage || 'English',
+      report_sections: reportSections,
+      kpi_policy: toJsonObject(input.kpiPolicy || {}),
+      working_days_only: workingDaysOnly,
+      send_hour: sendHour,
+      send_minute: sendMinute,
       status: 'active',
-      approval_required: input.approvalRequired ?? true,
-      next_run_at: input.nextRunAt ?? null,
+      approval_required: input.approvalRequired ?? false,
+      next_run_at: input.nextRunAt ?? calculateNextWorkingRunAt(new Date(), { sendHour, sendMinute, workingDaysOnly }),
       created_by_user_id: userId,
     },
   });
-  return mapSchedule(schedule);
+  const [summary] = await mapSchedulesWithContext(tenantKey, [schedule]);
+  return summary;
 }
 
 async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQueryInput) {
@@ -322,6 +346,9 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
   });
   const confidence = getConfidence(filteredKpis, filteredLeads, filteredConnectorJobs);
   const dataFreshness = buildFreshness(filteredKpis, filteredLeads, filteredConnectorJobs, disciplineRecords);
+  const scheduleSummaries = await mapSchedulesWithContext(tenantKey, schedules);
+  const defaultDeliveryReadiness = scheduleSummaries[0]?.deliveryReadiness || await resolveDeliveryReadiness(tenantKey, ['email', 'whatsapp']);
+  const workflow = buildExecutiveReportWorkflowReadiness(scheduleSummaries, defaultDeliveryReadiness);
 
   const dashboard: ExecutiveDashboard = {
     generatedAt: new Date(),
@@ -342,8 +369,9 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
     alerts,
     reports: {
       recent: recentReports.map(mapReport),
-      activeSchedules: schedules.map(mapSchedule),
+      activeSchedules: scheduleSummaries,
       nextRecommendedCadence: 'weekly',
+      workflow,
     },
     stitchi: {
       suggestedPrompt: 'Stitchi, summarize the executive dashboard, explain top risks, and propose the safest internal next actions.',
@@ -752,27 +780,80 @@ function mapReport(report: {
   };
 }
 
-function mapSchedule(schedule: {
+type ScheduleDbRow = {
   id: string;
   cadence: unknown;
   timezone: string;
   recipients: string[];
+  recipient_roles: string[];
   delivery_channels: unknown[];
+  report_language: string;
+  report_sections: string[];
+  kpi_policy: unknown;
+  working_days_only: boolean;
+  send_hour: number;
+  send_minute: number;
   status: unknown;
   approval_required: boolean;
   next_run_at: Date | null;
+  last_delivery_attempt_at: Date | null;
+  last_delivery_status: string | null;
   last_preview_report_id: string | null;
   created_at: Date;
-}): ExecutiveReportScheduleSummary {
+};
+
+async function mapSchedulesWithContext(
+  tenantKey: string,
+  schedules: ScheduleDbRow[],
+): Promise<ExecutiveReportScheduleSummary[]> {
+  if (!schedules.length) return [];
+  const roles = Array.from(new Set(schedules.flatMap(schedule => normalizeRecipientRoles(schedule.recipient_roles))));
+  const users = roles.length
+    ? await prisma.user.findMany({
+        where: { tenant_key: tenantKey, is_active: true, role: { in: roles } },
+        select: { email: true, name: true, role: true },
+        orderBy: [{ role: 'asc' }, { name: 'asc' }],
+      })
+    : [];
+  const allChannels = Array.from(new Set(schedules.flatMap(schedule => normalizeDeliveryChannels(schedule.delivery_channels.map(String)))));
+  const readiness = await resolveDeliveryReadiness(tenantKey, allChannels);
+  return schedules.map(schedule => mapSchedule(schedule, users, readiness));
+}
+
+function mapSchedule(
+  schedule: ScheduleDbRow,
+  users: Array<{ email: string; name: string; role: unknown }>,
+  readiness: ExecutiveReportDeliveryReadiness[],
+): ExecutiveReportScheduleSummary {
+  const recipientRoles = normalizeRecipientRoles(schedule.recipient_roles);
+  const deliveryChannels = normalizeDeliveryChannels(schedule.delivery_channels.map(String));
+  const roleRecipients = users
+    .filter(user => recipientRoles.includes(String(user.role) as ExecutiveReportRecipientRole))
+    .map(user => ({ email: user.email, name: user.name, role: String(user.role), source: 'role' as const }));
+  const explicitRecipients = schedule.recipients
+    .filter(email => !roleRecipients.some(user => user.email.toLowerCase() === email.toLowerCase()))
+    .map(email => ({ email, name: email, role: 'explicit', source: 'explicit' as const }));
   return {
     id: schedule.id,
     cadence: String(schedule.cadence) as ExecutiveReportScheduleSummary['cadence'],
     timezone: schedule.timezone,
     recipients: schedule.recipients,
-    deliveryChannels: schedule.delivery_channels.map(String) as ExecutiveReportScheduleSummary['deliveryChannels'],
+    recipientRoles,
+    resolvedRecipients: [...roleRecipients, ...explicitRecipients],
+    deliveryChannels,
+    deliveryReadiness: readiness.filter(row => deliveryChannels.includes(row.channel)),
+    reportLanguage: normalizeReportLanguage(schedule.report_language),
+    reportSections: normalizeReportSections(schedule.report_sections),
+    kpiPolicy: schedule.kpi_policy || {},
+    workingDaysOnly: schedule.working_days_only,
+    sendHour: schedule.send_hour,
+    sendMinute: schedule.send_minute,
+    sendTimeLabel: formatSendTime(schedule.send_hour, schedule.send_minute, schedule.timezone, schedule.working_days_only),
     status: String(schedule.status) as ExecutiveReportScheduleSummary['status'],
     approvalRequired: schedule.approval_required,
     nextRunAt: schedule.next_run_at,
+    lastDeliveryAttemptAt: schedule.last_delivery_attempt_at,
+    lastDeliveryStatus: schedule.last_delivery_status,
     lastPreviewReportId: schedule.last_preview_report_id,
     createdAt: schedule.created_at,
   };
@@ -828,6 +909,143 @@ function ensureChannel(map: Map<string, { channel: string; spend: number; reach:
 function buildExecutiveSummary(dashboard: ExecutiveDashboard): string {
   const alerts = dashboard.alerts.filter(alert => ['risk', 'critical'].includes(alert.severity)).length;
   return `Known revenue ${dashboard.metrics.knownRevenue}, spend ${dashboard.metrics.knownSpend}, leads ${dashboard.metrics.leads}, purchases ${dashboard.metrics.purchases}. Confidence is ${dashboard.confidence}. ${alerts} risk/critical alert(s) need executive attention.`;
+}
+
+export function calculateNextWorkingRunAt(
+  from: Date,
+  input: { sendHour?: number; sendMinute?: number; workingDaysOnly?: boolean },
+): Date {
+  const sendHour = input.sendHour ?? 9;
+  const sendMinute = input.sendMinute ?? 0;
+  const workingDaysOnly = input.workingDaysOnly ?? true;
+  const next = new Date(from);
+  next.setUTCSeconds(0, 0);
+  next.setUTCHours(sendHour, sendMinute, 0, 0);
+  if (next <= from) next.setUTCDate(next.getUTCDate() + 1);
+  while (workingDaysOnly && isWeekendUtc(next)) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return next;
+}
+
+async function resolveDeliveryReadiness(
+  tenantKey: string,
+  requestedChannels: ExecutiveReportDeliveryChannel[],
+): Promise<ExecutiveReportDeliveryReadiness[]> {
+  const channels = normalizeDeliveryChannels(requestedChannels);
+  const [emailCredentialCount, whatsappCredentialCount, ghlCredentialCount] = await Promise.all([
+    channels.includes('email')
+      ? prisma.integrationCredential.count({ where: { tenant_key: tenantKey, provider: 'smtp_email', is_active: true } })
+      : Promise.resolve(0),
+    channels.includes('whatsapp')
+      ? prisma.integrationCredential.count({ where: { tenant_key: tenantKey, provider: 'whatsapp', is_active: true } })
+      : Promise.resolve(0),
+    channels.includes('whatsapp')
+      ? prisma.integrationCredential.count({ where: { tenant_key: tenantKey, provider: 'gohighlevel', is_active: true } })
+      : Promise.resolve(0),
+  ]);
+  const emailStatus = getEmailDeliveryStatus();
+
+  return channels.map(channel => {
+    if (channel === 'dashboard') {
+      return {
+        channel,
+        status: 'ready' as const,
+        detail: 'Dashboard preview is available inside Tanaghum.',
+        requiredAction: null,
+      };
+    }
+    if (channel === 'email') {
+      const ready = (emailStatus.enabled && emailStatus.configured) || emailCredentialCount > 0;
+      return {
+        channel,
+        status: ready ? 'ready' as const : 'blocked' as const,
+        detail: ready
+          ? 'Email delivery configuration is present. Actual sending remains governed by the report delivery worker.'
+          : 'Email delivery is not configured yet. Reports can be previewed and scheduled, but Tanaghum will not claim email delivery.',
+        requiredAction: ready ? null : 'Configure Email Report Delivery credentials or SMTP environment settings.',
+      };
+    }
+    const ready = whatsappCredentialCount > 0 || ghlCredentialCount > 0;
+    return {
+      channel,
+      status: ready ? 'ready' as const : 'blocked' as const,
+      detail: ready
+        ? 'WhatsApp notification credentials are present through WhatsApp Cloud API or GoHighLevel readiness.'
+        : 'WhatsApp notification delivery is not configured yet. Tanaghum can save the workflow but will not send messages.',
+      requiredAction: ready ? null : 'Configure WhatsApp Cloud API or GoHighLevel credentials and mapping.',
+    };
+  });
+}
+
+function buildExecutiveReportWorkflowReadiness(
+  schedules: ExecutiveReportScheduleSummary[],
+  deliveryReadiness: ExecutiveReportDeliveryReadiness[],
+) {
+  const active = schedules.find(schedule => schedule.status === 'active') || null;
+  const blocked = deliveryReadiness.filter(row => row.status === 'blocked');
+  return {
+    defaultCadence: 'daily' as const,
+    defaultLocalTime: '09:00',
+    workingDaysOnly: active?.workingDaysOnly ?? true,
+    reportLanguage: active?.reportLanguage || 'English',
+    expectedRecipientRoles: active?.recipientRoles?.length ? active.recipientRoles : DEFAULT_REPORT_RECIPIENT_ROLES,
+    deliveryReadiness,
+    kpiPolicyStatus: active?.kpiPolicy && Object.keys(active.kpiPolicy as Record<string, unknown>).length
+      ? 'configured' as const
+      : 'customer_thresholds_pending' as const,
+    nextRunAt: active?.nextRunAt || null,
+    nextAction: !active
+      ? 'Create the daily 9 AM executive report workflow for CEO, GM, and CCO.'
+      : blocked.length
+        ? 'Configure the blocked delivery channels before claiming automated report delivery.'
+        : 'Review the preview and enable the governed delivery worker when customer approval is complete.',
+  };
+}
+
+function normalizeRecipientRoles(value?: unknown[]): ExecutiveReportRecipientRole[] {
+  const roles = Array.isArray(value) ? value.map(String) : [];
+  const filtered = roles.filter((role): role is ExecutiveReportRecipientRole => role === 'admin' || role === 'cco');
+  return filtered.length ? Array.from(new Set(filtered)) : DEFAULT_REPORT_RECIPIENT_ROLES;
+}
+
+function normalizeDeliveryChannels(value?: unknown[]): ExecutiveReportDeliveryChannel[] {
+  const channels = Array.isArray(value) ? value.map(String) : [];
+  const filtered = channels.filter((channel): channel is ExecutiveReportDeliveryChannel => channel === 'dashboard' || channel === 'email' || channel === 'whatsapp');
+  return filtered.length ? Array.from(new Set(filtered)) : ['email', 'whatsapp'];
+}
+
+function normalizeReportSections(value?: unknown[]): ExecutiveReportSection[] {
+  const sections = Array.isArray(value) ? value.map(String) : [];
+  const allowed = new Set<string>([
+    'executive_summary',
+    'revenue_lines',
+    'channel_performance',
+    'lead_funnel',
+    'data_freshness',
+    'connector_readiness',
+    'department_work',
+    'alerts',
+    'missing_data',
+    'stitchi_recommendations',
+  ]);
+  const filtered = sections.filter((section): section is ExecutiveReportSection => allowed.has(section));
+  return filtered.length ? Array.from(new Set(filtered)) : [...DEFAULT_REPORT_SECTIONS];
+}
+
+function normalizeReportLanguage(value: string): ExecutiveReportLanguage {
+  return value === 'Arabic' ? 'Arabic' : 'English';
+}
+
+function formatSendTime(sendHour: number, sendMinute: number, timezone: string, workingDaysOnly: boolean): string {
+  const hh = String(sendHour).padStart(2, '0');
+  const mm = String(sendMinute).padStart(2, '0');
+  return `${hh}:${mm} ${timezone}${workingDaysOnly ? ' on working days' : ''}`;
+}
+
+function isWeekendUtc(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
 }
 
 function isCustomerVisibleRecordName(name: string): boolean {

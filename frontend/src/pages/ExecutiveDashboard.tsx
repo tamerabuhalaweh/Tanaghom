@@ -43,6 +43,24 @@ const CADENCE_OPTIONS = [
   { value: 'annual', label: 'Annual' },
 ];
 
+const REPORT_SECTIONS = [
+  { value: 'executive_summary', label: 'Executive summary' },
+  { value: 'revenue_lines', label: 'Revenue lines' },
+  { value: 'channel_performance', label: 'Channel performance' },
+  { value: 'lead_funnel', label: 'Lead funnel' },
+  { value: 'data_freshness', label: 'Data freshness' },
+  { value: 'connector_readiness', label: 'Connector readiness' },
+  { value: 'department_work', label: 'Department work' },
+  { value: 'alerts', label: 'Alerts' },
+  { value: 'missing_data', label: 'Missing data' },
+];
+
+const DELIVERY_CHANNELS = [
+  { value: 'email', label: 'Email report' },
+  { value: 'whatsapp', label: 'WhatsApp notification' },
+  { value: 'dashboard', label: 'Dashboard preview' },
+];
+
 function object(value: unknown): RecordMap {
   return value && typeof value === 'object' ? value as RecordMap : {};
 }
@@ -113,10 +131,15 @@ export default function ExecutiveDashboard() {
   const [message, setMessage] = useState('');
   const [filters, setFilters] = useState({ revenueLineType: '', channel: '', startDate: '', endDate: '' });
   const [reportDraft, setReportDraft] = useState({
-    cadence: 'weekly',
-    title: 'Weekly commercial executive report',
+    cadence: 'daily',
+    title: 'Daily 9 AM commercial executive report',
     recipients: '',
-    deliveryChannel: 'dashboard',
+    deliveryChannels: ['email', 'whatsapp'],
+    reportLanguage: 'English',
+    reportSections: REPORT_SECTIONS.map(section => section.value),
+    workingDaysOnly: true,
+    sendHour: '9',
+    sendMinute: '0',
   });
   const [saving, setSaving] = useState(false);
 
@@ -131,6 +154,8 @@ export default function ExecutiveDashboard() {
   const freshness = list(dashboard?.dataFreshness);
   const recentReports = list(reports.recent);
   const schedules = list(reports.activeSchedules);
+  const workflow = object(reports.workflow);
+  const deliveryReadiness = list(workflow.deliveryReadiness);
   const readinessScore = useMemo(() => {
     const pieces = [
       numberValue(metrics.plannedRevenueTarget) > 0,
@@ -201,11 +226,17 @@ export default function ExecutiveDashboard() {
       await commercialExecutiveApi.createSchedule({
         cadence: reportDraft.cadence,
         recipients,
-        deliveryChannels: [reportDraft.deliveryChannel],
-        approvalRequired: true,
+        recipientRoles: ['admin', 'cco'],
+        deliveryChannels: reportDraft.deliveryChannels,
+        reportLanguage: reportDraft.reportLanguage,
+        reportSections: reportDraft.reportSections,
+        workingDaysOnly: reportDraft.workingDaysOnly,
+        sendHour: Number(reportDraft.sendHour || 9),
+        sendMinute: Number(reportDraft.sendMinute || 0),
+        approvalRequired: false,
       }, token);
       await load();
-      setMessage('Report schedule saved for dashboard preview. Sending still requires customer approval and configured delivery credentials.');
+      setMessage('Executive report workflow saved. Tanaghum will not claim email or WhatsApp delivery until those channels are ready.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not save report schedule.');
     } finally {
@@ -215,6 +246,26 @@ export default function ExecutiveDashboard() {
 
   function stitchiPrompt(): string {
     return 'Summarize the CEO commercial dashboard, explain the biggest revenue risks, and propose safe internal next actions. Do not call external systems.';
+  }
+
+  function toggleDeliveryChannel(channel: string) {
+    setReportDraft(current => {
+      const exists = current.deliveryChannels.includes(channel);
+      const deliveryChannels = exists
+        ? current.deliveryChannels.filter(item => item !== channel)
+        : [...current.deliveryChannels, channel];
+      return { ...current, deliveryChannels: deliveryChannels.length ? deliveryChannels : ['dashboard'] };
+    });
+  }
+
+  function toggleReportSection(section: string) {
+    setReportDraft(current => {
+      const exists = current.reportSections.includes(section);
+      const reportSections = exists
+        ? current.reportSections.filter(item => item !== section)
+        : [...current.reportSections, section];
+      return { ...current, reportSections: reportSections.length ? reportSections : ['executive_summary'] };
+    });
   }
 
   return (
@@ -428,11 +479,29 @@ export default function ExecutiveDashboard() {
         </AieroLightPanel>
 
         <AieroLightPanel
-          title="Scheduled reports"
-          subtitle="Create report previews and save schedules. Delivery remains approval-gated until customer policy and credentials are ready."
-          action={<ProductStatus tone="info">{schedules.length} active</ProductStatus>}
+          title="Executive report workflow"
+          subtitle="Create the daily working-day report for CEO, GM, and CCO. Delivery is only active when email and WhatsApp credentials are ready."
+          action={<ProductStatus tone={schedules.length ? 'good' : 'warn'}>{schedules.length} active</ProductStatus>}
         >
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="mb-5 grid gap-3 lg:grid-cols-3">
+            {deliveryReadiness.length ? deliveryReadiness.map(item => (
+              <div key={text(item.channel)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-neutral-950">{titleCase(text(item.channel))}</div>
+                    <p className="mt-1 text-xs leading-5 text-neutral-500">{text(item.detail)}</p>
+                  </div>
+                  <ProductStatus tone={text(item.status) === 'ready' ? 'good' : 'warn'}>{titleCase(text(item.status))}</ProductStatus>
+                </div>
+              </div>
+            )) : (
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-500 lg:col-span-3">
+                Save the executive report workflow to see channel readiness.
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
             <Field label="Report cadence">
               <select
                 value={reportDraft.cadence}
@@ -442,15 +511,14 @@ export default function ExecutiveDashboard() {
                 {CADENCE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </Field>
-            <Field label="Delivery mode">
+            <Field label="Report language">
               <select
-                value={reportDraft.deliveryChannel}
-                onChange={event => setReportDraft(current => ({ ...current, deliveryChannel: event.target.value }))}
+                value={reportDraft.reportLanguage}
+                onChange={event => setReportDraft(current => ({ ...current, reportLanguage: event.target.value }))}
                 className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
               >
-                <option value="dashboard">Dashboard preview</option>
-                <option value="email">Email after approval</option>
-                <option value="whatsapp">WhatsApp after approval</option>
+                <option value="English">English</option>
+                <option value="Arabic">Arabic</option>
               </select>
             </Field>
             <Field label="Report title">
@@ -460,16 +528,83 @@ export default function ExecutiveDashboard() {
                 className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
               />
             </Field>
+            <Field label="Local send time">
+              <div className="grid grid-cols-[1fr_1fr] gap-3">
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={reportDraft.sendHour}
+                  onChange={event => setReportDraft(current => ({ ...current, sendHour: event.target.value }))}
+                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={reportDraft.sendMinute}
+                  onChange={event => setReportDraft(current => ({ ...current, sendMinute: event.target.value }))}
+                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
+                />
+              </div>
+            </Field>
             <Field label="Recipients">
               <textarea
                 value={reportDraft.recipients}
                 onChange={event => setReportDraft(current => ({ ...current, recipients: event.target.value }))}
-                placeholder="name@example.com, manager@example.com"
+                placeholder="Optional extra recipients. CEO/GM/CCO roles are included automatically."
                 rows={3}
                 className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
               />
             </Field>
+            <Field label="Working day policy">
+              <label className="flex min-h-[48px] items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={reportDraft.workingDaysOnly}
+                  onChange={event => setReportDraft(current => ({ ...current, workingDaysOnly: event.target.checked }))}
+                />
+                Every working day at 9 AM
+              </label>
+            </Field>
           </div>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Delivery channels</div>
+              <div className="flex flex-wrap gap-2">
+                {DELIVERY_CHANNELS.map(channel => (
+                  <button
+                    key={channel.value}
+                    type="button"
+                    onClick={() => toggleDeliveryChannel(channel.value)}
+                    className={`rounded-full border px-4 py-2 text-sm font-semibold ${reportDraft.deliveryChannels.includes(channel.value) ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white text-neutral-700'}`}
+                  >
+                    {channel.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Report sections</div>
+              <div className="flex flex-wrap gap-2">
+                {REPORT_SECTIONS.map(section => (
+                  <button
+                    key={section.value}
+                    type="button"
+                    onClick={() => toggleReportSection(section.value)}
+                    className={`rounded-full border px-4 py-2 text-sm font-semibold ${reportDraft.reportSections.includes(section.value) ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-neutral-200 bg-white text-neutral-700'}`}
+                  >
+                    {section.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <Notice tone="info">
+            Reports do not require approval before sending according to the customer response. Tanaghum still refuses to claim email or WhatsApp delivery until credentials and the delivery worker are ready.
+          </Notice>
           <div className="mt-5 flex flex-wrap gap-3">
             <AieroActionButton onClick={generatePreview} disabled={saving}>Generate preview</AieroActionButton>
             <SecondaryAction onClick={createSchedule} disabled={saving}>Save schedule</SecondaryAction>
@@ -543,7 +678,19 @@ function ScheduleList({ items }: { items: RecordMap[] }) {
             <div key={text(item.id)} className="rounded-xl bg-white p-3">
               <div className="font-semibold text-neutral-950">{titleCase(text(item.cadence))}</div>
               <div className="mt-1 text-xs text-neutral-500">
-                {Array.isArray(item.deliveryChannels) ? (item.deliveryChannels as string[]).join(', ') : 'dashboard'} - approval required
+                {text(item.sendTimeLabel, '09:00 working days')} - {text(item.reportLanguage, 'English')}
+              </div>
+              <div className="mt-2 text-xs text-neutral-500">
+                Recipients: {Array.isArray(item.resolvedRecipients) && item.resolvedRecipients.length
+                  ? (item.resolvedRecipients as RecordMap[]).map(recipient => text(recipient.email)).filter(Boolean).join(', ')
+                  : 'CEO/GM/CCO roles'}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Array.isArray(item.deliveryReadiness) ? (item.deliveryReadiness as RecordMap[]).map(row => (
+                  <ProductStatus key={text(row.channel)} tone={text(row.status) === 'ready' ? 'good' : 'warn'}>
+                    {titleCase(text(row.channel))}: {titleCase(text(row.status))}
+                  </ProductStatus>
+                )) : null}
               </div>
             </div>
           ))}

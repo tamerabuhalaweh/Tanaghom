@@ -20,6 +20,9 @@ const commercialCenterMocks = vi.hoisted(() => ({
 const commercialDisciplineMocks = vi.hoisted(() => ({
   createRecord: vi.fn(),
 }));
+const commercialExecutiveMocks = vi.hoisted(() => ({
+  createSchedule: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
@@ -27,6 +30,7 @@ vi.mock('@modules/lead-lifecycle/service', () => leadServiceMocks);
 vi.mock('@modules/event-campaign-planner/service', () => plannerServiceMocks);
 vi.mock('@modules/commercial-command-center/service', () => commercialCenterMocks);
 vi.mock('@modules/commercial-disciplines/service', () => commercialDisciplineMocks);
+vi.mock('@modules/commercial-executive-reporting/service', () => commercialExecutiveMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -48,6 +52,7 @@ describe('Stitchi action registry', () => {
     commercialCenterMocks.updatePlan.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialCenterMocks.createAssessmentSignal.mockResolvedValue({ id: 'commercial-signal-1' });
     commercialDisciplineMocks.createRecord.mockResolvedValue({ id: 'discipline-record-1' });
+    commercialExecutiveMocks.createSchedule.mockResolvedValue({ id: 'executive-report-schedule-1' });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -68,6 +73,7 @@ describe('Stitchi action registry', () => {
       'update_commercial_plan',
       'create_commercial_assessment_signal',
       'create_commercial_discipline_record',
+      'create_executive_report_schedule',
     ]);
   });
 
@@ -330,6 +336,43 @@ describe('Stitchi action registry', () => {
       }),
     );
     expect(result).toMatchObject({ objectType: 'commercial_discipline_record', objectId: 'discipline-record-1' });
+  });
+
+  it('executes executive report schedules through the governed reporting service', async () => {
+    const result = await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'create_executive_report_schedule',
+      inputPayload: {
+        cadence: 'daily',
+        timezone: 'Asia/Dubai',
+        recipientRoles: ['admin', 'cco'],
+        deliveryChannels: ['email', 'whatsapp'],
+        reportLanguage: 'English',
+        reportSections: ['executive_summary', 'revenue_lines', 'lead_funnel'],
+        workingDaysOnly: true,
+        sendHour: 9,
+        sendMinute: 0,
+        approvalRequired: false,
+      },
+    });
+
+    expect(commercialExecutiveMocks.createSchedule).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      'user-1',
+      expect.objectContaining({
+        cadence: 'daily',
+        recipientRoles: ['admin', 'cco'],
+        deliveryChannels: ['email', 'whatsapp'],
+        approvalRequired: false,
+      }),
+    );
+    expect(result).toMatchObject({
+      objectType: 'commercial_executive_report_schedule',
+      objectId: 'executive-report-schedule-1',
+    });
   });
 
   it('rejects unsupported external/write actions', async () => {

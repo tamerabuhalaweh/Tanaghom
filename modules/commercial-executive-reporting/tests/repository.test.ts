@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createReportPreview, getExecutiveDashboard } from '../repository';
+import { calculateNextWorkingRunAt, createReportPreview, createSchedule, getExecutiveDashboard } from '../repository';
 
 const prismaMocks = vi.hoisted(() => ({
   commercialRevenueLine: { findMany: vi.fn() },
@@ -12,6 +12,8 @@ const prismaMocks = vi.hoisted(() => ({
   commercialAssessmentSignal: { findMany: vi.fn() },
   commercialExecutiveReport: { findMany: vi.fn(), create: vi.fn() },
   commercialExecutiveReportSchedule: { findMany: vi.fn(), create: vi.fn() },
+  integrationCredential: { count: vi.fn() },
+  user: { findMany: vi.fn() },
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
@@ -111,6 +113,11 @@ function seedHappyPath() {
   ]);
   prismaMocks.commercialExecutiveReport.findMany.mockResolvedValue([]);
   prismaMocks.commercialExecutiveReportSchedule.findMany.mockResolvedValue([]);
+  prismaMocks.integrationCredential.count.mockResolvedValue(0);
+  prismaMocks.user.findMany.mockResolvedValue([
+    { email: 'admin@tanaghum.com', name: 'Admin User', role: 'admin' },
+    { email: 'cco@tanaghum.com', name: 'CCO', role: 'cco' },
+  ]);
 }
 
 describe('Commercial executive reporting repository', () => {
@@ -211,5 +218,123 @@ describe('Commercial executive reporting repository', () => {
       title: 'Weekly CEO preview',
       confidence: 'high',
     });
+  });
+
+  it('calculates the next working-day 9 AM run and skips weekends', () => {
+    const beforeNine = calculateNextWorkingRunAt(new Date('2026-07-09T08:30:00.000Z'), {
+      sendHour: 9,
+      sendMinute: 0,
+      workingDaysOnly: true,
+    });
+    expect(beforeNine.toISOString()).toBe('2026-07-09T09:00:00.000Z');
+
+    const fridayAfterNine = calculateNextWorkingRunAt(new Date('2026-07-10T10:30:00.000Z'), {
+      sendHour: 9,
+      sendMinute: 0,
+      workingDaysOnly: true,
+    });
+    expect(fridayAfterNine.toISOString()).toBe('2026-07-13T09:00:00.000Z');
+  });
+
+  it('creates a daily executive workflow with CEO/GM/CCO role recipients and blocked delivery readiness when credentials are missing', async () => {
+    prismaMocks.commercialExecutiveReportSchedule.create.mockImplementation(async ({ data }) => ({
+      id: 'schedule-1',
+      cadence: data.cadence,
+      timezone: data.timezone,
+      recipients: data.recipients,
+      recipient_roles: data.recipient_roles,
+      delivery_channels: data.delivery_channels,
+      report_language: data.report_language,
+      report_sections: data.report_sections,
+      kpi_policy: data.kpi_policy,
+      working_days_only: data.working_days_only,
+      send_hour: data.send_hour,
+      send_minute: data.send_minute,
+      status: data.status,
+      approval_required: data.approval_required,
+      next_run_at: data.next_run_at,
+      last_delivery_attempt_at: null,
+      last_delivery_status: null,
+      last_preview_report_id: null,
+      created_at: now,
+    }));
+
+    const schedule = await createSchedule('tenant-a', 'user-1', {
+      cadence: 'daily',
+      recipients: ['gm@example.com'],
+      deliveryChannels: ['email', 'whatsapp'],
+      reportLanguage: 'English',
+      reportSections: ['executive_summary', 'revenue_lines', 'missing_data'],
+      workingDaysOnly: true,
+      sendHour: 9,
+      sendMinute: 0,
+      approvalRequired: false,
+    });
+
+    expect(prismaMocks.commercialExecutiveReportSchedule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        tenant_key: 'tenant-a',
+        cadence: 'daily',
+        timezone: 'Asia/Dubai',
+        recipient_roles: ['admin', 'cco'],
+        delivery_channels: ['email', 'whatsapp'],
+        report_language: 'English',
+        report_sections: ['executive_summary', 'revenue_lines', 'missing_data'],
+        working_days_only: true,
+        send_hour: 9,
+        send_minute: 0,
+        approval_required: false,
+      }),
+    }));
+    expect(schedule.resolvedRecipients.map(recipient => recipient.email)).toEqual([
+      'admin@tanaghum.com',
+      'cco@tanaghum.com',
+      'gm@example.com',
+    ]);
+    expect(schedule.sendTimeLabel).toBe('09:00 Asia/Dubai on working days');
+    expect(schedule.deliveryReadiness).toEqual(expect.arrayContaining([
+      expect.objectContaining({ channel: 'email', status: 'blocked' }),
+      expect.objectContaining({ channel: 'whatsapp', status: 'blocked' }),
+    ]));
+  });
+
+  it('marks delivery readiness ready when email and WhatsApp credentials exist', async () => {
+    prismaMocks.integrationCredential.count.mockImplementation(async ({ where }) => {
+      if (where.provider === 'smtp_email') return 1;
+      if (where.provider === 'gohighlevel') return 1;
+      return 0;
+    });
+    prismaMocks.commercialExecutiveReportSchedule.findMany.mockResolvedValue([
+      {
+        id: 'schedule-1',
+        cadence: 'daily',
+        timezone: 'Asia/Dubai',
+        recipients: [],
+        recipient_roles: ['admin', 'cco'],
+        delivery_channels: ['email', 'whatsapp'],
+        report_language: 'English',
+        report_sections: ['executive_summary'],
+        kpi_policy: {},
+        working_days_only: true,
+        send_hour: 9,
+        send_minute: 0,
+        status: 'active',
+        approval_required: false,
+        next_run_at: now,
+        last_delivery_attempt_at: null,
+        last_delivery_status: null,
+        last_preview_report_id: null,
+        created_at: now,
+      },
+    ]);
+
+    const dashboard = await getExecutiveDashboard('tenant-a', {});
+    const workflow = dashboard.reports.workflow;
+
+    expect(workflow.deliveryReadiness).toEqual(expect.arrayContaining([
+      expect.objectContaining({ channel: 'email', status: 'ready' }),
+      expect.objectContaining({ channel: 'whatsapp', status: 'ready' }),
+    ]));
+    expect(workflow.nextRunAt?.toISOString()).toBe(now.toISOString());
   });
 });

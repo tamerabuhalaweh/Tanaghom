@@ -17,6 +17,7 @@ export const integrationProviderSchema = z.enum([
   'telegram',
   'voice_chat',
   'smartlabs_voice',
+  'smtp_email',
   'social_oauth',
   'openclaw',
   'agentgateway',

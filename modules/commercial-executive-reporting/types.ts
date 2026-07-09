@@ -5,11 +5,40 @@ export const EXECUTIVE_REPORT_CADENCES = ['daily', 'weekly', 'monthly', 'quarter
 export const EXECUTIVE_REPORT_STATUSES = ['preview', 'generated', 'approved_send_ready', 'archived'] as const;
 export const EXECUTIVE_REPORT_DELIVERY_CHANNELS = ['dashboard', 'email', 'whatsapp'] as const;
 export const EXECUTIVE_REPORT_SCHEDULE_STATUSES = ['active', 'paused', 'archived'] as const;
+export const EXECUTIVE_REPORT_RECIPIENT_ROLES = ['admin', 'cco'] as const;
+export const EXECUTIVE_REPORT_LANGUAGES = ['English', 'Arabic'] as const;
+export const EXECUTIVE_REPORT_SECTIONS = [
+  'executive_summary',
+  'revenue_lines',
+  'channel_performance',
+  'lead_funnel',
+  'data_freshness',
+  'connector_readiness',
+  'department_work',
+  'alerts',
+  'missing_data',
+  'stitchi_recommendations',
+] as const;
+
+export const DEFAULT_EXECUTIVE_REPORT_SECTIONS = [
+  'executive_summary',
+  'revenue_lines',
+  'channel_performance',
+  'lead_funnel',
+  'data_freshness',
+  'connector_readiness',
+  'department_work',
+  'alerts',
+  'missing_data',
+] as const;
 
 export type ExecutiveReportCadence = (typeof EXECUTIVE_REPORT_CADENCES)[number];
 export type ExecutiveReportStatus = (typeof EXECUTIVE_REPORT_STATUSES)[number];
 export type ExecutiveReportDeliveryChannel = (typeof EXECUTIVE_REPORT_DELIVERY_CHANNELS)[number];
 export type ExecutiveReportScheduleStatus = (typeof EXECUTIVE_REPORT_SCHEDULE_STATUSES)[number];
+export type ExecutiveReportRecipientRole = (typeof EXECUTIVE_REPORT_RECIPIENT_ROLES)[number];
+export type ExecutiveReportLanguage = (typeof EXECUTIVE_REPORT_LANGUAGES)[number];
+export type ExecutiveReportSection = (typeof EXECUTIVE_REPORT_SECTIONS)[number];
 
 export const executiveDashboardQuerySchema = z.object({
   revenueLineType: z.enum(COMMERCIAL_REVENUE_LINE_TYPES).optional(),
@@ -34,11 +63,18 @@ export const listExecutiveReportsQuerySchema = z.object({
 });
 
 export const createExecutiveReportScheduleSchema = z.object({
-  cadence: z.enum(EXECUTIVE_REPORT_CADENCES),
-  timezone: z.string().trim().min(1).max(80).default('UTC').optional(),
+  cadence: z.enum(EXECUTIVE_REPORT_CADENCES).default('daily').optional(),
+  timezone: z.string().trim().min(1).max(80).default('Asia/Dubai').optional(),
   recipients: z.array(z.string().trim().min(3).max(220)).max(25).default([]).optional(),
-  deliveryChannels: z.array(z.enum(EXECUTIVE_REPORT_DELIVERY_CHANNELS)).min(1).max(3).default(['dashboard']).optional(),
-  approvalRequired: z.boolean().default(true).optional(),
+  recipientRoles: z.array(z.enum(EXECUTIVE_REPORT_RECIPIENT_ROLES)).min(1).max(2).default(['admin', 'cco']).optional(),
+  deliveryChannels: z.array(z.enum(EXECUTIVE_REPORT_DELIVERY_CHANNELS)).min(1).max(3).default(['email', 'whatsapp']).optional(),
+  reportLanguage: z.enum(EXECUTIVE_REPORT_LANGUAGES).default('English').optional(),
+  reportSections: z.array(z.enum(EXECUTIVE_REPORT_SECTIONS)).min(1).max(EXECUTIVE_REPORT_SECTIONS.length).default([...DEFAULT_EXECUTIVE_REPORT_SECTIONS]).optional(),
+  kpiPolicy: z.record(z.unknown()).default({}).optional(),
+  workingDaysOnly: z.boolean().default(true).optional(),
+  sendHour: z.coerce.number().int().min(0).max(23).default(9).optional(),
+  sendMinute: z.coerce.number().int().min(0).max(59).default(0).optional(),
+  approvalRequired: z.boolean().default(false).optional(),
   nextRunAt: z.coerce.date().nullable().optional(),
 });
 
@@ -145,10 +181,30 @@ export interface ExecutiveDashboard {
     recent: ExecutiveReportSummary[];
     activeSchedules: ExecutiveReportScheduleSummary[];
     nextRecommendedCadence: ExecutiveReportCadence;
+    workflow: ExecutiveReportWorkflowReadiness;
   };
   stitchi: {
     suggestedPrompt: string;
   };
+}
+
+export interface ExecutiveReportDeliveryReadiness {
+  channel: ExecutiveReportDeliveryChannel;
+  status: 'ready' | 'blocked' | 'not_requested';
+  detail: string;
+  requiredAction: string | null;
+}
+
+export interface ExecutiveReportWorkflowReadiness {
+  defaultCadence: ExecutiveReportCadence;
+  defaultLocalTime: string;
+  workingDaysOnly: boolean;
+  reportLanguage: ExecutiveReportLanguage;
+  expectedRecipientRoles: ExecutiveReportRecipientRole[];
+  deliveryReadiness: ExecutiveReportDeliveryReadiness[];
+  kpiPolicyStatus: 'customer_thresholds_pending' | 'configured';
+  nextRunAt: Date | null;
+  nextAction: string;
 }
 
 export interface ExecutiveReportSummary {
@@ -172,10 +228,27 @@ export interface ExecutiveReportScheduleSummary {
   cadence: ExecutiveReportCadence;
   timezone: string;
   recipients: string[];
+  recipientRoles: ExecutiveReportRecipientRole[];
+  resolvedRecipients: Array<{
+    email: string;
+    name: string;
+    role: string;
+    source: 'role' | 'explicit';
+  }>;
   deliveryChannels: ExecutiveReportDeliveryChannel[];
+  deliveryReadiness: ExecutiveReportDeliveryReadiness[];
+  reportLanguage: ExecutiveReportLanguage;
+  reportSections: ExecutiveReportSection[];
+  kpiPolicy: unknown;
+  workingDaysOnly: boolean;
+  sendHour: number;
+  sendMinute: number;
+  sendTimeLabel: string;
   status: ExecutiveReportScheduleStatus;
   approvalRequired: boolean;
   nextRunAt: Date | null;
+  lastDeliveryAttemptAt: Date | null;
+  lastDeliveryStatus: string | null;
   lastPreviewReportId: string | null;
   createdAt: Date;
 }

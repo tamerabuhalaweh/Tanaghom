@@ -353,6 +353,8 @@ async function deriveActionProposal(
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
+  const executiveReportProposal = deriveExecutiveReportActionProposal(content);
+  if (executiveReportProposal) return executiveReportProposal;
   const commercialProposal = await deriveCommercialCenterActionProposalV2(content, userId, context, metadata);
   if (commercialProposal) return commercialProposal;
   const disciplineProposal = deriveDisciplineActionProposal(content, eventId, context, metadata);
@@ -413,6 +415,62 @@ async function deriveActionProposal(
   }
 
   return null;
+}
+
+function deriveExecutiveReportActionProposal(content: string): ActionProposal | null {
+  const lower = content.toLowerCase();
+  if (!/(executive|ceo|gm|cco|leadership|daily|weekly|monthly|report|dashboard)/i.test(lower)) return null;
+  if (!/(report schedule|schedule report|daily report|executive report|ceo report|gm report|cco report|9\s*am|nine\s*am|working day)/i.test(lower)) return null;
+  const cadence = /weekly/i.test(lower)
+    ? 'weekly'
+    : /monthly/i.test(lower)
+      ? 'monthly'
+      : 'daily';
+  const deliveryChannels = [
+    ...(/email/i.test(lower) || /report/i.test(lower) ? ['email'] : []),
+    ...(/whatsapp|notification/i.test(lower) ? ['whatsapp'] : []),
+  ];
+  const title = firstSentence(content, 'Daily 9 AM commercial executive report');
+  return {
+    actionType: 'create_executive_report_schedule',
+    inputPayload: {
+      cadence,
+      timezone: 'Asia/Dubai',
+      recipients: [],
+      recipientRoles: ['admin', 'cco'],
+      deliveryChannels: deliveryChannels.length ? deliveryChannels : ['email', 'whatsapp'],
+      reportLanguage: /arabic|عربي|العربية/i.test(lower) ? 'Arabic' : 'English',
+      reportSections: [
+        'executive_summary',
+        'revenue_lines',
+        'channel_performance',
+        'lead_funnel',
+        'data_freshness',
+        'connector_readiness',
+        'department_work',
+        'alerts',
+        'missing_data',
+      ],
+      kpiPolicy: {},
+      workingDaysOnly: true,
+      sendHour: /9\s*am|nine\s*am/i.test(lower) ? 9 : 9,
+      sendMinute: 0,
+      approvalRequired: false,
+    },
+    previewPayload: {
+      title,
+      cadence,
+      recipientRoles: ['CEO/GM', 'CCO'],
+      deliveryChannels: deliveryChannels.length ? deliveryChannels : ['email', 'whatsapp'],
+      reportLanguage: /arabic|عربي|العربية/i.test(lower) ? 'Arabic' : 'English',
+      sendTime: '09:00 Asia/Dubai on working days',
+      deliveryExecution: 'blocked until email and WhatsApp credentials plus delivery worker are ready',
+      approvalRequired: true,
+      externalExecution: 'blocked',
+    },
+    riskLevel: 'medium',
+    reason: 'prepare an executive report workflow schedule',
+  };
 }
 
 function deriveDisciplineActionProposal(

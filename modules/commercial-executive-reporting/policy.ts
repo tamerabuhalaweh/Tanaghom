@@ -3,14 +3,14 @@ import { ForbiddenError } from '@shared/errors';
 export const EXECUTIVE_REPORTING_PERMISSIONS: Record<string, string[]> = {
   admin: ['commercial:executive:read', 'commercial:executive:report', 'commercial:executive:schedule'],
   cco: ['commercial:executive:read', 'commercial:executive:report', 'commercial:executive:schedule'],
-  department_head: ['commercial:executive:read', 'commercial:executive:report', 'commercial:executive:schedule'],
-  marketing_manager: ['commercial:executive:read', 'commercial:executive:report', 'commercial:executive:schedule'],
-  sales_manager: ['commercial:executive:read', 'commercial:executive:report'],
-  lead_qualification_manager: ['commercial:executive:read', 'commercial:executive:report'],
-  social_media_manager: ['commercial:executive:read', 'commercial:executive:report'],
-  specialist: ['commercial:executive:read'],
-  reviewer: ['commercial:executive:read'],
-  viewer: ['commercial:executive:read'],
+  department_head: [],
+  marketing_manager: [],
+  sales_manager: [],
+  lead_qualification_manager: [],
+  social_media_manager: [],
+  specialist: [],
+  reviewer: [],
+  viewer: [],
 };
 
 export function checkExecutiveReportingPermission(role: string, permission: string): void {

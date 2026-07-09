@@ -145,4 +145,27 @@ test.describe('Hybrid live customer acceptance', () => {
       monitor.assertClean(`${account.email} connector setup`);
     }
   });
+
+  test('admin can configure the daily executive report workflow with honest delivery readiness', async ({ page }) => {
+    test.setTimeout(90000);
+    const monitor = installLiveMonitors(page);
+
+    await login(page, hybridLiveAccounts.admin);
+    monitor.reset();
+    await page.goto('/executive', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /CEO commercial dashboard and report center/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Executive report workflow/i).first()).toBeVisible();
+
+    const recipients = page.getByPlaceholder(/Optional extra recipients/i).first();
+    await recipients.fill(`gm-${Date.now()}@tanaghum.test`);
+    await page.getByRole('button', { name: /Save schedule/i }).click();
+
+    await expect(page.getByText(/Executive report workflow saved/i).first()).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/09:00/i).first()).toBeVisible();
+    await expect(page.getByText(/Email/i).first()).toBeVisible();
+    await expect(page.getByText(/WhatsApp/i).first()).toBeVisible();
+    await expect(page.locator('main')).not.toContainText(customerVisibleInternalTextPattern);
+    await expectNoHorizontalOverflow(page, 'executive report workflow');
+    monitor.assertClean('executive report workflow setup');
+  });
 });

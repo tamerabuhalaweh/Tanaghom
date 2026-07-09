@@ -109,6 +109,15 @@ const REQUIRED_CREDENTIALS = [
     purpose: 'Connect this tenant to its own SmartLabs ConvAI and text-to-speech API. Conversations and TTS execution remain policy-gated.',
   },
   {
+    provider: 'smtp_email',
+    credentialType: 'service_endpoint',
+    connectionKey: 'default',
+    label: 'Email Report Delivery',
+    requiredFields: ['host', 'port', 'fromEmail'],
+    optionalFields: ['username', 'password', 'secure'],
+    purpose: 'Enable approved executive report delivery by email. Until configured, Tanaghum can preview and schedule reports but will not claim email delivery.',
+  },
+  {
     provider: 'social_oauth',
     credentialType: 'oauth_client',
     connectionKey: 'linkedin',
