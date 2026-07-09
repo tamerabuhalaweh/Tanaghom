@@ -72,6 +72,16 @@ async function assertCustomerPageHealth(page: Page, path: string) {
   await expectNoHorizontalOverflow(page, path);
 }
 
+async function respectLiveRateLimitIfTriggered(page: Page, monitor: ReturnType<typeof installLiveMonitors>) {
+  const rateLimitMessage = page.getByText(/Rate limit exceeded/i).first();
+  if (await rateLimitMessage.isVisible().catch(() => false)) {
+    await page.waitForTimeout(61000);
+    monitor.reset();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => undefined);
+  }
+}
+
 test.describe('Hybrid live customer acceptance', () => {
   test.skip(!hybridLiveEnabled, 'Set E2E_HYBRID_LIVE=true or run npm run test:e2e:hybrid-live to test deployed Hybrid.');
 
@@ -147,12 +157,17 @@ test.describe('Hybrid live customer acceptance', () => {
   });
 
   test('admin can configure the daily executive report workflow with honest delivery readiness', async ({ page }) => {
-    test.setTimeout(90000);
+    test.setTimeout(160000);
     const monitor = installLiveMonitors(page);
+
+    // The earlier live acceptance sweep intentionally opens many pages quickly.
+    // Start this admin write-flow in a fresh production rate-limit window.
+    await page.waitForTimeout(61000);
 
     await login(page, hybridLiveAccounts.admin);
     monitor.reset();
     await page.goto('/executive', { waitUntil: 'domcontentloaded' });
+    await respectLiveRateLimitIfTriggered(page, monitor);
     await expect(page.getByRole('heading', { name: /CEO commercial dashboard and report center/i })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/Executive report workflow/i).first()).toBeVisible();
 
