@@ -28,6 +28,7 @@ function getId(req: Request): string {
 approvalsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getPayload(req);
+    const includeInternal = req.query.includeInternal === 'true' && ['admin', 'cco'].includes(payload.role);
     const approvals = await listApprovals(payload.role, {
       tenantKey: payload.tenantKey || 'default',
       targetId: req.query.targetId as string | undefined,
@@ -36,6 +37,7 @@ approvalsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
       requesterUserId: req.query.requesterId as string | undefined,
       approverUserId: req.query.approverId as string | undefined,
       requiredDepartment: req.query.department as string | undefined,
+      customerVisibleOnly: !includeInternal,
     });
     res.json(approvals);
   } catch (err) {

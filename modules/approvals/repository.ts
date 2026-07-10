@@ -5,6 +5,7 @@ import type {
   ApprovalDecisionPacket, ApprovalSummary, ApprovalStatus,
 } from './types';
 import { getRoutingRule, validateApprovalTransition } from './types';
+import { getInternalContentTargets } from '@shared/customer-content';
 
 export async function createApproval(input: CreateApprovalInput, tenantKey: string): Promise<ApprovalSummary> {
   const routingRule = getRoutingRule(input.riskCategory, input.targetType);
@@ -41,6 +42,7 @@ export async function listApprovals(filters?: {
   requesterUserId?: string;
   approverUserId?: string;
   requiredDepartment?: string;
+  customerVisibleOnly?: boolean;
 }): Promise<ApprovalSummary[]> {
   const where: Record<string, unknown> = {};
   if (filters?.tenantKey) where.tenant_key = filters.tenantKey;
@@ -50,6 +52,15 @@ export async function listApprovals(filters?: {
   if (filters?.requesterUserId) where.requester_user_id = filters.requesterUserId;
   if (filters?.approverUserId) where.approver_user_id = filters.approverUserId;
   if (filters?.requiredDepartment) where.required_department = filters.requiredDepartment;
+
+  if (filters?.customerVisibleOnly && filters.tenantKey) {
+    const internal = await getInternalContentTargets(filters.tenantKey);
+    const exclusions: Record<string, unknown>[] = [];
+    if (internal.campaignIds.length) exclusions.push({ target_type: 'campaign', target_id: { in: internal.campaignIds } });
+    if (internal.contentItemIds.length) exclusions.push({ target_type: 'content_item', target_id: { in: internal.contentItemIds } });
+    if (internal.draftVersionIds.length) exclusions.push({ target_type: 'draft_version', target_id: { in: internal.draftVersionIds } });
+    if (exclusions.length) where.NOT = exclusions;
+  }
 
   const approvals = await prisma.approval.findMany({
     where,

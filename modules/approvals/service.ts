@@ -88,6 +88,7 @@ export async function listApprovals(requesterRole: string, filters?: {
   requesterUserId?: string;
   approverUserId?: string;
   requiredDepartment?: string;
+  customerVisibleOnly?: boolean;
 }): Promise<ApprovalSummary[]> {
   checkApprovalPermission(requesterRole, 'approvals:read');
   return repo.listApprovals(filters);
