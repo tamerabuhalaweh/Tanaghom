@@ -45,6 +45,7 @@ import Stitchi from './pages/Stitchi'
 import CommercialCommandCenter from './pages/CommercialCommandCenter'
 import CommercialDisciplines from './pages/CommercialDisciplines'
 import ExecutiveDashboard from './pages/ExecutiveDashboard'
+import HybridV3Preview from './pages/HybridV3Preview'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const EXECUTIVE_ROLES = ['admin', 'cco']
@@ -109,6 +110,9 @@ function App() {
           <Route path="/ux/aiero-preview" element={<AieroInspiredPreview page="home" />} />
           <Route path="/ux/aiero-preview/events" element={<AieroInspiredPreview page="events" />} />
           <Route path="/ux/aiero-preview/integrations" element={<AieroInspiredPreview page="integrations" />} />
+          <Route path="/ux/hybrid-v3-preview" element={<HybridV3Preview page="today" />} />
+          <Route path="/ux/hybrid-v3-preview/content" element={<HybridV3Preview page="content" />} />
+          <Route path="/ux/hybrid-v3-preview/review" element={<HybridV3Preview page="review" />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<CommercialCommandCenter />} />
             <Route path="events/master" element={<MasterEventsDashboard />} />
