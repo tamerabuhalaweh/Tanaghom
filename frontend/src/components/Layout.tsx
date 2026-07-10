@@ -52,6 +52,7 @@ const PRODUCT_ROLES = [
 const CONTENT_ROLES = PRODUCT_ROLES.filter(role => role !== 'viewer');
 const SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager'];
 const ADMIN_ROLES = ['admin', 'cco'];
+const EXECUTIVE_ROLES = ['admin', 'cco'];
 const APPROVAL_READ_ROLES = ['admin', 'cco', 'department_head', 'reviewer'];
 
 const PRIMARY_NAV: NavItem[] = [
@@ -64,13 +65,13 @@ const PRIMARY_NAV: NavItem[] = [
     activePaths: ['/', '/command-center'],
   },
   {
-    path: '/events',
-    label: 'Plans & Events',
+    path: '/commercial-plans',
+    label: 'Plans',
     shortLabel: 'Plans',
-    description: 'Commercial plans and event operations',
+    description: 'Commercial plans, discipline work, and event handoffs',
     icon: CalendarDays,
     roles: PRODUCT_ROLES,
-    activePaths: ['/events', '/commercial-plans'],
+    activePaths: ['/commercial-plans', '/disciplines', '/events'],
   },
   {
     path: '/ideas',
@@ -109,6 +110,20 @@ const PRIMARY_NAV: NavItem[] = [
 ];
 
 const WORKFLOW_LINKS: NavItem[] = [
+  {
+    path: '/disciplines',
+    label: 'Discipline Workspaces',
+    description: 'Brand, acquisition, conversion, growth, and operations',
+    icon: Building2,
+    roles: PRODUCT_ROLES,
+  },
+  {
+    path: '/events',
+    label: 'Event Operations',
+    description: 'Separate event planning and operating workspace',
+    icon: CalendarDays,
+    roles: PRODUCT_ROLES,
+  },
   {
     path: '/approvals',
     label: 'Review Queue',
@@ -149,14 +164,15 @@ const ADMIN_LINKS: NavItem[] = [
 const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = [
   { match: path => path === '/' || path === '/command-center', title: 'Today' },
   { match: path => path === '/commercial-plans', title: 'Commercial Plans' },
-  { match: path => path.startsWith('/events'), title: 'Plans & Events' },
+  { match: path => path === '/disciplines', title: 'Discipline Workspaces' },
+  { match: path => path.startsWith('/events'), title: 'Event Operations' },
   { match: path => path === '/ideas' || path === '/content', title: 'Content' },
   { match: path => path === '/campaigns', title: 'Campaign Workspace' },
   { match: path => path === '/approvals', title: 'Review Queue' },
   { match: path => path === '/publishing', title: 'Scheduling' },
   { match: path => path === '/analytics', title: 'Sales & Leads' },
   { match: path => path === '/growth', title: 'Performance' },
-  { match: path => path === '/executive', title: 'Executive Performance' },
+  { match: path => path === '/executive', title: 'Executive Dashboard' },
   { match: path => path === '/stitchi', title: 'Stitchi' },
   { match: path => path.includes('security'), title: 'Account Security' },
   { match: path => path.includes('integration'), title: 'Integrations' },
@@ -205,7 +221,16 @@ export default function Layout() {
   const role = normalizeRole(getField(user, ['role'], 'viewer'));
   const displayName = getField(user, ['name', 'email'], 'Workspace User');
   const currentTitle = pageTitle(location.pathname);
-  const primaryNav = useMemo(() => PRIMARY_NAV.filter(item => visibleForRole(item, role)), [role]);
+  const primaryNav = useMemo(() => PRIMARY_NAV.filter(item => visibleForRole(item, role)).map(item => {
+    if (item.path !== '/growth' || !EXECUTIVE_ROLES.includes(role)) return item;
+    return {
+      ...item,
+      path: '/executive',
+      label: 'Executive Dashboard',
+      shortLabel: 'Results',
+      description: 'Revenue, decisions, and executive reporting',
+    };
+  }), [role]);
   const workflowLinks = useMemo(() => WORKFLOW_LINKS.filter(item => visibleForRole(item, role)), [role]);
   const setupLinks = useMemo(() => SETUP_LINKS.filter(item => visibleForRole(item, role)), [role]);
   const adminLinks = useMemo(() => ADMIN_LINKS.filter(item => visibleForRole(item, role)), [role]);

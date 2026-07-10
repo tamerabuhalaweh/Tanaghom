@@ -328,7 +328,7 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
 
     await page.waitForURL(/\/command-center(?:$|[?#])/);
     await page.goto('/commercial-plans');
-    await expect(page.getByRole('heading', { name: /Run the commercial business lines/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Commercial Plans' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Revenue lines' })).toBeVisible();
     await expect(page.getByRole('link', { name: /Users & Roles/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Tenant Admin/i })).toHaveCount(0);
@@ -346,7 +346,7 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await page.getByLabel('Objective').fill('Grow course enrollment from warm followers.');
     await page.getByLabel('Audience').fill('Warm followers and existing customers.');
     await page.getByLabel('Action plan').fill('Prepare content, email follow-up, and CRM handoff.');
-    await page.getByRole('button', { name: 'Create plan' }).click();
+    await page.getByRole('button', { name: 'Create plan' }).last().click();
 
     await expect(page.getByText('Commercial plan created.')).toBeVisible();
     await expect(page.getByRole('button', { name: /Q3 online course growth plan/i })).toBeVisible();

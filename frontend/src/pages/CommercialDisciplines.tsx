@@ -1,32 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  BarChart3,
   BriefcaseBusiness,
   Handshake,
   Megaphone,
   MessageSquareText,
+  Plus,
   Repeat2,
   Settings2,
+  Sparkles,
 } from 'lucide-react';
 import { commercialCommandCenterApi, commercialDisciplinesApi } from '../api';
-import {
-  AieroActionButton,
-  AieroGhostButton,
-  AieroLightPanel,
-  AieroMetricCard,
-  AieroPage,
-  AieroPanel,
-  AieroStatusPill,
-} from '../components/AieroUX';
-import {
-  EmptyProductState,
-  Field,
-  Notice,
-  ProductStatus,
-  SecondaryAction,
-} from '../components/ProductUI';
+import { CommercialWorkspaceNav } from '../components/CommercialWorkspaceNav';
+import { OpsEmpty, OpsNotice, OpsPage, OpsPageHeader, OpsSection, OpsSkeleton, OpsStatus } from '../components/OperationalUI';
+import { Field } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
+import './CommercialR1D.css';
 
 type RecordMap = Record<string, unknown>;
 
@@ -53,12 +42,12 @@ function titleCase(value: string): string {
   return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, char => char.toUpperCase());
 }
 
-function statusTone(status: string): 'good' | 'warn' | 'danger' | 'info' | 'muted' {
-  if (status === 'active' || status === 'completed') return 'good';
+function statusTone(status: string): 'neutral' | 'positive' | 'warning' | 'danger' | 'info' {
+  if (status === 'active' || status === 'completed') return 'positive';
   if (status === 'blocked' || status === 'critical') return 'danger';
-  if (status === 'high') return 'warn';
+  if (status === 'high') return 'warning';
   if (status === 'draft') return 'info';
-  return 'muted';
+  return 'neutral';
 }
 
 function makeDraft(discipline = '', category = '') {
@@ -99,7 +88,6 @@ export default function CommercialDisciplines() {
   const blockedRecords = records.filter(record => text(record.status) === 'blocked').length;
   const completedRecords = records.filter(record => text(record.status) === 'completed').length;
   const highPriorityRecords = records.filter(record => ['high', 'critical'].includes(text(record.priority))).length;
-  const SelectedIcon = DISCIPLINE_ICONS[selectedDiscipline as keyof typeof DISCIPLINE_ICONS] || BriefcaseBusiness;
   const userRole = text((user as RecordMap | null)?.role);
   const canCreateRecord = !['reviewer', 'viewer'].includes(userRole);
   const canUpdateRecord = ['admin', 'cco', 'department_head', 'marketing_manager'].includes(userRole);
@@ -166,6 +154,7 @@ export default function CommercialDisciplines() {
       commercialPlanId: text(record.commercialPlanId),
       eventId: text(record.eventId),
     });
+    document.getElementById('discipline-record-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function saveRecord() {
@@ -198,15 +187,15 @@ export default function CommercialDisciplines() {
       eventId: draft.eventId || null,
     };
     try {
+      const successMessage = draft.id ? 'Workspace record updated.' : 'Workspace record created.';
       if (draft.id) {
         await commercialDisciplinesApi.updateRecord(draft.id, payload, token);
-        setMessage('Workspace record updated.');
       } else {
         await commercialDisciplinesApi.createRecord(payload, token);
-        setMessage('Workspace record created.');
       }
       setDraft(makeDraft(draft.discipline, draft.category));
       await load();
+      setMessage(successMessage);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not save workspace record.');
     } finally {
@@ -229,281 +218,130 @@ export default function CommercialDisciplines() {
   });
 
   return (
-    <AieroPage
-      eyebrow="Commercial Department"
-      title="Discipline workspaces for daily commercial execution."
-      subtitle="Capture brand, acquisition, conversion, growth, and operations work in one governed place. Stitchi can draft records, but managers approve before anything is saved."
-      action={(
+    <OpsPage className="commercial-r1d-page commercial-disciplines-page">
+      <OpsPageHeader
+        eyebrow="Commercial Department"
+        title="Discipline Workspaces"
+        subtitle="Give each commercial discipline one focused operating view while leadership keeps the full picture."
+        actions={(
+          <>
+            <button className="ops-button is-secondary" type="button" onClick={() => navigate(`/stitchi?${stitchiParams.toString()}`)}><Sparkles size={17} aria-hidden="true" />Ask Stitchi</button>
+            {canCreateRecord ? <button className="ops-button is-primary" type="button" onClick={() => {
+              setDraft(makeDraft(selectedDiscipline, text(categories[0], '')));
+              document.getElementById('discipline-record-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}><Plus size={17} aria-hidden="true" />New work item</button> : null}
+          </>
+        )}
+      />
+
+      <CommercialWorkspaceNav />
+      {message ? <OpsNotice tone={message.toLowerCase().includes('could not') ? 'danger' : 'info'}>{message}</OpsNotice> : null}
+
+      {loading ? (
+        <div className="commercial-r1d-loading"><OpsSkeleton rows={5} /><OpsSkeleton rows={5} /></div>
+      ) : (
         <>
-          <AieroGhostButton onClick={() => navigate(`/stitchi?${stitchiParams.toString()}`)}>Ask Stitchi</AieroGhostButton>
-          <AieroActionButton onClick={() => navigate('/command-center')}>Command Center</AieroActionButton>
+          <div className="commercial-discipline-overview">
+            <OpsSection title="Commercial disciplines" subtitle="Choose the team responsible for the work." className="commercial-discipline-list">
+              {workspaces.map((workspace, index) => {
+                const id = text(workspace.id);
+                const active = id === selectedDiscipline;
+                const Icon = DISCIPLINE_ICONS[id as keyof typeof DISCIPLINE_ICONS] || BriefcaseBusiness;
+                const blocked = Number(workspace.blockedCount || 0);
+                return (
+                  <button key={id} className={active ? 'is-selected' : ''} type="button" onClick={() => chooseWorkspace(workspace)}>
+                    <span>{index + 1}</span>
+                    <Icon size={17} aria-hidden="true" />
+                    <div><strong>{text(workspace.label, titleCase(id))}</strong><small>{text(workspace.purpose, 'Commercial operating work')}</small></div>
+                    <em>{blocked ? `${blocked} blocked` : `${Number(workspace.recordCount || 0)} records`}</em>
+                  </button>
+                );
+              })}
+            </OpsSection>
+
+            <OpsSection
+              title={text(selectedWorkspace.label, titleCase(selectedDiscipline))}
+              subtitle={text(selectedWorkspace.purpose, 'Capture and manage discipline work.')}
+              action={<OpsStatus tone={blockedRecords ? 'danger' : 'positive'}>{blockedRecords ? `${blockedRecords} blocked` : 'Operating'}</OpsStatus>}
+              className="commercial-discipline-detail"
+            >
+              <div className="commercial-discipline-summary">
+                <DisciplineMetric label="Today" value={`${activeRecords} active`} detail={`${highPriorityRecords} high-priority item${highPriorityRecords === 1 ? '' : 's'}`} />
+                <DisciplineMetric label="Blocked work" value={String(blockedRecords)} detail="Needs manager attention" />
+                <DisciplineMetric label="Completed" value={String(completedRecords)} detail="Closed operating records" />
+              </div>
+
+              {records.length ? (
+                <div className="commercial-discipline-queue">
+                  {records.slice(0, 4).map(record => (
+                    <button type="button" key={text(record.id)} onClick={() => editRecord(record)}>
+                      <OpsStatus tone={statusTone(text(record.priority))}>{titleCase(text(record.priority, 'normal'))}</OpsStatus>
+                      <div><strong>{text(record.title, 'Untitled work item')}</strong><small>{text(record.summary, titleCase(text(record.category)))}</small></div>
+                      <span>{titleCase(text(record.status, 'active'))}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : <OpsEmpty title="No work recorded" message="Create the first research note, script, blocker, or operating task for this discipline." />}
+            </OpsSection>
+          </div>
+
+          <section className="commercial-department-boundary">
+            <BriefcaseBusiness size={20} aria-hidden="true" />
+            <div><strong>Department boundary</strong><p>Content and Event Operations receive approved briefs and requests. Their internal execution remains in their own department workspaces.</p></div>
+          </section>
+
+          <div className="commercial-discipline-workspace" id="discipline-record-editor">
+            <OpsSection
+              title={canCreateRecord || canUpdateRecord ? (draft.id ? 'Edit work item' : 'Create work item') : 'Read-only workspace'}
+              subtitle={canCreateRecord || canUpdateRecord ? 'Capture useful daily work and connect it to the commercial outcome it supports.' : 'Your role can review work. Ask a manager or Stitchi when something must change.'}
+              action={draft.id && canUpdateRecord ? <button className="ops-button is-secondary" type="button" onClick={() => setDraft(makeDraft(selectedDiscipline, text(categories[0], '')))}>New item</button> : undefined}
+            >
+              {!canCreateRecord && !canUpdateRecord ? <OpsNotice>This workspace is read-only for your role. You can still review context and ask Stitchi what needs attention.</OpsNotice> : null}
+              <div className="commercial-form">
+                <div className="commercial-form-grid">
+                  <Field label="Workspace"><select value={draft.discipline} onChange={event => {
+                    const nextWorkspace = workspaces.find(workspace => text(workspace.id) === event.target.value) || {};
+                    const nextCategory = text(list(nextWorkspace.categories)[0], '');
+                    setSelectedDiscipline(event.target.value);
+                    setDraft(current => ({ ...current, discipline: event.target.value, category: nextCategory }));
+                  }}>{workspaces.map(workspace => <option key={text(workspace.id)} value={text(workspace.id)}>{text(workspace.label)}</option>)}</select></Field>
+                  <Field label="Work type"><select value={draft.category} onChange={event => setDraft(current => ({ ...current, category: event.target.value }))}>{categories.map(category => <option key={category} value={category}>{titleCase(category)}</option>)}</select></Field>
+                  <Field label="Priority"><select value={draft.priority} onChange={event => setDraft(current => ({ ...current, priority: event.target.value }))}>{PRIORITY_OPTIONS.map(priority => <option key={priority} value={priority}>{titleCase(priority)}</option>)}</select></Field>
+                  <Field label="Status"><select value={draft.status} onChange={event => setDraft(current => ({ ...current, status: event.target.value }))}>{STATUS_OPTIONS.map(status => <option key={status} value={status}>{titleCase(status)}</option>)}</select></Field>
+                  <Field label="Revenue line"><select value={draft.revenueLineId} onChange={event => setDraft(current => ({ ...current, revenueLineId: event.target.value }))}><option value="">Not linked</option>{revenueLines.map(line => <option key={text(line.id)} value={text(line.id)}>{text(line.name)}</option>)}</select></Field>
+                  <Field label="Commercial plan"><select value={draft.commercialPlanId} onChange={event => setDraft(current => ({ ...current, commercialPlanId: event.target.value }))}><option value="">Not linked</option>{plans.map(plan => <option key={text(plan.id)} value={text(plan.id)}>{text(plan.title)}</option>)}</select></Field>
+                </div>
+                <Field label="Title"><input value={draft.title} onChange={event => setDraft(current => ({ ...current, title: event.target.value }))} placeholder="Example: Price objection answer for warm buyers" /></Field>
+                <Field label="Summary"><textarea value={draft.summary} onChange={event => setDraft(current => ({ ...current, summary: event.target.value }))} rows={3} placeholder="Short summary for the team." /></Field>
+                <Field label="Details"><textarea value={draft.details} onChange={event => setDraft(current => ({ ...current, details: event.target.value }))} rows={5} placeholder="Add the script, research note, action detail, or operating instruction." /></Field>
+                <div className="ops-inline-actions">
+                  {canCreateRecord || canUpdateRecord ? <button className="ops-button is-primary" type="button" onClick={saveRecord} disabled={saving || (Boolean(draft.id) && !canUpdateRecord)}>{saving ? 'Saving...' : draft.id ? 'Save changes' : 'Create work item'}</button> : null}
+                  <button className="ops-button is-secondary" type="button" onClick={() => navigate(`/stitchi?${stitchiParams.toString()}`)}><Sparkles size={16} aria-hidden="true" />Ask Stitchi to draft</button>
+                </div>
+              </div>
+            </OpsSection>
+
+            <OpsSection title="All work in this discipline" subtitle="Business records only. External systems are not called from here.">
+              {records.length ? (
+                <div className="commercial-record-list">
+                  {records.map(record => (
+                    <button key={text(record.id)} type="button" onClick={() => editRecord(record)} className={text(record.id) === draft.id ? 'is-selected' : ''}>
+                      <div><strong>{text(record.title, 'Untitled work item')}</strong><small>{titleCase(text(record.category))} / {titleCase(text(record.priority))}</small></div>
+                      <OpsStatus tone={statusTone(text(record.status))}>{titleCase(text(record.status))}</OpsStatus>
+                      <p>{text(record.summary, 'No summary yet.')}</p>
+                      {text(record.revenueLineName) || text(record.commercialPlanTitle) || text(record.eventName) ? <small>{[text(record.revenueLineName), text(record.commercialPlanTitle), text(record.eventName)].filter(Boolean).join(' / ')}</small> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : <OpsEmpty title="Nothing recorded yet" message="Capture the first note, script, blocker, or operating task for this discipline." />}
+            </OpsSection>
+          </div>
         </>
       )}
-    >
-      {message && <Notice tone={message.toLowerCase().includes('could not') ? 'warn' : 'info'}>{message}</Notice>}
-
-      <div className="grid gap-4 lg:grid-cols-4">
-        <AieroMetricCard label="Active work" value={loading ? '-' : activeRecords} detail="Open records in this workspace" accent="teal" />
-        <AieroMetricCard label="Blocked" value={loading ? '-' : blockedRecords} detail="Needs manager attention" accent="rose" />
-        <AieroMetricCard label="High priority" value={loading ? '-' : highPriorityRecords} detail="High or critical priority" accent="amber" />
-        <AieroMetricCard label="Completed" value={loading ? '-' : completedRecords} detail="Closed operating records" accent="violet" />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-        <AieroLightPanel title="Workspaces" subtitle="Choose the commercial discipline you want to operate.">
-          <div className="space-y-3">
-            {workspaces.map(workspace => {
-              const id = text(workspace.id);
-              const Icon = DISCIPLINE_ICONS[id as keyof typeof DISCIPLINE_ICONS] || BriefcaseBusiness;
-              const active = id === selectedDiscipline;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => chooseWorkspace(workspace)}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${
-                    active ? 'border-neutral-950 bg-neutral-950 text-white shadow-lg' : 'border-neutral-200 bg-neutral-50 text-neutral-950 hover:border-neutral-300'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-neutral-950">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold">{text(workspace.label, titleCase(id))}</span>
-                      <span className={`mt-1 block text-xs leading-5 ${active ? 'text-white/62' : 'text-neutral-500'}`}>
-                        {text(workspace.purpose)}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <ProductStatus tone={active ? 'good' : 'muted'}>{Number(workspace.recordCount || 0)} records</ProductStatus>
-                    {Number(workspace.blockedCount || 0) > 0 && <ProductStatus tone="danger">{Number(workspace.blockedCount)} blocked</ProductStatus>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </AieroLightPanel>
-
-        <AieroPanel
-          title={text(selectedWorkspace.label, 'Selected workspace')}
-          subtitle={text(selectedWorkspace.purpose, 'Capture and manage discipline work.')}
-          action={<AieroStatusPill>{categories.length} record types</AieroStatusPill>}
-        >
-          <div className="grid gap-5 lg:grid-cols-[0.52fr_1fr]">
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
-              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-neutral-950">
-                <SelectedIcon className="h-6 w-6" />
-              </span>
-              <h3 className="mt-4 text-xl font-semibold text-white">{text(selectedWorkspace.label, titleCase(selectedDiscipline))}</h3>
-              <p className="mt-3 text-sm leading-6 text-white/55">{text(selectedWorkspace.purpose)}</p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {categories.slice(0, 5).map(category => (
-                  <AieroStatusPill key={category} accent="blue">{titleCase(category)}</AieroStatusPill>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {records.slice(0, 4).map(record => (
-                <button
-                  key={text(record.id)}
-                  type="button"
-                  onClick={() => editRecord(record)}
-                  className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-4 text-left transition hover:bg-white/[0.08]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="line-clamp-2 font-semibold text-white">{text(record.title, 'Untitled record')}</div>
-                      <div className="mt-1 text-xs text-white/48">{titleCase(text(record.category))}</div>
-                    </div>
-                    <ProductStatus tone={statusTone(text(record.status))}>{titleCase(text(record.status))}</ProductStatus>
-                  </div>
-                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-white/52">{text(record.summary, 'No summary yet.')}</p>
-                </button>
-              ))}
-              {!records.length && (
-                <div className="sm:col-span-2 rounded-[1.25rem] border border-dashed border-white/14 bg-white/[0.04] p-6">
-                  <EmptyProductState title="No records yet" message="Create the first operating record for this discipline, or ask Stitchi to draft one." />
-                </div>
-              )}
-            </div>
-          </div>
-        </AieroPanel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-        <AieroLightPanel
-          title={canCreateRecord || canUpdateRecord ? (draft.id ? 'Edit workspace record' : 'Create workspace record') : 'Read-only workspace'}
-          subtitle={canCreateRecord || canUpdateRecord
-            ? 'Use this for real daily work: scripts, research notes, campaign observations, data-quality issues, and operating tasks.'
-            : 'Your role can review discipline records. Ask a manager or Stitchi to prepare a governed action when work needs to change.'}
-          action={draft.id && canUpdateRecord ? <SecondaryAction onClick={() => setDraft(makeDraft(selectedDiscipline, text(categories[0], '')))}>New record</SecondaryAction> : null}
-        >
-          {!canCreateRecord && !canUpdateRecord && (
-            <Notice tone="info">This workspace is read-only for your role. You can still review context and ask Stitchi what needs attention.</Notice>
-          )}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Workspace">
-              <select
-                value={draft.discipline}
-                onChange={event => {
-                  const nextWorkspace = workspaces.find(workspace => text(workspace.id) === event.target.value) || {};
-                  const nextCategory = text(list(nextWorkspace.categories)[0], '');
-                  setSelectedDiscipline(event.target.value);
-                  setDraft(current => ({ ...current, discipline: event.target.value, category: nextCategory }));
-                }}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                {workspaces.map(workspace => <option key={text(workspace.id)} value={text(workspace.id)}>{text(workspace.label)}</option>)}
-              </select>
-            </Field>
-            <Field label="Record type">
-              <select
-                value={draft.category}
-                onChange={event => setDraft(current => ({ ...current, category: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                {categories.map(category => <option key={category} value={category}>{titleCase(category)}</option>)}
-              </select>
-            </Field>
-            <Field label="Priority">
-              <select
-                value={draft.priority}
-                onChange={event => setDraft(current => ({ ...current, priority: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                {PRIORITY_OPTIONS.map(priority => <option key={priority} value={priority}>{titleCase(priority)}</option>)}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select
-                value={draft.status}
-                onChange={event => setDraft(current => ({ ...current, status: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                {STATUS_OPTIONS.map(status => <option key={status} value={status}>{titleCase(status)}</option>)}
-              </select>
-            </Field>
-            <Field label="Revenue line">
-              <select
-                value={draft.revenueLineId}
-                onChange={event => setDraft(current => ({ ...current, revenueLineId: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="">Not linked</option>
-                {revenueLines.map(line => <option key={text(line.id)} value={text(line.id)}>{text(line.name)}</option>)}
-              </select>
-            </Field>
-            <Field label="Commercial plan">
-              <select
-                value={draft.commercialPlanId}
-                onChange={event => setDraft(current => ({ ...current, commercialPlanId: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="">Not linked</option>
-                {plans.map(plan => <option key={text(plan.id)} value={text(plan.id)}>{text(plan.title)}</option>)}
-              </select>
-            </Field>
-          </div>
-
-          <div className="mt-4 grid gap-4">
-            <Field label="Title">
-              <input
-                value={draft.title}
-                onChange={event => setDraft(current => ({ ...current, title: event.target.value }))}
-                placeholder="Example: Price objection answer for warm buyers"
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Summary">
-              <textarea
-                value={draft.summary}
-                onChange={event => setDraft(current => ({ ...current, summary: event.target.value }))}
-                rows={3}
-                placeholder="Short summary for the team."
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Details">
-              <textarea
-                value={draft.details}
-                onChange={event => setDraft(current => ({ ...current, details: event.target.value }))}
-                rows={5}
-                placeholder="Add the script, research note, action detail, or operating instruction."
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            {(canCreateRecord || canUpdateRecord) && (
-              <AieroActionButton onClick={saveRecord} disabled={saving || (Boolean(draft.id) && !canUpdateRecord)}>
-                {saving ? 'Saving...' : draft.id ? 'Save changes' : 'Create record'}
-              </AieroActionButton>
-            )}
-            <SecondaryAction onClick={() => navigate(`/stitchi?${stitchiParams.toString()}`)}>Ask Stitchi to draft</SecondaryAction>
-          </div>
-        </AieroLightPanel>
-
-        <AieroLightPanel title="All records in this workspace" subtitle="Business records only. External systems are not called from here.">
-          {records.length ? (
-            <div className="space-y-3">
-              {records.map(record => (
-                <button
-                  key={text(record.id)}
-                  type="button"
-                  onClick={() => editRecord(record)}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${
-                    text(record.id) === draft.id ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-950 hover:border-neutral-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="line-clamp-2 font-semibold">{text(record.title, 'Untitled record')}</div>
-                      <div className={`mt-1 text-xs ${text(record.id) === draft.id ? 'text-white/60' : 'text-neutral-500'}`}>
-                        {titleCase(text(record.category))} - {titleCase(text(record.priority))}
-                      </div>
-                    </div>
-                    <ProductStatus tone={statusTone(text(record.status))}>{titleCase(text(record.status))}</ProductStatus>
-                  </div>
-                  <p className={`mt-3 line-clamp-3 text-sm leading-6 ${text(record.id) === draft.id ? 'text-white/62' : 'text-neutral-600'}`}>
-                    {text(record.summary, 'No summary yet.')}
-                  </p>
-                  {(text(record.revenueLineName) || text(record.commercialPlanTitle) || text(record.eventName)) && (
-                    <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${text(record.id) === draft.id ? 'bg-white/10 text-white/70' : 'bg-white text-neutral-500'}`}>
-                      {[text(record.revenueLineName), text(record.commercialPlanTitle), text(record.eventName)].filter(Boolean).join(' / ')}
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <EmptyProductState title="Nothing recorded yet" message="Capture the first note, script, blocker, or operating task for this discipline." />
-          )}
-        </AieroLightPanel>
-      </div>
-
-      <AieroPanel title="How this connects to the rest of Tanaghum" subtitle="The discipline records are not isolated notes. They feed commercial planning, Stitchi context, and later executive reporting.">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
-            <BarChart3 className="h-6 w-6 text-[#70f5df]" />
-            <h3 className="mt-4 font-semibold text-white">Commercial plans</h3>
-            <p className="mt-2 text-sm leading-6 text-white/52">Link records to revenue lines and commercial plans so daily work supports business targets.</p>
-          </div>
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
-            <SelectedIcon className="h-6 w-6 text-[#ffd166]" />
-            <h3 className="mt-4 font-semibold text-white">Department roles</h3>
-            <p className="mt-2 text-sm leading-6 text-white/52">Specialists can create records. Managers control updates and approvals through governed backend permissions.</p>
-          </div>
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
-            <BriefcaseBusiness className="h-6 w-6 text-[#c4b5fd]" />
-            <h3 className="mt-4 font-semibold text-white">Stitchi-ready</h3>
-            <p className="mt-2 text-sm leading-6 text-white/52">Stitchi can draft workspace records for approval and read these records when helping the team.</p>
-          </div>
-        </div>
-      </AieroPanel>
-    </AieroPage>
+    </OpsPage>
   );
+}
+
+function DisciplineMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <article><span>{label}</span><strong>{value}</strong><p>{detail}</p></article>;
 }
