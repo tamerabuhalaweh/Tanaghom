@@ -304,21 +304,21 @@ test('Sprint 63C event barriers are visible and actionable from the event dashbo
   await installProblemLogMocks(page);
   await page.addInitScript(() => localStorage.setItem('token', 'e2e-token'));
 
-  await page.goto(`/events/${eventRecord.id}`);
+  await page.goto(`/events/advanced/${eventRecord.id}`);
 
   await expect(page.getByRole('heading', { name: /^Events$/i })).toBeVisible();
   await expect(page.getByText(/Barriers & Risks/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /Ad spend high but form/i })).toBeVisible();
   await expect(page.getByText(/1 active/i)).toBeVisible();
 
-  await page.getByLabel(/Barrier title/i).fill('WhatsApp follow-up delay over 24 hours');
+  await page.getByLabel(/Blocker title/i).fill('WhatsApp follow-up delay over 24 hours');
   await page.getByRole('combobox', { name: /^Area$/i }).selectOption('sales');
   await page.getByRole('combobox', { name: /^Severity$/i }).first().selectOption('critical');
   await page.getByLabel(/What happened/i).fill('Sales team is replying to qualified WhatsApp leads too late.');
   await page.getByLabel(/Business impact/i).fill('Hot leads may cool down before a meeting is booked.');
   await page.getByLabel(/Recommended action/i).first().fill('Assign same-day callback owner and test a shorter reply script.');
   await page.getByRole('combobox', { name: /Related lead/i }).selectOption(leadRecord.id);
-  await page.getByRole('button', { name: /Record Barrier/i }).click();
+  await page.getByRole('button', { name: /Record Blocker/i }).click();
 
   await expect(page.getByText(/Barrier recorded for this event/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /WhatsApp follow-up delay over/i })).toBeVisible();
@@ -328,7 +328,7 @@ test('Sprint 63C event barriers are visible and actionable from the event dashbo
   await page.getByRole('button', { name: /WhatsApp follow-up delay over/i }).click();
   await page.getByRole('textbox', { name: /^Impact$/i }).fill('Sales response SLA is now visible to the event owner.');
   await page.getByRole('textbox', { name: /Recommended action/i }).last().fill('Assign the sales manager and check responses twice daily.');
-  await page.getByRole('button', { name: /Save Barrier Update/i }).click();
+  await page.getByRole('button', { name: /Save Update/i }).click();
 
   await expect(page.getByText(/Barrier action plan updated/i)).toBeVisible();
 

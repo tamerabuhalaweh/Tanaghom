@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  BarChart3,
+  CalendarDays,
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  Plus,
+  Sparkles,
+  Target,
+  UsersRound,
+} from 'lucide-react';
+import {
   eventCloseoutApi,
   eventPlannerApi,
   eventProblemsApi,
@@ -10,31 +21,21 @@ import {
   learningRecommendationsApi,
 } from '../api';
 import {
-  AieroActionButton,
-  AieroGhostButton,
-  AieroLightPanel,
-  AieroMetricCard,
-  AieroPage,
-  AieroPanel,
-  AieroStatusPill,
-} from '../components/AieroUX';
-import {
   BarList,
   DetailGrid,
   EmptyProductState,
-  ExecutiveGauge,
-  FunnelChart,
   MetricCard,
   Notice,
-  PrimaryAction,
   ProductCard,
   ProductStatus,
   ProductTable,
   ReadableQueue,
   SecondaryAction,
 } from '../components/ProductUI';
+import { OpsEmpty, OpsNotice, OpsPage, OpsPageHeader, OpsSection, OpsSkeleton, OpsStatus } from '../components/OperationalUI';
 import { useAuth } from '../contexts/useAuth';
 import { formatCurrency } from '../lib/currency';
+import './EventSalesWorkspaces.css';
 
 type RecordMap = Record<string, unknown>;
 type WorkspaceTab = 'overview' | 'strategy' | 'kpis' | 'leads' | 'blockers' | 'closeout';
@@ -320,130 +321,39 @@ function useEventWorkspaceData() {
   };
 }
 
-function EventPicker({
-  events,
-  selectedEventId,
-  onSelect,
-}: {
-  events: RecordMap[];
-  selectedEventId: string;
-  onSelect: (eventId: string) => void;
-}) {
-  if (!events.length) {
-    return (
-      <AieroLightPanel title="Events" subtitle="Start by creating the event you want to sell.">
-        <EmptyProductState
-          title="No events yet"
-          message="Create the first event, then this workspace will track its campaign plan, spend, leads, and sales outcomes."
-        />
-      </AieroLightPanel>
-    );
-  }
-
+function EventContext({ events, selectedEventId, event, sourceStatus, ghlStatus, onSelect }: { events: RecordMap[]; selectedEventId: string; event: RecordMap; sourceStatus: RecordMap; ghlStatus: RecordMap | null; onSelect: (eventId: string) => void }) {
   return (
-    <AieroPanel title="Events" subtitle="Choose the event your team is operating today.">
-      <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
-        {events.map(event => {
-          const id = String(event.id || '');
-          const active = id === selectedEventId;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onSelect(id)}
-              className={`w-full rounded-2xl border p-4 text-left transition ${
-                active
-                  ? 'border-white bg-white text-[#080813] shadow-sm'
-                  : 'border-white/10 bg-white/[0.04] text-white hover:border-white/24 hover:bg-white/[0.07]'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="line-clamp-2 text-sm font-semibold">{eventTitle(event)}</div>
-                  <div className={`mt-1 text-xs ${active ? 'text-neutral-500' : 'text-white/46'}`}>
-                    {titleCase(event.eventType)} - {formatDate(event.eventDate)}
-                  </div>
-                </div>
-                <ProductStatus tone={statusTone(event.status)}>{titleCase(event.status)}</ProductStatus>
-              </div>
-            </button>
-          );
-        })}
+    <section className="event-context" aria-label="Selected event">
+      <div className="event-context-picker">
+        <label htmlFor="event-operations-picker">Selected event</label>
+        <div><CalendarDays size={18} aria-hidden="true" /><select id="event-operations-picker" value={selectedEventId} onChange={change => onSelect(change.target.value)}>{events.map(item => <option key={String(item.id)} value={String(item.id)}>{eventTitle(item)}</option>)}</select></div>
       </div>
-    </AieroPanel>
+      <dl>
+        <div><dt>Date</dt><dd>{formatDate(event.eventDate)}</dd></div>
+        <div><dt>Status</dt><dd><OpsStatus tone={statusTone(event.status) === 'good' ? 'positive' : statusTone(event.status) === 'warn' ? 'warning' : 'info'}>{titleCase(event.status)}</OpsStatus></dd></div>
+        <div><dt>Performance data</dt><dd>{sourceLabel(sourceStatus.primarySource)}</dd></div>
+        <div><dt>CRM</dt><dd>{text(ghlStatus?.credentialStatus) === 'configured' ? 'Configured' : 'Setup needed'}</dd></div>
+      </dl>
+    </section>
   );
 }
 
-function WorkspaceTabs({
-  activeTab,
-  onChange,
-}: {
-  activeTab: WorkspaceTab;
-  onChange: (tab: WorkspaceTab) => void;
-}) {
-  return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.06] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-        {TABS.map(tab => {
-          const active = tab.id === activeTab;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onChange(tab.id)}
-              className={`rounded-[1.15rem] px-4 py-4 text-left transition ${
-                active ? 'bg-white text-[#080813] shadow-sm' : 'bg-white/[0.04] text-white hover:bg-white/[0.08]'
-              }`}
-              aria-pressed={active}
-            >
-              <div className="text-sm font-semibold">{tab.label}</div>
-              <div className={`mt-1 text-xs ${active ? 'text-neutral-500' : 'text-white/45'}`}>{tab.helper}</div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function TabGuide({
-  activeTab,
-}: {
-  activeTab: WorkspaceTab;
-}) {
-  const tab = TABS.find(item => item.id === activeTab) || TABS[0];
-  return (
-    <AieroPanel>
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-wide text-white/42">{tab.label}</div>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">{tab.helper}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">{tab.action}</p>
-        </div>
-        <AieroStatusPill accent="blue">Current step</AieroStatusPill>
-      </div>
-    </AieroPanel>
-  );
+function WorkspaceTabs({ activeTab, onChange }: { activeTab: WorkspaceTab; onChange: (tab: WorkspaceTab) => void }) {
+  return <nav className="r1d2-tabs event-tabs" aria-label="Event workspace views">{TABS.map(tab => <button key={tab.id} type="button" className={activeTab === tab.id ? 'is-active' : ''} onClick={() => onChange(tab.id)} aria-pressed={activeTab === tab.id}>{tab.label}</button>)}</nav>;
 }
 
 function OverviewTab({
-  event,
   kpis,
-  funnel,
   nextActions,
   sourceStatus,
   problemDashboard,
-  ghlStatus,
-  onGoKpis,
+  onNavigate,
 }: {
-  event: RecordMap;
   kpis: RecordMap;
-  funnel: RecordMap[];
   nextActions: RecordMap[];
   sourceStatus: RecordMap;
   problemDashboard: RecordMap | null;
-  ghlStatus: RecordMap | null;
-  onGoKpis: () => void;
+  onNavigate: (tab: WorkspaceTab) => void;
 }) {
   const readiness = Math.min(100, Math.round(
     (numberValue(kpis.newLeads) > 0 ? 20 : 0)
@@ -453,92 +363,32 @@ function OverviewTab({
     + (numberValue(sourceStatus.connectorRecords) > 0 || numberValue(sourceStatus.importedRecords) > 0 ? 20 : 0),
   ));
 
-  return (
-    <div className="space-y-5">
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-        <AieroPanel className="bg-[#121122]">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.45fr)]">
-            <div className="min-w-0">
-              <div className="flex flex-wrap gap-2">
-                <AieroStatusPill accent="blue">{titleCase(event.status)}</AieroStatusPill>
-                <AieroStatusPill accent={numberValue(sourceStatus.connectorRecords) ? 'teal' : 'amber'}>
-                  {sourceLabel(sourceStatus.primarySource)}
-                </AieroStatusPill>
-              </div>
-              <div className="mt-5 text-xs font-semibold uppercase tracking-wide text-white/55">Today</div>
-              <h2 className="mt-2 text-4xl font-semibold leading-tight tracking-tight">Run the event workflow</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">
-                Keep the team focused on the plan, the campaign numbers, lead follow-up, and the next sales action.
-              </p>
-            </div>
+  const actionRows = nextActions.length ? nextActions.slice(0, 4) : [{ title: 'Review event performance data', detail: 'Confirm that spend, leads, meetings, and purchase records are current.', priority: 'medium' }];
+  const blockers = list(problemDashboard?.topBlockers).slice(0, 3);
+  function targetFor(action: RecordMap): WorkspaceTab {
+    const value = `${text(action.title, '')} ${text(action.detail, '')}`.toLowerCase();
+    if (/lead|meeting|sale|follow-up/.test(value)) return 'leads';
+    if (/risk|block|delay/.test(value)) return 'blockers';
+    if (/plan|content|offer|audience/.test(value)) return 'strategy';
+    return 'kpis';
+  }
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              {[
-                ['Event date', formatDate(event.eventDate)],
-                ['Location', customerSafeText(event.location, 'Not set')],
-                ['Budget', money(kpis.plannedBudget)],
-                ['CRM', text(ghlStatus?.credentialStatus) === 'configured' ? 'Configured' : 'Needs setup'],
-              ].map(([label, value]) => (
-                <div key={label} className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-white/38">{label}</div>
-                  <div className="mt-2 break-words text-lg font-semibold leading-snug text-white [overflow-wrap:anywhere]">{value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </AieroPanel>
+  return <div className="event-overview">
+    <OpsSection title="What needs attention today" subtitle="One ordered list across planning, marketing, and sales." action={<OpsStatus tone={actionRows.length ? 'warning' : 'positive'}>{actionRows.length} open</OpsStatus>} className="event-next-actions">
+      <div className="event-action-list">{actionRows.map((action, index) => <article key={`${text(action.title)}-${index}`}><span>{index + 1}</span><div><h3>{text(action.title, 'Review event action')}</h3><p>{text(action.detail, 'Review the event data and assign the next owner.')}</p><small><Clock3 size={14} aria-hidden="true" />{titleCase(text(action.priority, 'normal'))} priority</small></div><button className="ops-button is-secondary" type="button" onClick={() => onNavigate(targetFor(action))}>Open</button></article>)}</div>
+    </OpsSection>
 
-        <ExecutiveGauge
-          value={readiness}
-          label="Operating readiness"
-          detail="Calculated from KPI records, leads, sales outcomes, risks, and connector/import data."
-        />
-      </div>
+    <aside className="event-overview-side">
+      <OpsSection title="Event health" subtitle="Signals from recorded work and verified data." action={<OpsStatus tone={readiness >= 75 ? 'positive' : readiness >= 40 ? 'warning' : 'danger'}>{readiness >= 75 ? 'On track' : 'Needs attention'}</OpsStatus>} className="event-health">
+        <div className="event-health-score"><strong>{readiness}%</strong><div><span><i style={{ width: `${readiness}%` }} /></span><p>Based on KPI records, leads, sales outcomes, and connected/imported data.</p></div></div>
+        <dl><div><dt>Lead records</dt><dd>{numberValue(kpis.newLeads || kpis.capturedLeads)}</dd></div><div><dt>Sales outcomes</dt><dd>{numberValue(kpis.purchases)}</dd></div><div><dt>Data source</dt><dd>{numberValue(sourceStatus.connectorRecords) ? 'Connected' : numberValue(sourceStatus.importedRecords) ? 'Imported' : 'Pending'}</dd></div></dl>
+      </OpsSection>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ProductStatus tone={numberValue(problemDashboard?.openProblems) ? 'warn' : 'good'}>
-          {numberValue(problemDashboard?.openProblems)} active risk(s)
-        </ProductStatus>
-        <ProductStatus tone={numberValue(problemDashboard?.criticalOpen) ? 'danger' : 'good'}>
-          {numberValue(problemDashboard?.criticalOpen)} critical risk(s)
-        </ProductStatus>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <AieroMetricCard label="New Leads" value={numberValue(kpis.newLeads).toLocaleString()} detail={`${numberValue(kpis.capturedLeads)} captured in system`} accent="teal" />
-        <AieroMetricCard label="Meetings Booked" value={numberValue(kpis.meetingsBooked).toLocaleString()} detail={`${numberValue(kpis.meetingsAttended)} attended / ${numberValue(kpis.noShows)} no-show`} accent="amber" />
-        <AieroMetricCard label="Purchases" value={numberValue(kpis.purchases).toLocaleString()} detail={`${percent(kpis.noShowRate)} no-show rate`} accent={numberValue(kpis.purchases) ? 'rose' : 'amber'} />
-        <AieroMetricCard label="Spend" value={money(kpis.actualSpend)} detail={`${money(kpis.budgetVariance)} remaining variance`} accent="violet" />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <ProductCard title="Lead and Sales Funnel" subtitle="This is the customer-language path from interest to purchase.">
-          {funnel.length ? <FunnelChart stages={funnel.map(item => ({ label: titleCase(item.label), value: numberValue(item.value), tone: item.label === 'Purchases' ? 'good' : 'info' }))} /> : (
-            <EmptyProductState message="No lead funnel data exists yet. Connect/import KPI data or sync leads from CRM." />
-          )}
-        </ProductCard>
-
-        <ProductCard title="What The Team Should Do Next" subtitle="Backend-generated next actions from current event data.">
-          {nextActions.length ? (
-            <ReadableQueue
-              items={nextActions.slice(0, 5).map(action => ({
-                title: text(action.title, 'Action needed'),
-                meta: text(action.detail, 'Review current event data.'),
-                status: titleCase(action.priority),
-                tone: text(action.priority) === 'high' ? 'danger' : text(action.priority) === 'medium' ? 'warn' : 'info',
-              }))}
-            />
-          ) : (
-            <EmptyProductState
-              title="No urgent action"
-              message="The event has no open backend-generated action at the moment."
-              action={<SecondaryAction onClick={onGoKpis}>Review KPI data</SecondaryAction>}
-            />
-          )}
-        </ProductCard>
-      </div>
-    </div>
-  );
+      <OpsSection title="Risks" subtitle="Only items that may affect the event outcome." action={<OpsStatus tone={numberValue(problemDashboard?.criticalOpen) ? 'danger' : numberValue(problemDashboard?.openProblems) ? 'warning' : 'positive'}>{numberValue(problemDashboard?.openProblems)} active</OpsStatus>} className="event-risk-summary">
+        {blockers.length ? <ul>{blockers.map(problem => <li key={text(problem.id, text(problem.title))}><CircleAlert size={17} aria-hidden="true" /><span><strong>{customerSafeText(problem.title, 'Event risk')}</strong><small>{customerSafeText(problem.description || problem.impact, 'Review and assign the next action.')}</small></span></li>)}</ul> : <div className="event-no-risks"><CheckCircle2 size={18} aria-hidden="true" /><span><strong>No active risk returned</strong><small>Continue monitoring event progress.</small></span></div>}
+      </OpsSection>
+    </aside>
+  </div>;
 }
 
 function StrategyTab({
@@ -900,7 +750,6 @@ export default function HybridEventWorkspace() {
   const event = useMemo(() => (dashboard?.event || events.find(item => String(item.id) === selectedEventId) || {}) as RecordMap, [dashboard, events, selectedEventId]);
   const kpis = (dashboard?.kpis || {}) as RecordMap;
   const sourceStatus = (dashboard?.sourceStatus || {}) as RecordMap;
-  const funnel = list(dashboard?.funnel);
   const channelPerformance = list(dashboard?.channelPerformance);
   const leadTemperature = list(dashboard?.leadTemperature);
   const nextActions = list(dashboard?.nextActions);
@@ -914,136 +763,53 @@ export default function HybridEventWorkspace() {
   }
 
   if (loading) {
-    return (
-      <AieroPage eyebrow="Events" title="Event Workspace" subtitle="Opening the event operating workspace.">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[1, 2, 3, 4].map(item => <div key={item} className="h-36 rounded-[1.25rem] border border-white/10 bg-white/[0.08]" />)}
-        </div>
-      </AieroPage>
-    );
+    return <OpsPage className="event-operations-page"><OpsPageHeader title="Event Operations" subtitle="Loading the selected event workspace." /><div className="event-loading"><OpsSkeleton rows={5} /><OpsSkeleton rows={5} /></div></OpsPage>;
   }
 
   return (
-    <AieroPage
-      eyebrow="Events"
-      title="Event Workspace"
+    <OpsPage className="event-operations-page"
+    >
+      <OpsPageHeader
+      title="Event Operations"
       subtitle="Plan each event, track campaign performance, follow leads, manage risks, and learn what to improve next."
-      action={(
+      actions={(
         <>
-          <AieroGhostButton onClick={() => navigate('/events/master')}>Portfolio Dashboard</AieroGhostButton>
-          <AieroActionButton onClick={() => navigate('/events/new')}>Create Event</AieroActionButton>
+          {selectedEventId ? <button className="ops-button is-secondary" type="button" onClick={() => navigate(`/stitchi?mode=prepare&prompt=${encodeURIComponent(`Review ${eventTitle(event)} and tell me the most important event action today.`)}&returnTo=${encodeURIComponent(`/events/${selectedEventId}`)}`)}><Sparkles size={17} aria-hidden="true" />Ask Stitchi</button> : null}
+          <button className="ops-button is-primary" type="button" onClick={() => navigate('/events/new')}><Plus size={17} aria-hidden="true" />Create Event</button>
         </>
       )}
-    >
-      {message && <Notice tone="danger">{message}</Notice>}
+    />
 
-      <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="space-y-5">
-          <EventPicker events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+      {message ? <OpsNotice tone="danger">{message}</OpsNotice> : null}
 
-          <AieroLightPanel title="Today Focus" subtitle="What this workspace is for.">
-            <ReadableQueue
-              items={[
-                { title: 'Plan the event', meta: 'Offer, audience, budget, channels, content, email, WhatsApp, and upsell plan.', status: 'Plan', tone: 'info' },
-                { title: 'Track performance', meta: 'Reach, spend, forms, leads, meetings, no-shows, purchases, and cost efficiency.', status: 'KPIs', tone: 'warn' },
-                { title: 'Close the loop', meta: 'Sync CRM leads, record blockers, and learn what to improve for the next event.', status: 'Learning', tone: 'good' },
-              ]}
-            />
-          </AieroLightPanel>
-        </aside>
+      {!selectedEventId ? (
+        <OpsSection><OpsEmpty title="Create the first event" message="Start with the event date, location, budget, audience, and sales target." action={<button className="ops-button is-primary" type="button" onClick={() => navigate('/events/new')}>Create Event</button>} /></OpsSection>
+      ) : (
+        <>
+          <EventContext events={events} selectedEventId={selectedEventId} event={event} sourceStatus={sourceStatus} ghlStatus={ghlStatus} onSelect={selectEvent} />
 
-        <section className="min-w-0 space-y-5">
-          {!selectedEventId ? (
-            <ProductCard>
-              <EmptyProductState
-                title="Create the first event"
-                message="The workspace becomes useful after an event exists. Start with the event date, budget, audience, and sales target."
-                action={<PrimaryAction onClick={() => navigate('/events/new')}>Create Event</PrimaryAction>}
-              />
-            </ProductCard>
-          ) : (
-            <>
-              <AieroPanel className="bg-white/[0.05]">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AieroStatusPill accent="blue">{titleCase(event.status)}</AieroStatusPill>
-                      <AieroStatusPill accent={text(sourceStatus.primarySource) === 'none' ? 'amber' : 'teal'}>{sourceLabel(sourceStatus.primarySource)}</AieroStatusPill>
-                      <AieroStatusPill accent={text(ghlStatus?.credentialStatus) === 'configured' ? 'teal' : 'amber'}>
-                        {text(ghlStatus?.credentialStatus) === 'configured' ? 'GHL configured' : 'GHL needs setup'}
-                      </AieroStatusPill>
-                    </div>
-                    <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">{eventTitle(event)}</h2>
-                    <p className="mt-2 max-w-4xl text-sm leading-6 text-white/55">
-                      {titleCase(event.eventType)} in {customerSafeText(event.location, 'the selected location')} on {formatDate(event.eventDate)}.
-                    </p>
-                  </div>
-                </div>
-              </AieroPanel>
+          <section className="r1d2-summary-grid event-summary" aria-label="Event operating summary">
+            <EventSummaryMetric label="Next action" value={text(nextActions[0]?.title, 'Review event plan')} detail={text(nextActions[0]?.priority, 'Normal priority')} icon={Target} tone={nextActions.length ? 'warning' : 'neutral'} />
+            <EventSummaryMetric label="New leads" value={numberValue(kpis.newLeads || kpis.capturedLeads).toLocaleString()} detail={`${salesLeads.length} lead records`} icon={UsersRound} tone={numberValue(kpis.newLeads || kpis.capturedLeads) ? 'positive' : 'neutral'} />
+            <EventSummaryMetric label="Meetings" value={numberValue(kpis.meetingsBooked).toLocaleString()} detail={`${numberValue(kpis.meetingsAttended)} attended`} icon={CalendarDays} />
+            <EventSummaryMetric label="Purchases" value={numberValue(kpis.purchases).toLocaleString()} detail={`${percent(kpis.noShowRate)} no-show rate`} icon={CheckCircle2} tone={numberValue(kpis.purchases) ? 'positive' : 'neutral'} />
+            <EventSummaryMetric label="Known spend" value={money(kpis.actualSpend)} detail={`${money(kpis.budgetVariance)} budget variance`} icon={BarChart3} />
+          </section>
 
-              <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} />
-              <TabGuide activeTab={activeTab} />
+          <div className="event-workspace-toolbar"><WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} /><button className="ops-text-button" type="button" onClick={() => navigate('/events/master')}>Open event portfolio</button></div>
 
-              {activeTab === 'overview' && (
-                <OverviewTab
-                  event={event}
-                  kpis={kpis}
-                  funnel={funnel}
-                  nextActions={nextActions}
-                  sourceStatus={sourceStatus}
-                  problemDashboard={problemDashboard}
-                  ghlStatus={ghlStatus}
-                  onGoKpis={() => setActiveTab('kpis')}
-                />
-              )}
-
-              {activeTab === 'strategy' && (
-                <StrategyTab
-                  event={event}
-                  emailPlans={emailPlans}
-                  whatsappPlans={whatsappPlans}
-                  upsellPlans={upsellPlans}
-                  contentRequirements={contentRequirements}
-                  salesTasks={salesTasks}
-                  navigate={navigate}
-                />
-              )}
-
-              {activeTab === 'kpis' && (
-                <KpisTab
-                  kpis={kpis}
-                  sourceStatus={sourceStatus}
-                  channelPerformance={channelPerformance}
-                  kpiRecords={kpiRecords}
-                  navigate={navigate}
-                />
-              )}
-
-              {activeTab === 'leads' && (
-                <LeadsTab
-                  salesLeads={salesLeads}
-                  leadTemperature={leadTemperature}
-                  ghlStatus={ghlStatus}
-                  navigate={navigate}
-                />
-              )}
-
-              {activeTab === 'blockers' && (
-                <BlockersTab problemDashboard={problemDashboard} eventProblems={eventProblems} />
-              )}
-
-              {activeTab === 'closeout' && (
-                <CloseoutTab
-                  closeoutReport={closeoutReport}
-                  learningSummary={learningSummary}
-                  channelPerformance={closeoutChannels}
-                  sourcePerformance={closeoutSources}
-                />
-              )}
-            </>
-          )}
-        </section>
-      </div>
-    </AieroPage>
+          {activeTab === 'overview' ? <OverviewTab kpis={kpis} nextActions={nextActions} sourceStatus={sourceStatus} problemDashboard={problemDashboard} onNavigate={setActiveTab} /> : null}
+          {activeTab === 'strategy' ? <StrategyTab event={event} emailPlans={emailPlans} whatsappPlans={whatsappPlans} upsellPlans={upsellPlans} contentRequirements={contentRequirements} salesTasks={salesTasks} navigate={navigate} /> : null}
+          {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} navigate={navigate} /> : null}
+          {activeTab === 'leads' ? <LeadsTab salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} navigate={navigate} /> : null}
+          {activeTab === 'blockers' ? <BlockersTab problemDashboard={problemDashboard} eventProblems={eventProblems} /> : null}
+          {activeTab === 'closeout' ? <CloseoutTab closeoutReport={closeoutReport} learningSummary={learningSummary} channelPerformance={closeoutChannels} sourcePerformance={closeoutSources} /> : null}
+        </>
+      )}
+    </OpsPage>
   );
+}
+
+function EventSummaryMetric({ label, value, detail, icon: Icon, tone = 'neutral' }: { label: string; value: string; detail: string; icon: typeof Target; tone?: 'neutral' | 'positive' | 'warning' }) {
+  return <article className={`r1d2-summary-metric is-${tone}`}><span><Icon size={18} aria-hidden="true" /></span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></article>;
 }

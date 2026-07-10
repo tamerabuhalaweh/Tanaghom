@@ -88,7 +88,7 @@ const PRIMARY_NAV: NavItem[] = [
     description: 'Leads, meetings, purchases, and follow-up',
     icon: UsersRound,
     roles: PRODUCT_ROLES,
-    activePaths: ['/analytics'],
+    activePaths: ['/analytics', '/performance'],
   },
   {
     path: '/growth',
@@ -170,7 +170,7 @@ const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = 
   { match: path => path === '/campaigns', title: 'Campaign Workspace' },
   { match: path => path === '/approvals', title: 'Review Queue' },
   { match: path => path === '/publishing', title: 'Scheduling' },
-  { match: path => path === '/analytics', title: 'Sales & Leads' },
+  { match: path => path === '/analytics' || path === '/performance', title: 'Sales & Leads' },
   { match: path => path === '/growth', title: 'Performance' },
   { match: path => path === '/executive', title: 'Executive Dashboard' },
   { match: path => path === '/stitchi', title: 'Stitchi' },

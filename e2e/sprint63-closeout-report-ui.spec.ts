@@ -231,6 +231,20 @@ async function installCloseoutMocks(page: Page, report: unknown) {
       return;
     }
 
+    if (pathname === '/ghl-sync/status' && method === 'GET') {
+      await json({
+        eventId: eventRecord.id,
+        credentialStatus: 'missing',
+        mappingsConfigured: false,
+        syncReady: false,
+        ghlLeadCount: 0,
+        contactsChecked: 0,
+        appointmentsChecked: 0,
+        lastSyncedAt: null,
+      });
+      return;
+    }
+
     if (pathname === `/learning-recommendations/events/${eventRecord.id}` && method === 'GET') {
       await json({
         eventId: eventRecord.id,
@@ -257,7 +271,7 @@ async function installCloseoutMocks(page: Page, report: unknown) {
 
 async function openEvent(page: Page) {
   await page.addInitScript(() => localStorage.setItem('token', 'e2e-token'));
-  await page.goto(`/events/${eventRecord.id}`);
+  await page.goto(`/events/advanced/${eventRecord.id}`);
   await expect(page.getByRole('heading', { name: /^Events$/i })).toBeVisible();
 }
 
@@ -267,11 +281,11 @@ test('Sprint 63 closeout report renders populated event evidence and supports pr
   let printCalled = false;
 
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() === 'error') consoleErrors.push(`${message.text()} ${message.location().url}`.trim());
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
   page.on('response', (response) => {
-    if (response.url().includes(':4000') && response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
   });
 
   await installCloseoutMocks(page, populatedCloseoutReport());
@@ -294,13 +308,13 @@ test('Sprint 63 closeout report renders populated event evidence and supports pr
   await expect(page.getByText(/Closeout report generated/i)).toBeVisible();
   await expect(page.getByText(/Executive closeout/i)).toBeVisible();
   await expect(page.getByText('Known Spend', { exact: true })).toBeVisible();
-  await expect(page.locator('#closeout-report').getByText('8,200 SAR', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('#closeout-report').getByText('$8,200', { exact: true }).first()).toBeVisible();
   await expect(page.locator('#closeout-report').getByText('Lead Funnel', { exact: true }).last()).toBeVisible();
   await expect(page.locator('#closeout-report').getByText('Sales Outcomes', { exact: true }).last()).toBeVisible();
   await expect(page.locator('#closeout-report').getByText(/Top recorded signal: Instagram/i)).toBeVisible();
   await expect(page.locator('#closeout-report').getByText(/Top recorded signal: Follower/i)).toBeVisible();
-  await expect(page.locator('#closeout-report').getByText(/WhatsApp response delay/i)).toBeVisible();
-  await expect(page.locator('#closeout-report').getByText(/Call no-show leads/i)).toBeVisible();
+  await expect(page.locator('#closeout-report')).toContainText(/WhatsApp response delay/i);
+  await expect(page.locator('#closeout-report')).toContainText(/Call no-show leads/i);
   await expect(page.locator('#closeout-report').getByText(/Complete Evidence/i)).toBeVisible();
 
   await page.getByRole('button', { name: /Print \/ Save PDF/i }).click();
@@ -323,11 +337,11 @@ test('Sprint 63 closeout report labels missing data honestly', async ({ page }) 
   const consoleErrors: string[] = [];
   const failedResponses: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() === 'error') consoleErrors.push(`${message.text()} ${message.location().url}`.trim());
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
   page.on('response', (response) => {
-    if (response.url().includes(':4000') && response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
   });
 
   await installCloseoutMocks(page, emptyCloseoutReport());
@@ -337,10 +351,11 @@ test('Sprint 63 closeout report labels missing data honestly', async ({ page }) 
   await expect(page.getByText(/Missing evidence: Kpi Records/i)).toBeVisible();
   await expect(page.getByText(/KPI Records: Missing/i)).toBeVisible();
   await expect(page.getByText(/Leads: Missing/i)).toBeVisible();
-  await expect(page.getByText(/No timeline evidence is available yet/i)).toBeVisible();
-  await expect(page.getByText(/No channel performance data is available yet/i)).toBeVisible();
-  await expect(page.getByText(/No barriers were recorded for this event/i)).toBeVisible();
-  await expect(page.getByText(/No open follow-up items are currently recorded/i)).toBeVisible();
+  const report = page.locator('#closeout-report');
+  await expect(report).toContainText(/No timeline evidence is available yet/i);
+  await expect(report).toContainText(/No channel performance data is available yet/i);
+  await expect(report).toContainText(/No barriers were recorded for this event/i);
+  await expect(report).toContainText(/No open follow-up items are currently recorded/i);
   await expect(page.getByText(/Not available/i).first()).toBeVisible();
 
   const bodyText = await page.locator('body').innerText();

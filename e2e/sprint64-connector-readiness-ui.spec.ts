@@ -278,27 +278,23 @@ test('Sprint 64E connector setup readiness UI is usable and secret-safe', async 
 
   await page.goto('/integration-credentials');
 
-  await expect(page.getByRole('heading', { name: /Credentials & Integration Setup/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Start Here: Choose What You Want To Connect/i })).toBeVisible();
-  await expect(page.getByText(/Customers bring their own provider accounts/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Connect Business Systems/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Setup Wizard: Choose A Data Source/i })).toBeVisible();
+  await expect(page.getByText(/customer-owned systems that power the platform/i)).toBeVisible();
 
-  await expect(page.getByRole('heading', { name: /Postiz Scheduling/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Meta \/ Instagram Analytics/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /GoHighLevel CRM/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /^SmartLabs Voice$/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /^OpenClaw$/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Postiz Scheduling/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Meta \/ Instagram Ads/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /GoHighLevel CRM/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Voice Agent SmartLabs Voice/i })).toBeVisible();
 
-  await expect(page.getByText(/Credentials configured/i).first()).toBeVisible();
-  await expect(page.getByText(/Requires customer credentials/i).first()).toBeVisible();
+  await expect(page.getByText(/Credentials saved/i).first()).toBeVisible();
+  await expect(page.getByText(/Requires Customer API Key/i).first()).toBeVisible();
   await expect(page.getByText(/Channel selected/i)).toBeVisible();
   await expect(page.getByText(/OAuth connected/i)).toBeVisible();
-  await expect(page.getByText(/Runtime check needed/i).first()).toBeVisible();
-  await expect(page.getByText(/status only, raw values hidden/i).first()).toBeVisible();
+  await expect(page.getByText(/Live Provider Active/i)).toBeVisible();
 
-  await expect(page.getByRole('link', { name: /Open Event Import/i }).first()).toBeVisible();
-  await page.getByRole('button', { name: /^Configure$/i }).first().click();
-  await expect(page.getByRole('heading', { name: /Secure Setup Wizard/i })).toBeVisible();
-  await expect(page.getByText(/Postiz/i).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Secure Setup: GoHighLevel/i })).toBeVisible();
+  await expect(page.getByText(/Raw secrets are encrypted and never shown again/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /Save Encrypted Credential/i })).toBeVisible();
 
   await expect(page.getByText(/sk_live|sk-[a-z0-9]/i)).toHaveCount(0);

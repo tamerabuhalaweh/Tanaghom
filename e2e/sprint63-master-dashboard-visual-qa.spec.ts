@@ -285,7 +285,7 @@ async function openMasterDashboard(page: Page) {
   await installVisualQaMocks(page);
   await page.addInitScript(() => localStorage.setItem('token', 'e2e-token'));
   await page.goto('/events/master');
-  await expect(page.getByRole('heading', { name: 'Master Events Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Business Control Room' })).toBeVisible();
 }
 
 async function assertNoCustomerFacingLeaks(page: Page, failedRequests: string[], failedApiResponses: string[]) {
@@ -374,13 +374,13 @@ test.describe('Sprint 63 master dashboard visual QA', () => {
 
     await page.setViewportSize({ width: 1440, height: 1000 });
     await openMasterDashboard(page);
-    await page.getByRole('button', { name: 'Open' }).first().click();
+    await page.getByRole('row', { name: /Tagyeer wa Irtaqi - Dubai/i }).getByRole('button', { name: 'Open' }).click();
 
     await expect(page).toHaveURL(/\/events\/22222222-2222-4222-8222-222222222222$/);
-    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-    await expect(page.getByText('Tagyeer wa Irtaqi - Dubai').first()).toBeVisible();
-    await expect(page.getByText('Event Funnel')).toBeVisible();
-    await expect(page.getByText('Channel Performance')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Event Operations' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Selected event' })).toHaveValue('22222222-2222-4222-8222-222222222222');
+    await expect(page.getByRole('heading', { name: 'What needs attention today' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Event workspace views' })).toBeVisible();
     await assertNoDocumentOverflow(page);
     await assertNoCustomerFacingLeaks(page, failedRequests, failedApiResponses);
     expect(consoleErrors).toEqual([]);

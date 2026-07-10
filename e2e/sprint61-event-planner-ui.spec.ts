@@ -190,6 +190,20 @@ async function installPlannerMocks(page: Page) {
       return;
     }
 
+    if (pathname === '/ghl-sync/status' && method === 'GET') {
+      await json({
+        eventId: eventRecord.id,
+        credentialStatus: 'missing',
+        mappingsConfigured: false,
+        syncReady: false,
+        ghlLeadCount: 0,
+        contactsChecked: 0,
+        appointmentsChecked: 0,
+        lastSyncedAt: null,
+      });
+      return;
+    }
+
     if (pathname === `/learning-recommendations/events/${eventRecord.id}` && method === 'GET') {
       await json({
         eventId: eventRecord.id,
@@ -316,7 +330,7 @@ test('Sprint 61 event planner creates and updates event-scoped campaign plans', 
   await installPlannerMocks(page);
   await page.addInitScript(() => localStorage.setItem('token', 'e2e-token'));
 
-  await page.goto(`/events/${eventRecord.id}`);
+  await page.goto(`/events/advanced/${eventRecord.id}`);
 
   await expect(page.getByRole('heading', { name: /^Events$/i })).toBeVisible();
   await expect(page.getByText(/Event Campaign Planner/i)).toBeVisible();

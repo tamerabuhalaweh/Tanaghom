@@ -184,12 +184,12 @@ test.describe('Sprint 66 role-specific workspace separation', () => {
     await expect(page.getByRole('link', { name: /Operations/i })).toHaveCount(0);
 
     await page.goto('/tenant-admin');
-    await expect(page).toHaveURL(/\/events$/);
-    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+    await expect(page).toHaveURL(/\/command-center$/);
+    await expect(page.getByRole('heading', { name: "Today's Commercial Priorities" })).toBeVisible();
 
     await page.goto('/admin-users');
-    await expect(page).toHaveURL(/\/events$/);
-    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+    await expect(page).toHaveURL(/\/command-center$/);
+    await expect(page.getByRole('heading', { name: "Today's Commercial Priorities" })).toBeVisible();
   });
 
   test('Admin workspace keeps the admin navigation available', async ({ page }) => {
