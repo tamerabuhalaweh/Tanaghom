@@ -1,25 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarClock,
+  CheckCircle2,
+  CircleAlert,
   FileText,
   Filter,
-  LineChart,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { commercialExecutiveApi } from '../api';
-import {
-  AieroActionButton,
-  AieroGhostButton,
-  AieroLightPanel,
-  AieroMetricCard,
-  AieroPage,
-  AieroPanel,
-  AieroProgress,
-} from '../components/AieroUX';
-import { Field, Notice, ProductStatus, SecondaryAction } from '../components/ProductUI';
+import { OpsEmpty, OpsNotice, OpsPage, OpsPageHeader, OpsSection, OpsSkeleton, OpsStatus } from '../components/OperationalUI';
+import { Field } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
 import { formatCurrency } from '../lib/currency';
+import './CommercialR1D.css';
 
 type RecordMap = Record<string, unknown>;
 
@@ -93,11 +89,6 @@ function formatMoney(value: unknown): string {
   return parsed == null ? 'Not available' : formatCurrency(parsed);
 }
 
-function percent(value: unknown): string {
-  const parsed = nullableNumber(value);
-  return parsed == null ? 'Not available' : `${parsed.toFixed(parsed % 1 === 0 ? 0 : 1)}%`;
-}
-
 function titleCase(value: string): string {
   return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, char => char.toUpperCase());
 }
@@ -110,17 +101,17 @@ function dateLabel(value: unknown): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function toneForConfidence(confidence: string): 'good' | 'warn' | 'muted' {
-  if (confidence === 'high') return 'good';
-  if (confidence === 'medium') return 'warn';
-  return 'muted';
+function confidenceTone(confidence: string): 'neutral' | 'positive' | 'warning' {
+  if (confidence === 'high') return 'positive';
+  if (confidence === 'medium') return 'warning';
+  return 'neutral';
 }
 
-function toneForAlert(severity: string): 'good' | 'warn' | 'danger' | 'info' | 'muted' {
+function alertTone(severity: string): 'neutral' | 'positive' | 'warning' | 'danger' | 'info' {
   if (severity === 'critical') return 'danger';
-  if (severity === 'risk') return 'warn';
+  if (severity === 'risk') return 'warning';
   if (severity === 'watch') return 'info';
-  return 'muted';
+  return 'neutral';
 }
 
 export default function ExecutiveDashboard() {
@@ -156,16 +147,17 @@ export default function ExecutiveDashboard() {
   const schedules = list(reports.activeSchedules);
   const workflow = object(reports.workflow);
   const deliveryReadiness = list(workflow.deliveryReadiness);
-  const readinessScore = useMemo(() => {
-    const pieces = [
-      numberValue(metrics.plannedRevenueTarget) > 0,
-      numberValue(metrics.knownSpend) > 0 || channels.length > 0,
-      numberValue(metrics.leads) > 0,
-      numberValue(metrics.purchases) > 0,
-      numberValue(connectorReadiness.synced) > 0 || numberValue(connectorReadiness.readyForSync) > 0,
-    ];
-    return pieces.filter(Boolean).length * 20;
-  }, [channels.length, connectorReadiness.readyForSync, connectorReadiness.synced, metrics.knownSpend, metrics.leads, metrics.plannedRevenueTarget, metrics.purchases]);
+  const readinessSignals = [
+    numberValue(metrics.plannedRevenueTarget) > 0,
+    numberValue(metrics.knownSpend) > 0 || channels.length > 0,
+    numberValue(metrics.leads) > 0,
+    numberValue(metrics.purchases) > 0,
+    numberValue(connectorReadiness.synced) > 0,
+  ];
+  const confidence = text(dashboard?.confidence, 'low');
+  const confidenceCap = confidence === 'high' ? 100 : confidence === 'medium' ? 80 : 60;
+  const missingDataPenalty = Math.min(40, missingSources.length * 10);
+  const readinessScore = Math.max(0, Math.min(confidenceCap, readinessSignals.filter(Boolean).length * 20 - missingDataPenalty));
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -218,10 +210,7 @@ export default function ExecutiveDashboard() {
     if (!token) return;
     setSaving(true);
     setMessage('');
-    const recipients = reportDraft.recipients
-      .split(/[\n,]/)
-      .map(item => item.trim())
-      .filter(Boolean);
+    const recipients = reportDraft.recipients.split(/[\n,]/).map(item => item.trim()).filter(Boolean);
     try {
       await commercialExecutiveApi.createSchedule({
         cadence: reportDraft.cadence,
@@ -236,7 +225,7 @@ export default function ExecutiveDashboard() {
         approvalRequired: false,
       }, token);
       await load();
-      setMessage('Executive report workflow saved. Tanaghum will not claim email or WhatsApp delivery until those channels are ready.');
+      setMessage('Executive report workflow saved. Email and WhatsApp delivery remain unavailable until those channels are configured.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not save report schedule.');
     } finally {
@@ -245,15 +234,13 @@ export default function ExecutiveDashboard() {
   }
 
   function stitchiPrompt(): string {
-    return 'Summarize the CEO commercial dashboard, explain the biggest revenue risks, and propose safe internal next actions. Do not call external systems.';
+    return 'Summarize the executive commercial dashboard, explain the biggest revenue risks, and propose safe internal next actions. Do not call external systems.';
   }
 
   function toggleDeliveryChannel(channel: string) {
     setReportDraft(current => {
       const exists = current.deliveryChannels.includes(channel);
-      const deliveryChannels = exists
-        ? current.deliveryChannels.filter(item => item !== channel)
-        : [...current.deliveryChannels, channel];
+      const deliveryChannels = exists ? current.deliveryChannels.filter(item => item !== channel) : [...current.deliveryChannels, channel];
       return { ...current, deliveryChannels: deliveryChannels.length ? deliveryChannels : ['dashboard'] };
     });
   }
@@ -261,445 +248,169 @@ export default function ExecutiveDashboard() {
   function toggleReportSection(section: string) {
     setReportDraft(current => {
       const exists = current.reportSections.includes(section);
-      const reportSections = exists
-        ? current.reportSections.filter(item => item !== section)
-        : [...current.reportSections, section];
+      const reportSections = exists ? current.reportSections.filter(item => item !== section) : [...current.reportSections, section];
       return { ...current, reportSections: reportSections.length ? reportSections : ['executive_summary'] };
     });
   }
 
   return (
-    <AieroPage
-      eyebrow="Executive Analytics"
-      title="CEO commercial dashboard and report center"
-      subtitle="Read revenue targets, spend, leads, purchases, data freshness, and commercial blockers from real Tanaghum records and customer-owned imports."
-      action={(
+    <OpsPage className="commercial-r1d-page executive-r1d-page">
+      <OpsPageHeader
+        eyebrow="Executive view"
+        title="Executive Dashboard"
+        subtitle="Commercial performance, decisions, and reporting for authorized leadership."
+        actions={(
+          <>
+            <a className="ops-button is-secondary" href="#executive-report-workflow"><FileText size={17} aria-hidden="true" />Reports</a>
+            <button className="ops-button is-primary" type="button" onClick={() => navigate(`/stitchi?prompt=${encodeURIComponent(stitchiPrompt())}&mode=prepare`)}><Sparkles size={17} aria-hidden="true" />Ask Stitchi</button>
+          </>
+        )}
+      />
+
+      {message ? <OpsNotice tone={message.toLowerCase().includes('could not') ? 'danger' : 'info'}>{message}</OpsNotice> : null}
+
+      <nav className="executive-subnav" aria-label="Executive dashboard sections">
+        <a className="is-active" href="#executive-performance">Commercial performance</a>
+        <a href="#executive-decisions">Decisions</a>
+        <a href="#executive-report-workflow">Executive reports</a>
+        <a href="#executive-data-readiness">Data readiness</a>
+      </nav>
+
+      <details className="executive-filter-panel">
+        <summary><Filter size={17} aria-hidden="true" /><span><strong>Filter executive results</strong><small>Revenue line, channel, and date range</small></span></summary>
+        <div className="executive-filter-grid">
+          <Field label="Revenue line"><select value={filters.revenueLineType} onChange={event => setFilters(current => ({ ...current, revenueLineType: event.target.value }))}>{REVENUE_LINE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
+          <Field label="Channel"><input value={filters.channel} onChange={event => setFilters(current => ({ ...current, channel: event.target.value }))} placeholder="Meta, WhatsApp, email..." /></Field>
+          <Field label="Start date"><input type="date" value={filters.startDate} onChange={event => setFilters(current => ({ ...current, startDate: event.target.value }))} /></Field>
+          <Field label="End date"><input type="date" value={filters.endDate} onChange={event => setFilters(current => ({ ...current, endDate: event.target.value }))} /></Field>
+          <button className="ops-button is-primary" type="button" onClick={load} disabled={loading}><RefreshCw size={16} aria-hidden="true" />{loading ? 'Loading...' : 'Apply filters'}</button>
+        </div>
+      </details>
+
+      {loading ? (
+        <div className="commercial-r1d-loading"><OpsSkeleton rows={5} /><OpsSkeleton rows={5} /></div>
+      ) : (
         <>
-          <AieroGhostButton onClick={() => navigate(`/stitchi?prompt=${encodeURIComponent(stitchiPrompt())}&mode=prepare`)}>
-            Ask Stitchi
-          </AieroGhostButton>
-          <AieroActionButton onClick={() => load()}>Refresh</AieroActionButton>
+          <section className="executive-metrics" id="executive-performance" aria-label="Executive commercial summary">
+            <ExecutiveMetric label="Known revenue" value={formatMoney(metrics.knownRevenue)} detail="Verified internal records" tone="positive" />
+            <ExecutiveMetric label="Revenue target" value={formatMoney(metrics.plannedRevenueTarget)} detail="Across active products" />
+            <ExecutiveMetric label="Qualified leads" value={String(numberValue(metrics.leads))} detail={`${numberValue(metrics.purchases)} recorded purchases`} />
+            <ExecutiveMetric label="Data confidence" value={`${readinessScore}%`} detail={`${numberValue(connectorReadiness.readyForSync)} connectors ready for sync`} tone="warning" />
+          </section>
+
+          <div className="executive-overview">
+            <OpsSection title="Revenue by active product" subtitle="Targets and known outcomes. Missing connector data is never estimated." className="executive-revenue-section">
+              {revenueLines.length ? (
+                <div className="executive-revenue-table" role="table" aria-label="Revenue by active product">
+                  <div className="executive-revenue-head" role="row"><span>Product</span><span>Target</span><span>Known revenue</span><span>Spend</span><span>Results</span></div>
+                  {revenueLines.map(line => {
+                    const target = numberValue(line.plannedRevenueTarget);
+                    const known = numberValue(line.knownRevenue);
+                    const progress = target > 0 ? Math.min(100, Math.round((known / target) * 100)) : 0;
+                    return (
+                      <div className="executive-revenue-row" role="row" key={text(line.type)}>
+                        <div><strong>{text(line.name, titleCase(text(line.type)))}</strong><small>{numberValue(line.leads)} leads / {numberValue(line.purchases)} purchases</small></div>
+                        <span>{formatMoney(line.plannedRevenueTarget)}</span>
+                        <span>{formatMoney(line.knownRevenue)}</span>
+                        <span>{formatMoney(line.knownSpend)}</span>
+                        <div><strong>{progress}%</strong><span><i style={{ width: `${progress}%` }} /></span></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <OpsEmpty title="No revenue data yet" message="Configure an active revenue line and add verified internal or connector records to populate this view." />}
+            </OpsSection>
+
+            <OpsSection title="Decisions required" subtitle="Only items needing executive attention." action={<OpsStatus tone={alerts.length ? 'warning' : 'positive'}>{alerts.length}</OpsStatus>} className="executive-decisions" >
+              <div id="executive-decisions">
+                {alerts.length ? alerts.slice(0, 5).map(alert => (
+                  <article key={`${text(alert.code)}-${text(alert.title)}`}>
+                    <span><AlertTriangle size={18} aria-hidden="true" /></span>
+                    <div><strong>{text(alert.title, 'Executive decision')}</strong><p>{text(alert.detail)}</p><small>{text(alert.recommendedAction)}</small></div>
+                    <OpsStatus tone={alertTone(text(alert.severity))}>{titleCase(text(alert.severity, 'watch'))}</OpsStatus>
+                  </article>
+                )) : <OpsEmpty title="No active executive alerts" message="Spend, conversion, no-shows, connector, and department alerts will appear here when current records require a decision." />}
+              </div>
+            </OpsSection>
+          </div>
+
+          <section className="executive-report-band">
+            <div><span><FileText size={18} aria-hidden="true" /></span><div><strong>Next executive report</strong><p>{schedules.length ? `${titleCase(text(schedules[0].cadence, 'scheduled'))} / ${text(schedules[0].sendTimeLabel, '09:00 working days')} / ${text(schedules[0].reportLanguage, 'English')}` : 'No schedule saved yet'}</p></div></div>
+            <div><OpsStatus tone={deliveryReadiness.every(item => text(item.status) === 'ready') && deliveryReadiness.length ? 'positive' : 'warning'}>{deliveryReadiness.every(item => text(item.status) === 'ready') && deliveryReadiness.length ? 'Delivery ready' : 'Delivery setup required'}</OpsStatus><a className="ops-button is-secondary" href="#executive-report-workflow">Review workflow</a></div>
+          </section>
+
+          <div className="executive-detail-grid" id="executive-data-readiness">
+            <OpsSection title="Data freshness" subtitle="Current, stale, and missing sources used by executive reporting.">
+              <div className="executive-freshness-list">{freshness.length ? freshness.map(item => <article key={text(item.source)}><div><strong>{text(item.source)}</strong><p>{text(item.detail)}</p><small>Last seen: {dateLabel(item.lastSeenAt)}</small></div><OpsStatus tone={text(item.status) === 'current' ? 'positive' : text(item.status) === 'stale' ? 'warning' : 'neutral'}>{titleCase(text(item.status))}</OpsStatus></article>) : <OpsEmpty title="No freshness evidence" message="Freshness appears after internal records or customer-owned connectors provide data." />}</div>
+            </OpsSection>
+
+            <OpsSection title="Channel efficiency" subtitle="Spend, reach, leads, purchases, and cost efficiency by available channel.">
+              <div className="executive-channel-list">{channels.length ? channels.map(channel => <article key={text(channel.channel)}><div><strong>{titleCase(text(channel.channel, 'manual'))}</strong><p>Reach {numberValue(channel.reach)} / Leads {numberValue(channel.leads)} / Purchases {numberValue(channel.purchases)}</p></div><div><strong>{formatMoney(channel.spend)}</strong><small>CPL {formatMoney(channel.costPerLead)}</small></div></article>) : <OpsEmpty title="Channel data is not connected" message="Connect analytics or approve an import to see real channel efficiency. Tanaghum will not estimate it." />}</div>
+            </OpsSection>
+          </div>
+
+          <OpsSection
+            title="Executive report workflow"
+            subtitle="Create dashboard previews and schedule reports for authorized executive recipients. Delivery starts only when email and WhatsApp are configured."
+            action={<OpsStatus tone={schedules.length ? 'positive' : 'warning'}>{schedules.length} active</OpsStatus>}
+            className="executive-report-workflow"
+          >
+            <div id="executive-report-workflow" className="executive-delivery-readiness">
+              {deliveryReadiness.length ? deliveryReadiness.map(item => <article key={text(item.channel)}><div><strong>{titleCase(text(item.channel))}</strong><p>{text(item.detail)}</p></div><OpsStatus tone={text(item.status) === 'ready' ? 'positive' : 'warning'}>{titleCase(text(item.status))}</OpsStatus></article>) : <p>Save the report workflow to calculate delivery readiness.</p>}
+            </div>
+
+            <div className="executive-report-form">
+              <div className="executive-report-form-grid">
+                <Field label="Report cadence"><select value={reportDraft.cadence} onChange={event => setReportDraft(current => ({ ...current, cadence: event.target.value }))}>{CADENCE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
+                <Field label="Report language"><select value={reportDraft.reportLanguage} onChange={event => setReportDraft(current => ({ ...current, reportLanguage: event.target.value }))}><option value="English">English</option><option value="Arabic">Arabic</option></select></Field>
+                <Field label="Report title"><input value={reportDraft.title} onChange={event => setReportDraft(current => ({ ...current, title: event.target.value }))} /></Field>
+                <Field label="Local send time"><div className="executive-time-grid"><input aria-label="Send hour" type="number" min={0} max={23} value={reportDraft.sendHour} onChange={event => setReportDraft(current => ({ ...current, sendHour: event.target.value }))} /><input aria-label="Send minute" type="number" min={0} max={59} value={reportDraft.sendMinute} onChange={event => setReportDraft(current => ({ ...current, sendMinute: event.target.value }))} /></div></Field>
+                <Field label="Additional recipients"><textarea value={reportDraft.recipients} onChange={event => setReportDraft(current => ({ ...current, recipients: event.target.value }))} placeholder="Admin and CCO roles are included by the current policy." rows={3} /></Field>
+                <Field label="Working-day policy"><label className="executive-checkbox"><input type="checkbox" checked={reportDraft.workingDaysOnly} onChange={event => setReportDraft(current => ({ ...current, workingDaysOnly: event.target.checked }))} />Send on working days only</label></Field>
+              </div>
+
+              <ChoiceGroup title="Delivery channels" options={DELIVERY_CHANNELS} selected={reportDraft.deliveryChannels} onToggle={toggleDeliveryChannel} />
+              <ChoiceGroup title="Report sections" options={REPORT_SECTIONS} selected={reportDraft.reportSections} onToggle={toggleReportSection} />
+              <OpsNotice>Dashboard previews are available now. Email reports and WhatsApp notifications are not delivered until customer credentials and the delivery worker are ready.</OpsNotice>
+              <div className="ops-inline-actions"><button className="ops-button is-primary" type="button" onClick={generatePreview} disabled={saving}>Generate preview</button><button className="ops-button is-secondary" type="button" onClick={createSchedule} disabled={saving}>Save schedule</button></div>
+
+              <div className="executive-report-history"><ReportList title="Recent previews" items={recentReports} empty="No report previews yet." /><ScheduleList items={schedules} /></div>
+            </div>
+          </OpsSection>
+
+          {missingSources.length ? (
+            <OpsSection title="Missing data checklist" subtitle="Customer-owned data and configuration gaps that currently reduce report confidence.">
+              <div className="executive-missing-grid">{missingSources.map(item => <article key={item}><Filter size={17} aria-hidden="true" /><span>{item}</span></article>)}</div>
+            </OpsSection>
+          ) : null}
+
+          <section className="executive-confidence-note">
+            <span className={readinessScore >= 80 ? 'is-ready' : ''}>{readinessScore >= 80 ? <CheckCircle2 size={19} aria-hidden="true" /> : <CircleAlert size={19} aria-hidden="true" />}</span>
+            <div><strong>Executive confidence: {titleCase(confidence)}</strong><p>Based on commercial plans, lead outcomes, verified KPI records, connector evidence, and discipline work. Synced connectors: {numberValue(connectorReadiness.synced)}. Blocked discipline work: {numberValue(disciplineSummary.blocked)}.</p></div>
+            <OpsStatus tone={confidenceTone(confidence)}>{readinessScore}% ready</OpsStatus>
+          </section>
         </>
       )}
-    >
-      {message && (
-        <Notice tone={message.toLowerCase().includes('could not') ? 'warn' : 'info'}>
-          {message}
-        </Notice>
-      )}
-
-      <AieroLightPanel title="Executive filters" subtitle="Use these filters before generating a report preview. Empty filters show the whole commercial workspace.">
-        <div className="grid gap-4 lg:grid-cols-5">
-          <Field label="Revenue line">
-            <select
-              value={filters.revenueLineType}
-              onChange={event => setFilters(current => ({ ...current, revenueLineType: event.target.value }))}
-              className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-            >
-              {REVENUE_LINE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </Field>
-          <Field label="Channel">
-            <input
-              value={filters.channel}
-              onChange={event => setFilters(current => ({ ...current, channel: event.target.value }))}
-              placeholder="meta, whatsapp, email..."
-              className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-            />
-          </Field>
-          <Field label="Start date">
-            <input
-              type="date"
-              value={filters.startDate}
-              onChange={event => setFilters(current => ({ ...current, startDate: event.target.value }))}
-              className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-            />
-          </Field>
-          <Field label="End date">
-            <input
-              type="date"
-              value={filters.endDate}
-              onChange={event => setFilters(current => ({ ...current, endDate: event.target.value }))}
-              className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-            />
-          </Field>
-          <div className="flex items-end">
-            <AieroActionButton onClick={load} disabled={loading}>
-              {loading ? 'Loading...' : 'Apply filters'}
-            </AieroActionButton>
-          </div>
-        </div>
-      </AieroLightPanel>
-
-      <div className="grid gap-4 lg:grid-cols-4">
-        <AieroMetricCard label="Revenue target" value={loading ? '-' : formatMoney(metrics.plannedRevenueTarget)} detail={`Known revenue: ${formatMoney(metrics.knownRevenue)}`} accent="teal" />
-        <AieroMetricCard label="Budget vs spend" value={loading ? '-' : formatMoney(metrics.knownSpend)} detail={`Budget: ${formatMoney(metrics.plannedBudget)}`} accent="amber" />
-        <AieroMetricCard label="Leads to purchases" value={loading ? '-' : `${numberValue(metrics.leads)} -> ${numberValue(metrics.purchases)}`} detail={`${percent(metrics.leadToPurchaseRate)} purchase rate`} accent="violet" />
-        <AieroMetricCard label="Meetings" value={loading ? '-' : `${numberValue(metrics.meetingsAttended)} / ${numberValue(metrics.meetingsBooked)}`} detail={`${percent(metrics.meetingShowRate)} show rate`} accent="rose" />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
-        <AieroPanel
-          title="Executive confidence"
-          subtitle="Confidence rises when connector/imported KPI data, CRM leads, and sync evidence are present."
-          action={<ProductStatus tone={toneForConfidence(text(dashboard?.confidence, 'low'))}>{titleCase(text(dashboard?.confidence, 'low'))}</ProductStatus>}
-        >
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="text-sm font-semibold text-white/58">Reporting readiness</div>
-                <div className="mt-2 text-5xl font-semibold tracking-tight text-white">{readinessScore}%</div>
-              </div>
-              <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-[#080813]">
-                <LineChart className="h-7 w-7" />
-              </div>
-            </div>
-            <div className="mt-5">
-              <AieroProgress value={readinessScore} />
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <DarkFact label="Synced connectors" value={numberValue(connectorReadiness.synced).toString()} />
-              <DarkFact label="Ready connectors" value={numberValue(connectorReadiness.readyForSync).toString()} />
-              <DarkFact label="Blocked work" value={numberValue(disciplineSummary.blocked).toString()} />
-              <DarkFact label="Critical work" value={numberValue(disciplineSummary.critical).toString()} />
-            </div>
-          </div>
-        </AieroPanel>
-
-        <AieroLightPanel
-          title="Executive alerts"
-          subtitle="Only rule-based alerts from current Tanaghum data are shown here."
-          action={<ProductStatus tone={alerts.length ? 'warn' : 'good'}>{alerts.length} alert(s)</ProductStatus>}
-        >
-          {alerts.length ? (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {alerts.map(alert => (
-                <div key={`${text(alert.code)}-${text(alert.title)}`} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-neutral-950">
-                      <AlertTriangle className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <h3 className="font-semibold text-neutral-950">{text(alert.title, 'Executive alert')}</h3>
-                        <ProductStatus tone={toneForAlert(text(alert.severity))}>{titleCase(text(alert.severity, 'watch'))}</ProductStatus>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-neutral-500">{text(alert.detail)}</p>
-                      <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-neutral-600">{text(alert.recommendedAction)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-neutral-200 p-8 text-center">
-              <div className="font-semibold">No active executive alerts</div>
-              <p className="mt-2 text-sm text-neutral-500">When spend, conversion, no-shows, connectors, or department work need attention, alerts will appear here.</p>
-            </div>
-          )}
-        </AieroLightPanel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-        <AieroLightPanel title="Revenue line performance" subtitle="Target, spend, revenue, leads and purchases by business line.">
-          <div className="overflow-hidden rounded-2xl border border-neutral-200">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-                <tr>
-                  <th className="px-4 py-3">Revenue line</th>
-                  <th className="px-4 py-3">Target</th>
-                  <th className="px-4 py-3">Revenue</th>
-                  <th className="px-4 py-3">Spend</th>
-                  <th className="px-4 py-3">Leads</th>
-                  <th className="px-4 py-3">Purchases</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {revenueLines.length ? revenueLines.map(line => (
-                  <tr key={text(line.type)} className="bg-white">
-                    <td className="px-4 py-3 font-semibold text-neutral-950">{text(line.name, titleCase(text(line.type)))}</td>
-                    <td className="px-4 py-3 text-neutral-600">{formatMoney(line.plannedRevenueTarget)}</td>
-                    <td className="px-4 py-3 text-neutral-600">{formatMoney(line.knownRevenue)}</td>
-                    <td className="px-4 py-3 text-neutral-600">{formatMoney(line.knownSpend)}</td>
-                    <td className="px-4 py-3 text-neutral-600">{numberValue(line.leads)}</td>
-                    <td className="px-4 py-3 text-neutral-600">{numberValue(line.purchases)}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td className="px-4 py-8 text-center text-neutral-500" colSpan={6}>No revenue line data yet.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </AieroLightPanel>
-
-        <AieroLightPanel title="Data freshness" subtitle="Shows whether executive reporting is current, stale, or missing.">
-          <div className="space-y-3">
-            {freshness.map(item => (
-              <div key={text(item.source)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-neutral-950">{text(item.source)}</div>
-                    <p className="mt-1 text-sm leading-6 text-neutral-500">{text(item.detail)}</p>
-                  </div>
-                  <ProductStatus tone={text(item.status) === 'current' ? 'good' : text(item.status) === 'stale' ? 'warn' : 'muted'}>
-                    {titleCase(text(item.status))}
-                  </ProductStatus>
-                </div>
-                <div className="mt-3 text-xs text-neutral-500">Last seen: {dateLabel(item.lastSeenAt)}</div>
-              </div>
-            ))}
-          </div>
-        </AieroLightPanel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <AieroLightPanel title="Channel efficiency" subtitle="Spend, reach, leads, purchases, CPL and CPP by channel.">
-          <div className="space-y-3">
-            {channels.length ? channels.map(channel => (
-              <div key={text(channel.channel)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-neutral-950">{titleCase(text(channel.channel, 'manual'))}</div>
-                    <div className="mt-1 text-sm text-neutral-500">Reach {numberValue(channel.reach)} - Leads {numberValue(channel.leads)} - Purchases {numberValue(channel.purchases)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-neutral-950">{formatMoney(channel.spend)}</div>
-                    <div className="mt-1 text-xs text-neutral-500">CPL {formatMoney(channel.costPerLead)}</div>
-                  </div>
-                </div>
-              </div>
-            )) : (
-              <div className="rounded-2xl border border-dashed border-neutral-200 p-8 text-center text-neutral-500">
-                Connect analytics or import KPI data to see channel efficiency.
-              </div>
-            )}
-          </div>
-        </AieroLightPanel>
-
-        <AieroLightPanel
-          title="Executive report workflow"
-          subtitle="Create the daily working-day report for CEO, GM, and CCO. Delivery is only active when email and WhatsApp credentials are ready."
-          action={<ProductStatus tone={schedules.length ? 'good' : 'warn'}>{schedules.length} active</ProductStatus>}
-        >
-          <div className="mb-5 grid gap-3 lg:grid-cols-3">
-            {deliveryReadiness.length ? deliveryReadiness.map(item => (
-              <div key={text(item.channel)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-neutral-950">{titleCase(text(item.channel))}</div>
-                    <p className="mt-1 text-xs leading-5 text-neutral-500">{text(item.detail)}</p>
-                  </div>
-                  <ProductStatus tone={text(item.status) === 'ready' ? 'good' : 'warn'}>{titleCase(text(item.status))}</ProductStatus>
-                </div>
-              </div>
-            )) : (
-              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-500 lg:col-span-3">
-                Save the executive report workflow to see channel readiness.
-              </div>
-            )}
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Field label="Report cadence">
-              <select
-                value={reportDraft.cadence}
-                onChange={event => setReportDraft(current => ({ ...current, cadence: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                {CADENCE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Report language">
-              <select
-                value={reportDraft.reportLanguage}
-                onChange={event => setReportDraft(current => ({ ...current, reportLanguage: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="English">English</option>
-                <option value="Arabic">Arabic</option>
-              </select>
-            </Field>
-            <Field label="Report title">
-              <input
-                value={reportDraft.title}
-                onChange={event => setReportDraft(current => ({ ...current, title: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Local send time">
-              <div className="grid grid-cols-[1fr_1fr] gap-3">
-                <input
-                  type="number"
-                  min={0}
-                  max={23}
-                  value={reportDraft.sendHour}
-                  onChange={event => setReportDraft(current => ({ ...current, sendHour: event.target.value }))}
-                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={59}
-                  value={reportDraft.sendMinute}
-                  onChange={event => setReportDraft(current => ({ ...current, sendMinute: event.target.value }))}
-                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-                />
-              </div>
-            </Field>
-            <Field label="Recipients">
-              <textarea
-                value={reportDraft.recipients}
-                onChange={event => setReportDraft(current => ({ ...current, recipients: event.target.value }))}
-                placeholder="Optional extra recipients. CEO/GM/CCO roles are included automatically."
-                rows={3}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Working day policy">
-              <label className="flex min-h-[48px] items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={reportDraft.workingDaysOnly}
-                  onChange={event => setReportDraft(current => ({ ...current, workingDaysOnly: event.target.checked }))}
-                />
-                Every working day at 9 AM
-              </label>
-            </Field>
-          </div>
-
-          <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            <div>
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Delivery channels</div>
-              <div className="flex flex-wrap gap-2">
-                {DELIVERY_CHANNELS.map(channel => (
-                  <button
-                    key={channel.value}
-                    type="button"
-                    onClick={() => toggleDeliveryChannel(channel.value)}
-                    className={`rounded-full border px-4 py-2 text-sm font-semibold ${reportDraft.deliveryChannels.includes(channel.value) ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-200 bg-white text-neutral-700'}`}
-                  >
-                    {channel.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Report sections</div>
-              <div className="flex flex-wrap gap-2">
-                {REPORT_SECTIONS.map(section => (
-                  <button
-                    key={section.value}
-                    type="button"
-                    onClick={() => toggleReportSection(section.value)}
-                    className={`rounded-full border px-4 py-2 text-sm font-semibold ${reportDraft.reportSections.includes(section.value) ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-neutral-200 bg-white text-neutral-700'}`}
-                  >
-                    {section.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <Notice tone="info">
-            Reports do not require approval before sending according to the customer response. Tanaghum still refuses to claim email or WhatsApp delivery until credentials and the delivery worker are ready.
-          </Notice>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <AieroActionButton onClick={generatePreview} disabled={saving}>Generate preview</AieroActionButton>
-            <SecondaryAction onClick={createSchedule} disabled={saving}>Save schedule</SecondaryAction>
-          </div>
-
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <ReportList title="Recent previews" items={recentReports} empty="No report previews yet." />
-            <ScheduleList items={schedules} />
-          </div>
-        </AieroLightPanel>
-      </div>
-
-      {missingSources.length > 0 && (
-        <AieroPanel title="Missing data checklist" subtitle="These are not bugs. They are customer-owned data, credential, or configuration gaps that affect report confidence.">
-          <div className="grid gap-3 lg:grid-cols-2">
-            {missingSources.map(item => (
-              <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-sm leading-6 text-white/62">
-                <Filter className="mb-3 h-5 w-5 text-white" />
-                {item}
-              </div>
-            ))}
-          </div>
-        </AieroPanel>
-      )}
-    </AieroPage>
+    </OpsPage>
   );
 }
 
-function DarkFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-white/40">{label}</div>
-      <div className="mt-2 text-xl font-semibold text-white">{value}</div>
-    </div>
-  );
+function ExecutiveMetric({ label, value, detail, tone = 'neutral' }: { label: string; value: string; detail: string; tone?: 'neutral' | 'positive' | 'warning' }) {
+  return <article className={`is-${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
+}
+
+function ChoiceGroup({ title, options, selected, onToggle }: { title: string; options: Array<{ value: string; label: string }>; selected: string[]; onToggle: (value: string) => void }) {
+  return <fieldset className="executive-choice-group"><legend>{title}</legend><div>{options.map(option => <button type="button" key={option.value} className={selected.includes(option.value) ? 'is-selected' : ''} onClick={() => onToggle(option.value)}>{option.label}</button>)}</div></fieldset>;
 }
 
 function ReportList({ title, items, empty }: { title: string; items: RecordMap[]; empty: string }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-      <div className="mb-3 flex items-center gap-2 font-semibold text-neutral-950">
-        <FileText className="h-4 w-4" />
-        {title}
-      </div>
-      {items.length ? (
-        <div className="space-y-3">
-          {items.slice(0, 4).map(item => (
-            <div key={text(item.id)} className="rounded-xl bg-white p-3">
-              <div className="font-semibold text-neutral-950">{text(item.title, 'Report preview')}</div>
-              <div className="mt-1 text-xs text-neutral-500">{titleCase(text(item.cadence))} - {titleCase(text(item.status))} - {dateLabel(item.createdAt)}</div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-neutral-200 bg-white p-4 text-sm text-neutral-500">{empty}</div>
-      )}
-    </div>
+    <section><header><FileText size={17} aria-hidden="true" /><strong>{title}</strong></header>{items.length ? <div>{items.slice(0, 4).map(item => <article key={text(item.id)}><strong>{text(item.title, 'Report preview')}</strong><small>{titleCase(text(item.cadence))} / {titleCase(text(item.status))} / {dateLabel(item.createdAt)}</small></article>)}</div> : <p>{empty}</p>}</section>
   );
 }
 
 function ScheduleList({ items }: { items: RecordMap[] }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-      <div className="mb-3 flex items-center gap-2 font-semibold text-neutral-950">
-        <CalendarClock className="h-4 w-4" />
-        Active schedules
-      </div>
-      {items.length ? (
-        <div className="space-y-3">
-          {items.slice(0, 4).map(item => (
-            <div key={text(item.id)} className="rounded-xl bg-white p-3">
-              <div className="font-semibold text-neutral-950">{titleCase(text(item.cadence))}</div>
-              <div className="mt-1 text-xs text-neutral-500">
-                {text(item.sendTimeLabel, '09:00 working days')} - {text(item.reportLanguage, 'English')}
-              </div>
-              <div className="mt-2 text-xs text-neutral-500">
-                Recipients: {Array.isArray(item.resolvedRecipients) && item.resolvedRecipients.length
-                  ? (item.resolvedRecipients as RecordMap[]).map(recipient => text(recipient.email)).filter(Boolean).join(', ')
-                  : 'CEO/GM/CCO roles'}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {Array.isArray(item.deliveryReadiness) ? (item.deliveryReadiness as RecordMap[]).map(row => (
-                  <ProductStatus key={text(row.channel)} tone={text(row.status) === 'ready' ? 'good' : 'warn'}>
-                    {titleCase(text(row.channel))}: {titleCase(text(row.status))}
-                  </ProductStatus>
-                )) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-neutral-200 bg-white p-4 text-sm text-neutral-500">
-          No schedule yet. Save a schedule after confirming recipients with the customer.
-        </div>
-      )}
-    </div>
+    <section><header><CalendarClock size={17} aria-hidden="true" /><strong>Active schedules</strong></header>{items.length ? <div>{items.slice(0, 4).map(item => <article key={text(item.id)}><strong>{titleCase(text(item.cadence))}</strong><small>{text(item.sendTimeLabel, '09:00 working days')} / {text(item.reportLanguage, 'English')}</small><p>Recipients: {Array.isArray(item.resolvedRecipients) && item.resolvedRecipients.length ? (item.resolvedRecipients as RecordMap[]).map(recipient => text(recipient.email)).filter(Boolean).join(', ') : 'Admin and CCO roles'}</p></article>)}</div> : <p>No schedule yet. Save one after confirming recipients with the customer.</p>}</section>
   );
 }

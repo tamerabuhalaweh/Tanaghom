@@ -1,60 +1,44 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  BriefcaseBusiness,
+  ArrowRight,
   BookOpen,
+  BriefcaseBusiness,
   CalendarDays,
+  CheckCircle2,
+  CircleAlert,
   GraduationCap,
   HeartHandshake,
-  LineChart,
   Network,
+  Plus,
+  Search,
   ShoppingBag,
   Sparkles,
   Target,
   Users,
 } from 'lucide-react';
 import { commercialCommandCenterApi } from '../api';
+import { CommercialWorkspaceNav } from '../components/CommercialWorkspaceNav';
 import {
-  AieroActionButton,
-  AieroGhostButton,
-  AieroLightPanel,
-  AieroMetricCard,
-  AieroNumberedStep,
-  AieroPage,
-  AieroPanel,
-  AieroProgress,
-} from '../components/AieroUX';
-import {
-  EmptyProductState,
-  Field,
-  Notice,
-  ProductStatus,
-  SecondaryAction,
-} from '../components/ProductUI';
+  OpsEmpty,
+  OpsNotice,
+  OpsPage,
+  OpsPageHeader,
+  OpsSection,
+  OpsSkeleton,
+  OpsStatus,
+} from '../components/OperationalUI';
+import { Field } from '../components/ProductUI';
 import { useAuth } from '../contexts/useAuth';
 import { formatCurrency } from '../lib/currency';
+import './CommercialR1D.css';
 
 type RecordMap = Record<string, unknown>;
 
 const STAGES = [
-  {
-    id: 'assess',
-    number: '1',
-    title: 'Assess',
-    detail: 'Read demand, blockers, customer signals, and data readiness before deciding the plan.',
-  },
-  {
-    id: 'strategy_planning',
-    number: '2',
-    title: 'Plan',
-    detail: 'Set the objective, audience, offer, channel plan, budget, owner, and expected result.',
-  },
-  {
-    id: 'implementation_engagement',
-    number: '3',
-    title: 'Operate',
-    detail: 'Coordinate campaigns, events, leads, follow-up, and learning until revenue is visible.',
-  },
+  { id: 'assess', number: '1', title: 'Assess', detail: 'Review demand, blockers, customer signals, and data readiness.' },
+  { id: 'strategy_planning', number: '2', title: 'Strategy & Planning', detail: 'Set the objective, audience, offer, channels, budget, and expected result.' },
+  { id: 'implementation_engagement', number: '3', title: 'Implementation & Engagement', detail: 'Coordinate campaigns, leads, follow-up, and learning until revenue is visible.' },
 ] as const;
 
 const REVENUE_ICONS = {
@@ -120,12 +104,12 @@ function titleCase(value: string): string {
   return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, char => char.toUpperCase());
 }
 
-function statusTone(status: string): 'good' | 'warn' | 'muted' | 'info' {
-  if (status === 'active') return 'good';
-  if (status === 'future') return 'info';
-  if (status === 'not_configured' || status === 'draft') return 'warn';
-  if (status === 'paused') return 'info';
-  return 'muted';
+function statusTone(status: string): 'neutral' | 'positive' | 'warning' | 'danger' | 'info' {
+  if (status === 'active' || status === 'completed') return 'positive';
+  if (status === 'not_configured' || status === 'draft') return 'warning';
+  if (status === 'blocked' || status === 'critical') return 'danger';
+  if (status === 'paused' || status === 'future') return 'info';
+  return 'neutral';
 }
 
 function formatMoney(value: unknown, currency?: string): string {
@@ -194,12 +178,15 @@ export default function CommercialCommandCenter() {
 
   const revenueLines = useMemo(() => list(dashboard?.revenueLines), [dashboard]);
   const configuredRevenueLines = revenueLines.filter(line => Boolean(line.configured) && text(line.status) !== 'archived');
+  const activeRevenueLines = revenueLines.filter(line => text(line.availability) !== 'future' && text(line.status) !== 'archived');
+  const futureRevenueLines = revenueLines.filter(line => text(line.availability) === 'future' && text(line.status) !== 'archived');
   const selectedLine = object(lineDashboard?.revenueLine || revenueLines.find(line => text(line.revenueLineType) === selectedType));
   const rollups = object(lineDashboard?.rollups);
   const rollupCurrency = text(rollups.currency, 'USD');
   const currencyBreakdown = list(rollups.currencyBreakdown);
   const dataStatus = object(lineDashboard?.dataStatus);
   const plans = list(lineDashboard?.plans);
+  const primaryPlan = plans.find(plan => text(plan.status) === 'active') || plans[0] || {};
   const linkedEvents = list(lineDashboard?.linkedEvents);
   const availableEvents = list(lineDashboard?.availableEvents);
   const eventChoices = availableEvents.length ? availableEvents : linkedEvents;
@@ -237,7 +224,7 @@ export default function CommercialCommandCenter() {
     if (!token) return;
     const loadTimer = window.setTimeout(() => {
       load().catch(err => {
-        setMessage(err instanceof Error ? err.message : 'Could not load the Commercial Center.');
+        setMessage(err instanceof Error ? err.message : 'Could not load commercial plans.');
         setLoading(false);
       });
     }, 0);
@@ -247,9 +234,7 @@ export default function CommercialCommandCenter() {
   useEffect(() => {
     if (!token) return;
     const refresh = () => {
-      load().catch(err => {
-        setMessage(err instanceof Error ? err.message : 'Could not refresh the Commercial Center.');
-      });
+      load().catch(err => setMessage(err instanceof Error ? err.message : 'Could not refresh commercial plans.'));
     };
     window.addEventListener('tanaghum:commercial-data-changed', refresh);
     return () => window.removeEventListener('tanaghum:commercial-data-changed', refresh);
@@ -309,6 +294,7 @@ export default function CommercialCommandCenter() {
       strategySummary: text(plan.strategySummary),
       actionPlan: text(plan.actionPlan),
     });
+    document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function savePlan() {
@@ -367,482 +353,200 @@ export default function CommercialCommandCenter() {
   const SelectedIcon = REVENUE_ICONS[selectedTypeKey] || Target;
 
   return (
-    <AieroPage
-      eyebrow="Commercial Command Center"
-      title="Run the commercial business lines, not only events."
-      subtitle="Assess each revenue line, create plans, link events when needed, track real outcomes, and ask Stitchi to prepare governed work."
-      action={(
+    <OpsPage className="commercial-r1d-page commercial-plans-page">
+      <OpsPageHeader
+        eyebrow="Strategy & Planning"
+        title="Commercial Plans"
+        subtitle="Turn leadership priorities into approved plans for each active product and revenue line."
+        actions={(
+          <>
+            <button className="ops-button is-secondary" type="button" onClick={() => navigate(stitchiPath())}><Sparkles size={17} aria-hidden="true" />Ask Stitchi</button>
+            <button className="ops-button is-primary" type="button" onClick={() => {
+              setPlanDraft(makePlanDraft(text(selectedLine.id)));
+              document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}><Plus size={17} aria-hidden="true" />Create plan</button>
+          </>
+        )}
+      />
+
+      <CommercialWorkspaceNav />
+
+      {message ? <OpsNotice tone={message.toLowerCase().includes('could not') ? 'danger' : 'info'}>{message}</OpsNotice> : null}
+
+      {loading ? (
+        <div className="commercial-r1d-loading"><OpsSkeleton rows={4} /><OpsSkeleton rows={4} /></div>
+      ) : (
         <>
-          <AieroGhostButton onClick={() => navigate(stitchiPath())}>Ask Stitchi</AieroGhostButton>
-          <AieroActionButton onClick={() => navigate('/events')}>Event Operations</AieroActionButton>
+          <div className="commercial-plan-overview">
+            <OpsSection title="Revenue lines" subtitle="Daily work shows active lines first." action={<Search size={18} aria-hidden="true" />} className="commercial-revenue-list">
+              <div className="commercial-list-label"><span>Active now</span><strong>{activeRevenueLines.length}</strong></div>
+              <div className="commercial-revenue-rows">
+                {activeRevenueLines.map(line => (
+                  <RevenueLineButton key={text(line.revenueLineType)} line={line} selected={text(line.revenueLineType) === selectedType} onClick={() => loadLine(text(line.revenueLineType))} />
+                ))}
+              </div>
+              {futureRevenueLines.length ? (
+                <details className="commercial-future-lines">
+                  <summary>Future revenue lines <span>{futureRevenueLines.length}</span></summary>
+                  <div>{futureRevenueLines.map(line => <button key={text(line.revenueLineType)} type="button" onClick={() => loadLine(text(line.revenueLineType))}>{text(line.name, titleCase(text(line.revenueLineType)))}</button>)}</div>
+                </details>
+              ) : null}
+            </OpsSection>
+
+            <OpsSection
+              title={customerLabel(primaryPlan.title, text(selectedLine.name, 'Selected revenue line'))}
+              subtitle={`${text(selectedLine.name, titleCase(selectedType))} / ${primaryPlan.id ? stageLabel(text(primaryPlan.stage)) : 'Planning setup'}`}
+              action={<OpsStatus tone={statusTone(text(primaryPlan.status, text(selectedLine.status, 'draft')))}>{titleCase(text(primaryPlan.status, text(selectedLine.status, 'draft')))}</OpsStatus>}
+              className="commercial-plan-summary"
+            >
+              <div className="commercial-plan-summary-head">
+                <span className="commercial-selected-icon"><SelectedIcon size={21} aria-hidden="true" /></span>
+                <div><small>Operating readiness</small><strong>{readinessScore}%</strong><span><i style={{ width: `${readinessScore}%` }} /></span></div>
+                {text(selectedLine.status) === 'not_configured' && text(selectedLine.availability) !== 'future' ? (
+                  <button className="ops-button is-secondary" type="button" onClick={() => configureRevenueLine(selectedLine)} disabled={saving}>{canManagePlans ? 'Set up line' : 'Request setup'}</button>
+                ) : null}
+              </div>
+
+              <div className="commercial-plan-facts">
+                <MetricFact label="Revenue target" value={formatMoney(primaryPlan.revenueTarget ?? rollups.plannedRevenueTarget, text(primaryPlan.currency, rollupCurrency))} detail={`Known revenue: ${formatMoney(rollups.knownRevenue, rollupCurrency)}`} />
+                <MetricFact label="Budget target" value={formatMoney(primaryPlan.budgetTarget ?? rollups.plannedBudget, text(primaryPlan.currency, rollupCurrency))} detail={`Known spend: ${formatMoney(rollups.knownSpend, rollupCurrency)}`} />
+                <MetricFact label="Leads and purchases" value={`${numberValue(rollups.leads)} / ${numberValue(rollups.purchases)}`} detail={`${percent(rollups.leadToPurchaseRate)} conversion`} />
+              </div>
+
+              <div className="commercial-stage-flow">
+                {STAGES.map((stage, index) => {
+                  const active = text(primaryPlan.stage, 'strategy_planning') === stage.id;
+                  const complete = stage.id === 'assess' && text(primaryPlan.stage) !== 'assess';
+                  const count = plans.filter(plan => text(plan.stage) === stage.id).length || numberValue(stageSummary[stage.id]);
+                  return (
+                    <div className={active ? 'is-active' : complete ? 'is-complete' : ''} key={stage.id}>
+                      <span>{complete ? <CheckCircle2 size={17} aria-hidden="true" /> : index + 1}</span>
+                      <div><strong>{stage.title}</strong><small>{count} record{count === 1 ? '' : 's'} / {active ? 'Current stage' : stage.detail}</small></div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="commercial-next-decision">
+                <span><Target size={20} aria-hidden="true" /></span>
+                <div><small>Next required action</small><strong>{text(nextAction.label, plans.length ? 'Review the current commercial plan' : 'Create the first commercial plan')}</strong><p>{text(nextAction.description, 'Confirm the objective, audience, budget, revenue target, and owner before implementation begins.')}</p></div>
+                <button className="ops-button is-primary" type="button" onClick={() => navigate(text(nextAction.path, stitchiPath()))}>Take action</button>
+              </div>
+            </OpsSection>
+          </div>
+
+          <section className="commercial-event-boundary">
+            <span><CalendarDays size={21} aria-hidden="true" /></span>
+            <div><strong>Continue in Event Operations</strong><p>Commercial Plans sets targets and direction. Event Operations manages logistics, event KPIs, leads, risks, and closeout in its own workspace.</p></div>
+            <button className="ops-button is-secondary" type="button" onClick={() => navigate('/events')}>Open Event Operations <ArrowRight size={16} aria-hidden="true" /></button>
+          </section>
+
+          <div className="commercial-kpi-strip" aria-label="Selected revenue line performance">
+            <CompactMetric label="Known revenue" value={formatMoney(rollups.knownRevenue, rollupCurrency)} detail="Verified purchase records" />
+            <CompactMetric label="Known spend" value={formatMoney(rollups.knownSpend, rollupCurrency)} detail="KPI and import records" />
+            <CompactMetric label="Cost per lead" value={formatMoney(rollups.costPerLead, rollupCurrency)} detail="When spend and leads exist" />
+            <CompactMetric label="Meetings / no-shows" value={`${numberValue(rollups.meetingsBooked)} / ${numberValue(rollups.noShows)}`} detail="Lead lifecycle records" />
+          </div>
+
+          <div className="commercial-plan-workspace" id="commercial-plan-editor">
+            <OpsSection
+              title={canManagePlans ? (planDraft.id ? 'Edit commercial plan' : 'Create commercial plan') : 'Prepare a plan request'}
+              subtitle={canManagePlans ? 'Capture the information the team needs to run this plan.' : 'Ask Stitchi to prepare a governed proposal for leadership approval.'}
+              action={canManagePlans && planDraft.id ? <button className="ops-button is-secondary" type="button" onClick={() => setPlanDraft(makePlanDraft(text(selectedLine.id)))}>New plan</button> : undefined}
+            >
+              {canManagePlans ? (
+                <div className="commercial-form">
+                  <div className="commercial-form-grid">
+                    <Field label="Revenue line"><select value={planDraft.revenueLineId || text(selectedLine.id)} onChange={event => setPlanDraft(current => ({ ...current, revenueLineId: event.target.value }))}><option value="">Choose configured line</option>{configuredRevenueLines.map(line => <option key={text(line.id)} value={text(line.id)}>{text(line.name)}</option>)}</select></Field>
+                    <Field label="Plan title"><input value={planDraft.title} onChange={event => setPlanDraft(current => ({ ...current, title: event.target.value }))} placeholder="Example: Q3 book launch plan" /></Field>
+                    <Field label="Linked event"><select value={planDraft.linkedEventId} onChange={event => setPlanDraft(current => ({ ...current, linkedEventId: event.target.value }))}><option value="">No event linked</option>{eventChoices.map(event => <option key={text(event.id)} value={text(event.id)}>{customerLabel(event.name)} - {titleCase(text(event.status, 'draft'))}</option>)}</select><p>Use this only when the commercial plan supports a live event. Event execution stays in Event Operations.</p></Field>
+                    <Field label="Stage"><select value={planDraft.stage} onChange={event => setPlanDraft(current => ({ ...current, stage: event.target.value }))}><option value="assess">Assess</option><option value="strategy_planning">Strategy & Planning</option><option value="implementation_engagement">Implementation & Engagement</option></select></Field>
+                    <Field label="Horizon"><select value={planDraft.horizon} onChange={event => setPlanDraft(current => ({ ...current, horizon: event.target.value }))}><option value="quarterly">Quarterly</option><option value="product_or_event">Product or event</option><option value="one_year">One year</option><option value="three_year">Three year</option></select></Field>
+                    <Field label="Status"><select value={planDraft.status} onChange={event => setPlanDraft(current => ({ ...current, status: event.target.value }))}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></Field>
+                    <Field label="Currency"><select value={planDraft.currency} onChange={event => setPlanDraft(current => ({ ...current, currency: event.target.value }))}>{PLAN_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}</select></Field>
+                    <Field label="Budget target"><input value={planDraft.budgetTarget} onChange={event => setPlanDraft(current => ({ ...current, budgetTarget: event.target.value }))} type="number" min="0" placeholder="0" /></Field>
+                    <Field label="Revenue target"><input value={planDraft.revenueTarget} onChange={event => setPlanDraft(current => ({ ...current, revenueTarget: event.target.value }))} type="number" min="0" placeholder="0" /></Field>
+                  </div>
+                  <Field label="Objective"><textarea value={planDraft.objective} onChange={event => setPlanDraft(current => ({ ...current, objective: event.target.value }))} placeholder="What outcome should this plan create?" rows={3} /></Field>
+                  <Field label="Audience"><textarea value={planDraft.audience} onChange={event => setPlanDraft(current => ({ ...current, audience: event.target.value }))} placeholder="Who is this plan for?" rows={2} /></Field>
+                  <Field label="Strategy summary"><textarea value={planDraft.strategySummary} onChange={event => setPlanDraft(current => ({ ...current, strategySummary: event.target.value }))} placeholder="What strategic direction should guide the work?" rows={3} /></Field>
+                  <Field label="Action plan"><textarea value={planDraft.actionPlan} onChange={event => setPlanDraft(current => ({ ...current, actionPlan: event.target.value }))} placeholder="What will the team do next?" rows={3} /></Field>
+                  <div className="ops-inline-actions"><button className="ops-button is-primary" type="button" onClick={savePlan} disabled={saving || !text(selectedLine.id)}>{saving ? 'Saving...' : planDraft.id ? 'Save changes' : 'Create plan'}</button><button className="ops-button is-secondary" type="button" onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}><Sparkles size={16} aria-hidden="true" />Ask Stitchi to prepare</button></div>
+                </div>
+              ) : (
+                <OpsEmpty title="Ask Stitchi to prepare the plan" message="Stitchi can collect the objective, audience, budget, revenue target, action plan, and event link, then prepare an approval card. Nothing is saved until a manager approves it." action={<button className="ops-button is-primary" type="button" onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}>Ask Stitchi</button>} />
+              )}
+            </OpsSection>
+
+            <OpsSection title="Planning records" subtitle={canManagePlans ? 'Choose a plan to review or edit it.' : 'Review active plans and ask Stitchi to prepare changes.'}>
+              {plans.length ? (
+                <div className="commercial-plan-list">
+                  {plans.map(plan => (
+                    <button key={text(plan.id)} type="button" onClick={() => editPlan(plan)} disabled={!canManagePlans} className={text(plan.id) === planDraft.id ? 'is-selected' : ''}>
+                      <div><strong>{customerLabel(plan.title, 'Untitled plan')}</strong><small>{stageLabel(text(plan.stage))} / {titleCase(text(plan.horizon))}</small></div>
+                      <OpsStatus tone={statusTone(text(plan.status))}>{titleCase(text(plan.status))}</OpsStatus>
+                      <dl><div><dt>Budget</dt><dd>{formatMoney(plan.budgetTarget, text(plan.currency, 'USD'))}</dd></div><div><dt>Target</dt><dd>{formatMoney(plan.revenueTarget, text(plan.currency, 'USD'))}</dd></div></dl>
+                      <p>{text(plan.linkedEventName) ? `Supports event: ${customerLabel(plan.linkedEventName)}` : 'No event linked'}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : <OpsEmpty title="No plans yet" message="Create the first plan for this revenue line to connect objectives, budgets, audience, and operating work." />}
+            </OpsSection>
+          </div>
+
+          {currencyBreakdown.length ? (
+            <OpsSection title="Currency view" subtitle="Targets remain separated by currency. Tanaghum never performs an unapproved conversion.">
+              <div className="commercial-currency-grid">{currencyBreakdown.map(row => <article key={text(row.currency)}><span>{text(row.currency)}</span><strong>{formatMoney(row.plannedRevenueTarget, text(row.currency))}</strong><p>Revenue target across {numberValue(row.planCount)} plan(s)</p><small>Budget: {formatMoney(row.plannedBudget, text(row.currency))}</small></article>)}</div>
+            </OpsSection>
+          ) : null}
+
+          <div className="commercial-bottom-grid">
+            <OpsSection title="Linked event operations" subtitle="Commercial plans set direction; event teams manage operational execution." action={<button className="ops-button is-secondary" type="button" onClick={() => navigate('/events')}>Open Event Operations</button>}>
+              {linkedEvents.length ? <div className="commercial-event-list">{linkedEvents.slice(0, 6).map(event => <article key={text(event.id)}><div><strong>{customerLabel(event.name, 'Linked live event')}</strong><small>{dateLabel(event.eventDate)}</small></div><OpsStatus tone={statusTone(text(event.status))}>{titleCase(text(event.status))}</OpsStatus><p>{numberValue(event.linkedPlanCount)} supporting plan{numberValue(event.linkedPlanCount) === 1 ? '' : 's'}</p></article>)}</div> : <OpsEmpty title="No event linked" message="Link an existing event only when this revenue line needs event execution. Otherwise the plan remains commercial work." action={<button className="ops-button is-secondary" type="button" onClick={() => navigate('/events')}>Open Event Operations</button>} />}
+            </OpsSection>
+
+            <OpsSection title="Data and planning readiness" subtitle="Missing customer data is shown honestly and never replaced with estimates.">
+              <div className="commercial-readiness-list">
+                <ReadinessRow label="Commercial plan" ready={plans.length > 0} />
+                <ReadinessRow label="Linked operating work" ready={Boolean(dataStatus.hasLinkedEvents)} />
+                <ReadinessRow label="Performance data" ready={Boolean(dataStatus.hasKpiRecords)} />
+                <ReadinessRow label="Lead outcomes" ready={Boolean(dataStatus.hasLeadRecords)} />
+              </div>
+              {missing.length ? <div className="commercial-missing-data"><CircleAlert size={18} aria-hidden="true" /><div><strong>Data sources still needed</strong><ul>{missing.map(item => <li key={item}>{item}</li>)}</ul></div></div> : null}
+            </OpsSection>
+          </div>
+
+          {openSignals.length ? (
+            <OpsSection title="Open commercial signals" subtitle="Current risks and opportunities that need ownership.">
+              <div className="commercial-signal-list">{openSignals.map(signal => <article key={text(signal.id)}><div><strong>{text(signal.title)}</strong><p>{text(signal.recommendedAction, text(signal.finding, 'Review and assign the next action.'))}</p></div><OpsStatus tone={statusTone(text(signal.severity))}>{titleCase(text(signal.severity))}</OpsStatus></article>)}</div>
+            </OpsSection>
+          ) : null}
         </>
       )}
-    >
-      {message && (
-        <Notice tone={message.toLowerCase().includes('could not') ? 'warn' : 'info'}>
-          {message}
-        </Notice>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-4">
-        <AieroMetricCard
-          label="Revenue target"
-          value={loading ? '-' : rollupCurrency === 'mixed' ? 'Mixed currencies' : formatMoney(rollups.plannedRevenueTarget, rollupCurrency)}
-          detail="Grouped by product/revenue line"
-          accent="teal"
-        />
-        <AieroMetricCard
-          label="Known revenue"
-          value={loading ? '-' : rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.knownRevenue, rollupCurrency)}
-          detail="From real lead/purchase records"
-          accent="violet"
-        />
-        <AieroMetricCard
-          label="Known spend"
-          value={loading ? '-' : rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.knownSpend, rollupCurrency)}
-          detail="From KPI/import records"
-          accent="amber"
-        />
-        <AieroMetricCard label="Leads / purchases" value={loading ? '-' : `${numberValue(rollups.leads)} / ${numberValue(rollups.purchases)}`} detail={`${percent(rollups.leadToPurchaseRate)} conversion`} accent="rose" />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-        <AieroLightPanel
-          title="Revenue lines"
-          subtitle="Choose the business line you want to operate today."
-        >
-          <div className="space-y-3">
-            {revenueLines.map(line => {
-              const type = text(line.revenueLineType);
-              const Icon = REVENUE_ICONS[type as keyof typeof REVENUE_ICONS] || Users;
-              const status = text(line.status, 'not_configured');
-              const future = text(line.availability) === 'future' && !line.configured;
-              const active = type === selectedType;
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => loadLine(type)}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${
-                    active ? 'border-neutral-950 bg-neutral-950 text-white shadow-lg' : 'border-neutral-200 bg-neutral-50 text-neutral-950 hover:border-neutral-300'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${active ? 'bg-white text-neutral-950' : 'bg-white text-neutral-950'}`}>
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold">{text(line.name, titleCase(type))}</span>
-                      <span className={`mt-1 block text-xs leading-5 ${active ? 'text-white/62' : 'text-neutral-500'}`}>
-                        {numberValue(line.planCount)} plans, {numberValue(line.openSignalCount)} signals
-                      </span>
-                    </span>
-                    <ProductStatus tone={statusTone(future ? 'future' : status)}>
-                      {future ? 'Future' : status === 'not_configured' ? 'Setup' : titleCase(status)}
-                    </ProductStatus>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </AieroLightPanel>
-
-        <AieroPanel
-          title={text(selectedLine.name, 'Selected revenue line')}
-          subtitle={text(selectedLine.description, 'Configure this revenue line and start planning.')}
-          action={<ProductStatus tone={statusTone(text(selectedLine.availability) === 'future' && !selectedLine.configured ? 'future' : text(selectedLine.status, 'not_configured'))}>{text(selectedLine.availability) === 'future' && !selectedLine.configured ? 'Future line' : text(selectedLine.status) === 'not_configured' ? 'Needs setup' : titleCase(text(selectedLine.status))}</ProductStatus>}
-        >
-          <div className="grid gap-5 lg:grid-cols-[0.72fr_1fr]">
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-neutral-950">
-                  <SelectedIcon className="h-6 w-6" />
-                </span>
-                <div>
-                  <div className="text-sm font-semibold text-white/62">Operating readiness</div>
-                  <div className="mt-1 text-4xl font-semibold tracking-tight text-white">{readinessScore}%</div>
-                </div>
-              </div>
-              <div className="mt-5">
-                <AieroProgress value={readinessScore} />
-              </div>
-              <p className="mt-4 text-sm leading-6 text-white/54">
-                Based on setup, linked operating work, KPI records, lead records, and planning coverage.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Fact label="Budget variance" value={rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.budgetVariance, rollupCurrency)} />
-              <Fact label="Cost per lead" value={rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.costPerLead, rollupCurrency)} />
-              <Fact label="Cost per purchase" value={rollupCurrency === 'mixed' ? 'Review by currency' : formatMoney(rollups.costPerPurchase, rollupCurrency)} />
-              <Fact label="Meetings / no-shows" value={`${numberValue(rollups.meetingsBooked)} / ${numberValue(rollups.noShows)}`} />
-            </div>
-          </div>
-
-          {text(selectedLine.status) === 'not_configured' && text(selectedLine.availability) !== 'future' && (
-            <div className="mt-5">
-              {canManagePlans ? (
-                <AieroActionButton onClick={() => configureRevenueLine(selectedLine)} disabled={saving}>
-                  Configure this revenue line
-                </AieroActionButton>
-              ) : (
-                <AieroGhostButton onClick={() => navigate(stitchiPath('Prepare the setup request for this revenue line.'))}>
-                  Ask Stitchi to prepare setup
-                </AieroGhostButton>
-              )}
-            </div>
-          )}
-          {text(selectedLine.status) === 'not_configured' && text(selectedLine.availability) === 'future' && (
-            <p className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-white/58">
-              This revenue line is captured for future expansion. Ask Stitchi for discovery notes, but do not operate it as an active line until leadership enables it.
-            </p>
-          )}
-        </AieroPanel>
-      </div>
-
-      <AieroPanel title="Three-stage workspace" subtitle="Use these stages to keep the commercial work focused and easy to explain.">
-        <div className="grid gap-4 lg:grid-cols-3">
-          {STAGES.map(stage => {
-            const count = plans.filter(plan => text(plan.stage) === stage.id).length || numberValue(stageSummary[stage.id]);
-            return (
-              <AieroNumberedStep
-                key={stage.id}
-                number={stage.number}
-                title={`${stage.title} (${count})`}
-                detail={stage.detail}
-                accent={stage.id === 'assess' ? 'blue' : stage.id === 'strategy_planning' ? 'violet' : 'teal'}
-              />
-            );
-          })}
-        </div>
-      </AieroPanel>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
-        <AieroLightPanel
-          title={canManagePlans ? (planDraft.id ? 'Edit commercial plan' : 'Create commercial plan') : 'Prepare a plan request'}
-          subtitle={canManagePlans ? 'Keep the plan clear enough for a manager to run and for Stitchi to help with later.' : 'Your role can review plans and ask Stitchi to prepare work for leadership approval.'}
-          action={canManagePlans && planDraft.id ? <SecondaryAction onClick={() => setPlanDraft(makePlanDraft(text(selectedLine.id)))}>New plan</SecondaryAction> : null}
-        >
-          {canManagePlans ? (
-          <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Revenue line">
-              <select
-                value={planDraft.revenueLineId || text(selectedLine.id)}
-                onChange={event => setPlanDraft(current => ({ ...current, revenueLineId: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="">Choose configured line</option>
-                {configuredRevenueLines.map(line => (
-                  <option key={text(line.id)} value={text(line.id)}>{text(line.name)}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select
-                value={planDraft.status}
-                onChange={event => setPlanDraft(current => ({ ...current, status: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="draft">Draft</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="completed">Completed</option>
-                <option value="archived">Archived</option>
-              </select>
-            </Field>
-            <Field label="Plan title">
-              <input
-                value={planDraft.title}
-                onChange={event => setPlanDraft(current => ({ ...current, title: event.target.value }))}
-                placeholder="Example: Q3 online course growth plan"
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Linked event">
-              <select
-                value={planDraft.linkedEventId}
-                onChange={event => setPlanDraft(current => ({ ...current, linkedEventId: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="">No event linked</option>
-                {eventChoices.map(event => (
-                  <option key={text(event.id)} value={text(event.id)}>
-                    {text(event.name)} - {titleCase(text(event.status, 'draft'))}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-2 text-xs leading-5 text-neutral-500">
-                Link this commercial plan to the event it supports. Event execution stays in Event Operations.
-              </p>
-            </Field>
-            <Field label="Horizon">
-              <select
-                value={planDraft.horizon}
-                onChange={event => setPlanDraft(current => ({ ...current, horizon: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="quarterly">Quarterly</option>
-                <option value="product_or_event">Product or event</option>
-                <option value="one_year">One year</option>
-                <option value="three_year">Three year</option>
-              </select>
-            </Field>
-            <Field label="Plan currency">
-              <select
-                value={planDraft.currency}
-                onChange={event => setPlanDraft(current => ({ ...current, currency: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                {PLAN_CURRENCIES.map(option => (
-                  <option key={option.code} value={option.code}>{option.label}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Stage">
-              <select
-                value={planDraft.stage}
-                onChange={event => setPlanDraft(current => ({ ...current, stage: event.target.value }))}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              >
-                <option value="assess">Assess</option>
-                <option value="strategy_planning">Strategy & Planning</option>
-                <option value="implementation_engagement">Implementation & Engagement</option>
-              </select>
-            </Field>
-            <Field label="Budget target">
-              <input
-                value={planDraft.budgetTarget}
-                onChange={event => setPlanDraft(current => ({ ...current, budgetTarget: event.target.value }))}
-                type="number"
-                min="0"
-                placeholder="0"
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Revenue target">
-              <input
-                value={planDraft.revenueTarget}
-                onChange={event => setPlanDraft(current => ({ ...current, revenueTarget: event.target.value }))}
-                type="number"
-                min="0"
-                placeholder="0"
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-          </div>
-
-          <div className="mt-4 grid gap-4">
-            <Field label="Objective">
-              <textarea
-                value={planDraft.objective}
-                onChange={event => setPlanDraft(current => ({ ...current, objective: event.target.value }))}
-                placeholder="What outcome should this plan create?"
-                rows={3}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Audience">
-              <textarea
-                value={planDraft.audience}
-                onChange={event => setPlanDraft(current => ({ ...current, audience: event.target.value }))}
-                placeholder="Who is this plan for?"
-                rows={2}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-            <Field label="Action plan">
-              <textarea
-                value={planDraft.actionPlan}
-                onChange={event => setPlanDraft(current => ({ ...current, actionPlan: event.target.value }))}
-                placeholder="What will the team do next?"
-                rows={3}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-              />
-            </Field>
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            <AieroActionButton onClick={savePlan} disabled={saving || !text(selectedLine.id)}>
-              {saving ? 'Saving...' : planDraft.id ? 'Save changes' : 'Create plan'}
-            </AieroActionButton>
-            <SecondaryAction onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}>Ask Stitchi to prepare</SecondaryAction>
-          </div>
-          </>
-          ) : (
-            <div className="rounded-[1.25rem] border border-neutral-200 bg-neutral-50 p-5">
-              <h3 className="text-lg font-semibold text-neutral-950">Ask Stitchi to prepare the plan</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-600">
-                Stitchi can capture your objective, audience, budget target, revenue target, action plan, and linked event, then create an approval card for leadership. No data is saved until it is approved.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <AieroActionButton onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}>
-                  Ask Stitchi
-                </AieroActionButton>
-                <SecondaryAction onClick={() => navigate('/stitchi')}>Open Stitchi</SecondaryAction>
-              </div>
-            </div>
-          )}
-        </AieroLightPanel>
-
-        <AieroLightPanel title="Planning records" subtitle={canManagePlans ? 'Click a plan to edit it. These are internal operating records, not external execution.' : 'Review active plans. Ask Stitchi to prepare changes for leadership approval.'}>
-          {plans.length ? (
-            <div className="space-y-3">
-              {plans.map(plan => (
-                <button
-                  key={text(plan.id)}
-                  type="button"
-                  onClick={() => {
-                    if (canManagePlans) editPlan(plan);
-                  }}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${
-                    text(plan.id) === planDraft.id && canManagePlans ? 'border-neutral-950 bg-neutral-950 text-white' : `border-neutral-200 bg-neutral-50 text-neutral-950 ${canManagePlans ? 'hover:border-neutral-300' : 'cursor-default'}`
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold">{text(plan.title, 'Untitled plan')}</div>
-                      <div className={`mt-1 text-sm ${text(plan.id) === planDraft.id ? 'text-white/62' : 'text-neutral-500'}`}>
-                        {stageLabel(text(plan.stage))} - {titleCase(text(plan.horizon))}
-                      </div>
-                    </div>
-                    <ProductStatus tone={statusTone(text(plan.status))}>{titleCase(text(plan.status))}</ProductStatus>
-                  </div>
-                  <div className={`mt-3 grid gap-2 text-xs sm:grid-cols-2 ${text(plan.id) === planDraft.id ? 'text-white/58' : 'text-neutral-500'}`}>
-                    <span>Budget: {formatMoney(plan.budgetTarget, text(plan.currency, 'USD'))}</span>
-                    <span>Target: {formatMoney(plan.revenueTarget, text(plan.currency, 'USD'))}</span>
-                  </div>
-                  <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${text(plan.id) === planDraft.id ? 'bg-white/10 text-white/70' : 'bg-white text-neutral-500'}`}>
-                    {text(plan.linkedEventName)
-                      ? `Supports event: ${customerLabel(plan.linkedEventName)}`
-                      : 'No event linked yet'}
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <EmptyProductState
-              title="No plans yet"
-              message="Create the first commercial plan for this revenue line. Plans are where objectives, budgets, audiences, and execution stage become clear."
-            />
-          )}
-        </AieroLightPanel>
-      </div>
-
-      {currencyBreakdown.length > 0 && (
-        <AieroLightPanel title="Currency view" subtitle="Targets are shown by product/revenue line and currency. Tanaghum does not convert currencies without an approved finance rule.">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {currencyBreakdown.map(row => (
-              <div key={text(row.currency)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{text(row.currency)}</div>
-                <div className="mt-2 text-xl font-semibold text-neutral-950">{formatMoney(row.plannedRevenueTarget, text(row.currency))}</div>
-                <div className="mt-1 text-sm text-neutral-500">Revenue target across {numberValue(row.planCount)} plan(s)</div>
-                <div className="mt-3 text-sm text-neutral-700">Budget: {formatMoney(row.plannedBudget, text(row.currency))}</div>
-              </div>
-            ))}
-          </div>
-        </AieroLightPanel>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-        <AieroLightPanel
-          title="Operating bridge"
-          subtitle="Events remain the detailed operating workspace. The Commercial Center shows how those events support revenue lines."
-          action={<SecondaryAction onClick={() => navigate('/events')}>Open events</SecondaryAction>}
-        >
-          {linkedEvents.length ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              {linkedEvents.slice(0, 6).map(event => (
-                <div key={text(event.id)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-neutral-950">{customerLabel(event.name, 'Linked live event')}</div>
-                      <div className="mt-1 text-sm text-neutral-500">{dateLabel(event.eventDate)}</div>
-                    </div>
-                    <ProductStatus tone={statusTone(text(event.status))}>{titleCase(text(event.status))}</ProductStatus>
-                  </div>
-                  <div className="mt-3 grid gap-2 text-sm text-neutral-500">
-                    <span>Budget: {formatMoney(event.plannedBudget, rollupCurrency)}</span>
-                    <span>Target: {formatMoney(event.revenueTarget, rollupCurrency)}</span>
-                  </div>
-                  <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs text-neutral-500">
-                    {numberValue(event.linkedPlanCount)} supporting plan{numberValue(event.linkedPlanCount) === 1 ? '' : 's'}
-                    {Array.isArray(event.linkedPlanTitles) && event.linkedPlanTitles.length ? (
-                      <span className="mt-1 block font-medium text-neutral-700">
-                        {(event.linkedPlanTitles as string[]).slice(0, 2).join(', ')}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyProductState
-              title="No operating work linked yet"
-              message="Link an event or campaign when this revenue line has execution activity. Until then, the dashboard will stay in planning mode."
-              action={<SecondaryAction onClick={() => navigate('/events')}>Go to events</SecondaryAction>}
-            />
-          )}
-        </AieroLightPanel>
-
-        <AieroPanel title="Next best action" subtitle="Based on setup, planning records, linked events, data, and lead flow.">
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.05] p-5">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-neutral-950">
-                <LineChart className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-lg font-semibold text-white">{text(nextAction.label, 'Review this revenue line')}</div>
-                <p className="mt-2 text-sm leading-6 text-white/58">{text(nextAction.description, 'Ask Stitchi to summarize the next commercial action from available records.')}</p>
-              </div>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <AieroActionButton onClick={() => navigate(text(nextAction.path, '/stitchi'))}>Do next action</AieroActionButton>
-              <AieroGhostButton onClick={() => navigate(stitchiPath())}>Ask Stitchi</AieroGhostButton>
-            </div>
-          </div>
-
-          {missing.length > 0 && (
-            <div className="mt-5 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-5">
-              <div className="text-sm font-semibold text-white">Missing data sources</div>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-white/56">
-                {missing.map(item => <li key={item}>- {item}</li>)}
-              </ul>
-            </div>
-          )}
-        </AieroPanel>
-      </div>
-
-      {openSignals.length > 0 && (
-        <AieroLightPanel title="Open commercial signals" subtitle="Signals explain what may block growth or needs management attention.">
-          <div className="grid gap-3 lg:grid-cols-2">
-            {openSignals.map(signal => (
-              <div key={text(signal.id)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-neutral-950">{text(signal.title)}</div>
-                    <p className="mt-1 text-sm leading-6 text-neutral-500">
-                      {text(signal.recommendedAction, text(signal.finding, 'Review and assign next action.'))}
-                    </p>
-                  </div>
-                  <ProductStatus tone={text(signal.severity) === 'critical' ? 'danger' : text(signal.severity) === 'risk' ? 'warn' : 'info'}>
-                    {titleCase(text(signal.severity))}
-                  </ProductStatus>
-                </div>
-              </div>
-            ))}
-          </div>
-        </AieroLightPanel>
-      )}
-    </AieroPage>
+    </OpsPage>
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function RevenueLineButton({ line, selected, onClick }: { line: RecordMap; selected: boolean; onClick: () => void }) {
+  const type = text(line.revenueLineType);
+  const Icon = REVENUE_ICONS[type as keyof typeof REVENUE_ICONS] || Users;
   return (
-    <div className="min-w-0 rounded-[1rem] border border-white/10 bg-white/[0.04] p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-white/42">{label}</div>
-      <div className="mt-2 break-words text-lg font-semibold text-white">{value}</div>
-    </div>
+    <button className={selected ? 'is-selected' : ''} type="button" onClick={onClick}>
+      <span><Icon size={18} aria-hidden="true" /></span>
+      <span><strong>{text(line.name, titleCase(type))}</strong><small>{numberValue(line.planCount)} plan{numberValue(line.planCount) === 1 ? '' : 's'} / {numberValue(line.openSignalCount)} signal{numberValue(line.openSignalCount) === 1 ? '' : 's'}</small></span>
+      <ArrowRight size={16} aria-hidden="true" />
+    </button>
   );
+}
+
+function MetricFact({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
+}
+
+function CompactMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <article><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
+}
+
+function ReadinessRow({ label, ready }: { label: string; ready: boolean }) {
+  return <div><span className={ready ? 'is-ready' : ''}>{ready ? <CheckCircle2 size={15} aria-hidden="true" /> : <CircleAlert size={15} aria-hidden="true" />}</span><strong>{label}</strong><small>{ready ? 'Ready' : 'Needs attention'}</small></div>;
 }

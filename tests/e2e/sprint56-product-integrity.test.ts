@@ -40,7 +40,8 @@ describe('Sprint 56 production product integrity contracts', () => {
 
     const navigationContracts = [
       { path: '/command-center', route: 'command-center', label: 'Today' },
-      { path: '/events', route: 'events', label: 'Plans & Events' },
+      { path: '/commercial-plans', route: 'commercial-plans', label: 'Plans' },
+      { path: '/events', route: 'events', label: 'Event Operations' },
       { path: '/campaigns', route: 'campaigns', label: 'Campaign Workspace' },
       { path: '/ideas', route: 'ideas', label: 'Content' },
       { path: '/approvals', route: 'approvals', label: 'Review Queue' },
@@ -267,7 +268,8 @@ describe('Sprint 56 production product integrity contracts', () => {
     expect(app).toContain('path="events"');
     expect(app).toContain('path="events/new"');
     expect(app).toContain('path="events/:eventId"');
-    expect(layout).toContain("label: 'Plans & Events'");
+    expect(layout).toContain("label: 'Event Operations'");
+    expect(layout).toContain("path: '/commercial-plans'");
 
     for (const customerCue of [
       'Event Revenue Operations',

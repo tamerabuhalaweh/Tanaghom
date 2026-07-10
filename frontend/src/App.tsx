@@ -85,7 +85,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function RequireRole({ children, roles }: { children: React.ReactNode; roles: string[] }) {
   const { user, loading } = useAuth()
   if (loading) return <LoadingWorkspace />
-  if (!roles.includes(getUserRole(user))) return <Navigate to="/events" replace />
+  if (!roles.includes(getUserRole(user))) return <Navigate to="/command-center" replace />
   return <>{children}</>
 }
 
