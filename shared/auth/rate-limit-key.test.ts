@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { signToken } from './index';
-import { resolveRateLimitKey } from './rate-limit-key';
+import { resolveRateLimitCapacity, resolveRateLimitKey } from './rate-limit-key';
 
 function token(sub: string, tenantKey: string): string {
   return signToken({
@@ -31,5 +31,10 @@ describe('rate limit key resolution', () => {
   it('keeps unauthenticated and invalid sessions in the IP bucket', () => {
     expect(resolveRateLimitKey(undefined, '203.0.113.10')).toBe('rate-limit:ip:203.0.113.10');
     expect(resolveRateLimitKey('Bearer invalid-token', '203.0.113.10')).toBe('rate-limit:ip:203.0.113.10');
+  });
+
+  it('uses separate public and authenticated request capacities', () => {
+    expect(resolveRateLimitCapacity('rate-limit:ip:203.0.113.10', 300, 1000)).toBe(300);
+    expect(resolveRateLimitCapacity('rate-limit:user:tenant-a:user-one', 300, 1000)).toBe(1000);
   });
 });

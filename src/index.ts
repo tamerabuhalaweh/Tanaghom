@@ -6,7 +6,7 @@ import { logger } from '@shared/logging';
 import { connectDatabase, disconnectDatabase } from '@shared/database';
 import { closeQueue, getRedisConnection } from '@shared/queue';
 import { verifyToken } from '@shared/auth';
-import { resolveRateLimitKey } from '@shared/auth/rate-limit-key';
+import { resolveRateLimitCapacity, resolveRateLimitKey } from '@shared/auth/rate-limit-key';
 import { assertTokenNotRevoked } from '@shared/auth/token-revocation';
 import { validateEnvironment, isDemoMode, assertDemoSafe } from './env-validation';
 import { healthCheck } from './routes/health';
@@ -77,6 +77,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || '1mb';
 const RATE_LIMIT_WINDOW_SECONDS = parseInt(process.env.RATE_LIMIT_WINDOW_SECONDS || '60', 10);
 const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '300', 10);
+const RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS || '1000', 10);
 const allowedCorsOrigins = CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
 
 const app = express();
@@ -131,13 +132,13 @@ function enforceOrigin(req: express.Request, res: express.Response, next: expres
 }
 
 const memoryRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-function memoryRateLimit(key: string, now: number): { allowed: boolean; retryAfterSeconds: number } {
+function memoryRateLimit(key: string, now: number, capacity: number): { allowed: boolean; retryAfterSeconds: number } {
   const limit = memoryRateLimitMap.get(key);
   if (!limit || now > limit.resetAt) {
     memoryRateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_SECONDS * 1000 });
     return { allowed: true, retryAfterSeconds: RATE_LIMIT_WINDOW_SECONDS };
   }
-  if (limit.count >= RATE_LIMIT_MAX_REQUESTS) {
+  if (limit.count >= capacity) {
     return { allowed: false, retryAfterSeconds: Math.ceil((limit.resetAt - now) / 1000) };
   }
   limit.count++;
@@ -146,10 +147,11 @@ function memoryRateLimit(key: string, now: number): { allowed: boolean; retryAft
 
 async function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> {
   const key = resolveRateLimitKey(req.headers.authorization, req.ip || req.socket.remoteAddress);
+  const capacity = resolveRateLimitCapacity(key, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS);
   const now = Date.now();
   try {
     if (process.env.NODE_ENV === 'test' || process.env.REDIS_RATE_LIMIT_DISABLED === 'true') {
-      const decision = memoryRateLimit(key, now);
+      const decision = memoryRateLimit(key, now, capacity);
       if (!decision.allowed) {
         res.setHeader('Retry-After', String(decision.retryAfterSeconds));
         res.status(429).json({ error: 'Rate limit exceeded', code: 'RATE_LIMITED', requestId: req.requestId });
@@ -162,7 +164,7 @@ async function rateLimit(req: express.Request, res: express.Response, next: expr
     const redis = getRedisConnection();
     const count = await redis.incr(key);
     if (count === 1) await redis.expire(key, RATE_LIMIT_WINDOW_SECONDS);
-    if (count > RATE_LIMIT_MAX_REQUESTS) {
+    if (count > capacity) {
       const ttl = await redis.ttl(key);
       res.setHeader('Retry-After', String(Math.max(ttl, 1)));
       res.status(429).json({ error: 'Rate limit exceeded', code: 'RATE_LIMITED', requestId: req.requestId });
@@ -175,7 +177,7 @@ async function rateLimit(req: express.Request, res: express.Response, next: expr
       res.status(503).json({ error: 'Rate limiter unavailable', code: 'RATE_LIMIT_UNAVAILABLE', requestId: req.requestId });
       return;
     }
-    const decision = memoryRateLimit(key, now);
+    const decision = memoryRateLimit(key, now, capacity);
     if (!decision.allowed) {
       res.setHeader('Retry-After', String(decision.retryAfterSeconds));
       res.status(429).json({ error: 'Rate limit exceeded', code: 'RATE_LIMITED', requestId: req.requestId });
