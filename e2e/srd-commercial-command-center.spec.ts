@@ -4,7 +4,7 @@ const user = {
   id: 'user-commercial-manager',
   email: 'commercial.manager@tanaghum.com',
   name: 'Commercial Manager',
-  role: 'marketing_manager',
+  role: 'department_head',
   tenantKey: 'default',
 };
 
@@ -327,6 +327,7 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await page.getByRole('button', { name: 'Open Command Center' }).click();
 
     await page.waitForURL(/\/command-center(?:$|[?#])/);
+    await page.goto('/commercial-plans');
     await expect(page.getByRole('heading', { name: /Run the commercial business lines/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Revenue lines' })).toBeVisible();
     await expect(page.getByRole('link', { name: /Users & Roles/i })).toHaveCount(0);
@@ -375,6 +376,7 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await expect(page.getByRole('link', { name: 'Open Commercial Command Center' }).first()).toBeVisible();
     await page.getByRole('link', { name: 'Open Commercial Command Center' }).first().click();
     await expect(page).toHaveURL(/\/command-center(?:$|[?#])/);
+    await page.goto('/commercial-plans');
     await page.getByRole('button', { name: /Online Courses/i }).click();
     await expect(page.getByRole('button', { name: /Q3 online course growth plan/i })).toBeVisible();
 

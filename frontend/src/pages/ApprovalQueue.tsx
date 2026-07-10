@@ -1,230 +1,269 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  CircleAlert,
+  FileText,
+  ListChecks,
+  Sparkles,
+} from 'lucide-react';
 import { approvalsApi, publishingPackageApi } from '../api';
-import { DetailGrid, EmptyProductState, MetricCard, Notice, PrimaryAction, ProductCard, ProductPage, ProductStatus, ReadableQueue, SecondaryAction } from '../components/ProductUI';
+import { OpsEmpty, OpsNotice, OpsPage, OpsPageHeader, OpsSection, OpsSkeleton, OpsStatus } from '../components/OperationalUI';
 import { useAuth } from '../contexts/useAuth';
+import './ApprovalQueue.css';
 
 type RecordMap = Record<string, unknown>;
+type Decision = 'approve' | 'reject' | 'request-changes';
+
+const PAGE_SIZE = 20;
+const DECISION_ROLES = ['admin', 'cco'];
 
 function text(value: unknown, fallback = 'Not specified'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
 function titleCase(value: string): string {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+  return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function object(value: unknown): RecordMap {
+  return value && typeof value === 'object' ? value as RecordMap : {};
+}
+
+function list(value: unknown): RecordMap[] {
+  return Array.isArray(value) ? value as RecordMap[] : [];
+}
+
+function normalizeRole(user: unknown): string {
+  const role = user && typeof user === 'object' ? (user as RecordMap).role : '';
+  return typeof role === 'string' ? role.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_') : 'viewer';
+}
+
+function customerTitle(value: unknown, fallback: string): string {
+  return text(value, fallback)
+    .replace(/^Sprint\s*\d+\s+Acceptance\s+(Event|Lead)\s*\d*/i, '$1')
+    .replace(/\bSprint\s*\d+\b/gi, '')
+    .trim() || fallback;
 }
 
 export default function ApprovalQueue() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const canDecide = DECISION_ROLES.includes(normalizeRole(user));
   const [approvals, setApprovals] = useState<RecordMap[]>([]);
   const [packages, setPackages] = useState<RecordMap[]>([]);
-  const [decisionPackets, setDecisionPackets] = useState<Record<string, RecordMap>>({});
-  const [decisionComments, setDecisionComments] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState('');
+  const [packets, setPackets] = useState<Record<string, RecordMap>>({});
+  const [selectedId, setSelectedId] = useState('');
+  const [comment, setComment] = useState('');
+  const [page, setPage] = useState(0);
+  const [mobileDetail, setMobileDetail] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [decisionLoading, setDecisionLoading] = useState('');
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const loadPacket = useCallback(async (id: string) => {
+    if (!token || !id) return;
+    try {
+      const packet = await approvalsApi.decisionPacket(id, token) as RecordMap;
+      setPackets(current => ({ ...current, [id]: packet }));
+    } catch {
+      setPackets(current => ({ ...current, [id]: {} }));
+    }
+  }, [token]);
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [approvalData, packageData] = await Promise.all([
-      approvalsApi.list(token),
-      publishingPackageApi.list(token).catch(() => []),
-    ]);
-    const approvalRows = approvalData as RecordMap[];
-    setApprovals(approvalRows);
-    setPackages(packageData as RecordMap[]);
-    const packets = await Promise.all(approvalRows.slice(0, 20).map(async approval => {
-      const id = String(approval.id);
-      try {
-        return [id, await approvalsApi.decisionPacket(id, token)] as const;
-      } catch {
-        return [id, null] as const;
-      }
-    }));
-    setDecisionPackets(Object.fromEntries(packets.filter((entry): entry is readonly [string, RecordMap] => Boolean(entry[1]))));
-  }, [token]);
+    setLoading(true);
+    setError('');
+    try {
+      const [approvalData, packageData] = await Promise.all([
+        approvalsApi.list(token),
+        publishingPackageApi.list(token).catch(() => []),
+      ]);
+      const rows = approvalData as RecordMap[];
+      const preferred = rows.find(row => text(row.approvalStatus, 'pending') === 'pending') ?? rows[0];
+      setApprovals(rows);
+      setPackages(packageData as RecordMap[]);
+      if (!selectedId && preferred) setSelectedId(String(preferred.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The review queue could not load.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedId, token]);
 
   useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
-    async function run() {
-      try {
-        if (cancelled) return;
-        await load();
-      } catch (error) {
-        if (!cancelled) setMessage(`Could not load reviews: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
+  const totalPages = Math.max(1, Math.ceil(approvals.length / PAGE_SIZE));
+  const visibleApprovals = useMemo(() => approvals.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [approvals, page]);
+  const visibleIds = visibleApprovals.map(row => String(row.id)).join(',');
+
+  useEffect(() => {
+    if (!token || !visibleIds) return;
+    const missingIds = visibleIds.split(',').filter(id => id && !packets[id]);
+    if (!missingIds.length) return;
+    const timer = window.setTimeout(() => {
+      void Promise.all(missingIds.map(id => loadPacket(id)));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPacket, packets, token, visibleIds]);
+
+  useEffect(() => {
+    if (!selectedId || packets[selectedId]) return;
+    const timer = window.setTimeout(() => void loadPacket(selectedId), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPacket, packets, selectedId]);
+
+  async function decide(action: Decision) {
+    if (!token || !selectedId || !canDecide) return;
+    if (action !== 'approve' && !comment.trim()) {
+      setError('Add a specific reviewer comment before requesting changes or rejecting.');
+      return;
     }
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [load, token]);
-
-  async function handleAction(id: string, action: 'approve' | 'reject' | 'request-changes') {
-    if (!token) return;
-    setLoading(`${action}-${id}`);
+    setDecisionLoading(action);
     setMessage('');
+    setError('');
     try {
-      const comment = decisionComments[id]?.trim()
-        || (action === 'approve' ? 'Approved - ready for scheduling.' : action === 'reject' ? 'Rejected.' : 'Please revise and resubmit.');
-      if (action === 'approve') await approvalsApi.approve(id, { comment }, token);
-      else if (action === 'reject') await approvalsApi.reject(id, { comment }, token);
-      else await approvalsApi.requestChanges(id, { comment }, token);
-      setMessage(action === 'approve' ? 'Approved. Content moves to scheduling next.' : action === 'reject' ? 'Rejected.' : 'Changes requested.');
+      const decisionComment = comment.trim() || 'Approved and ready for the next governed step.';
+      if (action === 'approve') await approvalsApi.approve(selectedId, { comment: decisionComment }, token);
+      else if (action === 'reject') await approvalsApi.reject(selectedId, { comment: decisionComment }, token);
+      else await approvalsApi.requestChanges(selectedId, { comment: decisionComment }, token);
+      setMessage(action === 'approve' ? 'Content approved. Scheduling preparation is now available.' : action === 'reject' ? 'Content rejected.' : 'Changes requested and returned to the content team.');
+      setComment('');
+      setPackets(current => {
+        const next = { ...current };
+        delete next[selectedId];
+        return next;
+      });
       await load();
-    } catch (error) {
-      setMessage(`Decision failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      await loadPacket(selectedId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The decision could not be recorded.');
     } finally {
-      setLoading('');
+      setDecisionLoading('');
     }
   }
 
-  const pendingApprovals = approvals.filter(approval => text(approval.approvalStatus, 'pending') === 'pending');
-  const readyPackages = packages.slice(0, 5);
+  function selectApproval(id: string) {
+    setSelectedId(id);
+    setComment('');
+    setError('');
+    setMobileDetail(true);
+  }
+
+  const selectedApproval = approvals.find(row => String(row.id) === selectedId) ?? visibleApprovals[0] ?? null;
+  const selectedPacket = selectedId ? object(packets[selectedId]) : {};
+  const campaign = object(selectedPacket.campaign);
+  const contentItem = object(selectedPacket.contentItem);
+  const latestDraft = object(selectedPacket.latestDraftVersion);
+  const selectedPackages = list(selectedPacket.publishingPackages);
+  const selectedStatus = text(selectedApproval?.approvalStatus, 'pending');
+  const draftText = text(latestDraft.text, text(contentItem.draftText, 'No draft text is available for this review.'));
+  const selectedTitle = customerTitle(campaign.topic, titleCase(text(selectedApproval?.targetType, 'Content')));
+  const pendingCount = approvals.filter(row => text(row.approvalStatus, 'pending') === 'pending').length;
 
   return (
-    <ProductPage
-      eyebrow="Content Studio"
-      title="Review & Approve"
-      subtitle="Review submitted content, approve or request changes, and track what's ready for scheduling."
-      action={<ProductStatus tone={pendingApprovals.length ? 'warn' : 'good'}>{pendingApprovals.length ? `${pendingApprovals.length} to Review` : 'All Clear'}</ProductStatus>}
-    >
-      {message && (
-        <Notice tone={message.includes('failed') || message.includes('Decision failed') || message.includes('Could not') ? 'danger' : 'good'}>{message}</Notice>
-      )}
+    <OpsPage className="review-queue-page">
+      <OpsPageHeader
+        eyebrow="Content Decisions"
+        title="Review Queue"
+        subtitle="Review one item at a time with its content, quality, risk, comments, and publishing context together."
+        actions={(
+          <>
+            <Link className="ops-button is-secondary" to="/stitchi?prompt=Summarize%20the%20current%20content%20review%20risks"><Sparkles size={17} aria-hidden="true" />Ask Stitchi</Link>
+            <OpsStatus tone={pendingCount ? 'warning' : 'positive'}>{pendingCount ? `${pendingCount} Awaiting Review` : 'All Clear'}</OpsStatus>
+          </>
+        )}
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="To Review" value={pendingApprovals.length} detail="Content waiting for your decision" tone={pendingApprovals.length ? 'warn' : 'good'} />
-        <MetricCard label="Prepared Packages" value={packages.length} detail="Ready after approval" tone={packages.length ? 'good' : 'default'} />
-        <MetricCard label="Publishing" value="Controlled" detail="Scheduling requires admin setup" tone="info" />
-      </div>
+      {message ? <OpsNotice tone="positive">{message}</OpsNotice> : null}
+      {error ? <OpsNotice tone="danger">{error}</OpsNotice> : null}
 
-      {/* ---- Quick guide for first-time users ---- */}
-      <ProductCard title="How reviews work" subtitle="Here's what happens when content is submitted for review.">
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[
-            { step: '1', title: 'Content is submitted', desc: 'When a draft is ready, it comes here for your review. You see the full text, campaign context, and quality score.' },
-            { step: '2', title: 'You decide', desc: 'Approve to move it forward, request changes to improve it, or reject if it is not right for this campaign.' },
-            { step: '3', title: 'Approved content moves on', desc: 'Once approved, the content becomes a scheduling package. Publishing remains controlled until admin setup.' },
-          ].map((item) => (
-            <div key={item.step} className="rounded-lg border border-neutral-200 bg-neutral-50 p-5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
-                {item.step}
-              </div>
-              <div className="mt-3 text-sm font-semibold text-neutral-950">{item.title}</div>
-              <p className="mt-1 text-sm leading-6 text-neutral-600">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </ProductCard>
-
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
-        <ProductCard title="Review Queue" subtitle="Content waiting for your approval decision.">
-          {approvals.length ? (
-            <div className="space-y-4">
-              {approvals.map(approval => {
+      {loading ? <OpsSkeleton rows={6} /> : approvals.length ? (
+        <div className={`review-workspace${mobileDetail ? ' show-detail' : ''}`}>
+          <section className="review-list-panel" aria-label="Review queue">
+            <header className="review-list-header">
+              <div><h2>Awaiting Decision</h2><p>{approvals.length} total review record{approvals.length === 1 ? '' : 's'}</p></div>
+              <span><ListChecks size={18} aria-hidden="true" /></span>
+            </header>
+            <div className="review-list">
+              {visibleApprovals.map(approval => {
                 const id = String(approval.id);
+                const packet = object(packets[id]);
+                const rowCampaign = object(packet.campaign);
+                const rowContent = object(packet.contentItem);
                 const status = text(approval.approvalStatus, 'pending');
-                const pending = status === 'pending';
-                const packet = decisionPackets[id] || {};
-                const campaign = (packet.campaign || {}) as RecordMap;
-                const contentItem = (packet.contentItem || {}) as RecordMap;
-                const latestDraft = (packet.latestDraftVersion || {}) as RecordMap;
-                const packetPackages = Array.isArray(packet.publishingPackages) ? packet.publishingPackages as RecordMap[] : [];
-                const draftText = text(latestDraft.text, text(contentItem.draftText, 'No draft text available.'));
                 return (
-                  <article key={id} className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-                    <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_300px]">
-                      <div className="min-w-0 p-5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg font-semibold text-black">{text(campaign.topic, titleCase(text(approval.targetType, 'Content')))}</h2>
-                          <ProductStatus tone={status === 'approved' ? 'good' : status === 'rejected' ? 'warn' : 'info'}>
-                            {titleCase(status)}
-                          </ProductStatus>
-                        </div>
-                        <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
-                          {text(campaign.objective, 'Review the content below, quality score, and campaign details before deciding.')}
-                        </p>
-                        <div className="mt-4 grid gap-3 md:grid-cols-3">
-                          <Mini label="Department" value={text(approval.requiredDepartment, 'Commercial')} />
-                          <Mini label="Reviewer Role" value={text(approval.requiredRole, 'Reviewer')} />
-                          <Mini label="Priority" value={titleCase(text(approval.riskCategory, 'medium'))} />
-                        </div>
-                        <div className="mt-4 space-y-4">
-                          <div className="min-w-0 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                            <div className="mb-2 flex flex-wrap items-center gap-2">
-                              <ProductStatus tone="info">{titleCase(text(contentItem.platform, 'selected platform'))}</ProductStatus>
-                              <ProductStatus tone="muted">Version {text(latestDraft.versionNo, 'current')}</ProductStatus>
-                            </div>
-                            <div className="max-h-[380px] overflow-auto whitespace-pre-wrap break-words pr-2 text-sm leading-6 text-neutral-800">{draftText}</div>
-                          </div>
-                          <DetailGrid items={[
-                            { label: 'Audience', value: text(campaign.audience, 'Not specified') },
-                            { label: 'Call to Action', value: text(campaign.cta, 'Not specified') },
-                            { label: 'Quality Score', value: String(contentItem.reachScore ?? 0) },
-                            { label: 'Risk Notes', value: text(contentItem.riskReason, 'None recorded') },
-                            { label: 'Packages', value: packetPackages.length ? `${packetPackages.length} package(s)` : 'None yet' },
-                          ]} />
-                        </div>
-                      </div>
-                      {pending && (
-                        <div className="border-t border-neutral-100 bg-neutral-50 p-5 xl:border-l xl:border-t-0">
-                          <div className="mb-3">
-                            <div className="text-sm font-semibold text-neutral-950">Decision</div>
-                            <p className="mt-1 text-xs leading-5 text-neutral-500">Add a note, then choose what happens next.</p>
-                          </div>
-                          <textarea
-                            value={decisionComments[id] || ''}
-                            onChange={event => setDecisionComments(current => ({ ...current, [id]: event.target.value }))}
-                            className="min-h-28 w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
-                            placeholder="Add a comment (optional)"
-                          />
-                          <div className="mt-3 grid gap-2">
-                            <PrimaryAction onClick={() => handleAction(id, 'approve')} disabled={!!loading}>{loading === `approve-${id}` ? 'Approving...' : 'Approve'}</PrimaryAction>
-                            <SecondaryAction onClick={() => handleAction(id, 'request-changes')} disabled={!!loading}>Request Changes</SecondaryAction>
-                            <SecondaryAction onClick={() => handleAction(id, 'reject')} disabled={!!loading}>Reject</SecondaryAction>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </article>
+                  <button className={`review-list-item${id === selectedId ? ' is-active' : ''}`} key={id} type="button" onClick={() => selectApproval(id)} aria-current={id === selectedId ? 'true' : undefined}>
+                    <span><strong>{customerTitle(rowCampaign.topic, titleCase(text(approval.targetType, 'Content')))}</strong><ChevronRight size={17} aria-hidden="true" /></span>
+                    <small>{text(rowCampaign.objective, 'Content submitted for a human decision.')}</small>
+                    <span className="review-list-meta"><span>{titleCase(text(rowContent.platform, 'Content'))}</span><OpsStatus tone={status === 'approved' ? 'positive' : status === 'rejected' ? 'danger' : status === 'changes_requested' ? 'warning' : 'info'}>{titleCase(status)}</OpsStatus></span>
+                  </button>
                 );
               })}
             </div>
-          ) : (
-            <EmptyProductState
-              title="Nothing to review"
-              message="When a draft is submitted for review from the Campaigns page, it will appear here."
-              action={<Link to="/campaigns" className="inline-flex min-h-10 items-center justify-center rounded-md bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800">Go to Campaigns</Link>}
-            />
-          )}
-        </ProductCard>
+            <footer className="review-pagination">
+              <button type="button" onClick={() => setPage(current => Math.max(0, current - 1))} disabled={page === 0} aria-label="Previous review page"><ArrowLeft size={16} aria-hidden="true" /></button>
+              <span>Page {page + 1} of {totalPages}</span>
+              <button type="button" onClick={() => setPage(current => Math.min(totalPages - 1, current + 1))} disabled={page >= totalPages - 1} aria-label="Next review page"><ArrowRight size={16} aria-hidden="true" /></button>
+            </footer>
+          </section>
 
-        <ProductCard title="Ready for Scheduling" subtitle="Approved content prepared as scheduling packages.">
-          <ReadableQueue items={readyPackages.length ? readyPackages.map(pkg => ({
-            title: 'Content package',
-            meta: `Status: ${titleCase(text(pkg.status || pkg.packageStatus, 'prepared'))}`,
-            status: 'Ready',
-            tone: 'good' as const,
-          })) : [
-            { title: 'No packages yet', meta: 'Approve content to create scheduling packages.', status: 'Waiting', tone: 'default' as const },
-          ]} />
-          <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
-            Scheduling is set up in the Scheduling page. An admin configures the scheduling service and channels before content can be published.
-          </div>
-        </ProductCard>
-      </div>
-    </ProductPage>
-  );
-}
+          <section className="review-detail-panel" aria-label="Selected review decision">
+            <button className="review-mobile-back" type="button" onClick={() => setMobileDetail(false)}><ArrowLeft size={17} aria-hidden="true" />Back to Queue</button>
+            <header className="review-detail-header">
+              <div><span className="ops-eyebrow">{titleCase(text(contentItem.platform, 'Content'))}</span><h2>{selectedTitle}</h2><p>{text(campaign.objective, 'Review the complete decision context below.')}</p></div>
+            </header>
 
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-neutral-100 bg-neutral-50 p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className="mt-1 text-sm font-medium text-neutral-800">{value}</div>
-    </div>
+            <div className="review-detail-body">
+              <article className="review-content-preview">
+                <div><span className="review-avatar">T</span><span><strong>Content Draft</strong><small>Version {text(latestDraft.versionNo, 'current')}</small></span></div>
+                <p>{draftText}</p>
+                <span className="review-draft-label"><FileText size={15} aria-hidden="true" />Full Draft Shown Above</span>
+              </article>
+
+              <div className="review-insights">
+                <section><span>Quality Score</span><strong>{String(contentItem.reachScore ?? 0)}<small>/100</small></strong><p>Use the score as supporting context. The human reviewer makes the final decision.</p></section>
+                <section><span>Risk Review</span><strong className="review-risk"><CircleAlert size={18} aria-hidden="true" />{titleCase(text(selectedApproval?.riskCategory, 'medium'))} Risk</strong><p>{text(contentItem.riskReason, 'No specific risk note is recorded.')}</p></section>
+              </div>
+
+              <section className="review-context-grid">
+                <div><span>Audience</span><strong>{text(campaign.audience)}</strong></div>
+                <div><span>Call to Action</span><strong>{text(campaign.cta)}</strong></div>
+                <div><span>Publishing Package</span><strong>{selectedPackages.length ? `${selectedPackages.length} prepared` : 'Available after approval'}</strong></div>
+                <div><span>Reviewer Role</span><strong>{titleCase(text(selectedApproval?.requiredRole, 'CCO'))}</strong></div>
+              </section>
+
+              {selectedStatus === 'pending' ? (
+                <section className="review-comment">
+                  <div><h3>Reviewer Comment</h3><p>Required when requesting changes or rejecting.</p></div>
+                  <label htmlFor="review-decision-comment">Decision Comment</label>
+                  <textarea id="review-decision-comment" name="reviewComment" rows={3} value={comment} onChange={event => setComment(event.target.value)} placeholder={'Add a specific decision note\u2026'} disabled={!canDecide} />
+                  {!canDecide ? <p className="review-read-only">Your role can read this decision context. Final approval actions require the CCO or admin role.</p> : null}
+                </section>
+              ) : <OpsNotice tone="info">This review is {titleCase(selectedStatus)}. Its recorded decision remains available as evidence.</OpsNotice>}
+            </div>
+
+            {selectedStatus === 'pending' && canDecide ? (
+              <footer className="review-decision-actions">
+                <button className="ops-button is-danger" type="button" onClick={() => void decide('reject')} disabled={Boolean(decisionLoading)}>Reject</button>
+                <button className="ops-button is-secondary" type="button" onClick={() => void decide('request-changes')} disabled={Boolean(decisionLoading)}>Request Changes</button>
+                <button className="ops-button is-primary" type="button" onClick={() => void decide('approve')} disabled={Boolean(decisionLoading)}><Check size={17} aria-hidden="true" />{decisionLoading === 'approve' ? 'Approving\u2026' : 'Approve Content'}</button>
+              </footer>
+            ) : null}
+          </section>
+        </div>
+      ) : (
+        <OpsSection><OpsEmpty title="Nothing to review" message="When campaign content is submitted for review, it will appear here." action={<Link className="ops-button is-primary" to="/campaigns">Open Campaign Workspace</Link>} /></OpsSection>
+      )}
+
+      {!loading && packages.length > 0 ? <p className="review-package-summary">{packages.length} publishing package{packages.length === 1 ? '' : 's'} are currently recorded. Open Scheduling to review package readiness.</p> : null}
+    </OpsPage>
   );
 }

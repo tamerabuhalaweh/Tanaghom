@@ -39,25 +39,22 @@ describe('Sprint 56 production product integrity contracts', () => {
     const layout = source('frontend', 'src', 'components', 'Layout.tsx');
 
     const navigationContracts = [
-      { path: '/command-center', route: 'command-center', label: 'Home' },
-      { path: '/events', route: 'events', label: 'Events' },
-      { path: '/campaigns', route: 'campaigns', label: 'Campaigns' },
+      { path: '/command-center', route: 'command-center', label: 'Today' },
+      { path: '/events', route: 'events', label: 'Plans & Events' },
+      { path: '/campaigns', route: 'campaigns', label: 'Campaign Workspace' },
       { path: '/ideas', route: 'ideas', label: 'Content' },
-      { path: '/approvals', route: 'approvals', label: 'Review' },
+      { path: '/approvals', route: 'approvals', label: 'Review Queue' },
       { path: '/publishing', route: 'publishing', label: 'Scheduling' },
-      { path: '/analytics', route: 'analytics', label: 'Performance' },
+      { path: '/analytics', route: 'analytics', label: 'Sales & Leads' },
+      { path: '/growth', route: 'growth', label: 'Performance' },
+      { path: '/stitchi', route: 'stitchi', label: 'Stitchi' },
       { path: '/my-agent-rep', route: 'my-agent-rep', label: 'My Profile' },
       { path: '/account-security', route: 'account-security', label: 'Account Security' },
-      { path: '/ai-settings', route: 'ai-settings', label: 'AI Settings' },
+      { path: '/ai-settings', route: 'ai-settings', label: 'AI Model' },
       { path: '/admin-users', route: 'admin-users', label: 'Users & Roles' },
-      { path: '/tenant-admin', route: 'tenant-admin', label: 'Tenant Admin' },
-      { path: '/agent-skills', route: 'agent-skills', label: 'Agent Skills' },
+      { path: '/tenant-admin', route: 'tenant-admin', label: 'Workspace Admin' },
       { path: '/operations', route: 'operations', label: 'Operations' },
-      { path: '/runtime-infrastructure', route: 'runtime-infrastructure', label: 'Runtime Evidence' },
-      { path: '/smartlabs-voice', route: 'smartlabs-voice', label: 'SmartLabs Voice' },
-      { path: '/mcp-engine', route: 'mcp-engine', label: 'Connector Registry' },
       { path: '/integration-credentials', route: 'integration-credentials', label: 'Integrations' },
-      { path: '/safety', route: 'safety', label: 'Security' },
       { path: '/observability', route: 'observability', label: 'Activity Log' },
     ];
 
@@ -65,6 +62,11 @@ describe('Sprint 56 production product integrity contracts', () => {
       expect(layout, `${item.label} nav path must exist`).toContain(`path: '${item.path}'`);
       expect(layout, `${item.label} nav label must exist`).toContain(`label: '${item.label}'`);
       expect(app, `${item.path} route must exist`).toContain(`path="${item.route}"`);
+    }
+
+    for (const hiddenTechnicalRoute of ['agent-skills', 'runtime-infrastructure', 'smartlabs-voice', 'mcp-engine', 'safety']) {
+      expect(app, `${hiddenTechnicalRoute} route must remain available behind route permissions`).toContain(`path="${hiddenTechnicalRoute}"`);
+      expect(layout, `${hiddenTechnicalRoute} must not compete with daily customer navigation`).not.toContain(`path: '/${hiddenTechnicalRoute}'`);
     }
 
     for (const alias of ['dashboard', 'content', 'review', 'scheduling', 'performance']) {
@@ -85,8 +87,9 @@ describe('Sprint 56 production product integrity contracts', () => {
 
     expect(app).toContain('path="runtime-infrastructure"');
     expect(app).toContain('adminOnly(<RuntimeInfrastructure />)');
-    expect(layout).toContain("label: 'Runtime Evidence'");
-    expect(layout).toContain("path: '/runtime-infrastructure'");
+    expect(layout).not.toContain("label: 'Runtime Evidence'");
+    expect(layout).not.toContain("path: '/runtime-infrastructure'");
+    expect(layout).toContain("label: 'Activity Log'");
     expect(integrationCredentials).not.toContain('runtimeBridgesApi');
     expect(integrationCredentials).not.toContain('OpenClaw Runtime');
     expect(runtimeInfrastructure).toContain('OpenClaw');
@@ -264,7 +267,7 @@ describe('Sprint 56 production product integrity contracts', () => {
     expect(app).toContain('path="events"');
     expect(app).toContain('path="events/new"');
     expect(app).toContain('path="events/:eventId"');
-    expect(layout).toContain("label: 'Events'");
+    expect(layout).toContain("label: 'Plans & Events'");
 
     for (const customerCue of [
       'Event Revenue Operations',
