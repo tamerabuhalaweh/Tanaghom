@@ -240,25 +240,22 @@ test('Commercial/Social product routes are wired with current UX vocabulary', as
 
   await page.getByRole('link', { name: 'Content', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Create Campaign Content/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Generate 4 Directions/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Generate Directions/i })).toBeVisible();
 
   await page.getByRole('button', { name: /Setup & More/i }).click();
-  await page.getByRole('link', { name: /Campaign Workspace/i }).click();
-  await expect(page.getByRole('heading', { name: /^Campaigns$/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /New Campaign/i })).toBeVisible();
-  await expect(page.getByText(/Today's campaign step/i)).toBeVisible();
-  await expect(page.getByText(/Workflow Guide/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: /Campaign Workspace/i })).toHaveCount(0);
+  await page.getByRole('dialog', { name: 'Workspace menu' }).getByRole('button', { name: 'Close workspace menu' }).click();
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2)).toBe(true);
 
   await page.getByRole('button', { name: /Setup & More/i }).click();
   await page.getByRole('link', { name: /Review Queue/i }).click();
-  await expect(page.getByRole('heading', { name: /Review Queue/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Review Content/i })).toBeVisible();
   await expect(page.getByText(/When campaign content is submitted for review/i)).toBeVisible();
 
   await page.getByRole('button', { name: /Setup & More/i }).click();
   await page.getByRole('link', { name: /^Scheduling\b/i }).click();
-  await expect(page.getByRole('heading', { name: /Scheduling & Review/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Scheduling Payload/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Schedule Approved Content/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /No Approved Content Yet/i })).toBeVisible();
 
   await page.getByRole('link', { name: /Sales & Leads/i }).click();
   await expect(page.getByRole('heading', { name: /^Sales & Leads$/i })).toBeVisible();

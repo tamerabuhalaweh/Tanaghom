@@ -50,7 +50,7 @@ import UXR1D3Reference from './pages/UXR1D3Reference'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const EXECUTIVE_ROLES = ['admin', 'cco']
-const APPROVAL_READ_ROLES = ['admin', 'cco', 'department_head', 'reviewer']
+const APPROVAL_READ_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'specialist', 'reviewer', 'viewer']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
 
 function LoadingWorkspace() {

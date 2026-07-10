@@ -42,7 +42,6 @@ describe('Sprint 56 production product integrity contracts', () => {
       { path: '/command-center', route: 'command-center', label: 'Today' },
       { path: '/commercial-plans', route: 'commercial-plans', label: 'Plans' },
       { path: '/events', route: 'events', label: 'Event Operations' },
-      { path: '/campaigns', route: 'campaigns', label: 'Campaign Workspace' },
       { path: '/ideas', route: 'ideas', label: 'Content' },
       { path: '/approvals', route: 'approvals', label: 'Review Queue' },
       { path: '/publishing', route: 'publishing', label: 'Scheduling' },
@@ -64,6 +63,9 @@ describe('Sprint 56 production product integrity contracts', () => {
       expect(layout, `${item.label} nav label must exist`).toContain(`label: '${item.label}'`);
       expect(app, `${item.path} route must exist`).toContain(`path="${item.route}"`);
     }
+
+    expect(app, 'Campaign Workspace route must remain available for direct and legacy links').toContain('path="campaigns"');
+    expect(layout, 'Campaign Workspace must not compete with the connected Content journey').not.toContain("path: '/campaigns'");
 
     for (const hiddenTechnicalRoute of ['agent-skills', 'runtime-infrastructure', 'smartlabs-voice', 'mcp-engine', 'safety']) {
       expect(app, `${hiddenTechnicalRoute} route must remain available behind route permissions`).toContain(`path="${hiddenTechnicalRoute}"`);

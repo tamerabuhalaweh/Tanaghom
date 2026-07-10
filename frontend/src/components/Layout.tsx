@@ -53,7 +53,7 @@ const CONTENT_ROLES = PRODUCT_ROLES.filter(role => role !== 'viewer');
 const SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager'];
 const ADMIN_ROLES = ['admin', 'cco'];
 const EXECUTIVE_ROLES = ['admin', 'cco'];
-const APPROVAL_READ_ROLES = ['admin', 'cco', 'department_head', 'reviewer'];
+const APPROVAL_READ_ROLES = PRODUCT_ROLES;
 
 const PRIMARY_NAV: NavItem[] = [
   {
@@ -79,7 +79,7 @@ const PRIMARY_NAV: NavItem[] = [
     description: 'Briefs, ideas, drafts, and campaign content',
     icon: PenLine,
     roles: CONTENT_ROLES,
-    activePaths: ['/ideas', '/content', '/campaigns', '/approvals', '/publishing'],
+    activePaths: ['/ideas', '/content', '/campaigns', '/approvals', '/review', '/publishing', '/scheduling'],
   },
   {
     path: '/analytics',
@@ -138,13 +138,6 @@ const WORKFLOW_LINKS: NavItem[] = [
     icon: CalendarDays,
     roles: CONTENT_ROLES,
   },
-  {
-    path: '/campaigns',
-    label: 'Campaign Workspace',
-    description: 'Continue platform drafts and packages',
-    icon: PenLine,
-    roles: CONTENT_ROLES,
-  },
 ];
 
 const SETUP_LINKS: NavItem[] = [
@@ -168,8 +161,8 @@ const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = 
   { match: path => path.startsWith('/events'), title: 'Event Operations' },
   { match: path => path === '/ideas' || path === '/content', title: 'Content' },
   { match: path => path === '/campaigns', title: 'Campaign Workspace' },
-  { match: path => path === '/approvals', title: 'Review Queue' },
-  { match: path => path === '/publishing', title: 'Scheduling' },
+  { match: path => path === '/approvals' || path === '/review', title: 'Review' },
+  { match: path => path === '/publishing' || path === '/scheduling', title: 'Scheduling' },
   { match: path => path === '/analytics' || path === '/performance', title: 'Sales & Leads' },
   { match: path => path === '/growth', title: 'Performance' },
   { match: path => path === '/executive', title: 'Executive Dashboard' },

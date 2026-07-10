@@ -1,3 +1,67 @@
+.review-journey {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 20px;
+  padding: 7px;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  background: var(--ops-surface);
+}
+
+.review-journey > a,
+.review-journey > span {
+  display: flex;
+  min-width: 0;
+  min-height: 46px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--ops-ink-secondary);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.review-journey > a > span,
+.review-journey > span > span {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ops-surface-subtle);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.review-journey strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-journey > .is-complete {
+  color: var(--ops-accent);
+}
+
+.review-journey > .is-complete > span {
+  background: var(--ops-accent-soft);
+}
+
+.review-journey > .is-active {
+  color: #ffffff;
+  background: var(--ops-ink);
+}
+
+.review-journey > .is-active > span {
+  color: var(--ops-ink);
+  background: #ffffff;
+}
+
 .review-workspace {
   display: grid;
   min-width: 0;
@@ -421,6 +485,17 @@
 }
 
 @media (max-width: 767px) {
+  .review-journey {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .review-journey > a,
+  .review-journey > span {
+    min-height: 42px;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
   .review-workspace {
     display: block;
     height: auto;
