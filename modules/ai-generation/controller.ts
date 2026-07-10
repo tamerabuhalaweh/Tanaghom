@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
-import { generateDrafts, reviseDraft, saveEditedDraft } from './service';
+import { generateDrafts, listCampaignDrafts, reviseDraft, saveEditedDraft } from './service';
 import { validateGenerateDraft, validateReviseDraft, validateSaveEditedDraft } from './validators';
 
 export const aiGenerationRouter = Router();
@@ -11,6 +11,17 @@ function getPayload(req: Request): JwtPayload {
   if (!authHeader?.startsWith('Bearer ')) throw new UnauthorizedError();
   return verifyToken(authHeader.substring(7));
 }
+
+aiGenerationRouter.get('/campaigns/:campaignId/drafts', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const campaignId = Array.isArray(req.params.campaignId) ? req.params.campaignId[0] : req.params.campaignId;
+    const drafts = await listCampaignDrafts(payload.role, payload.tenantKey || 'default', campaignId);
+    res.json(drafts);
+  } catch (err) {
+    next(err);
+  }
+});
 
 aiGenerationRouter.post('/generate', async (req: Request, res: Response, next: NextFunction) => {
   try {

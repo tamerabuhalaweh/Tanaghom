@@ -146,6 +146,7 @@ async function installMocks(page: Page, role: ProductRole) {
       '/ai-provider/',
       '/campaigns',
       '/ideas/',
+      '/ai-generation/',
       '/approvals',
       '/publishing-package/',
     ];
@@ -190,6 +191,16 @@ async function installMocks(page: Page, role: ProductRole) {
       campaignCreated = true;
       return json({ campaignId: 'campaign-leadership', title: 'Leadership Course Launch', status: 'idea' }, 201);
     }
+    if (path === '/ai-generation/generate' && method === 'POST') return json([{
+      contentItemId: 'content-leadership',
+      campaignRequestId: 'campaign-leadership',
+      platform: 'instagram',
+      contentType: 'carousel',
+      draftText: 'Leadership begins before confidence arrives. Choose the next right action.',
+      versionNo: 1,
+      status: 'drafting',
+      riskNotes: 'No unsupported outcome promise detected.',
+    }], 201);
     if (path === '/approvals' && method === 'GET') return json([{ ...approval, approvalStatus }]);
     if (path === '/approvals/approval-leadership/decision-packet' && method === 'GET') return json(approvalPacket());
     if (path === '/publishing-package/list' && method === 'GET') return json([{ id: 'package-leadership', status: 'draft' }]);
@@ -238,14 +249,15 @@ test.describe('UX-R1B Hybrid customer shell', () => {
     await page.getByLabel('Campaign Name').fill('Leadership Course Launch');
     await page.getByLabel('Objective').fill('Sell a leadership course to entrepreneurs.');
     await page.getByLabel('Audience').fill('Warm followers and previous buyers.');
-    await page.getByRole('button', { name: 'Generate 4 Directions' }).click();
-    await expect(page.getByRole('heading', { name: 'Generated Directions' })).toBeVisible();
+    await page.getByRole('button', { name: 'Generate Directions' }).click();
+    await expect(page.getByRole('heading', { name: 'Choose A Direction' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Lead With Courage', level: 3 })).toBeVisible();
-    await page.getByRole('button', { name: /Select Direction/i }).click();
+    await page.getByRole('button', { name: /Lead With Courage/i }).click();
+    await page.getByRole('button', { name: 'Select Direction' }).click();
     await expect(page.getByText('Direction selected. Create the campaign when you are ready.')).toBeVisible();
-    await page.getByRole('button', { name: 'Create Campaign' }).click();
-    await expect(page.getByText('Campaign created: Leadership Course Launch')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Campaign Created' })).toBeVisible();
+    await page.getByRole('button', { name: 'Create Draft' }).click();
+    await expect(page.locator('.content-draft-section').getByRole('heading', { name: 'Leadership Course Launch' })).toBeVisible();
+    await expect(page.getByLabel('Content Draft')).toHaveValue(/Leadership begins before confidence arrives/);
     await expectNoHorizontalOverflow(page);
     monitor.assertClean();
   });
@@ -283,8 +295,8 @@ test.describe('UX-R1B Hybrid customer shell', () => {
     await page.getByRole('button', { name: 'Setup & More' }).click();
     await page.getByRole('link', { name: 'Review Queue' }).click();
 
-    await expect(page).toHaveTitle('Review Queue | Tanaghum');
-    await expect(page.getByRole('heading', { name: 'Review Queue' })).toBeVisible();
+    await expect(page).toHaveTitle('Review | Tanaghum');
+    await expect(page.getByRole('heading', { name: 'Review Content' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Leadership Course Launch' })).toBeVisible();
     await expect(page.getByText(/Leadership is not the absence of pressure/)).toBeVisible();
     await expect(page.getByText('82/100')).toBeVisible();
@@ -298,7 +310,7 @@ test.describe('UX-R1B Hybrid customer shell', () => {
     await expect(page.getByRole('button', { name: 'Approve Content' })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.getByRole('button', { name: 'Approve Content' }).click();
-    await expect(page.getByText('Content approved. Scheduling preparation is now available.')).toBeVisible();
+    await expect(page.getByText('Content approved and prepared for scheduling.')).toBeVisible();
     monitor.assertClean();
   });
 });

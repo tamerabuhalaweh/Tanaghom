@@ -46,10 +46,11 @@ import CommercialCommandCenter from './pages/CommercialCommandCenter'
 import CommercialDisciplines from './pages/CommercialDisciplines'
 import ExecutiveDashboard from './pages/ExecutiveDashboard'
 import CommercialToday from './pages/CommercialToday'
+import UXR1D3Reference from './pages/UXR1D3Reference'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const EXECUTIVE_ROLES = ['admin', 'cco']
-const APPROVAL_READ_ROLES = ['admin', 'cco', 'department_head', 'reviewer']
+const APPROVAL_READ_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager', 'social_media_manager', 'sales_manager', 'lead_qualification_manager', 'specialist', 'reviewer', 'viewer']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
 
 function LoadingWorkspace() {
@@ -115,6 +116,9 @@ function App() {
           <Route path="/ux/aiero-preview" element={<AieroInspiredPreview page="home" />} />
           <Route path="/ux/aiero-preview/events" element={<AieroInspiredPreview page="events" />} />
           <Route path="/ux/aiero-preview/integrations" element={<AieroInspiredPreview page="integrations" />} />
+          <Route path="/ux/r1d3/content" element={<UXR1D3Reference page="content" />} />
+          <Route path="/ux/r1d3/review" element={<UXR1D3Reference page="review" />} />
+          <Route path="/ux/r1d3/scheduling" element={<UXR1D3Reference page="scheduling" />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<CommercialToday />} />
             <Route path="events/master" element={<MasterEventsDashboard />} />

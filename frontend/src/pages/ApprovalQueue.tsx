@@ -29,6 +29,12 @@ function titleCase(value: string): string {
   return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, character => character.toUpperCase());
 }
 
+function roleLabel(value: unknown): string {
+  const normalized = text(value, 'content approver').toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+  if (normalized === 'cco') return 'CCO';
+  return titleCase(normalized);
+}
+
 function object(value: unknown): RecordMap {
   return value && typeof value === 'object' ? value as RecordMap : {};
 }
@@ -131,10 +137,33 @@ export default function ApprovalQueue() {
     setError('');
     try {
       const decisionComment = comment.trim() || 'Approved and ready for the next governed step.';
-      if (action === 'approve') await approvalsApi.approve(selectedId, { comment: decisionComment }, token);
-      else if (action === 'reject') await approvalsApi.reject(selectedId, { comment: decisionComment }, token);
-      else await approvalsApi.requestChanges(selectedId, { comment: decisionComment }, token);
-      setMessage(action === 'approve' ? 'Content approved. Scheduling preparation is now available.' : action === 'reject' ? 'Content rejected.' : 'Changes requested and returned to the content team.');
+      if (action === 'approve') {
+        await approvalsApi.approve(selectedId, { comment: decisionComment }, token);
+        let packagePrepared = selectedPackages.length > 0;
+        const campaignId = text(campaign.id, '');
+        const contentItemId = text(contentItem.id, '');
+        if (!packagePrepared && campaignId && contentItemId) {
+          try {
+            const createdPackage = await publishingPackageApi.create({
+              campaignId,
+              draftId: contentItemId,
+              approvalId: selectedId,
+              platforms: [text(contentItem.platform, 'instagram')],
+            }, token) as RecordMap;
+            setPackages(current => [createdPackage, ...current]);
+            packagePrepared = true;
+          } catch (packageError) {
+            setMessage(`Content approved. Scheduling package still needs attention: ${packageError instanceof Error ? packageError.message : 'Package preparation failed.'}`);
+          }
+        }
+        if (packagePrepared) setMessage('Content approved and prepared for scheduling.');
+      } else if (action === 'reject') {
+        await approvalsApi.reject(selectedId, { comment: decisionComment }, token);
+        setMessage('Content rejected.');
+      } else {
+        await approvalsApi.requestChanges(selectedId, { comment: decisionComment }, token);
+        setMessage('Changes requested and returned to the content team.');
+      }
       setComment('');
       setPackets(current => {
         const next = { ...current };
@@ -172,8 +201,8 @@ export default function ApprovalQueue() {
     <OpsPage className="review-queue-page">
       <OpsPageHeader
         eyebrow="Content Decisions"
-        title="Review Queue"
-        subtitle="Review one item at a time with its content, quality, risk, comments, and publishing context together."
+        title="Review Content"
+        subtitle="Make one informed decision with the draft, quality, risk, comments, and publishing impact together."
         actions={(
           <>
             <Link className="ops-button is-secondary" to="/stitchi?prompt=Summarize%20the%20current%20content%20review%20risks"><Sparkles size={17} aria-hidden="true" />Ask Stitchi</Link>
@@ -181,6 +210,13 @@ export default function ApprovalQueue() {
           </>
         )}
       />
+
+      <nav className="review-journey" aria-label="Content workflow stages">
+        {['Brief', 'Ideas', 'Draft'].map(step => <Link key={step} className="is-complete" to="/ideas"><span><Check size={14} /></span><strong>{step}</strong></Link>)}
+        <span className="is-active"><span>4</span><strong>Review</strong></span>
+        <Link to="/publishing"><span>5</span><strong>Schedule</strong></Link>
+        <Link to="/growth"><span>6</span><strong>Results</strong></Link>
+      </nav>
 
       {message ? <OpsNotice tone="positive">{message}</OpsNotice> : null}
       {error ? <OpsNotice tone="danger">{error}</OpsNotice> : null}
@@ -237,7 +273,7 @@ export default function ApprovalQueue() {
                 <div><span>Audience</span><strong>{text(campaign.audience)}</strong></div>
                 <div><span>Call to Action</span><strong>{text(campaign.cta)}</strong></div>
                 <div><span>Publishing Package</span><strong>{selectedPackages.length ? `${selectedPackages.length} prepared` : 'Available after approval'}</strong></div>
-                <div><span>Reviewer Role</span><strong>{titleCase(text(selectedApproval?.requiredRole, 'CCO'))}</strong></div>
+                <div><span>Reviewer Role</span><strong>{roleLabel(selectedApproval?.requiredRole)}</strong></div>
               </section>
 
               {selectedStatus === 'pending' ? (

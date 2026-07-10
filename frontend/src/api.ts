@@ -149,6 +149,8 @@ export const campaignsApi = {
 };
 
 export const aiGenerationApi = {
+  listCampaignDrafts: (campaignId: string, token: string) =>
+    apiFetch<unknown[]>(`/ai-generation/campaigns/${campaignId}/drafts`, { token }),
   generate: (data: unknown, token: string) =>
     apiFetch<unknown>('/ai-generation/generate', { method: 'POST', body: data, token }),
   revise: (data: unknown, token: string) =>

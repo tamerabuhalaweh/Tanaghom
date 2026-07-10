@@ -1,21 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { commercialWorkflowApi, eventsApi, postizApi, postizChannelApi, publishingPackageApi } from '../api';
-import { useAuth } from '../contexts/useAuth';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  DetailGrid,
-  EmptyProductState,
-  Field,
-  Notice,
-  PrimaryAction,
-  ProductCard,
-  ProductPage,
-  ProductStatus,
-  ProductTable,
-  ReadableQueue,
-  SecondaryAction,
-  WorkflowRail,
-} from '../components/ProductUI';
+  ArrowLeft,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  MoreHorizontal,
+  RefreshCw,
+  Search,
+  Settings,
+  Sparkles,
+} from 'lucide-react';
+import { campaignsApi, commercialWorkflowApi, eventsApi, postizApi, postizChannelApi, publishingPackageApi } from '../api';
+import { OpsEmpty, OpsNotice, OpsPage, OpsPageHeader, OpsSkeleton, OpsStatus } from '../components/OperationalUI';
+import { useAuth } from '../contexts/useAuth';
+import './PublishingPrep.css';
 
 type RecordMap = Record<string, unknown>;
 
@@ -39,20 +41,8 @@ function numberValue(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function toneForState(value: string): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
-  const normalized = value.toLowerCase();
-  if (normalized.includes('ready') || normalized.includes('connected') || normalized.includes('complete') || normalized.includes('saved')) return 'good';
-  if (normalized.includes('blocked') || normalized.includes('missing') || normalized.includes('requires') || normalized.includes('not')) return 'warn';
-  if (normalized.includes('failed') || normalized.includes('error')) return 'danger';
-  if (normalized.includes('waiting')) return 'muted';
-  return 'info';
-}
-
-function titleCase(value: string): string {
-  return value
-    .replaceAll('_', ' ')
-    .replaceAll('-', ' ')
-    .replace(/\b\w/g, letter => letter.toUpperCase());
+function titleCase(value: unknown): string {
+  return text(value, 'not_available').replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
 const internalCustomerTextPattern = /\b(sprint\s*\d+|acceptance|smoke)\b/i;
@@ -64,9 +54,12 @@ function safeEventName(event: RecordMap | null | undefined): string {
   const eventDate = text(event.eventDate, '');
   if (!eventDate) return 'Customer event';
   const date = new Date(eventDate);
-  return Number.isNaN(date.getTime())
-    ? 'Customer event'
-    : `Customer event - ${date.toLocaleDateString()}`;
+  return Number.isNaN(date.getTime()) ? 'Customer event' : `Customer event - ${date.toLocaleDateString()}`;
+}
+
+function safeCampaignName(campaign: RecordMap | null | undefined): string {
+  const rawName = text(campaign?.topic || campaign?.title || campaign?.name, '');
+  return rawName && !internalCustomerTextPattern.test(rawName) ? rawName : 'Approved Campaign Content';
 }
 
 function defaultScheduleInput(): string {
@@ -81,65 +74,82 @@ function localScheduleToIso(value: string): string {
 }
 
 async function fetchPublishingReadiness(token: string) {
-  const [packageData, statusData, channelData, evidenceData, eventData, connectorData] = await Promise.all([
+  const [packageData, statusData, channelData, evidenceData, eventData, connectorData, campaignData] = await Promise.all([
     publishingPackageApi.list(token),
     postizApi.status(token),
-    postizApi.channels(token).catch((err) => ({
-      status: 'requires_channel',
-      channels: [],
-      _label: err instanceof Error ? err.message : 'Postiz channel status unavailable',
-    })),
+    postizApi.channels(token).catch((error) => ({ status: 'requires_channel', channels: [], _label: error instanceof Error ? error.message : 'Social account status unavailable' })),
     commercialWorkflowApi.evidence(token).catch(() => null),
     eventsApi.list(token).catch(() => []),
     postizApi.connectors(token).catch(() => []),
+    campaignsApi.list(token).catch(() => []),
   ]);
 
   return {
     packages: asList(packageData),
-    postizStatus: asRecord(statusData),
-    postizChannels: asList(asRecord(channelData).channels),
+    schedulingStatus: asRecord(statusData),
+    channels: asList(asRecord(channelData).channels),
     evidence: evidenceData ? asRecord(evidenceData) : null,
     events: asList(eventData),
-    postizConnectors: asList(connectorData),
+    connectors: asList(connectorData),
+    campaigns: asList(campaignData),
   };
+}
+
+function SchedulingJourney() {
+  return (
+    <nav className="scheduling-journey" aria-label="Content workflow stages">
+      {['Brief', 'Ideas', 'Draft', 'Review'].map(step => <Link key={step} className="is-complete" to={step === 'Review' ? '/approvals' : '/ideas'}><span><Check size={14} /></span><strong>{step}</strong></Link>)}
+      <span className="is-active"><span>5</span><strong>Schedule</strong></span>
+      <Link to="/growth"><span>6</span><strong>Results</strong></Link>
+    </nav>
+  );
 }
 
 export default function PublishingPrep() {
   const { token } = useAuth();
-  const navigate = useNavigate();
   const [packages, setPackages] = useState<RecordMap[]>([]);
-  const [postizStatus, setPostizStatus] = useState<RecordMap | null>(null);
-  const [postizChannels, setPostizChannels] = useState<RecordMap[]>([]);
-  const [postizConnectors, setPostizConnectors] = useState<RecordMap[]>([]);
+  const [campaigns, setCampaigns] = useState<RecordMap[]>([]);
+  const [channels, setChannels] = useState<RecordMap[]>([]);
+  const [connectors, setConnectors] = useState<RecordMap[]>([]);
   const [events, setEvents] = useState<RecordMap[]>([]);
+  const [evidence, setEvidence] = useState<RecordMap | null>(null);
+  const [schedulingStatus, setSchedulingStatus] = useState<RecordMap | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [selectedChannelId, setSelectedChannelId] = useState('');
   const [selectedEventId, setSelectedEventId] = useState('');
   const [eventChannelState, setEventChannelState] = useState<RecordMap | null>(null);
   const [eventChannelMessage, setEventChannelMessage] = useState('');
   const [assigningChannel, setAssigningChannel] = useState('');
-  const [evidence, setEvidence] = useState<RecordMap | null>(null);
   const [scheduledAt, setScheduledAt] = useState(defaultScheduleInput);
-  const [postizPayload, setPostizPayload] = useState<RecordMap | null>(null);
+  const [schedulePreview, setSchedulePreview] = useState<RecordMap | null>(null);
   const [scheduleResult, setScheduleResult] = useState<RecordMap | null>(null);
-  const [schedulingMessage, setSchedulingMessage] = useState('');
-  const [schedulingLoading, setSchedulingLoading] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState('');
+  const [mobileDetail, setMobileDetail] = useState(false);
+
+  function applyReadiness(result: Awaited<ReturnType<typeof fetchPublishingReadiness>>) {
+    setPackages(result.packages);
+    setCampaigns(result.campaigns);
+    setChannels(result.channels);
+    setConnectors(result.connectors);
+    setEvents(result.events);
+    setEvidence(result.evidence);
+    setSchedulingStatus(result.schedulingStatus);
+    setSelectedPackageId(current => current || text(result.packages[0]?.id, ''));
+    setSelectedChannelId(current => current || text(result.channels[0]?.id, ''));
+    setSelectedEventId(current => current || text(result.events[0]?.id, ''));
+  }
 
   async function load() {
     if (!token) return;
     setLoading(true);
     setError('');
     try {
-      const result = await fetchPublishingReadiness(token);
-      setPackages(result.packages);
-      setPostizStatus(result.postizStatus);
-      setPostizChannels(result.postizChannels);
-      setPostizConnectors(result.postizConnectors);
-      setEvents(result.events);
-      if (!selectedEventId && result.events[0]?.id) setSelectedEventId(text(result.events[0].id, ''));
-      setEvidence(result.evidence);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Publishing readiness failed to load');
+      applyReadiness(await fetchPublishingReadiness(token));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Scheduling could not load.');
     } finally {
       setLoading(false);
     }
@@ -148,125 +158,108 @@ export default function PublishingPrep() {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    void fetchPublishingReadiness(token)
-      .then((result) => {
-        if (cancelled) return;
-        setPackages(result.packages);
-        setPostizStatus(result.postizStatus);
-        setPostizChannels(result.postizChannels);
-        setPostizConnectors(result.postizConnectors);
-        setEvents(result.events);
-        if (!selectedEventId && result.events[0]?.id) setSelectedEventId(text(result.events[0].id, ''));
-        setEvidence(result.evidence);
-        setError('');
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Publishing readiness failed to load');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, selectedEventId]);
+    void fetchPublishingReadiness(token).then(result => {
+      if (!cancelled) applyReadiness(result);
+    }).catch(reason => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : 'Scheduling could not load.');
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [token]);
 
-  async function loadEventChannelState(eventId: string) {
+  const loadEventChannelState = useCallback(async (eventId: string) => {
     if (!token || !eventId) {
       setEventChannelState(null);
       return;
     }
     try {
-      const response = await postizChannelApi.eventChannels(eventId, token);
-      setEventChannelState(response as RecordMap);
+      setEventChannelState(await postizChannelApi.eventChannels(eventId, token) as RecordMap);
       setEventChannelMessage('');
-    } catch (err) {
+    } catch (reason) {
       setEventChannelState(null);
-      setEventChannelMessage(err instanceof Error ? err.message : 'Event channel readiness failed to load');
+      setEventChannelMessage(reason instanceof Error ? reason.message : 'Event account readiness could not load.');
     }
-  }
+  }, [token]);
 
   useEffect(() => {
     if (!selectedEventId) return;
-    async function run() {
-      await loadEventChannelState(selectedEventId);
-    }
-    void run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEventId, token]);
+    const timer = window.setTimeout(() => void loadEventChannelState(selectedEventId), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadEventChannelState, selectedEventId]);
 
-  const selectedPackage = packages[0] || null;
-  const selectedEvent = events.find(event => text(event.id, '') === selectedEventId) || null;
-  const activePostizConnector = postizConnectors.find(connector =>
-    text(connector.connectorStatus, '').toLowerCase() === 'active'
-      && connector.supportsSchedule === true,
-  ) || postizConnectors.find(connector => connector.supportsSchedule === true) || null;
-  const eventChannelReadiness = asRecord(eventChannelState?.readiness);
+  const selectedPackage = packages.find(item => text(item.id, '') === selectedPackageId) || packages[0] || null;
+  const selectedCampaign = campaigns.find(item => text(item.id, '') === text(selectedPackage?.campaignId, '')) || null;
+  const selectedChannel = channels.find(item => text(item.id, '') === selectedChannelId) || channels[0] || null;
+  const selectedEvent = events.find(item => text(item.id, '') === selectedEventId) || null;
+  const activeConnector = connectors.find(item => text(item.connectorStatus, '').toLowerCase() === 'active' && item.supportsSchedule === true) || connectors.find(item => item.supportsSchedule === true) || null;
   const eventSelections = asList(eventChannelState?.selections);
-  const eventSelectedIntegrationIds = new Set(eventSelections.map(item => text(item.postizIntegrationChannelId, '')).filter(Boolean));
-  const eventReadinessState = text(eventChannelReadiness.state, 'not checked');
-  const eventReadinessChecks = asList(eventChannelReadiness.checks);
-  const health = asRecord(postizStatus?.health);
-  const credentialStatus = text(health.credentialStatus, 'missing');
-  const integrationIdStatus = text(health.integrationIdStatus, 'missing');
-  const postizReady = text(postizStatus?.status, 'Requires Credentials');
-  const channelCount = postizChannels.length;
+  const selectedEventChannels = new Set(eventSelections.map(item => text(item.postizIntegrationChannelId, '')).filter(Boolean));
+  const eventReadiness = asRecord(eventChannelState?.readiness);
+  const health = asRecord(schedulingStatus?.health);
+  const previewSafety = asRecord(schedulePreview?.safety);
+  const previewGate = asRecord(previewSafety.schedulingGate);
+  const schedulingAllowed = previewGate.allowed === true;
+  const schedulingReasons = stringList(previewGate.reasons);
+  const evidenceActions = asList(evidence?.actions).slice(0, 8);
   const evidenceCoverage = numberValue(asRecord(evidence?.coverage).score);
-  const evidenceActions = asList(evidence?.actions).slice(0, 6);
-  const evidenceStages = asList(evidence?.stages);
-  const missingActions = stringList(asRecord(evidence?.coverage).missingActions);
-  const payloadSummary = asRecord(postizPayload?.payloadSummary);
-  const payloadTarget = asRecord(postizPayload?.target);
-  const payloadSafety = asRecord(postizPayload?.safety);
-  const schedulingGate = asRecord(payloadSafety.schedulingGate);
-  const schedulingAllowed = schedulingGate.allowed === true;
-  const schedulingReasons = stringList(schedulingGate.reasons);
-  const scheduleStatus = text(scheduleResult?.status, '');
+  const selectedCampaignTitle = safeCampaignName(selectedCampaign);
+  const selectedChannelName = text(selectedChannel?.name || selectedChannel?.profile, 'Choose a social account');
+  const scheduleSucceeded = ['sandbox_scheduled', 'scheduled', 'completed'].includes(text(scheduleResult?.status, '').toLowerCase());
 
-  async function preparePackagePayload() {
-    if (!token || !selectedPackage) return;
-    setSchedulingLoading('payload');
-    setSchedulingMessage('');
-    setScheduleResult(null);
+  async function validateSchedule() {
+    if (!token || !selectedPackage) return null;
+    const preview = await postizApi.packagePayload({ publishingPackageId: selectedPackage.id, scheduledAt: localScheduleToIso(scheduledAt) }, token) as RecordMap;
+    setSchedulePreview(preview);
+    return preview;
+  }
+
+  async function checkReadiness() {
+    if (!selectedPackage) return;
+    setActionLoading('readiness');
+    setMessage('');
+    setError('');
     try {
-      const result = await postizApi.packagePayload({
-        publishingPackageId: selectedPackage.id,
-        scheduledAt: localScheduleToIso(scheduledAt),
-      }, token) as RecordMap;
-      setPostizPayload(result);
-      setSchedulingMessage(text(result._label, 'Postiz package payload prepared.'));
-    } catch (err) {
-      setSchedulingMessage(err instanceof Error ? err.message : 'Failed to prepare Postiz package payload');
+      const preview = await validateSchedule();
+      const allowed = asRecord(asRecord(preview?.safety).schedulingGate).allowed === true;
+      setMessage(allowed ? 'Content, social account, and publishing controls are ready.' : 'The approved content is saved, but account setup or publishing authorization still needs attention.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Readiness could not be checked.');
     } finally {
-      setSchedulingLoading('');
+      setActionLoading('');
     }
   }
 
-  async function requestSandboxSchedule() {
-    if (!token || !selectedPackage || !schedulingAllowed) return;
-    setSchedulingLoading('schedule');
-    setSchedulingMessage('');
+  async function confirmSchedule() {
+    if (!token || !selectedPackage || !selectedChannel) return;
+    setActionLoading('confirm');
+    setMessage('');
+    setError('');
+    setScheduleResult(null);
     try {
-      const result = await postizApi.packageSandboxSchedule({
-        publishingPackageId: selectedPackage.id,
-        scheduledAt: localScheduleToIso(scheduledAt),
-      }, token) as RecordMap;
+      await postizApi.selectChannel({ integrationId: text(selectedChannel.id, ''), validationMode: 'listed_channel' }, token);
+      const preview = await validateSchedule();
+      const allowed = asRecord(asRecord(preview?.safety).schedulingGate).allowed === true;
+      if (!allowed) {
+        setMessage('This approved content is saved, but scheduling needs workspace authorization or account setup before it can continue.');
+        return;
+      }
+      const result = await postizApi.packageSandboxSchedule({ publishingPackageId: selectedPackage.id, scheduledAt: localScheduleToIso(scheduledAt) }, token) as RecordMap;
       setScheduleResult(result);
-      setSchedulingMessage(text(result._label, 'Postiz sandbox scheduling request completed.'));
-    } catch (err) {
-      setSchedulingMessage(err instanceof Error ? err.message : 'Postiz sandbox scheduling failed');
+      setMessage('Schedule confirmed by the connected scheduling service.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The schedule could not be confirmed.');
     } finally {
-      setSchedulingLoading('');
+      setActionLoading('');
     }
   }
 
   async function assignChannelToEvent(channel: RecordMap) {
     if (!token || !selectedEventId) return;
     const channelId = text(channel.id, '');
-    const connectorId = text(activePostizConnector?.id, '');
+    const connectorId = text(activeConnector?.id, '');
     if (!channelId || !connectorId) {
-      setEventChannelMessage('Select a connected Postiz channel and confirm an active scheduling connector exists.');
+      setEventChannelMessage('Connect a scheduling account before assigning it to an event.');
       return;
     }
     setAssigningChannel(channelId);
@@ -275,13 +268,13 @@ export default function PublishingPrep() {
       await postizChannelApi.selectEventChannel(selectedEventId, {
         postizConnectorId: connectorId,
         postizIntegrationChannelId: channelId,
-        platform: text(channel.type || channel.providerIdentifier, 'postiz'),
-        channelDisplayName: text(channel.name || channel.profile, 'Postiz channel'),
+        platform: text(channel.type || channel.providerIdentifier, 'social'),
+        channelDisplayName: text(channel.name || channel.profile, 'Social account'),
       }, token);
-      setEventChannelMessage('Postiz channel assigned to this event. Scheduling still requires approval and execution gates.');
+      setEventChannelMessage('Social account assigned to the selected event.');
       await loadEventChannelState(selectedEventId);
-    } catch (err) {
-      setEventChannelMessage(err instanceof Error ? err.message : 'Failed to assign channel to event');
+    } catch (reason) {
+      setEventChannelMessage(reason instanceof Error ? reason.message : 'The social account could not be assigned.');
     } finally {
       setAssigningChannel('');
     }
@@ -289,383 +282,68 @@ export default function PublishingPrep() {
 
   async function clearEventChannel() {
     if (!token || !selectedEventId) return;
-    setAssigningChannel('deselect');
+    setAssigningChannel('clear');
     setEventChannelMessage('');
     try {
-      await postizChannelApi.deselectEventChannel(selectedEventId, { reason: 'Changed from Tanaghum Scheduling page' }, token);
-      setEventChannelMessage('Event channel assignment cleared.');
+      await postizChannelApi.deselectEventChannel(selectedEventId, { reason: 'Changed from Tanaghum Scheduling' }, token);
+      setEventChannelMessage('Event social account cleared.');
       await loadEventChannelState(selectedEventId);
-    } catch (err) {
-      setEventChannelMessage(err instanceof Error ? err.message : 'Failed to clear event channel assignment');
+    } catch (reason) {
+      setEventChannelMessage(reason instanceof Error ? reason.message : 'The event social account could not be cleared.');
     } finally {
       setAssigningChannel('');
     }
   }
 
-  const railSteps = useMemo(() => {
-    if (!evidenceStages.length) {
-      return [
-        { label: 'Package', state: selectedPackage ? 'done' as const : 'active' as const },
-        { label: 'Postiz', state: channelCount ? 'done' as const : 'blocked' as const },
-        { label: 'Scheduling Review', state: 'waiting' as const },
-        { label: 'Evidence', state: 'waiting' as const },
-      ];
-    }
-    return evidenceStages.map(stage => ({
-      label: text(stage.label, 'Stage'),
-      state: text(stage.state, 'waiting') === 'complete'
-        ? 'done' as const
-        : text(stage.state, 'waiting') === 'active'
-          ? 'active' as const
-          : text(stage.state, 'waiting') === 'blocked'
-            ? 'blocked' as const
-            : 'waiting' as const,
-    }));
-  }, [channelCount, evidenceStages, selectedPackage]);
+  if (loading) return <OpsPage><OpsPageHeader eyebrow="Publishing Workspace" title="Schedule Approved Content" subtitle="Loading approved content and social accounts." /><OpsSkeleton rows={7} /></OpsPage>;
 
   return (
-    <ProductPage
-      eyebrow="Content Studio"
-      title="Scheduling & Review"
-      subtitle="Check your approved content and scheduling setup before publishing. All actions are tracked and can be reviewed anytime."
-      action={<SecondaryAction onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</SecondaryAction>}
-    >
-      {error && <Notice tone="danger">{error}</Notice>}
+    <OpsPage className="scheduling-page">
+      <OpsPageHeader eyebrow="Publishing Workspace" title="Schedule Approved Content" subtitle="Choose the social account and time for one approved item. Tanaghum keeps its approval record attached." actions={<><Link className="ops-button is-secondary" to="/integration-credentials"><Settings size={17} />Manage Social Accounts</Link><button className="ops-icon-button" type="button" onClick={() => void load()} aria-label="Refresh scheduling"><RefreshCw size={18} /></button></>} />
+      <SchedulingJourney />
+      {error ? <OpsNotice tone="danger">{error}</OpsNotice> : null}
+      {message ? <OpsNotice tone={message.includes('confirmed') || message.includes('ready') ? 'positive' : 'warning'}>{message}</OpsNotice> : null}
 
-      <WorkflowRail steps={railSteps} />
+      {packages.length ? <div className={`scheduling-workspace${mobileDetail ? ' show-detail' : ''}`}>
+        <section className="scheduling-queue" aria-label="Approved content queue">
+          <header><div><h2>Approved Content</h2><p>Ready for a publish time.</p></div><OpsStatus tone="positive">{packages.length} Ready</OpsStatus></header>
+          <label className="scheduling-search"><Search size={17} /><input aria-label="Search approved content" placeholder="Search approved content" /></label>
+          <div className="scheduling-queue-items">{packages.map(pkg => {
+            const campaign = campaigns.find(item => text(item.id, '') === text(pkg.campaignId, '')) || null;
+            const active = text(pkg.id, '') === text(selectedPackage?.id, '');
+            return <button key={text(pkg.id)} className={active ? 'is-active' : ''} type="button" onClick={() => { setSelectedPackageId(text(pkg.id, '')); setSchedulePreview(null); setScheduleResult(null); setMessage(''); setMobileDetail(true); }}><span><strong>{safeCampaignName(campaign)}</strong><ChevronRight size={17} /></span><small>{titleCase(text(pkg.status, 'approved'))}</small><span><span>Approved content</span><OpsStatus tone="positive">Ready To Schedule</OpsStatus></span></button>;
+          })}</div>
+        </section>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <ProductCard>
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Packages</div>
-          <div className="mt-3 text-3xl font-semibold text-neutral-950">{packages.length}</div>
-          <p className="mt-2 text-sm text-neutral-500">Prepared from approved content.</p>
-        </ProductCard>
-        <ProductCard>
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Scheduling Service</div>
-          <div className="mt-3 text-xl font-semibold text-neutral-950">{postizReady}</div>
-          <p className="mt-2 text-sm text-neutral-500">Connection status.</p>
-        </ProductCard>
-        <ProductCard>
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Channels</div>
-          <div className="mt-3 text-3xl font-semibold text-neutral-950">{channelCount}</div>
-          <p className="mt-2 text-sm text-neutral-500">Connected social accounts.</p>
-        </ProductCard>
-        <ProductCard>
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Evidence</div>
-          <div className="mt-3 text-3xl font-semibold text-neutral-950">{evidenceCoverage}%</div>
-          <p className="mt-2 text-sm text-neutral-500">Activity records available.</p>
-        </ProductCard>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <ProductCard
-          title="Your Approved Content"
-          subtitle="Content that has been reviewed and is ready for the next step."
-          action={<PrimaryAction onClick={() => navigate('/campaigns')}>Prepare Content</PrimaryAction>}
-        >
-          {packages.length ? (
-            <ProductTable
-              columns={['Package', 'Campaign', 'Status', 'Created']}
-              rows={packages.map(pkg => [
-                <span className="font-medium text-neutral-950">{text(pkg.id).slice(0, 8)}</span>,
-                text(pkg.campaignId, 'Campaign linked'),
-                <ProductStatus tone={toneForState(text(pkg.status, 'ready'))}>{titleCase(text(pkg.status, 'ready'))}</ProductStatus>,
-                text(pkg.createdAt, 'Recorded'),
-              ])}
-            />
-          ) : (
-            <EmptyProductState
-              title="No publishing package yet"
-              message="Approve a generated draft, then prepare a publishing package from the Campaigns workspace."
-              action={<PrimaryAction onClick={() => navigate('/campaigns')}>Open Campaigns</PrimaryAction>}
-            />
-          )}
-        </ProductCard>
-
-        <ProductCard title="What's Needed Before Scheduling" subtitle="These items must be in place before content can be scheduled.">
-          <ReadableQueue
-            items={[
-              {
-                title: 'Approved package',
-                meta: selectedPackage ? 'A package exists and is ready for scheduling review.' : 'Create a package after human approval.',
-                status: selectedPackage ? 'Ready' : 'Waiting',
-                tone: selectedPackage ? 'good' : 'muted',
-              },
-              {
-                title: 'Scheduling service',
-                meta: text(health.url, 'Scheduling service URL is not configured.'),
-                status: text(postizStatus?.status, 'Requires Credentials'),
-                tone: toneForState(text(postizStatus?.status, 'Requires Credentials')),
-              },
-              {
-                title: 'Postiz API key',
-                meta: credentialStatus === 'configured' ? 'Tenant credential is saved securely.' : 'Save the tenant Postiz API key in Credentials.',
-                status: titleCase(credentialStatus),
-                tone: toneForState(credentialStatus),
-              },
-              {
-                title: 'Social channel',
-                meta: channelCount ? `${channelCount} social channel(s) are visible.` : 'Complete channel OAuth inside Postiz, then refresh Tanaghum.',
-                status: channelCount ? 'Visible' : 'Requires Channel',
-                tone: channelCount ? 'good' : 'warn',
-              },
-              {
-                title: 'Selected scheduling channel',
-                meta: integrationIdStatus === 'configured' ? 'A Postiz channel ID is selected.' : 'Select a visible channel for scheduling packages.',
-                status: titleCase(integrationIdStatus),
-                tone: toneForState(integrationIdStatus),
-              },
-              {
-                title: 'External execution',
-                meta: 'Publishing controls are active. An admin must enable scheduling for this workspace.',
-                status: 'Blocked',
-                tone: 'warn',
-              },
-            ]}
-          />
-          <div className="mt-5">
-            <SecondaryAction onClick={() => navigate('/integration-credentials')}>Open Credentials</SecondaryAction>
-          </div>
-        </ProductCard>
-      </div>
-
-      <ProductCard
-        title="Event Scheduling Channel"
-        subtitle="Assign one connected Postiz channel to the event. This does not schedule or publish anything; it only makes the event ready for governed scheduling."
-        action={<ProductStatus tone={toneForState(eventReadinessState)}>{titleCase(eventReadinessState)}</ProductStatus>}
-      >
-        <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <Field label="Event">
-              <select
-                value={selectedEventId}
-                onChange={(event) => setSelectedEventId(event.target.value)}
-                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950"
-              >
-                {events.length ? events.map(event => (
-                  <option key={text(event.id)} value={text(event.id, '')}>{safeEventName(event)}</option>
-                )) : (
-                  <option value="">No events available</option>
-                )}
-              </select>
-            </Field>
-            <DetailGrid items={[
-              { label: 'Selected Event', value: safeEventName(selectedEvent) },
-              { label: 'Postiz Connector', value: activePostizConnector ? text(activePostizConnector.connectorName, 'Active scheduling connector') : 'No active scheduling connector' },
-              { label: 'Connected Channels', value: String(postizChannels.length) },
-              { label: 'Assigned Channels', value: String(eventSelections.length) },
-            ]} />
-            {eventChannelMessage && (
-              <Notice tone={eventChannelMessage.toLowerCase().includes('failed') || eventChannelMessage.toLowerCase().includes('select') ? 'warn' : 'good'}>
-                {eventChannelMessage}
-              </Notice>
-            )}
-            {eventSelections.length > 0 && (
-              <SecondaryAction onClick={clearEventChannel} disabled={assigningChannel === 'deselect'}>
-                {assigningChannel === 'deselect' ? 'Clearing...' : 'Clear Event Channel'}
-              </SecondaryAction>
-            )}
-          </div>
-
-          <div className="space-y-5">
-            {postizChannels.length ? (
-              <ProductTable
-                columns={['Channel', 'Platform', 'State', 'Action']}
-                rows={postizChannels.map(channel => {
-                  const channelId = text(channel.id, '');
-                  const selected = eventSelectedIntegrationIds.has(channelId);
-                  const disabled = Boolean(channel.disabled);
-                  const refreshNeeded = Boolean(channel.refreshNeeded);
-                  return [
-                    <div>
-                      <div className="font-medium text-neutral-950">{text(channel.name, text(channel.profile, 'Unnamed channel'))}</div>
-                      <div className="mt-1 max-w-xs truncate text-xs text-neutral-500">{channelId}</div>
-                    </div>,
-                    titleCase(text(channel.type || channel.providerIdentifier, 'postiz')),
-                    <ProductStatus tone={selected ? 'good' : disabled || refreshNeeded ? 'warn' : 'info'}>
-                      {selected ? 'Assigned To Event' : disabled ? 'Disabled' : refreshNeeded ? 'Reconnect Needed' : 'Available'}
-                    </ProductStatus>,
-                    <SecondaryAction
-                      onClick={() => void assignChannelToEvent(channel)}
-                      disabled={!selectedEventId || !activePostizConnector || disabled || selected || assigningChannel === channelId}
-                    >
-                      {selected ? 'Assigned' : assigningChannel === channelId ? 'Assigning...' : 'Assign To Event'}
-                    </SecondaryAction>,
-                  ];
-                })}
-              />
-            ) : (
-              <EmptyProductState
-                title="No Postiz channels visible"
-                message="Save the Postiz API key and connect a social account inside Postiz, then refresh this page."
-                action={<SecondaryAction onClick={() => navigate('/integration-credentials')}>Open Integrations</SecondaryAction>}
-              />
-            )}
-
-            {eventReadinessChecks.length > 0 && (
-              <ProductTable
-                columns={['Check', 'Status', 'Detail']}
-                rows={eventReadinessChecks.map(check => [
-                  text(check.label, 'Readiness check'),
-                  <ProductStatus tone={toneForState(text(check.status, 'waiting'))}>{titleCase(text(check.status, 'waiting'))}</ProductStatus>,
-                  text(check.detail, 'Recorded by backend readiness policy'),
-                ])}
-              />
-            )}
-          </div>
-        </div>
-      </ProductCard>
-
-      <ProductCard title="Content Package Details" subtitle="Plain-language status for your most recent prepared content.">
-        {selectedPackage ? (
-          <DetailGrid
-            items={[
-              { label: 'Package Status', value: titleCase(text(selectedPackage.status, 'ready')) },
-              { label: 'Campaign', value: text(selectedPackage.campaignId, 'Campaign linked') },
-              { label: 'Scheduling Status', value: 'Scheduling is controlled. Channel selection and admin authorization are needed.' },
-              { label: 'Next Action', value: channelCount ? 'Select a channel and request scheduling authorization.' : 'Connect a social channel through your scheduling service.' },
-            ]}
-          />
-        ) : (
-          <EmptyProductState message="No package is available yet. The normal path is draft generation, scoring, human approval, then package preparation." />
-        )}
-      </ProductCard>
-
-      <ProductCard
-        title="Scheduling Payload"
-        subtitle="Prepare the exact package Tanaghum would send to the scheduling service. No external scheduling happens during payload preview."
-        action={<ProductStatus tone={schedulingAllowed ? 'good' : 'warn'}>{schedulingAllowed ? 'Sandbox Scheduling Enabled' : 'Scheduling Blocked'}</ProductStatus>}
-      >
-        {selectedPackage ? (
-          <div className="space-y-5">
-            {schedulingMessage && (
-              <Notice tone={schedulingMessage.toLowerCase().includes('failed') || schedulingMessage.toLowerCase().includes('blocked') ? 'warn' : 'good'}>
-                {schedulingMessage}
-              </Notice>
-            )}
-            <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="space-y-4">
-                <Field label="Target Time" helper="This becomes the proposed Postiz schedule time. Change it before preparing the payload.">
-                  <input
-                    type="datetime-local"
-                    value={scheduledAt}
-                    onChange={(event) => {
-                      setScheduledAt(event.target.value);
-                      setPostizPayload(null);
-                      setScheduleResult(null);
-                    }}
-                    className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
-                  />
-                </Field>
-                <div className="flex flex-wrap gap-2">
-                  <PrimaryAction onClick={preparePackagePayload} disabled={schedulingLoading === 'payload'}>
-                    {schedulingLoading === 'payload' ? 'Preparing...' : 'Prepare Payload'}
-                  </PrimaryAction>
-                  <SecondaryAction onClick={requestSandboxSchedule} disabled={!postizPayload || !schedulingAllowed || schedulingLoading === 'schedule'}>
-                    {schedulingLoading === 'schedule' ? 'Requesting...' : 'Request Sandbox Schedule'}
-                  </SecondaryAction>
-                </div>
-                {!schedulingAllowed && postizPayload && (
-                  <Notice tone="warn">
-                    Scheduling is blocked until the required channel and deployment controls are configured. The payload preview is still valid.
-                  </Notice>
-                )}
-              </div>
-
-              {postizPayload ? (
-                <div className="space-y-4">
-                  <DetailGrid
-                    items={[
-                      { label: 'Platform', value: titleCase(text(payloadSummary.platform, text(payloadTarget.platform))) },
-                      { label: 'Post Type', value: titleCase(text(payloadSummary.postType, 'schedule')) },
-                      { label: 'Scheduled For', value: text(payloadTarget.proposedPublishAt) },
-                      { label: 'Channel Selected', value: payloadSummary.hasIntegrationId ? 'Yes' : 'No' },
-                      { label: 'Content Length', value: `${numberValue(payloadSummary.contentCharacters)} characters` },
-                      { label: 'Endpoint', value: text(postizPayload.endpoint, 'Scheduling endpoint not configured') },
-                    ]}
-                  />
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Approved Content Preview</div>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-800">{text(postizPayload.contentPreview, 'No content preview available')}</p>
-                  </div>
-                  <ReadableQueue
-                    items={[
-                      {
-                        title: 'Payload generated',
-                        meta: 'Derived from the approved publishing package stored in Tanaghum.',
-                        status: 'Ready',
-                        tone: 'good',
-                      },
-                      {
-                        title: 'Postiz channel',
-                        meta: payloadSummary.hasIntegrationId ? 'A selected scheduling channel is available.' : 'Select a connected Postiz channel before scheduling.',
-                        status: payloadSummary.hasIntegrationId ? 'Selected' : 'Missing',
-                        tone: payloadSummary.hasIntegrationId ? 'good' : 'warn',
-                      },
-                      {
-                        title: 'Sandbox execution gate',
-                        meta: schedulingReasons.join('; ') || 'Sandbox scheduling flags are enabled for this workspace.',
-                        status: schedulingAllowed ? 'Allowed' : 'Blocked',
-                        tone: schedulingAllowed ? 'good' : 'warn',
-                      },
-                    ]}
-                  />
-                  {scheduleStatus && (
-                    <Notice tone={scheduleStatus === 'sandbox_scheduled' ? 'good' : 'warn'}>
-                      Scheduling service response: {titleCase(scheduleStatus)}.
-                    </Notice>
-                  )}
-                </div>
-              ) : (
-                <EmptyProductState
-                  title="Prepare the scheduling payload"
-                  message="Choose the target time, then generate the package that would be sent to Postiz after all controls are satisfied."
-                />
-              )}
+        <section className="scheduling-detail" aria-label="Selected scheduling task">
+          <button className="scheduling-mobile-back" type="button" onClick={() => setMobileDetail(false)}><ArrowLeft size={17} />Back To Approved Content</button>
+          <header><div><span className="ops-eyebrow">Approved Content</span><h2>{selectedCampaignTitle}</h2><p>{selectedChannel ? `Ready for ${selectedChannelName}` : 'Choose a social account to continue.'}</p></div><OpsStatus tone="positive">Approved</OpsStatus></header>
+          {scheduleSucceeded ? <div className="scheduling-success"><CheckCircle2 size={20} /><div><strong>Schedule Recorded</strong><span>{new Date(localScheduleToIso(scheduledAt)).toLocaleString()}</span></div><Link to="/growth">View Results When Available<ChevronRight size={16} /></Link></div> : null}
+          <div className="scheduling-task-layout">
+            <div className="scheduling-form">
+              <label><span>Social Account</span><select value={selectedChannelId} onChange={event => { setSelectedChannelId(event.target.value); setSchedulePreview(null); setScheduleResult(null); }} disabled={!channels.length}>{channels.length ? channels.map(channel => <option key={text(channel.id)} value={text(channel.id, '')}>{text(channel.name || channel.profile, 'Connected social account')}</option>) : <option value="">No social account connected</option>}</select></label>
+              <label><span>Publish Date And Time</span><input type="datetime-local" value={scheduledAt} onChange={event => { setScheduledAt(event.target.value); setSchedulePreview(null); setScheduleResult(null); }} /></label>
+              <label><span>Timezone</span><select defaultValue="workspace"><option value="workspace">Workspace Timezone</option><option value="amman">Amman</option><option value="dubai">Dubai</option></select></label>
+              <div className="scheduling-checks"><div><CheckCircle2 size={18} /><span><strong>Content Approved</strong><small>Human decision recorded</small></span></div><div className={channels.length ? '' : 'is-missing'}>{channels.length ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}<span><strong>Social Account</strong><small>{channels.length ? selectedChannelName : 'Connect an account in Integrations'}</small></span></div><div className={schedulePreview && schedulingAllowed ? '' : 'is-waiting'}>{schedulePreview && schedulingAllowed ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}<span><strong>Publishing Controls</strong><small>{schedulePreview ? schedulingAllowed ? 'Ready' : 'Authorization needed' : 'Checked before confirmation'}</small></span></div></div>
             </div>
+            <aside className="scheduling-preview"><div><span className="scheduling-avatar">T</span><span><strong>{selectedCampaignTitle}</strong><small>Approved content preview</small></span><MoreHorizontal size={18} /></div><div className="scheduling-preview-media"><Sparkles size={24} /><strong>{selectedCampaignTitle}</strong></div><p>{text(schedulePreview?.contentPreview, 'Tanaghum will show the approved content here after the schedule passes readiness checks.')}</p><span>Preview only. Final platform rendering may vary.</span></aside>
           </div>
-        ) : (
-          <EmptyProductState message="Create an approved publishing package before preparing a scheduling payload." />
-        )}
-      </ProductCard>
+          <footer><Link className="ops-button is-secondary" to="/approvals"><ArrowLeft size={17} />Back To Review</Link><button className="ops-button is-secondary" type="button" onClick={() => void checkReadiness()} disabled={actionLoading === 'readiness'}><Clock3 size={17} />{actionLoading === 'readiness' ? 'Checking...' : 'Check Readiness'}</button><button className="ops-button is-primary" type="button" onClick={() => void confirmSchedule()} disabled={!selectedChannel || actionLoading === 'confirm'}><CalendarDays size={17} />{actionLoading === 'confirm' ? 'Confirming...' : 'Confirm Schedule'}</button></footer>
+        </section>
+      </div> : <section className="scheduling-empty"><OpsEmpty title="No Approved Content Yet" message="Approve a content draft first. Tanaghum will then prepare it for scheduling." action={<Link className="ops-button is-primary" to="/approvals">Open Review</Link>} /></section>}
 
-        <ProductCard title="Activity History" subtitle="Your workflow records are stored permanently. No screenshots or hidden logs needed.">
-        <div className="mb-5">
-          <ReadableQueue
-            items={[
-              {
-                title: 'Evidence coverage',
-                meta: evidenceCoverage ? 'Required workflow events are being persisted.' : 'Evidence appears after workflow actions are performed.',
-                status: `${evidenceCoverage}%`,
-                tone: evidenceCoverage >= 80 ? 'good' : evidenceCoverage > 0 ? 'warn' : 'muted',
-              },
-              {
-                  title: 'Missing activities',
-                  meta: missingActions.join(', ') || 'All expected activities are recorded.',
-                status: missingActions.length ? 'Review' : 'Clear',
-                tone: missingActions.length ? 'warn' : 'good',
-              },
-            ]}
-          />
+      <div className="scheduling-stitchi"><Sparkles size={18} /><div><strong>Not Sure When To Publish?</strong><span>Stitchi can suggest a time using the campaign window and audience context. You confirm before anything is scheduled.</span></div><Link className="ops-button is-secondary" to="/stitchi?mode=prepare&prompt=Suggest%20a%20publishing%20time%20for%20the%20selected%20approved%20content">Suggest A Time</Link></div>
+
+      <details className="scheduling-details">
+        <summary><span><Settings size={18} /><span><strong>Setup And Activity Details</strong><small>Social account assignment, readiness, and workflow history.</small></span></span><ChevronDown size={18} /></summary>
+        <div className="scheduling-details-body">
+          <section><header><div><h3>Event Social Account</h3><p>Optionally associate one connected social account with an event.</p></div><OpsStatus tone={eventSelections.length ? 'positive' : 'warning'}>{eventSelections.length ? 'Assigned' : 'Not Assigned'}</OpsStatus></header><label><span>Event</span><select value={selectedEventId} onChange={event => setSelectedEventId(event.target.value)}>{events.length ? events.map(item => <option key={text(item.id)} value={text(item.id, '')}>{safeEventName(item)}</option>) : <option value="">No events available</option>}</select></label><div className="scheduling-account-list">{channels.length ? channels.map(channel => { const channelId = text(channel.id, ''); const assigned = selectedEventChannels.has(channelId); return <div key={channelId}><span><strong>{text(channel.name || channel.profile, 'Social account')}</strong><small>{titleCase(text(channel.type || channel.providerIdentifier, 'social'))}</small></span><button className="ops-button is-secondary" type="button" disabled={!selectedEvent || !activeConnector || assigned || assigningChannel === channelId} onClick={() => void assignChannelToEvent(channel)}>{assigned ? 'Assigned' : assigningChannel === channelId ? 'Assigning...' : 'Assign To Event'}</button></div>; }) : <p>No connected social accounts are available.</p>}</div>{eventSelections.length ? <button className="ops-button is-secondary" type="button" onClick={() => void clearEventChannel()} disabled={assigningChannel === 'clear'}>{assigningChannel === 'clear' ? 'Clearing...' : 'Clear Event Account'}</button> : null}{eventChannelMessage ? <p className="scheduling-detail-message">{eventChannelMessage}</p> : null}</section>
+
+          <section><header><div><h3>Readiness</h3><p>Status of the customer-owned scheduling connection.</p></div><OpsStatus tone={channels.length ? 'positive' : 'warning'}>{channels.length ? 'Account Visible' : 'Setup Needed'}</OpsStatus></header><dl className="scheduling-readiness-grid"><div><dt>Connection</dt><dd>{titleCase(text(schedulingStatus?.status, 'setup needed'))}</dd></div><div><dt>Credential</dt><dd>{titleCase(text(health.credentialStatus, 'missing'))}</dd></div><div><dt>Social Accounts</dt><dd>{channels.length}</dd></div><div><dt>Selected Account</dt><dd>{titleCase(text(health.integrationIdStatus, 'not selected'))}</dd></div><div><dt>Event Readiness</dt><dd>{titleCase(text(eventReadiness.state, 'not checked'))}</dd></div><div><dt>Activity Coverage</dt><dd>{evidenceCoverage}%</dd></div></dl>{schedulingReasons.length ? <p className="scheduling-detail-message">{schedulingReasons.join('; ')}</p> : null}</section>
+
+          <section className="scheduling-activity"><header><div><h3>Activity History</h3><p>Recent governed workflow actions.</p></div><OpsStatus tone={evidenceActions.length ? 'positive' : 'neutral'}>{evidenceActions.length} Records</OpsStatus></header>{evidenceActions.length ? <div>{evidenceActions.map((action, index) => <article key={`${text(action.action, 'activity')}-${index}`}><span><strong>{titleCase(text(action.action, 'workflow action'))}</strong><small>{text(action.reason, 'Recorded')}</small></span><OpsStatus tone={text(action.result, '').includes('success') ? 'positive' : 'warning'}>{titleCase(text(action.result, 'recorded'))}</OpsStatus></article>)}</div> : <p>No workflow activity has been recorded for this workspace yet.</p>}</section>
         </div>
-        {evidenceActions.length ? (
-          <ProductTable
-            columns={['Action', 'Result', 'Source', 'Reason']}
-            rows={evidenceActions.map(action => [
-              titleCase(text(action.action, 'workflow action')),
-              <ProductStatus tone={toneForState(text(action.result, 'success'))}>{titleCase(text(action.result, 'success'))}</ProductStatus>,
-              text(action.sourceModule, 'STITCH'),
-              text(action.reason, 'Recorded'),
-            ])}
-          />
-        ) : (
-          <EmptyProductState message="No persistent workflow audit records are available for the selected campaign yet." />
-        )}
-      </ProductCard>
-
-      <Notice tone="warn">
-        Scheduling is controlled. An admin must enable scheduling for this workspace and configure the required channels before content can be published.
-      </Notice>
-    </ProductPage>
+      </details>
+    </OpsPage>
   );
 }

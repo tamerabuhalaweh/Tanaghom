@@ -32,6 +32,8 @@ const PERMISSIONS: Record<string, string[]> = {
   admin: ['drafts:generate', 'drafts:revise', 'drafts:read'],
   cco: ['drafts:generate', 'drafts:revise', 'drafts:read'],
   department_head: ['drafts:generate', 'drafts:revise', 'drafts:read'],
+  marketing_manager: ['drafts:generate', 'drafts:revise', 'drafts:read'],
+  social_media_manager: ['drafts:generate', 'drafts:revise', 'drafts:read'],
   specialist: ['drafts:generate', 'drafts:read'],
   reviewer: ['drafts:read'],
   viewer: ['drafts:read'],
@@ -42,6 +44,39 @@ function checkPermission(role: string, permission: string): void {
   if (!allowed || !allowed.includes(permission)) {
     throw new ForbiddenError(`Role '${role}' does not have permission '${permission}'`);
   }
+}
+
+export async function listCampaignDrafts(
+  requesterRole: string,
+  tenantKey: string,
+  campaignRequestId: string,
+) {
+  checkPermission(requesterRole, 'drafts:read');
+
+  const campaign = await prisma.contentRequest.findFirst({
+    where: { id: campaignRequestId, tenant_key: tenantKey },
+    select: { id: true },
+  });
+  if (!campaign) throw new NotFoundError('Campaign request', campaignRequestId);
+
+  const items = await repo.getContentItemsByCampaign(campaignRequestId, tenantKey);
+  return items.map(item => {
+    const latestVersion = item.draft_versions[0] ?? null;
+    return {
+      contentItemId: item.id,
+      campaignRequestId: item.request_id,
+      platform: item.platform,
+      contentType: item.content_type,
+      draftText: latestVersion?.text || item.draft_text,
+      versionNo: latestVersion?.version_no || 1,
+      status: item.status,
+      riskScore: item.risk_score,
+      riskNotes: item.risk_reason || '',
+      reachScore: item.reach_score,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    };
+  });
 }
 
 // ============================================================
