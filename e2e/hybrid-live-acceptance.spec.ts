@@ -12,6 +12,7 @@ const customerPaths = [
   '/approvals',
   '/publishing',
   '/events',
+  '/analytics',
   '/executive',
   '/integration-credentials',
 ] as const;
@@ -141,7 +142,7 @@ test.describe('Hybrid live customer acceptance', () => {
     monitor.reset();
     await page.goto('/integration-credentials', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => undefined);
-    await expect(page).toHaveURL(/\/events(?:$|[?#])/);
+    await expect(page).toHaveURL(/\/command-center(?:$|[?#])/);
     monitor.assertClean('specialist connector redirect');
 
     for (const account of [hybridLiveAccounts.manager, hybridLiveAccounts.admin]) {
@@ -156,6 +157,46 @@ test.describe('Hybrid live customer acceptance', () => {
     }
   });
 
+  test('manager can operate Event Operations and Sales & Leads at desktop and mobile widths', async ({ page }) => {
+    test.setTimeout(90000);
+    const monitor = installLiveMonitors(page);
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await login(page, hybridLiveAccounts.manager);
+
+    monitor.reset();
+    await page.goto('/events', { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => undefined);
+    await expect(page.getByRole('heading', { name: /^Event Operations$/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('navigation', { name: 'Event workspace views' })).toBeVisible();
+    await expectNoHorizontalOverflow(page, 'desktop event operations');
+    monitor.assertClean('desktop event operations');
+
+    monitor.reset();
+    await page.goto('/analytics', { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => undefined);
+    await expect(page.getByRole('heading', { name: /^Sales & Leads$/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: /^Lead Pipeline$/i })).toBeVisible();
+    await expectNoHorizontalOverflow(page, 'desktop sales and leads');
+    monitor.assertClean('desktop sales and leads');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    monitor.reset();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => undefined);
+    await expect(page.getByRole('heading', { name: /^Sales & Leads$/i })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Mobile product navigation' })).toBeVisible();
+    await expectNoHorizontalOverflow(page, 'mobile sales and leads');
+    monitor.assertClean('mobile sales and leads');
+
+    monitor.reset();
+    await page.goto('/events', { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => undefined);
+    await expect(page.getByRole('heading', { name: /^Event Operations$/i })).toBeVisible();
+    await expectNoHorizontalOverflow(page, 'mobile event operations');
+    monitor.assertClean('mobile event operations');
+  });
+
   test('admin can configure the daily executive report workflow with honest delivery readiness', async ({ page }) => {
     test.setTimeout(160000);
     const monitor = installLiveMonitors(page);
@@ -168,10 +209,10 @@ test.describe('Hybrid live customer acceptance', () => {
     monitor.reset();
     await page.goto('/executive', { waitUntil: 'domcontentloaded' });
     await respectLiveRateLimitIfTriggered(page, monitor);
-    await expect(page.getByRole('heading', { name: /CEO commercial dashboard and report center/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { name: /^Executive Dashboard$/i })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/Executive report workflow/i).first()).toBeVisible();
 
-    const recipients = page.getByPlaceholder(/Optional extra recipients/i).first();
+    const recipients = page.getByRole('textbox', { name: /Additional recipients/i });
     await recipients.fill(`gm-${Date.now()}@tanaghum.test`);
     await page.getByRole('button', { name: /Save schedule/i }).click();
 
