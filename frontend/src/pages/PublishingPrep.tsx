@@ -332,7 +332,7 @@ export default function PublishingPrep() {
         </section>
       </div> : <section className="scheduling-empty"><OpsEmpty title="No Approved Content Yet" message="Approve a content draft first. Tanaghum will then prepare it for scheduling." action={<Link className="ops-button is-primary" to="/approvals">Open Review</Link>} /></section>}
 
-      <div className="scheduling-stitchi"><Sparkles size={18} /><div><strong>Not Sure When To Publish?</strong><span>Stitchi can suggest a time using the campaign window and audience context. You confirm before anything is scheduled.</span></div><Link className="ops-button is-secondary" to="/stitchi?mode=prepare&prompt=Suggest%20a%20publishing%20time%20for%20the%20selected%20approved%20content">Suggest A Time</Link></div>
+      {packages.length ? <div className="scheduling-stitchi"><Sparkles size={18} /><div><strong>Not Sure When To Publish?</strong><span>Stitchi can suggest a time using the campaign window and audience context. You confirm before anything is scheduled.</span></div><Link className="ops-button is-secondary" to="/stitchi?mode=prepare&prompt=Suggest%20a%20publishing%20time%20for%20the%20selected%20approved%20content">Suggest A Time</Link></div> : null}
 
       <details className="scheduling-details">
         <summary><span><Settings size={18} /><span><strong>Setup And Activity Details</strong><small>Social account assignment, readiness, and workflow history.</small></span></span><ChevronDown size={18} /></summary>
