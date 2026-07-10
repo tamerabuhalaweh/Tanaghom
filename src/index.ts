@@ -6,6 +6,7 @@ import { logger } from '@shared/logging';
 import { connectDatabase, disconnectDatabase } from '@shared/database';
 import { closeQueue, getRedisConnection } from '@shared/queue';
 import { verifyToken } from '@shared/auth';
+import { resolveRateLimitKey } from '@shared/auth/rate-limit-key';
 import { assertTokenNotRevoked } from '@shared/auth/token-revocation';
 import { validateEnvironment, isDemoMode, assertDemoSafe } from './env-validation';
 import { healthCheck } from './routes/health';
@@ -144,7 +145,7 @@ function memoryRateLimit(key: string, now: number): { allowed: boolean; retryAft
 }
 
 async function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> {
-  const key = `rate-limit:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+  const key = resolveRateLimitKey(req.headers.authorization, req.ip || req.socket.remoteAddress);
   const now = Date.now();
   try {
     if (process.env.NODE_ENV === 'test' || process.env.REDIS_RATE_LIMIT_DISABLED === 'true') {
