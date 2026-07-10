@@ -243,11 +243,12 @@ describe('Sprint 56 production product integrity contracts', () => {
 
     for (const leadField of ['leadName', 'leadEmail', 'leadPhone']) {
       expect(leadsController, `${leadField} must be returned to the tenant UI`).toContain(leadField);
-      expect(analytics, `${leadField} must be displayed in Performance`).toContain(leadField);
+      expect(analytics, `${leadField} must be displayed in Sales & Leads`).toContain(leadField);
     }
 
-    expect(analytics).toContain('Preview Voice/Chat Handoff');
-    expect(analytics).toContain('Voice/Chat Handoff Preview');
+    expect(analytics).toContain('smartLabsApi.leadHandoffPreview');
+    expect(analytics).toContain('Voice/chat handoff');
+    expect(analytics).toContain('Voice/chat handoff preview prepared. No external call was made.');
   });
 
   it('keeps Sprint 60 Events dashboard wired to event APIs and customer-facing navigation', () => {

@@ -375,7 +375,7 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
   await installEventApiMocks(page);
   await page.addInitScript(() => localStorage.setItem('token', 'e2e-token'));
 
-  await page.goto('/events');
+  await page.goto('/events/advanced');
   await expect(page.getByRole('heading', { name: /^Events$/i })).toBeVisible();
   await expect(page.getByText(/No events yet/i)).toBeVisible();
 
@@ -388,8 +388,9 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
   await page.getByRole('button', { name: /Create Event Workspace/i }).click();
 
   await expect(page).toHaveURL(/\/events\/11111111-1111-4111-8111-111111111111$/);
+  await page.goto('/events/advanced/11111111-1111-4111-8111-111111111111');
   await expect(page.getByRole('heading', { name: /Tagyeer wa Irtaqi - E2E Event/i })).toBeVisible();
-  await expect(page.getByText(/Manual KPI Update/i)).toBeVisible();
+  await expect(page.getByText(/Fallback KPI Correction/i)).toBeVisible();
 
   await page.getByLabel(/Reach/i).fill('5000');
   await page.getByLabel(/Interactions/i).fill('640');
@@ -398,11 +399,11 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
   await page.getByLabel(/^Meetings$/i).fill('16');
   await page.getByLabel(/^Purchases$/i).fill('7');
   await page.getByLabel(/Spend/i).fill('2800');
-  await page.getByRole('button', { name: /Save KPI Update/i }).click();
+  await page.getByRole('button', { name: /Save Fallback Correction/i }).click();
 
   await expect(page.getByText(/Event KPI update saved/i)).toBeVisible();
   await expect(page.getByText(/80 forms completed/i)).toBeVisible();
-  await expect(page.getByText(/2,800 SAR actual spend/i)).toBeVisible();
+  await expect(page.getByText(/\$2,800 actual spend/i)).toBeVisible();
   await expect(page.getByRole('heading', { name: /^Channel Performance$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^KPI Evidence$/i })).toBeVisible();
   await expect(page.getByText(/What To Improve Next/i)).toBeVisible();
@@ -419,7 +420,7 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
   await expect(page.getByText(/Dry-run complete: 1 valid row/i)).toBeVisible();
   await page.getByRole('button', { name: /Approve Import/i }).click();
   await expect(page.getByText(/Import approved: 1 KPI record/i)).toBeVisible();
-  await expect(page.getByText(/Approved Import Active/i)).toBeVisible();
+  await expect(page.getByText(/Approved Import Bridge/i)).toBeVisible();
   await expect(page.getByText(/1 connector/i)).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });

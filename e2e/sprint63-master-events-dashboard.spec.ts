@@ -186,9 +186,9 @@ test('Sprint 63 master events dashboard shows executive portfolio metrics', asyn
 
   await page.goto('/events/master');
 
-  await expect(page.getByRole('heading', { name: 'Master Events Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Business Control Room' })).toBeVisible();
   await expect(page.getByText('185').first()).toBeVisible();
-  await expect(page.getByText('61,200 SAR').first()).toBeVisible();
+  await expect(page.getByText('$61,200').first()).toBeVisible();
   await expect(page.getByText('Revenue Funnel')).toBeVisible();
   await expect(page.getByText('Channel Performance')).toBeVisible();
   await expect(page.getByText('Event Type Comparison')).toBeVisible();
@@ -210,7 +210,7 @@ test('Sprint 63 master events dashboard shows honest empty state', async ({ page
 
   await page.goto('/events/master');
 
-  await expect(page.getByRole('heading', { name: 'Master Events Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Business Control Room' })).toBeVisible();
   await expect(page.getByText('No event results yet')).toBeVisible();
   await expect(page.getByText(/without static sample numbers/i)).toBeVisible();
 });

@@ -263,7 +263,7 @@ test('Sprint 62 event sales workflow captures and converts a lead', async ({ pag
   await installSprint62Mocks(page);
   await page.addInitScript(() => localStorage.setItem('token', 'e2e-token'));
 
-  await page.goto(`/events/${eventId}`);
+  await page.goto(`/events/advanced/${eventId}`);
   await expect(page.getByRole('heading', { name: /^Events$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sales Workflow', exact: true })).toBeVisible();
   await expect(page.getByText('Capture event leads', { exact: true })).toBeVisible();

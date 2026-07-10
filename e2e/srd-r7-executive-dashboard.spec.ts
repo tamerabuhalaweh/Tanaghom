@@ -4,7 +4,7 @@ const user = {
   id: 'user-executive',
   email: 'executive.manager@tanaghum.com',
   name: 'Executive Manager',
-  role: 'marketing_manager',
+  role: 'cco',
   tenantKey: 'default',
 };
 
@@ -258,14 +258,14 @@ test.describe('SRD-R7 CEO commercial analytics', () => {
     await page.getByRole('button', { name: 'Open Command Center' }).click();
     await page.waitForURL(/\/command-center(?:$|[?#])/);
 
-    await page.getByRole('link', { name: /CEO Dashboard/i }).click();
+    await page.getByRole('link', { name: /Executive Dashboard/i }).click();
     await expect(page).toHaveURL(/\/executive(?:$|[?#])/);
-    await expect(page.getByRole('heading', { name: /CEO commercial dashboard and report center/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Executive Dashboard$/i })).toBeVisible();
     await expect(page.getByText('Revenue target', { exact: true })).toBeVisible();
-    await expect(page.getByText('Known revenue:')).toBeVisible();
+    await expect(page.getByText('Known revenue', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('No-show rate needs attention')).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'Online Courses' })).toBeVisible();
-    await expect(page.getByText('KPI records')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Revenue by active product' }).getByText('Online Courses', { exact: true })).toBeVisible();
+    await expect(page.getByText('KPI records', { exact: true })).toBeVisible();
     await expect(page.getByText('Connect analytics or import KPI data')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Generate preview' }).click();
@@ -273,7 +273,7 @@ test.describe('SRD-R7 CEO commercial analytics', () => {
     await expect(page.getByText('Weekly commercial executive report').last()).toBeVisible();
 
     await page.getByRole('button', { name: 'Save schedule' }).click();
-    await expect(page.getByText('Report schedule saved for dashboard preview.')).toBeVisible();
+    await expect(page.getByText(/Executive report workflow saved/i)).toBeVisible();
     await expect(page.getByText('Active schedules')).toBeVisible();
 
     monitor.assertClean();

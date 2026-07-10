@@ -235,34 +235,36 @@ test('Commercial/Social product routes are wired with current UX vocabulary', as
   await page.getByRole('textbox', { name: /^Password$/i }).fill('password123');
   await page.getByRole('button', { name: /Open Command Center/i }).click();
 
-  await expect(page.getByRole('heading', { name: /^Dashboard$/i })).toBeVisible();
-  await expect(page.getByText(/Your Content Workflow/i)).toBeVisible();
-  await expect(page.getByText(/Performance & Results/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Today's Commercial Priorities/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Commercial Pipeline/i })).toBeVisible();
 
-  await page.locator('a[href="/ideas"]:visible').click();
-  await expect(page.getByRole('heading', { name: /Content Creator/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Generate Campaign Ideas/i })).toBeVisible();
+  await page.getByRole('link', { name: 'Content', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Create Campaign Content/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Generate 4 Directions/i })).toBeVisible();
 
-  await page.locator('a[href="/campaigns"]:visible').click();
+  await page.getByRole('button', { name: /Setup & More/i }).click();
+  await page.getByRole('link', { name: /Campaign Workspace/i }).click();
   await expect(page.getByRole('heading', { name: /^Campaigns$/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /New Campaign/i })).toBeVisible();
   await expect(page.getByText(/Today's campaign step/i)).toBeVisible();
   await expect(page.getByText(/Workflow Guide/i)).toBeVisible();
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2)).toBe(true);
 
-  await page.locator('a[href="/approvals"]:visible').click();
-  await expect(page.getByRole('heading', { name: /Review & Approve/i })).toBeVisible();
-  await expect(page.getByText(/How reviews work/i)).toBeVisible();
+  await page.getByRole('button', { name: /Setup & More/i }).click();
+  await page.getByRole('link', { name: /Review Queue/i }).click();
+  await expect(page.getByRole('heading', { name: /Review Queue/i })).toBeVisible();
+  await expect(page.getByText(/When campaign content is submitted for review/i)).toBeVisible();
 
-  await page.locator('a[href="/publishing"]:visible').click();
+  await page.getByRole('button', { name: /Setup & More/i }).click();
+  await page.getByRole('link', { name: /^Scheduling\b/i }).click();
   await expect(page.getByRole('heading', { name: /Scheduling & Review/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Scheduling Payload/i })).toBeVisible();
 
-  await page.locator('a[href="/analytics"]:visible').click();
-  await expect(page.getByRole('heading', { name: /^Performance$/i })).toBeVisible();
+  await page.getByRole('link', { name: /Sales & Leads/i }).click();
+  await expect(page.getByRole('heading', { name: /^Sales & Leads$/i })).toBeVisible();
 
-  await page.getByRole('button', { name: /Admin & Settings/i }).click();
-  await page.locator('a[href="/tenant-admin"]:visible').click();
+  await page.getByRole('button', { name: /Setup & More/i }).click();
+  await page.getByRole('link', { name: /Workspace Admin/i }).click();
   await expect(page.getByRole('heading', { name: /Tenant Administration/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Subscription & Entitlements/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Tenant Export/i })).toBeVisible();
