@@ -1,20 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { aiProviderApi, campaignsApi, ideasApi } from '../api';
 import {
-  EmptyProductState,
-  Field,
-  Notice,
-  PlatformPill,
-  PrimaryAction,
-  ProductCard,
-  ProductPage,
-  ProductStatus,
-  ProductTable,
-  SecondaryAction,
-  WorkflowRail,
-} from '../components/ProductUI';
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  MessageSquareText,
+  Plus,
+  Search,
+  Sparkles,
+} from 'lucide-react';
+import { aiProviderApi, campaignsApi, ideasApi } from '../api';
+import { OpsEmpty, OpsNotice, OpsPage, OpsPageHeader, OpsSection, OpsSkeleton, OpsStatus } from '../components/OperationalUI';
 import { useAuth } from '../contexts/useAuth';
+import './PostIdeas.css';
 
 interface PostIdea {
   id: string;
@@ -71,11 +70,6 @@ const DEFAULT_BRIEF = {
   riskLevel: 'medium',
 };
 
-function platformLabel(platform: string): string {
-  if (platform === 'twitter' || platform === 'x') return 'X / Twitter';
-  return platform.charAt(0).toUpperCase() + platform.slice(1);
-}
-
 function text(value: unknown, fallback = 'Not specified'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
@@ -89,10 +83,12 @@ function stringList(value: unknown): string[] {
 }
 
 function titleCase(value: unknown): string {
-  return text(value, 'not_available')
-    .replaceAll('_', ' ')
-    .replaceAll('-', ' ')
-    .replace(/\b\w/g, char => char.toUpperCase());
+  return text(value, 'not_available').replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function platformLabel(platform: string): string {
+  if (platform === 'twitter' || platform === 'x') return 'X / Twitter';
+  return platform.charAt(0).toUpperCase() + platform.slice(1);
 }
 
 function campaignTitle(campaign: RecordMap): string {
@@ -112,17 +108,14 @@ function isSetupOrTestContent(campaign: RecordMap): boolean {
 }
 
 function contentSummary(item: RecordMap): string {
-  return text(
-    item.objective || item.rawMessage || item.raw_message || item.summary,
-    'Open this campaign to continue drafting, review, approval, and scheduling.',
-  );
+  return text(item.objective || item.rawMessage || item.raw_message || item.summary, 'Continue this campaign in the Campaign Workspace.');
 }
 
-function contentActionLabel(status: string): string {
-  if (status.includes('approved')) return 'Prepare schedule';
-  if (status.includes('review')) return 'Review content';
-  if (status.includes('scheduled') || status.includes('published')) return 'View result';
-  return 'Continue';
+function contentAction(status: string): { label: string; path: string } {
+  if (status.includes('approved')) return { label: 'Prepare Schedule', path: '/publishing' };
+  if (status.includes('review')) return { label: 'Open Review', path: '/approvals' };
+  if (status.includes('scheduled') || status.includes('published')) return { label: 'View Performance', path: '/growth' };
+  return { label: 'Continue Drafting', path: '/campaigns' };
 }
 
 function buildGoalPayload(brief: typeof DEFAULT_BRIEF): string {
@@ -139,10 +132,7 @@ function buildGoalPayload(brief: typeof DEFAULT_BRIEF): string {
 }
 
 function buildAudiencePayload(brief: typeof DEFAULT_BRIEF): string {
-  return [
-    brief.audience,
-    `Target geography: ${brief.geography}`,
-  ].join('\n');
+  return [brief.audience, `Target geography: ${brief.geography}`].join('\n');
 }
 
 export default function PostIdeas() {
@@ -164,38 +154,30 @@ export default function PostIdeas() {
   const [contentStatus, setContentStatus] = useState('');
   const [contentPlatform, setContentPlatform] = useState('');
 
-  const selectedIdea = useMemo(() => ideas.find((idea) => idea.id === selectedIdeaId) || null, [ideas, selectedIdeaId]);
-  const goalPayload = buildGoalPayload(brief);
-  const audiencePayload = buildAudiencePayload(brief);
+  const selectedIdea = useMemo(() => ideas.find(idea => idea.id === selectedIdeaId) || null, [ideas, selectedIdeaId]);
   const filteredContent = useMemo(() => {
     const search = contentSearch.trim().toLowerCase();
     return contentLibrary.filter(item => !isSetupOrTestContent(item)).filter(item => {
-      const platforms = stringList(item.targetPlatforms || item.platforms);
+      const itemPlatforms = stringList(item.targetPlatforms || item.platforms);
       const status = text(item.status, '').toLowerCase();
-      const title = campaignTitle(item).toLowerCase();
-      const objective = text(item.objective || item.rawMessage || item.raw_message, '').toLowerCase();
-      if (search && !`${title} ${objective}`.includes(search)) return false;
+      const searchable = `${campaignTitle(item)} ${text(item.objective || item.rawMessage || item.raw_message, '')}`.toLowerCase();
+      if (search && !searchable.includes(search)) return false;
       if (contentStatus && status !== contentStatus) return false;
-      if (contentPlatform && !platforms.includes(contentPlatform)) return false;
+      if (contentPlatform && !itemPlatforms.includes(contentPlatform)) return false;
       return true;
     });
   }, [contentLibrary, contentPlatform, contentSearch, contentStatus]);
-  const hiddenSetupContentCount = useMemo(() => contentLibrary.filter(isSetupOrTestContent).length, [contentLibrary]);
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-
-    async function run() {
+    async function load() {
       try {
-        const active = await aiProviderApi.active(token as string) as { name?: string; model?: string; apiKeyStatus?: string; _label?: string };
-        if (cancelled) return;
-        setProviderReady(active.apiKeyStatus === 'configured');
+        const active = await aiProviderApi.active(token as string) as { apiKeyStatus?: string };
+        if (!cancelled) setProviderReady(active.apiKeyStatus === 'configured');
       } catch {
-        if (cancelled) return;
-        setProviderReady(false);
+        if (!cancelled) setProviderReady(false);
       }
-
       try {
         const campaigns = await campaignsApi.list(token as string);
         if (!cancelled) setContentLibrary(list(campaigns));
@@ -205,12 +187,19 @@ export default function PostIdeas() {
         if (!cancelled) setPageLoading(false);
       }
     }
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
+    void load();
+    return () => { cancelled = true; };
   }, [token]);
+
+  function updateBrief(key: keyof typeof DEFAULT_BRIEF, value: string) {
+    setBrief(current => ({ ...current, [key]: value }));
+  }
+
+  function togglePlatform(platform: string) {
+    setPlatforms(current => current.includes(platform)
+      ? current.length === 1 ? current : current.filter(item => item !== platform)
+      : [...current, platform]);
+  }
 
   async function generateIdeas() {
     if (!token || !providerReady) return;
@@ -220,8 +209,8 @@ export default function PostIdeas() {
     setWorkflowDecision(null);
     try {
       const data = await ideasApi.generate({
-        goal: goalPayload,
-        audience: audiencePayload,
+        goal: buildGoalPayload(brief),
+        audience: buildAudiencePayload(brief),
         platforms,
         count: 4,
       }, token) as GenerateResponse;
@@ -229,34 +218,30 @@ export default function PostIdeas() {
       setSelectedIdeaId(data.ideas?.[0]?.id || '');
       setWorkflowId(data.workflow.threadId);
       setProvider(data);
-      setMessage(`Generated ${data.ideas?.length || 0} campaign ideas for your review.`);
-    } catch (error) {
-      setMessage(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage(`Generated ${data.ideas?.length || 0} campaign directions for review.`);
+    } catch (reason) {
+      setMessage(`Generation failed: ${reason instanceof Error ? reason.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   }
 
-  async function approveSelectedIdea() {
+  async function selectIdea() {
     if (!token || !workflowId || !selectedIdea) return;
     setLoading(true);
     setMessage('');
     try {
-      const decision = await ideasApi.resumeWorkflow(workflowId, {
-        action: 'select',
-        ideaId: selectedIdea.id,
-        notes: 'Selected for campaign creation.',
-      }, token) as WorkflowResumeResponse;
+      const decision = await ideasApi.resumeWorkflow(workflowId, { action: 'select', ideaId: selectedIdea.id, notes: 'Selected for campaign creation.' }, token) as WorkflowResumeResponse;
       setWorkflowDecision(decision);
-      setMessage('Idea selected. You can now create a campaign from it.');
-    } catch (error) {
-      setMessage(`Selection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMessage('Direction selected. Create the campaign when you are ready.');
+    } catch (reason) {
+      setMessage(`Selection failed: ${reason instanceof Error ? reason.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   }
 
-  async function convertToCampaign() {
+  async function createCampaign() {
     if (!token || !selectedIdea || workflowDecision?.status !== 'selected') return;
     setLoading(true);
     setMessage('');
@@ -264,456 +249,158 @@ export default function PostIdeas() {
       const data = await ideasApi.convertToCampaign({
         idea: selectedIdea,
         platforms: [selectedIdea.platform],
-        audience: audiencePayload,
-        goal: goalPayload,
+        audience: buildAudiencePayload(brief),
+        goal: buildGoalPayload(brief),
       }, token) as CampaignResponse;
       setCampaign(data);
-      setContentLibrary(current => [
-        {
-          id: data.campaignId,
-          topic: data.title,
-          status: data.status,
-          targetPlatforms: [selectedIdea.platform],
-          objective: selectedIdea.hook,
-          riskCategory: selectedIdea.estimatedReach,
-        },
-        ...current,
-      ]);
+      setContentLibrary(current => [{
+        id: data.campaignId,
+        topic: data.title,
+        status: data.status,
+        targetPlatforms: [selectedIdea.platform],
+        objective: selectedIdea.hook,
+        riskCategory: selectedIdea.estimatedReach,
+      }, ...current]);
       setMessage(`Campaign created: ${data.title}`);
-    } catch (error) {
-      setMessage(`Campaign creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (reason) {
+      setMessage(`Campaign creation failed: ${reason instanceof Error ? reason.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   }
 
-  function updateBrief(key: keyof typeof DEFAULT_BRIEF, value: string) {
-    setBrief(current => ({ ...current, [key]: value }));
-  }
+  const workflowStep = campaign ? 3 : workflowDecision?.status === 'selected' ? 2 : ideas.length ? 1 : 0;
+  const providerLabel = provider ? `${provider.generationMode || provider.provider} / ${provider.model}` : 'AI Connected';
 
-  function togglePlatform(platform: string) {
-    setPlatforms((current) => {
-      if (current.includes(platform)) return current.length === 1 ? current : current.filter((item) => item !== platform);
-      return [...current, platform];
-    });
-  }
-
-  // ---- Skeleton loading ----
-  if (pageLoading) {
-    return (
-      <ProductPage eyebrow="Content Studio" title="Content Creator" subtitle="Loading...">
-        <div className="space-y-6">
-          <div className="skeleton-pulse h-10 w-72 rounded-lg" />
-          <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-            <div className="skeleton-pulse h-96 rounded-xl" />
-            <div className="skeleton-pulse h-96 rounded-xl" />
-          </div>
-        </div>
-      </ProductPage>
-    );
-  }
+  if (pageLoading) return <OpsPage><OpsPageHeader eyebrow="Content Workspace" title="Create Campaign Content" subtitle="Loading your content workspace." /><OpsSkeleton rows={7} /></OpsPage>;
 
   return (
-    <ProductPage
-      eyebrow="Content Studio"
-      title="Content Creator"
-      subtitle="Fill in your campaign brief and let AI generate creative directions for you to choose from."
-      action={
-        <ProductStatus tone={providerReady ? 'good' : 'warn'}>
-          {providerReady
-            ? (provider ? `${provider.generationMode || provider.provider} / ${provider.model}` : 'AI Connected')
-            : 'Connect AI Model'}
-        </ProductStatus>
-      }
-    >
-      <WorkflowRail
-        steps={[
-          { label: 'Brief', state: 'active' },
-          { label: 'Ideas', state: ideas.length ? 'done' : 'waiting' },
-          { label: 'Campaign', state: campaign ? 'done' : workflowDecision?.status === 'selected' ? 'active' : 'waiting' },
-        ]}
+    <OpsPage className="content-workspace-page">
+      <OpsPageHeader
+        eyebrow="Content Workspace"
+        title="Create Campaign Content"
+        subtitle="Start with a focused brief, create directions with AI, then move one selected direction into campaign production."
+        actions={(
+          <>
+            <Link className="ops-button is-secondary" to="/stitchi?mode=prepare&prompt=Help%20me%20create%20a%20campaign%20content%20brief"><Sparkles size={17} aria-hidden="true" />Create With Stitchi</Link>
+            <button className="ops-button is-primary" type="button" onClick={() => { setBrief(DEFAULT_BRIEF); setIdeas([]); setWorkflowDecision(null); setCampaign(null); }}><Plus size={17} aria-hidden="true" />New Brief</button>
+          </>
+        )}
       />
 
-      {message && (
-        <Notice tone={message.includes('failed') ? 'danger' : 'good'}>{message}</Notice>
-      )}
+      <nav className="content-journey" aria-label="Content workflow stages">
+        {['Brief', 'Ideas', 'Campaign', 'Review', 'Schedule', 'Results'].map((step, index) => (
+          <span key={step} className={`${index === workflowStep ? 'is-active' : ''}${index < workflowStep ? ' is-complete' : ''}`}>
+            <span>{index < workflowStep ? <Check size={14} aria-hidden="true" /> : index + 1}</span><strong>{step}</strong>
+          </span>
+        ))}
+      </nav>
 
-      {!providerReady && (
-        <Notice tone="warn">
-          Connect an AI model to generate campaign ideas.{' '}
-          <Link to="/ai-settings" className="font-semibold underline">Go to AI Settings</Link>
-        </Notice>
-      )}
+      {message ? <OpsNotice tone={message.toLowerCase().includes('failed') ? 'danger' : 'positive'}>{message}</OpsNotice> : null}
+      {!providerReady ? <OpsNotice tone="warning">Connect an AI model before generating directions. <Link className="ops-text-button" to="/ai-settings">Open AI Model Setup</Link></OpsNotice> : null}
 
-      <ProductCard title="What this page helps you do" subtitle="Create campaign directions with AI, choose the best idea, and continue that idea into production.">
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            ['1', 'Write the brief', 'Describe the offer, audience, goal, tone, and platforms.'],
-            ['2', 'Choose the strongest idea', 'AI generates several directions. You select the one worth turning into campaign work.'],
-            ['3', 'Continue production', 'Saved content can move to drafting, review, approval, scheduling, and performance tracking.'],
-          ].map(([step, title, detail]) => (
-            <div key={step} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">{step}</div>
-              <div className="mt-4 text-sm font-semibold text-neutral-950">{title}</div>
-              <p className="mt-2 text-sm leading-6 text-neutral-500">{detail}</p>
-            </div>
-          ))}
-        </div>
-      </ProductCard>
+      <div className="content-create-layout">
+        <OpsSection title="Campaign Brief" subtitle="Required information first. Add optional details only when they improve the result." action={<OpsStatus tone={providerReady ? 'positive' : 'warning'}>{providerReady ? providerLabel : 'AI Setup Required'}</OpsStatus>} className="content-brief-section">
+          <form className="content-brief-form" onSubmit={event => { event.preventDefault(); void generateIdeas(); }}>
+            <ContentField label="Campaign Name" htmlFor="content-campaign-name">
+              <input id="content-campaign-name" name="campaignName" value={brief.campaignName} onChange={event => updateBrief('campaignName', event.target.value)} placeholder={'Example: Leadership course launch\u2026'} autoComplete="off" />
+            </ContentField>
+            <ContentField label="Objective" htmlFor="content-objective" required wide>
+              <textarea id="content-objective" name="objective" rows={3} value={brief.objective} onChange={event => updateBrief('objective', event.target.value)} placeholder={'What outcome should this content create?\u2026'} />
+            </ContentField>
+            <ContentField label="Audience" htmlFor="content-audience" required wide>
+              <textarea id="content-audience" name="audience" rows={3} value={brief.audience} onChange={event => updateBrief('audience', event.target.value)} placeholder={'Who should see this content, and why should they care?\u2026'} />
+            </ContentField>
+            <fieldset className="content-platform-field">
+              <legend>Platforms</legend>
+              <div>{PLATFORM_OPTIONS.map(platform => <button key={platform.id} type="button" className={platforms.includes(platform.id) ? 'is-active' : ''} onClick={() => togglePlatform(platform.id)} aria-pressed={platforms.includes(platform.id)}>{platform.label}</button>)}</div>
+            </fieldset>
 
-      <ProductCard
-        title="Saved campaign content"
-        subtitle="Customer-ready campaign records created from selected ideas. Use filters to find what needs drafting, review, approval, or scheduling."
-        action={<ProductStatus tone={filteredContent.length ? 'good' : 'warn'}>{filteredContent.length} visible item(s)</ProductStatus>}
-      >
-        {hiddenSetupContentCount > 0 && (
-          <Notice tone="info">
-            Archived setup records are hidden from this customer workspace so the team sees only usable campaign content.
-          </Notice>
-        )}
-
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto]">
-          <Field label="Search content">
-            <input
-              value={contentSearch}
-              onChange={event => setContentSearch(event.target.value)}
-              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-              placeholder="Search by title or objective"
-            />
-          </Field>
-          <Field label="Status">
-            <select
-              value={contentStatus}
-              onChange={event => setContentStatus(event.target.value)}
-              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-            >
-              <option value="">All statuses</option>
-              <option value="idea">Idea</option>
-              <option value="drafting">Drafting</option>
-              <option value="pending_review">Pending review</option>
-              <option value="approved">Approved</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="published">Published</option>
-            </select>
-          </Field>
-          <Field label="Platform">
-            <select
-              value={contentPlatform}
-              onChange={event => setContentPlatform(event.target.value)}
-              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-            >
-              <option value="">All platforms</option>
-              {PLATFORM_OPTIONS.map(platform => <option key={platform.id} value={platform.id}>{platform.label}</option>)}
-            </select>
-          </Field>
-          <div className="flex items-end">
-            <SecondaryAction
-              onClick={() => {
-                setContentSearch('');
-                setContentStatus('');
-                setContentPlatform('');
-              }}
-            >
-              Clear
-            </SecondaryAction>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          {filteredContent.length ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {filteredContent.slice(0, 12).map(item => {
-                const status = text(item.status, 'idea').toLowerCase();
-                const platforms = stringList(item.targetPlatforms || item.platforms);
-                return (
-                  <article key={text(item.id, campaignTitle(item))} className="flex min-h-[230px] flex-col rounded-[1.25rem] border border-neutral-100 bg-neutral-50 p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="line-clamp-2 text-base font-semibold leading-6 text-neutral-950">{campaignTitle(item)}</div>
-                        <p className="mt-2 line-clamp-3 text-sm leading-6 text-neutral-600">{contentSummary(item)}</p>
-                      </div>
-                      <ProductStatus tone={status.includes('approved') ? 'good' : status.includes('review') ? 'warn' : 'info'}>{titleCase(status)}</ProductStatus>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-2xl border border-neutral-100 bg-white p-3">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Platforms</div>
-                        <div className="mt-2 text-sm leading-5 text-neutral-900">{platforms.length ? platforms.map(platformLabel).join(', ') : 'Choose platform'}</div>
-                      </div>
-                      <div className="rounded-2xl border border-neutral-100 bg-white p-3">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Risk</div>
-                        <div className="mt-2 text-sm leading-5 text-neutral-900">{titleCase(item.riskCategory || item.risk_category || 'medium')}</div>
-                      </div>
-                      <div className="rounded-2xl border border-neutral-100 bg-white p-3">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Next step</div>
-                        <div className="mt-2 text-sm leading-5 text-neutral-900">{contentActionLabel(status)}</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
-                      <span className="text-xs leading-5 text-neutral-500">Use Campaigns to continue editing and approval.</span>
-                      <Link
-                        to="/campaigns"
-                        className="inline-flex min-h-10 items-center justify-center rounded-full bg-neutral-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-neutral-800"
-                      >
-                        {contentActionLabel(status)}
-                      </Link>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyProductState
-              title="No customer-ready content yet"
-              message="Generate ideas below, choose the strongest direction, then create a campaign. That campaign will appear here for drafting, review, approval, and scheduling."
-              action={<SecondaryAction onClick={() => setContentSearch('')}>Show All Content</SecondaryAction>}
-            />
-          )}
-        </div>
-      </ProductCard>
-
-      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <ProductCard
-          title="Campaign Brief"
-          subtitle="Fill in the details below. The AI uses this to generate creative campaign directions."
-        >
-          <div className="space-y-4">
-            <Field label="Campaign Name">
-              <input
-                value={brief.campaignName}
-                onChange={(event) => updateBrief('campaignName', event.target.value)}
-                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-                placeholder="e.g. Summer product launch"
-              />
-            </Field>
-            <Field label="What's the goal?">
-              <textarea
-                value={brief.objective}
-                onChange={(event) => updateBrief('objective', event.target.value)}
-                className="min-h-24 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-6 text-neutral-950"
-                placeholder="e.g. Drive awareness for our new product line and generate 500 sign-ups"
-              />
-            </Field>
-            <Field label="Who are you talking to?">
-              <textarea
-                value={brief.audience}
-                onChange={(event) => updateBrief('audience', event.target.value)}
-                className="min-h-20 w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm leading-6 text-neutral-950"
-                placeholder="e.g. Marketing managers at mid-size tech companies in North America"
-              />
-            </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Location">
-                <input
-                  value={brief.geography}
-                  onChange={(event) => updateBrief('geography', event.target.value)}
-                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-                  placeholder="e.g. North America"
-                />
-              </Field>
-              <Field label="Tone">
-                <input
-                  value={brief.tone}
-                  onChange={(event) => updateBrief('tone', event.target.value)}
-                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-                  placeholder="e.g. professional, casual, inspiring"
-                />
-              </Field>
-              <Field label="Call to Action">
-                <input
-                  value={brief.cta}
-                  onChange={(event) => updateBrief('cta', event.target.value)}
-                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-                  placeholder="e.g. Sign up for early access"
-                />
-              </Field>
-              <Field label="Your Offer">
-                <input
-                  value={brief.offer}
-                  onChange={(event) => updateBrief('offer', event.target.value)}
-                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-                  placeholder="e.g. 30% off first month"
-                />
-              </Field>
-              <Field label="When to post">
-                <input
-                  value={brief.postingWindow}
-                  onChange={(event) => updateBrief('postingWindow', event.target.value)}
-                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-                  placeholder="e.g. Next two weeks"
-                />
-              </Field>
-              <Field label="Content Category">
-                <input
-                  value={brief.pillar}
-                  onChange={(event) => updateBrief('pillar', event.target.value)}
-                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-950"
-                  placeholder="e.g. Product launch, thought leadership"
-                />
-              </Field>
-            </div>
-            <Field label="Platforms">
-              <div className="flex flex-wrap gap-2">
-                {PLATFORM_OPTIONS.map((platform) => (
-                  <button
-                    key={platform.id}
-                    type="button"
-                    onClick={() => togglePlatform(platform.id)}
-                    className="focus:outline-none"
-                  >
-                    <PlatformPill active={platforms.includes(platform.id)}>{platform.label}</PlatformPill>
-                  </button>
-                ))}
+            <details className="content-advanced-fields">
+              <summary>Optional Brief Details <ChevronDown size={17} aria-hidden="true" /></summary>
+              <div>
+                <ContentField label="Location" htmlFor="content-geography"><input id="content-geography" name="geography" value={brief.geography} onChange={event => updateBrief('geography', event.target.value)} placeholder={'Example: GCC\u2026'} autoComplete="off" /></ContentField>
+                <ContentField label="Tone" htmlFor="content-tone"><input id="content-tone" name="tone" value={brief.tone} onChange={event => updateBrief('tone', event.target.value)} autoComplete="off" /></ContentField>
+                <ContentField label="Call to Action" htmlFor="content-cta"><input id="content-cta" name="cta" value={brief.cta} onChange={event => updateBrief('cta', event.target.value)} placeholder={'Example: Reserve your place\u2026'} autoComplete="off" /></ContentField>
+                <ContentField label="Offer" htmlFor="content-offer"><input id="content-offer" name="offer" value={brief.offer} onChange={event => updateBrief('offer', event.target.value)} placeholder={'What is being offered?\u2026'} autoComplete="off" /></ContentField>
+                <ContentField label="Posting Window" htmlFor="content-window"><input id="content-window" name="postingWindow" value={brief.postingWindow} onChange={event => updateBrief('postingWindow', event.target.value)} placeholder={'Example: Next 2 weeks\u2026'} autoComplete="off" /></ContentField>
+                <ContentField label="Content Category" htmlFor="content-pillar"><input id="content-pillar" name="pillar" value={brief.pillar} onChange={event => updateBrief('pillar', event.target.value)} placeholder={'Example: Thought leadership\u2026'} autoComplete="off" /></ContentField>
               </div>
-            </Field>
-            <PrimaryAction
-              onClick={generateIdeas}
-              disabled={
-                !providerReady ||
-                loading ||
-                brief.objective.trim().length < 6 ||
-                brief.audience.trim().length < 3
-              }
-            >
-              {loading ? 'Generating ideas...' : !providerReady ? 'Connect AI Model First' : 'Generate Campaign Ideas'}
-            </PrimaryAction>
-          </div>
-        </ProductCard>
+            </details>
 
-        <div className="space-y-6">
-          <ProductCard
-            title="Generated Ideas"
-            subtitle="Review the AI-generated directions and pick the one you like best."
-          >
-            {ideas.length ? (
-              <div className="grid gap-4 lg:grid-cols-2">
-                {ideas.map((idea) => {
-                  const active = selectedIdeaId === idea.id;
-                  return (
-                    <button
-                      key={idea.id}
-                      type="button"
-                      onClick={() => setSelectedIdeaId(idea.id)}
-                      className={`rounded-lg border p-5 text-left transition ${
-                        active
-                          ? 'border-neutral-950 bg-neutral-950 text-white'
-                          : 'border-neutral-200 bg-white hover:bg-neutral-50'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div
-                            className={
-                              active
-                                ? 'text-sm font-medium text-white/60'
-                                : 'text-sm font-medium text-neutral-500'
-                            }
-                          >
-                            {platformLabel(idea.platform)} / {idea.format.replaceAll('_', ' ')}
-                          </div>
-                          <h2 className="mt-3 text-lg font-semibold leading-snug">{idea.title}</h2>
-                        </div>
-                        <ProductStatus tone={active ? 'muted' : 'info'}>
-                          {active ? 'Selected' : 'Review'}
-                        </ProductStatus>
-                      </div>
-                      <p
-                        className={`mt-4 text-sm leading-6 ${
-                          active ? 'text-white/75' : 'text-neutral-600'
-                        }`}
-                      >
-                        {idea.hook}
-                      </p>
-                      <p
-                        className={`mt-3 text-sm leading-6 ${
-                          active ? 'text-white/50' : 'text-neutral-500'
-                        }`}
-                      >
-                        {idea.rationale}
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {idea.hashtags.map((tag) => (
-                          <span
-                            key={tag}
-                            className={`rounded-md border px-2 py-1 text-xs ${
-                              active
-                                ? 'border-white/15 bg-white/10 text-white/75'
-                                : 'border-neutral-200 bg-neutral-50 text-neutral-600'
-                            }`}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyProductState
-                title="Your campaign ideas will appear here"
-                message="Fill in the brief on the left and click Generate Campaign Ideas. The AI creates platform-specific directions for you to review."
-              />
-            )}
-          </ProductCard>
-
-          <ProductCard
-            title="Make Your Choice"
-            subtitle="Select your favorite idea, then create a campaign from it."
-          >
-            <div className="flex flex-wrap items-center gap-3">
-              <PrimaryAction
-                onClick={approveSelectedIdea}
-                disabled={loading || !selectedIdea || workflowDecision?.status === 'selected'}
-              >
-                {workflowDecision?.status === 'selected' ? 'Idea Selected' : 'Choose This Idea'}
-              </PrimaryAction>
-              <SecondaryAction
-                onClick={convertToCampaign}
-                disabled={
-                  loading ||
-                  workflowDecision?.status !== 'selected' ||
-                  Boolean(campaign)
-                }
-              >
-                {campaign ? 'Campaign Created' : 'Create Campaign From Idea'}
-              </SecondaryAction>
-              {campaign && (
-                <Link
-                  to="/campaigns"
-                  className="inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
-                >
-                  Open in Campaigns
-                </Link>
-              )}
+            <div className="content-form-actions">
+              <Link className="ops-button is-secondary" to="/campaigns">Open Saved Campaigns</Link>
+              <button className="ops-button is-primary" type="submit" disabled={!providerReady || loading || brief.objective.trim().length < 6 || brief.audience.trim().length < 3}><Sparkles size={17} aria-hidden="true" />{loading ? 'Generating\u2026' : 'Generate 4 Directions'}</button>
             </div>
-            {!selectedIdea && ideas.length > 0 && (
-              <p className="mt-3 text-sm text-neutral-500">
-                Click on any idea card above to select it, then choose it as your direction.
-              </p>
-            )}
-            {workflowDecision?.status === 'selected' && !campaign && (
-              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                Idea selected - now click "Create Campaign From Idea" to turn it into a campaign.
-              </div>
-            )}
-          </ProductCard>
+          </form>
+        </OpsSection>
 
-          <ProductCard title="Your Brief Summary" subtitle="What the AI will work with.">
-            <ProductTable
-              columns={['Input', 'Value']}
-              rows={[
-                ['Goal', brief.objective || 'Not filled in yet'],
-                ['Audience', brief.audience || 'Not filled in yet'],
-                ['Call to Action', brief.cta || 'Not filled in yet'],
-                ['Platforms', platforms.length ? platforms.map(platformLabel).join(', ') : 'Select platforms above'],
-                ['Safety', 'Human approval required before publishing'],
-              ]}
-            />
-          </ProductCard>
-        </div>
+        <aside className="content-stitchi-card">
+          <span><Sparkles size={20} aria-hidden="true" /></span>
+          <span className="ops-eyebrow">Stitchi Is Ready</span>
+          <h2>Build the brief through conversation.</h2>
+          <p>Stitchi can ask for missing audience, offer, channel, and timing details before preparing governed content work.</p>
+          <div><MessageSquareText size={17} aria-hidden="true" /><span>"Create an energetic Instagram carousel for entrepreneurs who want to become stronger leaders."</span></div>
+          <Link className="ops-button is-primary" to="/stitchi?mode=prepare&prompt=Help%20me%20build%20a%20content%20brief">Open Stitchi</Link>
+          <small>Stitchi prepares work. You choose what moves forward.</small>
+        </aside>
       </div>
-    </ProductPage>
+
+      {ideas.length ? (
+        <OpsSection title="Generated Directions" subtitle="Compare the AI-generated directions and choose one human-approved path." className="content-ideas-section">
+          <div className="content-idea-grid">
+            {ideas.map(idea => {
+              const active = selectedIdeaId === idea.id;
+              return (
+                <button key={idea.id} type="button" className={active ? 'is-active' : ''} onClick={() => { setSelectedIdeaId(idea.id); setWorkflowDecision(null); setCampaign(null); }} aria-pressed={active}>
+                  <span><small>{platformLabel(idea.platform)} / {titleCase(idea.format)}</small><OpsStatus tone={active ? 'positive' : 'neutral'}>{active ? 'Selected' : 'Compare'}</OpsStatus></span>
+                  <h3>{idea.title}</h3><p>{idea.hook}</p><em>{idea.rationale}</em>
+                  <span className="content-hashtags">{idea.hashtags.slice(0, 4).map(tag => <span key={tag}>{tag}</span>)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="content-selection-bar">
+            <div><strong>{selectedIdea ? selectedIdea.title : 'Choose a direction'}</strong><span>{workflowDecision?.status === 'selected' ? 'Human selection recorded. The campaign can now be created.' : 'Selection is required before campaign creation.'}</span></div>
+            <div>
+              <button className="ops-button is-secondary" type="button" onClick={() => void selectIdea()} disabled={loading || !selectedIdea || workflowDecision?.status === 'selected'}>{workflowDecision?.status === 'selected' ? 'Direction Selected' : 'Select Direction'}</button>
+              <button className="ops-button is-primary" type="button" onClick={() => void createCampaign()} disabled={loading || workflowDecision?.status !== 'selected' || Boolean(campaign)}>{campaign ? 'Campaign Created' : 'Create Campaign'}</button>
+              {campaign ? <Link className="ops-button is-secondary" to="/campaigns">Open Campaign <ArrowRight size={15} aria-hidden="true" /></Link> : null}
+            </div>
+          </div>
+        </OpsSection>
+      ) : null}
+
+      <OpsSection title="Recent Content" subtitle="Continue real saved campaign records without searching through every workflow." action={<OpsStatus tone={filteredContent.length ? 'positive' : 'neutral'}>{filteredContent.length} Visible</OpsStatus>} className="content-library-section">
+        <div className="content-library-filters">
+          <label><span>Search</span><span className="content-search-control"><Search size={17} aria-hidden="true" /><input name="contentSearch" value={contentSearch} onChange={event => setContentSearch(event.target.value)} placeholder={'Search saved content\u2026'} autoComplete="off" /></span></label>
+          <label><span>Status</span><span className="content-select-control"><select name="contentStatus" value={contentStatus} onChange={event => setContentStatus(event.target.value)}><option value="">All Statuses</option><option value="idea">Idea</option><option value="drafting">Drafting</option><option value="pending_review">Pending Review</option><option value="approved">Approved</option><option value="scheduled">Scheduled</option><option value="published">Published</option></select><ChevronDown size={17} aria-hidden="true" /></span></label>
+          <label><span>Platform</span><span className="content-select-control"><select name="contentPlatform" value={contentPlatform} onChange={event => setContentPlatform(event.target.value)}><option value="">All Platforms</option>{PLATFORM_OPTIONS.map(platform => <option key={platform.id} value={platform.id}>{platform.label}</option>)}</select><ChevronDown size={17} aria-hidden="true" /></span></label>
+          <button className="ops-button is-secondary" type="button" onClick={() => { setContentSearch(''); setContentStatus(''); setContentPlatform(''); }}>Clear</button>
+        </div>
+
+        {filteredContent.length ? (
+          <div className="content-library-list">
+            {filteredContent.slice(0, 20).map(item => {
+              const status = text(item.status, 'idea').toLowerCase();
+              const itemPlatforms = stringList(item.targetPlatforms || item.platforms);
+              const action = contentAction(status);
+              return (
+                <article key={text(item.id, campaignTitle(item))}>
+                  <div><h3>{campaignTitle(item)}</h3><p>{contentSummary(item)}</p></div>
+                  <span>{itemPlatforms.length ? itemPlatforms.map(platformLabel).join(', ') : 'Platform not selected'}</span>
+                  <OpsStatus tone={status.includes('approved') ? 'positive' : status.includes('review') ? 'warning' : 'info'}>{titleCase(status)}</OpsStatus>
+                  <Link className="ops-button is-secondary" to={action.path}>{action.label}<ChevronRight size={16} aria-hidden="true" /></Link>
+                </article>
+              );
+            })}
+          </div>
+        ) : <OpsEmpty title="No matching content" message="Create a brief above or clear the filters to see saved campaign records." action={<button className="ops-button is-secondary" type="button" onClick={() => { setContentSearch(''); setContentStatus(''); setContentPlatform(''); }}>Clear Filters</button>} />}
+      </OpsSection>
+    </OpsPage>
   );
+}
+
+function ContentField({ label, htmlFor, required = false, wide = false, children }: { label: string; htmlFor: string; required?: boolean; wide?: boolean; children: ReactNode }) {
+  return <div className={`content-field${wide ? ' is-wide' : ''}`}><label htmlFor={htmlFor}>{label}{required ? <span>Required</span> : null}</label>{children}</div>;
 }

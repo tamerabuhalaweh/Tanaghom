@@ -45,10 +45,11 @@ import Stitchi from './pages/Stitchi'
 import CommercialCommandCenter from './pages/CommercialCommandCenter'
 import CommercialDisciplines from './pages/CommercialDisciplines'
 import ExecutiveDashboard from './pages/ExecutiveDashboard'
-import HybridV3Preview from './pages/HybridV3Preview'
+import CommercialToday from './pages/CommercialToday'
 
 const ADMIN_ROLES = ['admin', 'cco']
 const EXECUTIVE_ROLES = ['admin', 'cco']
+const APPROVAL_READ_ROLES = ['admin', 'cco', 'department_head', 'reviewer']
 const CONNECTOR_SETUP_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager']
 
 function LoadingWorkspace() {
@@ -96,6 +97,10 @@ function executiveOnly(element: React.ReactNode) {
   return <RequireRole roles={EXECUTIVE_ROLES}>{element}</RequireRole>
 }
 
+function approvalRead(element: React.ReactNode) {
+  return <RequireRole roles={APPROVAL_READ_ROLES}>{element}</RequireRole>
+}
+
 function connectorSetup(element: React.ReactNode) {
   return <RequireRole roles={CONNECTOR_SETUP_ROLES}>{element}</RequireRole>
 }
@@ -110,11 +115,8 @@ function App() {
           <Route path="/ux/aiero-preview" element={<AieroInspiredPreview page="home" />} />
           <Route path="/ux/aiero-preview/events" element={<AieroInspiredPreview page="events" />} />
           <Route path="/ux/aiero-preview/integrations" element={<AieroInspiredPreview page="integrations" />} />
-          <Route path="/ux/hybrid-v3-preview" element={<HybridV3Preview page="today" />} />
-          <Route path="/ux/hybrid-v3-preview/content" element={<HybridV3Preview page="content" />} />
-          <Route path="/ux/hybrid-v3-preview/review" element={<HybridV3Preview page="review" />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<CommercialCommandCenter />} />
+            <Route index element={<CommercialToday />} />
             <Route path="events/master" element={<MasterEventsDashboard />} />
             <Route path="events" element={<HybridEventWorkspace />} />
             <Route path="events/new" element={<EventStrategyWizard />} />
@@ -126,7 +128,7 @@ function App() {
             <Route path="disciplines" element={<CommercialDisciplines />} />
             <Route path="campaigns" element={<CampaignWorkspace />} />
             <Route path="growth" element={<SocialGrowthIntelligence />} />
-            <Route path="approvals" element={executiveOnly(<ApprovalQueue />)} />
+            <Route path="approvals" element={approvalRead(<ApprovalQueue />)} />
             <Route path="saif" element={adminOnly(<SaifDecisions />)} />
             <Route path="capabilities" element={adminOnly(<CapabilityResolution />)} />
             <Route path="mcp" element={adminOnly(<McpMediation />)} />
@@ -153,14 +155,15 @@ function App() {
             <Route path="ghl-readiness" element={adminOnly(<GhlReadiness />)} />
             <Route path="ghl-wizard" element={connectorSetup(<GhlWizard />)} />
             <Route path="dashboard" element={<MasterEventsDashboard />} />
-            <Route path="command-center" element={<CommercialCommandCenter />} />
+            <Route path="command-center" element={<CommercialToday />} />
+            <Route path="commercial-plans" element={<CommercialCommandCenter />} />
             <Route path="ceo-dashboard" element={executiveOnly(<ExecutiveDashboard />)} />
             <Route path="content-workflow" element={<DemoCommandCenter />} />
             <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />
             <Route path="content" element={<PostIdeas />} />
             <Route path="ideas" element={<PostIdeas />} />
             <Route path="draft-studio" element={<PostIdeas />} />
-            <Route path="review" element={executiveOnly(<ApprovalQueue />)} />
+            <Route path="review" element={approvalRead(<ApprovalQueue />)} />
             <Route path="scheduling" element={<PublishingPrep />} />
             <Route path="performance" element={<Analytics />} />
             <Route path="*" element={<NotFound />} />

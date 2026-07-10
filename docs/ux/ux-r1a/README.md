@@ -1,6 +1,6 @@
 # UX-R1A Hybrid v3 Prototype Review
 
-Status: local prototype only. Not deployed.
+Status: approved visual reference, archived as screenshots. The temporary prototype routes were removed before the production Hybrid build.
 
 Scope: Hybrid only. The A/B system and its repository were not modified.
 
@@ -8,13 +8,9 @@ Scope: Hybrid only. The A/B system and its repository were not modified.
 
 This prototype tests a replacement customer workflow and shell before production implementation. It addresses the measured problems in GitHub issue #145: module-first navigation, hidden desktop navigation, long pages, clipped mobile layouts, expanded review feeds, competing design systems, and Stitchi overlays that compete with the current task.
 
-## Local Review Routes
+## Review Artifact
 
-- Today: `http://127.0.0.1:4178/ux/hybrid-v3-preview`
-- Content: `http://127.0.0.1:4178/ux/hybrid-v3-preview/content`
-- Review Queue: `http://127.0.0.1:4178/ux/hybrid-v3-preview/review`
-
-These routes use static sample content and do not call Tanaghum APIs or change customer records.
+The screenshots below are the approved UX-R1A checkpoint. Temporary static routes were used during review, then deliberately removed so sample data and preview-only code cannot ship in the customer application. UX-R1B implements the approved direction against Tanaghum APIs.
 
 ## Design Decisions
 
@@ -68,7 +64,7 @@ These routes use static sample content and do not call Tanaghum APIs or change c
 - Form fields: visible labels or accessible labels present.
 - Tested interactive targets: minimum 44px after correction.
 
-## Not Implemented In This Prototype
+## Prototype Scope At Approval
 
 - Tanaghum API wiring and real customer data.
 - RBAC-driven navigation variants.
@@ -77,4 +73,4 @@ These routes use static sample content and do not call Tanaghum APIs or change c
 - Arabic and RTL implementation.
 - Deployment to the Hybrid VPS.
 
-These remain implementation work after product-owner approval of the reference direction.
+UX-R1B subsequently implemented the production shell, RBAC navigation, Today, Content, and Review Queue vertical slice. Remaining page migrations continue under GitHub issue #145.
