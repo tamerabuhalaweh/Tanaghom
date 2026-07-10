@@ -18,7 +18,7 @@ const customerPaths = [
 ] as const;
 
 const customerVisibleInternalTextPattern =
-  /\b(Sprint\s*\d+|Acceptance\s+(Lead|Event|Truth)|acceptance workflow|smoke test|test tenant|raw values|Tenant-Owned Credentials|STITCH|SAIF|MCP|M5)\b/i;
+  /\b(Sprint\s*\d+|Acceptance\s+(Lead|Event|Truth)|acceptance workflow|smoke test|test tenant|raw values|Tenant-Owned Credentials|Mock LLM|Proof-led customer story|STITCH|SAIF|MCP|M5)\b/i;
 
 function installLiveMonitors(page: Page) {
   const consoleErrors: string[] = [];

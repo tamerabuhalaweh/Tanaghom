@@ -6,6 +6,7 @@ import { auditLog } from '@shared/logging';
 import { validatePublishingApprovalGate } from './policy';
 import { createPublishingPackageGovernance } from './governance';
 import { recordCommercialWorkflowAudit } from '../commercial-workflow/evidence';
+import { listPublishingPackages } from './list';
 
 export const publishingPackageRouter = Router();
 
@@ -293,17 +294,8 @@ publishingPackageRouter.get('/list', async (req: Request, res: Response, next: N
   try {
     const payload = getPayload(req);
     const tenantKey = payload.tenantKey || 'default';
-    const packages = await prisma.publishingPackage.findMany({
-      where: { tenant_key: tenantKey },
-      orderBy: { created_at: 'desc' },
-      take: 10,
-    });
-    res.json(packages.map((p: Record<string, unknown>) => ({
-      id: p.id,
-      campaignId: p.campaign_id,
-      status: p.package_status,
-      createdAt: p.created_at,
-    })));
+    const includeInternal = req.query.includeInternal === 'true' && ['admin', 'cco'].includes(payload.role);
+    res.json(await listPublishingPackages(tenantKey, includeInternal));
   } catch (err) {
     next(err);
   }
