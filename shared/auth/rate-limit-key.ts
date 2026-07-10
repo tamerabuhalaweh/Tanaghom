@@ -18,3 +18,7 @@ export function resolveRateLimitKey(authorization: string | undefined, remoteAdd
 
   return `rate-limit:ip:${keySegment(remoteAddress || 'unknown')}`;
 }
+
+export function resolveRateLimitCapacity(key: string, publicCapacity: number, authenticatedCapacity: number): number {
+  return key.startsWith('rate-limit:user:') ? authenticatedCapacity : publicCapacity;
+}
