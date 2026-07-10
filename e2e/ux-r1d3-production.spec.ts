@@ -196,4 +196,27 @@ test.describe('UX-R1D3 production workflow', () => {
     await expect(page.getByRole('heading', { name: 'Approved Content', exact: true })).toBeVisible();
     monitor.assertClean();
   });
+
+  test('empty Review and Scheduling return the user to the connected workflow', async ({ page }) => {
+    const monitor = await installMocks(page, 'marketing_manager');
+    await page.route('**/approvals', async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route('**/publishing-package/list', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+
+    await page.goto('/review');
+    await expect(page.getByRole('link', { name: 'Create Content' })).toHaveAttribute('href', '/ideas');
+    await expect(page.getByRole('link', { name: 'Open Campaign Workspace' })).toHaveCount(0);
+
+    await page.goto('/scheduling');
+    await expect(page.getByRole('heading', { name: 'No Approved Content Yet' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Suggest A Time' })).toHaveCount(0);
+    monitor.assertClean();
+  });
 });

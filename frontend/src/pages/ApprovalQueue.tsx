@@ -296,7 +296,7 @@ export default function ApprovalQueue() {
           </section>
         </div>
       ) : (
-        <OpsSection><OpsEmpty title="Nothing to review" message="When campaign content is submitted for review, it will appear here." action={<Link className="ops-button is-primary" to="/campaigns">Open Campaign Workspace</Link>} /></OpsSection>
+        <OpsSection><OpsEmpty title="Nothing to review" message="When campaign content is submitted for review, it will appear here." action={<Link className="ops-button is-primary" to="/ideas">Create Content</Link>} /></OpsSection>
       )}
 
       {!loading && packages.length > 0 ? <p className="review-package-summary">{packages.length} publishing package{packages.length === 1 ? '' : 's'} are currently recorded. Open Scheduling to review package readiness.</p> : null}
