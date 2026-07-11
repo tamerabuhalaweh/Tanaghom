@@ -280,17 +280,17 @@ jobs:
       - run: npm --prefix frontend run build
       - name: Start production acceptance stack
         run: |
-          mkdir -p test-results
-          node dist/index.js > test-results/acceptance-backend.log 2>&1 &
-          npm --prefix frontend run preview -- --host 127.0.0.1 --port 3000 > test-results/acceptance-frontend.log 2>&1 &
+          mkdir -p acceptance-logs
+          node dist/index.js > acceptance-logs/backend.log 2>&1 &
+          npm --prefix frontend run preview -- --host 127.0.0.1 --port 3000 > acceptance-logs/frontend.log 2>&1 &
           for attempt in $(seq 1 30); do
             if curl -sf http://127.0.0.1:4000/health >/dev/null && curl -sf http://127.0.0.1:3000 >/dev/null; then
               exit 0
             fi
             sleep 1
           done
-          cat test-results/acceptance-backend.log
-          cat test-results/acceptance-frontend.log
+          cat acceptance-logs/backend.log
+          cat acceptance-logs/frontend.log
           exit 1
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -302,6 +302,7 @@ jobs:
         with:
           name: production-acceptance-evidence
           path: |
+            acceptance-logs
             playwright-report
             test-results
           if-no-files-found: ignore

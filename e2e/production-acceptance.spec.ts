@@ -227,7 +227,7 @@ test.describe('Hybrid production acceptance harness', () => {
     await expect(page.getByRole('heading', { name: planTitle, exact: true })).toBeVisible();
     await page.goto('/scheduling');
     await expect(page.getByRole('heading', { name: 'Approved Campaign Content', exact: true })).toBeVisible();
-    await expect(page.getByText('Ready To Schedule', { exact: true })).toBeVisible();
+    await expect(page.getByText('Ready To Schedule', { exact: true }).first()).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     expect(overflow).toBe(false);
     expect(browserProblems).toEqual([]);
