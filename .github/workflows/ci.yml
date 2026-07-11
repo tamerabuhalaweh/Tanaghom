@@ -399,12 +399,15 @@ jobs:
           printf '%s' 'https://example.invalid/operations-alert' > monitoring/secrets/alert_webhook_url
           docker compose -f docker-compose.monitoring.yml config >/dev/null
           docker compose -f docker-compose.monitoring.yml -f docker-compose.alerting.yml config >/dev/null
-          docker run --rm -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v2.55.1 \
-            promtool check config /etc/prometheus/prometheus.yml
-          docker run --rm -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v2.55.1 \
-            promtool check config /etc/prometheus/prometheus-alerting.yml
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v2.55.1 \
+            check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v2.55.1 \
+            check config /etc/prometheus/prometheus-alerting.yml
           docker run --rm \
+            --entrypoint /bin/amtool \
             -v "$PWD/monitoring:/etc/alertmanager:ro" \
             -v "$PWD/monitoring/secrets:/run/secrets:ro" \
             prom/alertmanager:v0.28.1 \
-            amtool check-config /etc/alertmanager/alertmanager.yml
+            check-config /etc/alertmanager/alertmanager.yml
