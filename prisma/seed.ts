@@ -261,7 +261,7 @@ async function seed() {
       {
         raw_message: 'Summer Wellness Launch',
         objective: 'Promote wellness course to health-conscious professionals on LinkedIn and Instagram',
-        status: 'draft' as const,
+        status: 'drafting' as const,
         risk_category: 'medium' as const,
         target_platforms: ['linkedin', 'instagram'],
         audience: 'Health-conscious professionals aged 25-45',

@@ -57,6 +57,9 @@ jobs:
       - name: Run Database Migrations
         run: npx prisma migrate deploy
 
+      - name: Validate Development Seed On Clean Database
+        run: npm run db:seed
+
       - name: Lint
         run: npm run lint
 
@@ -252,6 +255,7 @@ jobs:
       ANALYTICS_LIVE_ENABLED: "false"
       OPENCLAW_ORCHESTRATION_ENABLED: "false"
       AGENTSCOPE_PROCESS_ENABLED: "false"
+      ENFORCE_TENANT_SUBSCRIPTION: "true"
       POSTIZ_SANDBOX_URL: http://127.0.0.1:9
       CORS_ORIGIN: http://127.0.0.1:3000
       VITE_API_BASE_URL: http://127.0.0.1:4000
@@ -271,7 +275,6 @@ jobs:
       - run: npm --prefix frontend ci --include=dev
       - run: npx prisma generate
       - run: npx prisma migrate deploy
-      - run: npm run db:seed
       - run: npx tsx scripts/seed-production-acceptance.ts
       - run: npm run build
       - run: npm --prefix frontend run build

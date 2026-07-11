@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../shared/auth';
+import {
+  DEFAULT_PRODUCTION_ENTITLEMENTS,
+  DEFAULT_PRODUCTION_PLAN_KEY,
+} from '../modules/tenant-admin/subscription';
 
 if (process.env.E2E_PRODUCTION_ACCEPTANCE !== 'true') {
   throw new Error('Refusing to seed acceptance fixtures without E2E_PRODUCTION_ACCEPTANCE=true');
@@ -16,20 +20,133 @@ const FIXTURES = {
   draftVersionId: '91000000-0000-4000-8000-000000000003',
 } as const;
 
+async function ensureActiveSubscription(tenantKey: string, planId: string) {
+  const current = await prisma.tenantSubscription.findFirst({
+    where: { tenant_key: tenantKey, is_current: true },
+  });
+  if (current) {
+    await prisma.tenantSubscription.update({
+      where: { id: current.id },
+      data: {
+        plan_id: planId,
+        status: 'active',
+        current_period_end: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    return;
+  }
+  await prisma.tenantSubscription.create({
+    data: {
+      tenant_key: tenantKey,
+      plan_id: planId,
+      status: 'active',
+      source: 'manual',
+      is_current: true,
+      current_period_start: new Date(),
+      current_period_end: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      notes: 'Isolated production acceptance subscription.',
+    },
+  });
+}
+
 async function seedAcceptanceFixtures() {
-  const manager = await prisma.user.findUnique({ where: { email: 'brand.head@tanaghum.com' } });
-  if (!manager) throw new Error('Run prisma/seed.ts before the production acceptance seed');
+  const [defaultTenant, isolationTenant] = await Promise.all([
+    prisma.tenant.upsert({
+      where: { tenant_key: 'default' },
+      update: { name: 'Tanaghum Acceptance Tenant', status: 'active' },
+      create: { tenant_key: 'default', name: 'Tanaghum Acceptance Tenant', status: 'active' },
+    }),
+    prisma.tenant.upsert({
+      where: { tenant_key: FIXTURES.tenantKey },
+      update: { name: FIXTURES.tenantName, status: 'active' },
+      create: { tenant_key: FIXTURES.tenantKey, name: FIXTURES.tenantName, status: 'active' },
+    }),
+  ]);
 
-  const managerAgentRep = await prisma.agentRep.findUnique({ where: { user_id: manager.id } });
-  if (!managerAgentRep) throw new Error('Manager AgentRep is required for production acceptance');
+  const plan = await prisma.tenantPlan.upsert({
+    where: { plan_key: DEFAULT_PRODUCTION_PLAN_KEY },
+    update: { status: 'active', entitlements: DEFAULT_PRODUCTION_ENTITLEMENTS },
+    create: {
+      plan_key: DEFAULT_PRODUCTION_PLAN_KEY,
+      name: 'Production Acceptance',
+      description: 'Isolated CI acceptance plan.',
+      status: 'active',
+      billing_interval: 'monthly',
+      currency: 'USD',
+      entitlements: DEFAULT_PRODUCTION_ENTITLEMENTS,
+    },
+  });
+  await Promise.all([
+    ensureActiveSubscription(defaultTenant.tenant_key, plan.id),
+    ensureActiveSubscription(isolationTenant.tenant_key, plan.id),
+  ]);
 
-  const department = await prisma.department.findUnique({ where: { name: 'Brand & Market Intelligence' } });
-  if (!department) throw new Error('Brand & Market Intelligence department is required');
+  const department = await prisma.department.upsert({
+    where: { name: 'Brand & Market Intelligence' },
+    update: { description: 'Production acceptance commercial department.' },
+    create: {
+      name: 'Brand & Market Intelligence',
+      description: 'Production acceptance commercial department.',
+    },
+  });
 
-  await prisma.tenant.upsert({
-    where: { tenant_key: FIXTURES.tenantKey },
-    update: { name: FIXTURES.tenantName, status: 'active' },
-    create: { tenant_key: FIXTURES.tenantKey, name: FIXTURES.tenantName, status: 'active' },
+  const passwordHash = await hashPassword('password123');
+  const manager = await prisma.user.upsert({
+    where: { email: 'brand.head@tanaghum.com' },
+    update: {
+      tenant_key: 'default',
+      department_id: department.id,
+      role: 'department_head',
+      is_active: true,
+      password_hash: passwordHash,
+    },
+    create: {
+      email: 'brand.head@tanaghum.com',
+      name: 'Acceptance Commercial Manager',
+      password_hash: passwordHash,
+      department_id: department.id,
+      tenant_key: 'default',
+      role: 'department_head',
+      is_active: true,
+    },
+  });
+  const cco = await prisma.user.upsert({
+    where: { email: 'cco@tanaghum.com' },
+    update: {
+      tenant_key: 'default',
+      role: 'cco',
+      is_active: true,
+      password_hash: passwordHash,
+    },
+    create: {
+      email: 'cco@tanaghum.com',
+      name: 'Acceptance CCO',
+      password_hash: passwordHash,
+      tenant_key: 'default',
+      role: 'cco',
+      is_active: true,
+    },
+  });
+
+  const managerAgentRep = await prisma.agentRep.upsert({
+    where: { user_id: manager.id },
+    update: { status: 'active' },
+    create: {
+      user_id: manager.id,
+      name: 'Acceptance Commercial Manager AgentRep',
+      agent_type: 'functional',
+      status: 'active',
+    },
+  });
+  await prisma.agentRep.upsert({
+    where: { user_id: cco.id },
+    update: { status: 'active' },
+    create: {
+      user_id: cco.id,
+      name: 'Acceptance CCO AgentRep',
+      agent_type: 'governance',
+      status: 'active',
+    },
   });
 
   const otherUser = await prisma.user.upsert({
