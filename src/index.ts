@@ -8,7 +8,7 @@ import { closeQueue, getRedisConnection } from '@shared/queue';
 import { verifyToken } from '@shared/auth';
 import { resolveRateLimitCapacity, resolveRateLimitKey } from '@shared/auth/rate-limit-key';
 import { assertTokenNotRevoked } from '@shared/auth/token-revocation';
-import { validateEnvironment, isDemoMode, assertDemoSafe } from './env-validation';
+import { validateEnvironment, isDemoMode, isLiveExecutionEnabled, assertDemoSafe } from './env-validation';
 import { healthCheck } from './routes/health';
 import { AppError } from '../shared/errors';
 import { authRouter } from '../modules/auth/controller';
@@ -322,6 +322,8 @@ async function start(): Promise<void> {
 
     if (isDemoMode()) {
       logger.info('DEMO MODE - All live integrations disabled, M5 execution blocked');
+    } else if (process.env.NODE_ENV === 'production' && !isLiveExecutionEnabled()) {
+      logger.info('PRODUCTION RUNTIME - External execution remains disabled by policy');
     }
 
     app.listen(PORT, () => {

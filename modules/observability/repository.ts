@@ -44,7 +44,37 @@ export async function getEventById(id: string): Promise<ObservabilityEventSummar
   return mapEvent(event);
 }
 
+async function tenantIdentityScope(tenantKey: string) {
+  const users = await prisma.user.findMany({
+    where: { tenant_key: tenantKey },
+    select: { id: true, agent_reps: { select: { id: true } } },
+  });
+  return {
+    userIds: users.map(user => user.id),
+    agentRepIds: users.flatMap(user => user.agent_reps.map(agentRep => agentRep.id)),
+  };
+}
+
+function scopedIdentityFilter(scope: { userIds: string[]; agentRepIds: string[] }) {
+  return {
+    OR: [
+      { human_user_id: { in: scope.userIds } },
+      { agent_rep_id: { in: scope.agentRepIds } },
+    ],
+  };
+}
+
+export async function getTenantEventById(id: string, tenantKey: string): Promise<ObservabilityEventSummary> {
+  const scope = await tenantIdentityScope(tenantKey);
+  const event = await prisma.observabilityEvent.findFirst({
+    where: { id, ...scopedIdentityFilter(scope) },
+  });
+  if (!event) throw new NotFoundError('ObservabilityEvent', id);
+  return mapEvent(event);
+}
+
 export async function listEvents(filters?: {
+  tenantKey?: string;
   eventType?: string;
   eventCategory?: string;
   severity?: string;
@@ -61,6 +91,7 @@ export async function listEvents(filters?: {
   if (filters?.agentRepId) where.agent_rep_id = filters.agentRepId;
   if (filters?.targetObjectType) where.target_object_type = filters.targetObjectType;
   if (filters?.targetObjectId) where.target_object_id = filters.targetObjectId;
+  if (filters?.tenantKey) Object.assign(where, scopedIdentityFilter(await tenantIdentityScope(filters.tenantKey)));
 
   const events = await prisma.observabilityEvent.findMany({ where, orderBy: { created_at: 'desc' } });
   return events.map(mapEvent);
@@ -108,6 +139,7 @@ export async function getAuditRecordById(id: string): Promise<AuditRecordSummary
 }
 
 export async function listAuditRecords(filters?: {
+  tenantKey?: string;
   auditType?: string;
   action?: string;
   result?: string;
@@ -124,6 +156,7 @@ export async function listAuditRecords(filters?: {
   if (filters?.agentRepId) where.agent_rep_id = filters.agentRepId;
   if (filters?.targetObjectType) where.target_object_type = filters.targetObjectType;
   if (filters?.targetObjectId) where.target_object_id = filters.targetObjectId;
+  if (filters?.tenantKey) Object.assign(where, scopedIdentityFilter(await tenantIdentityScope(filters.tenantKey)));
 
   const records = await prisma.auditRecord.findMany({ where, orderBy: { created_at: 'desc' } });
   return records.map(mapAuditRecord);
@@ -163,6 +196,7 @@ export async function getLearningSignalById(id: string): Promise<LearningSignalS
 }
 
 export async function listLearningSignals(filters?: {
+  tenantKey?: string;
   signalType?: string;
   status?: string;
   saifDecisionRecordId?: string;
@@ -173,6 +207,18 @@ export async function listLearningSignals(filters?: {
   if (filters?.status) where.status = filters.status;
   if (filters?.saifDecisionRecordId) where.saif_decision_record_id = filters.saifDecisionRecordId;
   if (filters?.dksEntryId) where.dks_entry_id = filters.dksEntryId;
+  if (filters?.tenantKey) {
+    const scope = await tenantIdentityScope(filters.tenantKey);
+    const identityFilter = scopedIdentityFilter(scope);
+    const [auditRecords, events] = await Promise.all([
+      prisma.auditRecord.findMany({ where: identityFilter, select: { id: true } }),
+      prisma.observabilityEvent.findMany({ where: identityFilter, select: { id: true } }),
+    ]);
+    where.OR = [
+      { source_audit_record_id: { in: auditRecords.map(record => record.id) } },
+      { source_event_id: { in: events.map(event => event.id) } },
+    ];
+  }
 
   const signals = await prisma.learningSignal.findMany({ where, orderBy: { created_at: 'desc' } });
   return signals.map(mapLearningSignal);

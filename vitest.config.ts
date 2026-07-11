@@ -10,7 +10,22 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules', 'dist', 'frontend', 'e2e', '**/*.test.ts', '**/*.spec.ts'],
+      include: ['modules/**/*.ts', 'shared/**/*.ts', 'src/**/*.ts'],
+      exclude: [
+        'node_modules',
+        'dist',
+        'frontend',
+        'e2e',
+        '**/*.test.ts',
+        '**/*.spec.ts',
+        'src/index.ts',
+      ],
+      thresholds: {
+        statements: 40,
+        branches: 66,
+        functions: 60,
+        lines: 40,
+      },
     },
     setupFiles: [],
     env: {

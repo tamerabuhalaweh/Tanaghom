@@ -13,8 +13,9 @@ function getPayload(req: Request): JwtPayload {
 
 observabilityRouter.get('/events', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
     const events = await repo.listEvents({
+      tenantKey: payload.tenantKey || 'default',
       eventType: req.query.type as string | undefined,
       eventCategory: req.query.category as string | undefined,
       severity: req.query.severity as string | undefined,
@@ -31,8 +32,8 @@ observabilityRouter.get('/events', async (req: Request, res: Response, next: Nex
 
 observabilityRouter.get('/events/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
-    const event = await repo.getEventById(req.params.id as string);
+    const payload = getPayload(req);
+    const event = await repo.getTenantEventById(req.params.id as string, payload.tenantKey || 'default');
     res.json(event);
   } catch (err) {
     next(err);
@@ -41,8 +42,9 @@ observabilityRouter.get('/events/:id', async (req: Request, res: Response, next:
 
 observabilityRouter.get('/audit', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
     const records = await repo.listAuditRecords({
+      tenantKey: payload.tenantKey || 'default',
       auditType: req.query.type as string | undefined,
       action: req.query.action as string | undefined,
       targetObjectType: req.query.objectType as string | undefined,
@@ -56,8 +58,9 @@ observabilityRouter.get('/audit', async (req: Request, res: Response, next: Next
 
 observabilityRouter.get('/learning-signals', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    getPayload(req);
+    const payload = getPayload(req);
     const signals = await repo.listLearningSignals({
+      tenantKey: payload.tenantKey || 'default',
       signalType: req.query.type as string | undefined,
       status: req.query.status as string | undefined,
     });

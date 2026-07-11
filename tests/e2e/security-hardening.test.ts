@@ -54,6 +54,51 @@ describe('Environment Validation', () => {
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.includes('REDIS_URL'))).toBe(true);
   });
+
+  it('requires demo mode to be explicitly disabled in production', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'test-secret-at-least-32-characters-long';
+    process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
+    process.env.REDIS_URL = 'redis://localhost:6379';
+    process.env.SECRET_VAULT_ENCRYPTION_KEY = 'test-vault-key-at-least-32-characters-long';
+    delete process.env.DEMO_MODE;
+
+    const result = validateEnvironment();
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('DEMO_MODE must be explicitly set to false in production');
+  });
+
+  it('accepts production runtime while every external write gate is disabled', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DEMO_MODE = 'false';
+    process.env.JWT_SECRET = 'test-secret-at-least-32-characters-long';
+    process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
+    process.env.REDIS_URL = 'redis://localhost:6379';
+    process.env.SECRET_VAULT_ENCRYPTION_KEY = 'test-vault-key-at-least-32-characters-long';
+    for (const switchName of EXECUTION_KILL_SWITCHES) process.env[switchName] = 'false';
+
+    const result = validateEnvironment();
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toContain('Production runtime is active with external execution disabled.');
+  });
+
+  it('rejects a provider write gate without the global execution gate', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DEMO_MODE = 'false';
+    process.env.JWT_SECRET = 'test-secret-at-least-32-characters-long';
+    process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
+    process.env.REDIS_URL = 'redis://localhost:6379';
+    process.env.SECRET_VAULT_ENCRYPTION_KEY = 'test-vault-key-at-least-32-characters-long';
+    process.env.EXTERNAL_EXECUTION_ENABLED = 'false';
+    process.env.POSTIZ_LIVE_ENABLED = 'true';
+
+    const result = validateEnvironment();
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('POSTIZ_LIVE_ENABLED requires EXTERNAL_EXECUTION_ENABLED=true');
+  });
 });
 
 describe('Execution Kill Switches', () => {
