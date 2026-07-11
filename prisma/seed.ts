@@ -166,17 +166,29 @@ async function seed() {
     // Assign functional agents to non-CCO users
     if (user.role !== 'cco') {
       for (const fa of FUNCTIONAL_AGENTS) {
-        await prisma.functionalAgent.upsert({
-          where: { id: `${agentRep.id}-${fa.name}` },
-          update: {},
-          create: {
-            agent_rep_id: agentRep.id,
-            name: fa.name,
-            capability: fa.capability,
-            description: fa.description,
-            status: 'active',
-          },
+        const existingAgent = await prisma.functionalAgent.findFirst({
+          where: { agent_rep_id: agentRep.id, name: fa.name },
         });
+        if (existingAgent) {
+          await prisma.functionalAgent.update({
+            where: { id: existingAgent.id },
+            data: {
+              capability: fa.capability,
+              description: fa.description,
+              status: 'active',
+            },
+          });
+        } else {
+          await prisma.functionalAgent.create({
+            data: {
+              agent_rep_id: agentRep.id,
+              name: fa.name,
+              capability: fa.capability,
+              description: fa.description,
+              status: 'active',
+            },
+          });
+        }
       }
       console.log(`    FunctionalAgents: ${FUNCTIONAL_AGENTS.length} agents assigned`);
     }
@@ -184,18 +196,31 @@ async function seed() {
     // Assign governance agents to CCO
     if (user.role === 'cco') {
       for (const ga of GOVERNANCE_AGENTS) {
-        await prisma.governanceAgent.upsert({
-          where: { id: `${agentRep.id}-${ga.name}` },
-          update: {},
-          create: {
-            agent_rep_id: agentRep.id,
-            name: ga.name,
-            policy_scope: ga.policyScope,
-            veto_authority: ga.vetoAuthority,
-            description: ga.description,
-            status: 'active',
-          },
+        const existingAgent = await prisma.governanceAgent.findFirst({
+          where: { agent_rep_id: agentRep.id, name: ga.name },
         });
+        if (existingAgent) {
+          await prisma.governanceAgent.update({
+            where: { id: existingAgent.id },
+            data: {
+              policy_scope: ga.policyScope,
+              veto_authority: ga.vetoAuthority,
+              description: ga.description,
+              status: 'active',
+            },
+          });
+        } else {
+          await prisma.governanceAgent.create({
+            data: {
+              agent_rep_id: agentRep.id,
+              name: ga.name,
+              policy_scope: ga.policyScope,
+              veto_authority: ga.vetoAuthority,
+              description: ga.description,
+              status: 'active',
+            },
+          });
+        }
       }
       console.log(`    GovernanceAgents: ${GOVERNANCE_AGENTS.length} agents assigned`);
     }
@@ -236,7 +261,7 @@ async function seed() {
       {
         raw_message: 'Summer Wellness Launch',
         objective: 'Promote wellness course to health-conscious professionals on LinkedIn and Instagram',
-        status: 'draft' as const,
+        status: 'drafting' as const,
         risk_category: 'medium' as const,
         target_platforms: ['linkedin', 'instagram'],
         audience: 'Health-conscious professionals aged 25-45',

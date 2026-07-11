@@ -57,6 +57,9 @@ jobs:
       - name: Run Database Migrations
         run: npx prisma migrate deploy
 
+      - name: Validate Development Seed On Clean Database
+        run: npm run db:seed
+
       - name: Lint
         run: npm run lint
 
@@ -64,18 +67,27 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm run test
+        run: npm run test:coverage
 
       - name: Build
         run: npm run build
 
       - name: Runtime Smoke Test
         run: |
-          timeout 15 node dist/index.js &
-          sleep 5
-          curl -sf http://localhost:4000/health && echo "PASS: Health endpoint reachable" || echo "WARN: Health endpoint not reachable (may need DB)"
-          kill %1 || true
-          echo "PASS: Runtime smoke test completed"
+          node dist/index.js > /tmp/tanaghum-runtime.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -sf http://localhost:4000/health > /tmp/tanaghum-health.json; then
+              cat /tmp/tanaghum-health.json
+              echo "PASS: Health endpoint reachable"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/tanaghum-runtime.log
+          echo "FAIL: Runtime health endpoint was not reachable"
+          exit 1
 
   frontend:
     runs-on: ubuntu-latest
@@ -98,8 +110,57 @@ jobs:
       - name: Frontend Build
         run: cd frontend && npm run build
 
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix frontend ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run deterministic browser regression
+        run: npm run test:e2e
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-regression-evidence
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   docker:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tanaghum
+          POSTGRES_PASSWORD: tanaghum_test
+          POSTGRES_DB: tanaghum_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tanaghum"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -115,25 +176,154 @@ jobs:
 
       - name: Container Startup Test
         run: |
-          # Start container and verify it processes startup
           docker run -d --name test-backend \
+            --network host \
             -e JWT_SECRET=ci-test-secret-at-least-32-characters-long \
-            -e DATABASE_URL=postgresql://fake:5432/test \
-            -e REDIS_URL=redis://fake:6379 \
-            -e NODE_ENV=test \
-            -e DEMO_MODE=true \
+            -e DATABASE_URL=postgresql://tanaghum:tanaghum_test@127.0.0.1:5432/tanaghum_test?schema=public \
+            -e REDIS_URL=redis://127.0.0.1:6379 \
+            -e SECRET_VAULT_ENCRYPTION_KEY=ci-test-vault-key-at-least-32-characters \
+            -e NODE_ENV=production \
+            -e DEMO_MODE=false \
+            -e EXTERNAL_EXECUTION_ENABLED=false \
+            -e M5_WRITE_EXECUTION_ENABLED=false \
+            -e POSTIZ_LIVE_ENABLED=false \
             tanaghum-backend
-          sleep 5
-          # Verify container attempted startup (check for expected log output)
-          LOGS=$(docker logs test-backend 2>&1)
-          if echo "$LOGS" | grep -q "Environment validation failed\|Server running\|Failed to start\|JWT_SECRET"; then
-            echo "PASS: Container processed startup correctly"
-          else
-            echo "FAIL: Container did not produce expected startup output"
-            echo "$LOGS"
-            exit 1
-          fi
+          for attempt in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4000/health > /tmp/container-health.json; then
+              cat /tmp/container-health.json
+              echo "PASS: Production container health endpoint reachable"
+              break
+            fi
+            if [ "$attempt" = "30" ]; then
+              docker logs test-backend
+              echo "FAIL: Production container never became healthy"
+              exit 1
+            fi
+            sleep 1
+          done
+          docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' test-backend | grep -q '^NODE_ENV=production$'
+          docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' test-backend | grep -q '^DEMO_MODE=false$'
+          docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' test-backend | grep -q '^EXTERNAL_EXECUTION_ENABLED=false$'
           docker rm -f test-backend
+
+  production-acceptance:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tanaghum
+          POSTGRES_PASSWORD: tanaghum_test
+          POSTGRES_DB: tanaghum_acceptance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tanaghum"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://tanaghum:tanaghum_test@127.0.0.1:5432/tanaghum_acceptance?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+      JWT_SECRET: ci-acceptance-secret-at-least-32-characters-long
+      SECRET_VAULT_ENCRYPTION_KEY: ci-acceptance-vault-key-at-least-32-characters
+      NODE_ENV: production
+      DEMO_MODE: "false"
+      EXTERNAL_EXECUTION_ENABLED: "false"
+      M5_WRITE_EXECUTION_ENABLED: "false"
+      POSTIZ_LIVE_ENABLED: "false"
+      POSTIZ_SANDBOX_SCHEDULING_ENABLED: "false"
+      CRM_LIVE_ENABLED: "false"
+      GHL_SANDBOX_WRITE_ENABLED: "false"
+      WHATSAPP_LIVE_ENABLED: "false"
+      TELEGRAM_LIVE_ENABLED: "false"
+      VOICE_CHAT_LIVE_ENABLED: "false"
+      RENDERING_LIVE_ENABLED: "false"
+      RESOURCESPACE_LIVE_ENABLED: "false"
+      PAPERCLIP_SYNC_ENABLED: "false"
+      ANALYTICS_LIVE_ENABLED: "false"
+      OPENCLAW_ORCHESTRATION_ENABLED: "false"
+      AGENTSCOPE_PROCESS_ENABLED: "false"
+      ENFORCE_TENANT_SUBSCRIPTION: "true"
+      POSTIZ_SANDBOX_URL: http://127.0.0.1:9
+      CORS_ORIGIN: http://127.0.0.1:3000
+      VITE_API_BASE_URL: http://127.0.0.1:4000
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_API_BASE_URL: http://127.0.0.1:4000
+      E2E_PRODUCTION_ACCEPTANCE: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # NODE_ENV=production would otherwise make npm omit the build, seed, and
+      # Playwright toolchain required by this acceptance job.
+      - run: npm ci --include=dev
+      - run: npm --prefix frontend ci --include=dev
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npx tsx scripts/seed-production-acceptance.ts
+      - run: npm run build
+      - run: npm --prefix frontend run build
+      - name: Start production acceptance stack
+        run: |
+          mkdir -p acceptance-logs
+          node dist/index.js > acceptance-logs/backend.log 2>&1 &
+          npm --prefix frontend run preview -- --host 127.0.0.1 --port 3000 > acceptance-logs/frontend.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4000/health >/dev/null && curl -sf http://127.0.0.1:3000 >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat acceptance-logs/backend.log
+          cat acceptance-logs/frontend.log
+          exit 1
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run persisted production acceptance
+        run: npm run test:e2e:production
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-acceptance-evidence
+          path: |
+            acceptance-logs
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
 
   security:
     runs-on: ubuntu-latest
@@ -148,10 +338,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Production dependency audit
+        run: |
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          npm --prefix frontend ci
+          npm --prefix frontend audit --omit=dev --audit-level=high
+
       - name: Demo Safety Check
         run: |
           # Build first so we can test the validation module
-          npm ci
           npm run build
           # Test that live flags fail in demo mode - the app should exit with error
           # Use pipefail to capture the exit code of the node command, not tee

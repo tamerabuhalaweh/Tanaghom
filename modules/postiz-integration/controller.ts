@@ -170,7 +170,7 @@ postizIntegrationRouter.get('/channels', async (req: Request, res: Response, nex
       selectedIntegrationId: config.integrationId || null,
     });
     if (!config.baseUrl || !config.apiKey) {
-      res.status(424).json({
+      res.json({
         status: 'requires_credentials',
         channels: [],
         required: ['Postiz base URL', 'Postiz API key'],

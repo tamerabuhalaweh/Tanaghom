@@ -32,6 +32,12 @@ export interface EnvValidationResult {
   warnings: string[];
 }
 
+const ENABLED_VALUES = new Set(['true', '1']);
+
+function isEnabled(value: string | undefined): boolean {
+  return Boolean(value && ENABLED_VALUES.has(value.toLowerCase()));
+}
+
 export function validateEnvironment(): EnvValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -74,21 +80,25 @@ export function validateEnvironment(): EnvValidationResult {
 
   // Validate execution kill switches — hard failures in demo mode
   const isDemo = process.env.DEMO_MODE === 'true' || !process.env.DEMO_MODE;
+  const externalExecutionEnabled = isEnabled(process.env.EXTERNAL_EXECUTION_ENABLED);
   for (const switchName of EXECUTION_KILL_SWITCHES) {
     const value = process.env[switchName];
-    if (value && value !== 'false' && value !== '0') {
+    if (isEnabled(value)) {
       if (isDemo) {
         errors.push(`DEMO MODE VIOLATION: ${switchName} cannot be enabled in demo mode`);
-      } else {
-        warnings.push(`${switchName} is enabled (${value}). Live execution should be disabled in demo mode.`);
+      } else if (switchName !== 'EXTERNAL_EXECUTION_ENABLED' && !externalExecutionEnabled) {
+        errors.push(`${switchName} requires EXTERNAL_EXECUTION_ENABLED=true`);
       }
     }
   }
 
   // Validate NODE_ENV
   const nodeEnv = process.env.NODE_ENV;
-  if (nodeEnv === 'production' && process.env.DEMO_MODE === 'true') {
-    warnings.push('DEMO_MODE is enabled in production environment.');
+  if (nodeEnv === 'production' && process.env.DEMO_MODE !== 'false') {
+    errors.push('DEMO_MODE must be explicitly set to false in production');
+  }
+  if (nodeEnv === 'production' && !externalExecutionEnabled) {
+    warnings.push('Production runtime is active with external execution disabled.');
   }
 
   return {
@@ -103,11 +113,11 @@ export function isDemoMode(): boolean {
 }
 
 export function isLiveExecutionEnabled(): boolean {
-  return process.env.EXTERNAL_EXECUTION_ENABLED === 'true';
+  return isEnabled(process.env.EXTERNAL_EXECUTION_ENABLED);
 }
 
 export function isM5WriteEnabled(): boolean {
-  return process.env.M5_WRITE_EXECUTION_ENABLED === 'true';
+  return isEnabled(process.env.M5_WRITE_EXECUTION_ENABLED);
 }
 
 export function assertDemoSafe(): void {
