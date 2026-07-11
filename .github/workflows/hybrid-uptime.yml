@@ -1,0 +1,49 @@
+name: Hybrid External Uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hybrid-external-uptime
+  cancel-in-progress: true
+
+jobs:
+  verify-hybrid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PUBLIC_APP_URL: https://tanaghum-hybrid.163-123-180-104.sslip.io
+      PUBLIC_HEALTH_URL: https://tanaghum-hybrid.163-123-180-104.sslip.io/api/health
+      UPTIME_CHECK_EVIDENCE_PATH: ops/evidence/hybrid-uptime-latest.json
+      ALERT_EVIDENCE_PATH: ops/evidence/hybrid-alert-latest.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify public endpoint availability
+        run: bash scripts/uptime-check.sh
+      - name: Verify production security headers and HSTS
+        run: node scripts/verify-security-headers.mjs
+      - name: Notify configured external destination on failure
+        if: failure()
+        continue-on-error: true
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
+          ALERT_SOURCE: github-hybrid-external-uptime
+          ALERT_TITLE: Tanaghum Hybrid external uptime failure
+          ALERT_MESSAGE: GitHub-hosted uptime or security-header verification failed. Review the workflow evidence and VPS status.
+        run: node scripts/send-operations-alert.mjs github-hybrid-external-uptime
+      - name: Upload external uptime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-external-uptime-evidence
+          path: ops/evidence
+          if-no-files-found: warn
+          retention-days: 30

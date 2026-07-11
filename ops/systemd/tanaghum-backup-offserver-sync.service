@@ -2,10 +2,12 @@
 Description=Tanaghum off-server backup sync
 Wants=docker.service
 After=docker.service tanaghum-postgres-backup.service
+OnFailure=tanaghum-operations-alert@%n.service
+ConditionPathExists=/etc/tanaghum/backup-offserver.env
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/tanaghum
+WorkingDirectory=/opt/tanaghum-hybrid
 Environment=DATABASE_BACKUP_DIR=/var/backups/tanaghum/postgres
 EnvironmentFile=-/etc/tanaghum/backup-offserver.env
-ExecStart=/bin/bash /opt/tanaghum/scripts/sync-latest-backup-offserver.sh
+ExecStart=/bin/bash /opt/tanaghum-hybrid/scripts/sync-latest-backup-offserver.sh

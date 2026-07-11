@@ -1,0 +1,5 @@
+# Import this directive inside the Hybrid site block at the TLS edge.
+# Do not apply this file to the A/B site configuration.
+header {
+  Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}

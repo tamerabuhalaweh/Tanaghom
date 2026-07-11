@@ -15,15 +15,32 @@ const REQUIRED = [
   'referrer-policy',
 ];
 
+const HSTS_HEADER = 'strict-transport-security';
+const MIN_HSTS_MAX_AGE = Number(process.env.MIN_HSTS_MAX_AGE || 31536000);
+
+function validateHsts(url, value) {
+  if (!url.startsWith('https://')) return null;
+  if (!value) return 'missing';
+  const match = value.match(/(?:^|;)\s*max-age=(\d+)/i);
+  if (!match) return 'max-age_missing';
+  if (Number(match[1]) < MIN_HSTS_MAX_AGE) return 'max-age_too_short';
+  return null;
+}
+
 async function check(url) {
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', redirect: 'error' });
   const missing = REQUIRED.filter(header => !response.headers.get(header));
+  const hsts = response.headers.get(HSTS_HEADER);
+  const hstsError = validateHsts(url, hsts);
   return {
     url,
     status: response.status,
-    ok: response.ok && missing.length === 0,
+    ok: response.ok && missing.length === 0 && !hstsError,
     missing,
-    headers: Object.fromEntries(REQUIRED.map(header => [header, response.headers.get(header) ? 'present' : 'missing'])),
+    hstsError,
+    headers: Object.fromEntries(
+      [...REQUIRED, HSTS_HEADER].map(header => [header, response.headers.get(header) ? 'present' : 'missing']),
+    ),
   };
 }
 

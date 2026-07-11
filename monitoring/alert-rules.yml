@@ -36,3 +36,30 @@ groups:
         annotations:
           summary: Tanaghum database backup is missing or stale
           description: No recent local PostgreSQL backup was found within the expected daily backup window.
+
+      - alert: TanaghumOffServerBackupMissingOrStale
+        expr: tanaghum_backup_offserver_age_seconds < 0 or tanaghum_backup_offserver_age_seconds > 180000
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tanaghum encrypted off-server backup is missing or stale
+          description: No current encrypted off-server PostgreSQL backup evidence exists.
+
+      - alert: TanaghumRestoreDrillMissingOrStale
+        expr: tanaghum_restore_drill_age_seconds < 0 or tanaghum_restore_drill_age_seconds > 2678400
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Tanaghum restore drill evidence is missing or stale
+          description: The latest isolated restore and application login validation is older than 31 days.
+
+      - alert: TanaghumUptimeEvidenceMissingOrStale
+        expr: tanaghum_uptime_evidence_age_seconds < 0 or tanaghum_uptime_evidence_age_seconds > 900
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tanaghum public uptime evidence is missing or stale
+          description: The Hybrid public endpoint has not produced current passing uptime evidence.

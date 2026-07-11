@@ -1,0 +1,17 @@
+[Unit]
+Description=Tanaghum isolated PostgreSQL restore drill
+Wants=docker.service
+After=docker.service tanaghum-postgres-backup.service
+OnFailure=tanaghum-operations-alert@%n.service
+ConditionPathExists=/etc/tanaghum/restore-drill.env
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tanaghum-hybrid
+Environment=DATABASE_BACKUP_DIR=/var/backups/tanaghum/postgres
+Environment=POSTGRES_CONTAINER=tanaghum-postgres-1
+Environment=POSTGRES_USER=tanaghum
+Environment=POSTGRES_DB=tanaghum
+Environment=RESTORE_DRILL_APP_CONTAINER=tanaghum-hybrid-app
+EnvironmentFile=/etc/tanaghum/restore-drill.env
+ExecStart=/bin/bash /opt/tanaghum-hybrid/scripts/run-latest-restore-drill.sh

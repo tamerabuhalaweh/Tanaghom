@@ -2,11 +2,17 @@ global:
   scrape_interval: 30s
   evaluation_interval: 30s
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
 rule_files:
   - /etc/prometheus/alert-rules.yml
 
 scrape_configs:
-  - job_name: tanaghum-backend
+  - job_name: tanaghum-hybrid-backend
     metrics_path: /ops/prometheus
     bearer_token_file: /run/secrets/ops_metrics_token
     static_configs:
