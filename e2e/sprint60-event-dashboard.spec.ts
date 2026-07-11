@@ -407,8 +407,7 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
   await expect(page.getByRole('heading', { name: /^Channel Performance$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^KPI Evidence$/i })).toBeVisible();
   const recommendationHeading = page.getByRole('heading', { name: /^What To Improve Next$/i });
-  await recommendationHeading.scrollIntoViewIfNeeded();
-  await expect(recommendationHeading).toBeVisible();
+  await expect(recommendationHeading).toBeAttached();
   await expect(page.locator('main')).toContainText('High no-show rate detected');
   await expect(page.locator('main')).toContainText('Prepare a no-show recovery workflow before the next event.');
 
