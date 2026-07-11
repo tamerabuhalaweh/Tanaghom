@@ -224,7 +224,7 @@ test.describe('Hybrid production acceptance harness', () => {
     await page.goto('/commercial-plans');
     await page.locator('summary').filter({ hasText: 'Future revenue lines' }).click();
     await page.getByRole('button', { name: revenueLineName }).click();
-    await expect(page.getByText(planTitle, { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: planTitle, exact: true })).toBeVisible();
     await page.goto('/scheduling');
     await expect(page.getByText(/Production acceptance leadership campaign/i).first()).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
