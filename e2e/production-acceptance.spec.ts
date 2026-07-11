@@ -46,6 +46,7 @@ test.describe('Hybrid production acceptance harness', () => {
 
     const suffix = Date.now().toString();
     const eventName = `Leadership Operating Plan ${suffix}`;
+    const revenueLineName = `Acceptance Community ${suffix}`;
     const planTitle = `Leadership Course Plan ${suffix}`;
 
     const eventResponse = await request.post(`${apiBase}/events`, {
@@ -78,7 +79,7 @@ test.describe('Hybrid production acceptance harness', () => {
         inputPayload: {
           revenueLine: {
             revenueLineType: 'loyalty_community',
-            name: `Acceptance Community ${suffix}`,
+            name: revenueLineName,
             description: 'Acceptance-only revenue line for the isolated CI database.',
           },
           plan: {
@@ -221,6 +222,8 @@ test.describe('Hybrid production acceptance harness', () => {
 
     await loginInBrowser(page, 'brand.head@tanaghum.com', 'password123');
     await page.goto('/commercial-plans');
+    await page.locator('summary').filter({ hasText: 'Future revenue lines' }).click();
+    await page.getByRole('button', { name: revenueLineName }).click();
     await expect(page.getByText(planTitle, { exact: true })).toBeVisible();
     await page.goto('/scheduling');
     await expect(page.getByText(/Production acceptance leadership campaign/i).first()).toBeVisible();
