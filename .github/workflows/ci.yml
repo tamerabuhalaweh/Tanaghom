@@ -364,3 +364,54 @@ jobs:
             echo "FAIL: App should have exited with error for live flags in demo mode (exit code: $EXIT_CODE)"
             exit 1
           fi
+
+  production-operations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate operations script syntax
+        run: |
+          bash -n \
+            scripts/backup-postgres-docker.sh \
+            scripts/restore-drill-postgres-docker.sh \
+            scripts/run-latest-restore-drill.sh \
+            scripts/sync-latest-backup-offserver.sh \
+            scripts/uptime-check.sh \
+            scripts/verify-encrypted-postgres-backup-docker.sh
+          node --check scripts/send-operations-alert.mjs
+          node --check scripts/verify-security-headers.mjs
+
+      - name: Validate systemd units
+        run: systemd-analyze verify ops/systemd/*.service ops/systemd/*.timer
+
+      - name: Validate Prometheus and Alertmanager configuration
+        env:
+          GRAFANA_ADMIN_PASSWORD: ci-only-not-a-production-password
+        run: |
+          mkdir -p monitoring/secrets
+          printf '%s' 'ci-operations-token-at-least-24-characters' > monitoring/secrets/ops_metrics_token
+          printf '%s' 'https://example.invalid/operations-alert' > monitoring/secrets/alert_webhook_url
+          docker compose -f docker-compose.monitoring.yml config >/dev/null
+          docker compose -f docker-compose.monitoring.yml -f docker-compose.alerting.yml config >/dev/null
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/monitoring:/etc/prometheus:ro" \
+            -v "$PWD/monitoring/secrets:/run/secrets:ro" \
+            prom/prometheus:v2.55.1 \
+            check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/monitoring:/etc/prometheus:ro" \
+            -v "$PWD/monitoring/secrets:/run/secrets:ro" \
+            prom/prometheus:v2.55.1 \
+            check config /etc/prometheus/prometheus-alerting.yml
+          docker run --rm \
+            --entrypoint /bin/amtool \
+            -v "$PWD/monitoring:/etc/alertmanager:ro" \
+            -v "$PWD/monitoring/secrets:/run/secrets:ro" \
+            prom/alertmanager:v0.28.1 \
+            check-config /etc/alertmanager/alertmanager.yml

@@ -2,12 +2,13 @@
 Description=Tanaghum PostgreSQL Docker backup
 Wants=docker.service
 After=docker.service
+OnFailure=tanaghum-operations-alert@%n.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/tanaghum
+WorkingDirectory=/opt/tanaghum-hybrid
 Environment=DATABASE_BACKUP_DIR=/var/backups/tanaghum/postgres
 Environment=POSTGRES_CONTAINER=tanaghum-postgres-1
 Environment=POSTGRES_USER=tanaghum
 Environment=POSTGRES_DB=tanaghum
-ExecStart=/bin/bash /opt/tanaghum/scripts/backup-postgres-docker.sh
+ExecStart=/bin/bash /opt/tanaghum-hybrid/scripts/backup-postgres-docker.sh

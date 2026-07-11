@@ -44,11 +44,11 @@ operationsRouter.get('/readiness', async (req: Request, res: Response, next: Nex
       check('request_body_limit', Boolean(process.env.REQUEST_BODY_LIMIT || true), `Request body limit is ${process.env.REQUEST_BODY_LIMIT || '1mb default'}.`),
       check('email_delivery', !process.env.EMAIL_DELIVERY_ENABLED || email.configured, email.configured ? 'Email delivery is configured.' : 'Email delivery is not configured.'),
       check('backup_target', backupStatus.configured, 'Database backup target is configured.'),
-      check('backup_manifest', backupStatus.latestBackupFound, backupStatus.latestBackupFound ? 'Latest database backup manifest exists.' : 'No local backup manifest found yet.'),
-      check('backup_offserver_copy', backupStatus.offServerCopyFound, backupStatus.offServerCopyFound ? 'Latest off-server backup sync evidence exists.' : 'No off-server backup sync evidence found yet.'),
-      check('backup_restore_drill', backupStatus.restoreDrillEvidenceConfigured, backupStatus.restoreDrillEvidenceConfigured ? 'Latest restore drill evidence exists.' : 'No restore drill evidence found yet.'),
+      check('backup_manifest', backupStatus.latestBackupCurrent, backupStatus.latestBackupCurrent ? 'Latest database backup is current.' : 'Local backup is missing or stale.'),
+      check('backup_offserver_copy', backupStatus.offServerCopyCurrent, backupStatus.offServerCopyCurrent ? 'Latest encrypted off-server backup sync is current.' : 'Encrypted off-server backup evidence is missing or stale.'),
+      check('backup_restore_drill', backupStatus.restoreDrillCurrent, backupStatus.restoreDrillCurrent ? 'Latest isolated restore drill is current.' : 'Restore drill evidence is missing or stale.'),
       check('alert_webhook', Boolean(process.env.ALERT_WEBHOOK_URL || process.env.OPERATIONS_ALERT_EMAIL), 'Alert destination is configured.'),
-      check('uptime_evidence', monitoringStatus.uptimeEvidenceFound, monitoringStatus.uptimeEvidenceFound ? 'Latest uptime check evidence exists.' : 'No uptime check evidence found yet.'),
+      check('uptime_evidence', monitoringStatus.uptimeEvidenceCurrent, monitoringStatus.uptimeEvidenceCurrent ? 'Latest uptime check passed and is current.' : 'Uptime evidence is missing, stale, or failed.'),
       check('admin_mfa_coverage', mfaCoverage.coveragePct === 100, `Admin MFA coverage is ${mfaCoverage.coveragePct}%.`),
       check('ops_metrics_token', Boolean(process.env.OPERATIONS_METRICS_TOKEN && process.env.OPERATIONS_METRICS_TOKEN.length >= 24), 'Prometheus metrics scrape token is configured.'),
     ];
@@ -164,6 +164,15 @@ operationsRouter.get('/prometheus', async (req: Request, res: Response, next: Ne
       '# HELP tanaghum_backup_latest_age_seconds Latest local backup age in seconds, or -1 if not found.',
       '# TYPE tanaghum_backup_latest_age_seconds gauge',
       `tanaghum_backup_latest_age_seconds ${getBackupStatus().latestBackupAgeSeconds ?? -1}`,
+      '# HELP tanaghum_backup_offserver_age_seconds Latest encrypted off-server sync age in seconds, or -1 if not found.',
+      '# TYPE tanaghum_backup_offserver_age_seconds gauge',
+      `tanaghum_backup_offserver_age_seconds ${getBackupStatus().latestOffServerSyncAgeSeconds ?? -1}`,
+      '# HELP tanaghum_restore_drill_age_seconds Latest isolated restore drill age in seconds, or -1 if not found.',
+      '# TYPE tanaghum_restore_drill_age_seconds gauge',
+      `tanaghum_restore_drill_age_seconds ${getBackupStatus().latestRestoreDrillAgeSeconds ?? -1}`,
+      '# HELP tanaghum_uptime_evidence_age_seconds Latest public uptime evidence age in seconds, or -1 if not found.',
+      '# TYPE tanaghum_uptime_evidence_age_seconds gauge',
+      `tanaghum_uptime_evidence_age_seconds ${getMonitoringStatus().latestUptimeAgeSeconds ?? -1}`,
     ];
     res.setHeader('Content-Type', 'text/plain; version=0.0.4');
     res.send(`${lines.join('\n')}\n`);
@@ -192,9 +201,28 @@ export function getBackupStatus() {
   const latestRestoreDrillManifest = readJsonIfExists(latestRestoreDrillManifestPath);
   const latestDump = findLatestDump(backupDir);
   const latestBackupAt = normalizeTimestamp(stringOrNull(latestManifest?.timestamp)) || latestDump?.createdAt || null;
-  const latestBackupAgeSeconds = latestBackupAt ? Math.max(0, Math.round((Date.now() - Date.parse(latestBackupAt)) / 1000)) : null;
+  const latestBackupAgeSeconds = ageSeconds(latestBackupAt);
   const latestOffServerSyncAt = normalizeTimestamp(stringOrNull(latestOffServerManifest?.syncedAt) || stringOrNull(process.env.BACKUP_OFFSERVER_LAST_SYNC_AT));
   const latestRestoreDrillAt = normalizeTimestamp(stringOrNull(latestRestoreDrillManifest?.restoredAt) || stringOrNull(process.env.LATEST_RESTORE_DRILL_AT));
+  const latestOffServerSyncAgeSeconds = ageSeconds(latestOffServerSyncAt);
+  const latestRestoreDrillAgeSeconds = ageSeconds(latestRestoreDrillAt);
+  const backupMaxAgeSeconds = positiveInteger(process.env.BACKUP_MAX_AGE_SECONDS, 93600);
+  const offServerMaxAgeSeconds = positiveInteger(process.env.BACKUP_OFFSERVER_MAX_AGE_SECONDS, 180000);
+  const restoreDrillMaxAgeSeconds = positiveInteger(process.env.RESTORE_DRILL_MAX_AGE_SECONDS, 2678400);
+  const latestBackupCurrent = Boolean(latestBackupAgeSeconds !== null && latestBackupAgeSeconds <= backupMaxAgeSeconds);
+  const offServerCopyCurrent = Boolean(
+    latestOffServerManifest?.status === 'synced'
+    && latestOffServerManifest?.encrypted === true
+    && latestOffServerSyncAgeSeconds !== null
+    && latestOffServerSyncAgeSeconds <= offServerMaxAgeSeconds,
+  );
+  const restoreDrillCurrent = Boolean(
+    latestRestoreDrillManifest?.status === 'passed'
+    && latestRestoreDrillManifest?.applicationHealthValidation === 'passed'
+    && latestRestoreDrillManifest?.applicationLoginValidation === 'passed'
+    && latestRestoreDrillAgeSeconds !== null
+    && latestRestoreDrillAgeSeconds <= restoreDrillMaxAgeSeconds,
+  );
   return {
     configured: Boolean(process.env.DATABASE_BACKUP_DIR || process.env.BACKUP_STORAGE_TARGET),
     backupDirConfigured: Boolean(process.env.DATABASE_BACKUP_DIR),
@@ -205,12 +233,20 @@ export function getBackupStatus() {
     latestBackupFound: Boolean(latestManifest || latestDump),
     latestBackupAt,
     latestBackupAgeSeconds,
+    latestBackupCurrent,
+    backupMaxAgeSeconds,
     latestManifestPath: latestManifest ? latestManifestPath : null,
     latestChecksumFound: Boolean(latestManifest?.checksumFile || latestDump?.checksumFile),
     offServerCopyFound: Boolean(latestOffServerManifest),
     latestOffServerSyncAt,
+    latestOffServerSyncAgeSeconds,
+    offServerCopyCurrent,
+    offServerMaxAgeSeconds,
     offServerManifestPath: latestOffServerManifest ? latestOffServerManifestPath : null,
     latestRestoreDrillAt,
+    latestRestoreDrillAgeSeconds,
+    restoreDrillCurrent,
+    restoreDrillMaxAgeSeconds,
     restoreDrillManifestPath: latestRestoreDrillManifest ? latestRestoreDrillManifestPath : null,
   };
 }
@@ -218,11 +254,27 @@ export function getBackupStatus() {
 function getMonitoringStatus() {
   const uptimeEvidencePath = process.env.UPTIME_CHECK_EVIDENCE_PATH || './ops/uptime-latest.json';
   const uptimeEvidence = readJsonIfExists(uptimeEvidencePath);
+  const alertEvidencePath = process.env.ALERT_EVIDENCE_PATH || './ops/alert-delivery-latest.json';
+  const alertEvidence = readJsonIfExists(alertEvidencePath);
+  const latestUptimeCheckAt = normalizeTimestamp(stringOrNull(uptimeEvidence?.checkedAt));
+  const latestUptimeAgeSeconds = ageSeconds(latestUptimeCheckAt);
+  const uptimeMaxAgeSeconds = positiveInteger(process.env.UPTIME_EVIDENCE_MAX_AGE_SECONDS, 900);
+  const uptimeEvidenceCurrent = Boolean(
+    uptimeEvidence?.status === 'passed'
+    && latestUptimeAgeSeconds !== null
+    && latestUptimeAgeSeconds <= uptimeMaxAgeSeconds,
+  );
   return {
     uptimeCheckTarget: process.env.PUBLIC_HEALTH_URL ? 'configured' : 'missing',
     uptimeEvidenceFound: Boolean(uptimeEvidence),
-    latestUptimeCheckAt: stringOrNull(uptimeEvidence?.checkedAt),
+    latestUptimeCheckAt,
+    latestUptimeAgeSeconds,
+    uptimeMaxAgeSeconds,
+    uptimeEvidenceCurrent,
     latestUptimeStatus: stringOrNull(uptimeEvidence?.status) || 'missing',
+    alertDeliveryEvidenceFound: Boolean(alertEvidence),
+    latestAlertDeliveryAt: normalizeTimestamp(stringOrNull(alertEvidence?.attemptedAt)),
+    latestAlertDeliveryStatus: stringOrNull(alertEvidence?.status) || 'missing',
   };
 }
 
@@ -270,6 +322,17 @@ function normalizeTimestamp(value: string | null): string | null {
     : value;
   const timestamp = Date.parse(candidate);
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function ageSeconds(value: string | null): number | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, Math.round((Date.now() - timestamp) / 1000)) : null;
+}
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function backupStorageProvider(): string {

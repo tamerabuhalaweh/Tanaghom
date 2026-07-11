@@ -30,12 +30,15 @@ describe('operations backup status', () => {
       checksumFile,
     }));
     writeFileSync(join(dir, 'offserver-latest.json'), JSON.stringify({
-      syncedAt: '2026-06-28T10:00:00Z',
+      syncedAt: new Date().toISOString(),
       provider: 'rsync',
+      encrypted: true,
       status: 'synced',
     }));
     writeFileSync(join(dir, 'restore-drill-latest.json'), JSON.stringify({
-      restoredAt: '2026-06-28T10:10:00Z',
+      restoredAt: new Date().toISOString(),
+      applicationHealthValidation: 'passed',
+      applicationLoginValidation: 'passed',
       status: 'passed',
     }));
     process.env.BACKUP_RSYNC_TARGET = 'backup-host:/srv/tanaghum';
@@ -48,9 +51,9 @@ describe('operations backup status', () => {
     expect(status.storageTargetConfigured).toBe(true);
     expect(status.storageProvider).toBe('rsync');
     expect(status.offServerCopyFound).toBe(true);
-    expect(status.latestOffServerSyncAt).toBe('2026-06-28T10:00:00.000Z');
+    expect(status.offServerCopyCurrent).toBe(true);
     expect(status.restoreDrillEvidenceConfigured).toBe(true);
-    expect(status.latestRestoreDrillAt).toBe('2026-06-28T10:10:00.000Z');
+    expect(status.restoreDrillCurrent).toBe(true);
   });
 
   it('reports missing off-server evidence separately from local backup evidence', () => {
@@ -65,5 +68,27 @@ describe('operations backup status', () => {
     expect(status.offServerCopyFound).toBe(false);
     expect(status.storageTargetConfigured).toBe(false);
     expect(status.restoreDrillEvidenceConfigured).toBe(false);
+  });
+
+  it('does not treat stale or incomplete evidence as production current', () => {
+    const old = '2025-01-01T00:00:00Z';
+    writeFileSync(join(dir, 'latest.json'), JSON.stringify({ timestamp: '20250101T000000Z' }));
+    writeFileSync(join(dir, 'offserver-latest.json'), JSON.stringify({
+      syncedAt: old,
+      encrypted: false,
+      status: 'synced',
+    }));
+    writeFileSync(join(dir, 'restore-drill-latest.json'), JSON.stringify({
+      restoredAt: old,
+      status: 'passed',
+    }));
+
+    const status = getBackupStatus();
+
+    expect(status.latestBackupCurrent).toBe(false);
+    expect(status.offServerCopyFound).toBe(true);
+    expect(status.offServerCopyCurrent).toBe(false);
+    expect(status.restoreDrillEvidenceConfigured).toBe(true);
+    expect(status.restoreDrillCurrent).toBe(false);
   });
 });

@@ -1,0 +1,11 @@
+[Unit]
+Description=Tanaghum operations alert for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tanaghum-hybrid
+EnvironmentFile=-/etc/tanaghum/alert-routing.env
+Environment=ALERT_EVIDENCE_PATH=/var/lib/tanaghum/alerts/%i-latest.json
+ExecStart=/usr/bin/env node /opt/tanaghum-hybrid/scripts/send-operations-alert.mjs %i

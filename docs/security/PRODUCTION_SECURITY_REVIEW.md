@@ -64,6 +64,7 @@ The script checks:
 - `X-Frame-Options`
 - `X-Content-Type-Options`
 - `Referrer-Policy`
+- `Strict-Transport-Security` with a minimum one-year `max-age` on HTTPS endpoints
 
 ## Dependency Policy
 
@@ -93,8 +94,10 @@ Minimum external review scope:
 ## Current Security Gaps
 
 - No independent penetration test evidence yet.
-- CSP verification script exists; deployed evidence must be recorded per environment.
+- CSP and HSTS verification is automated for Hybrid through the external GitHub-hosted uptime workflow; keep its evidence artifacts for each release.
 - No formal admin-assisted MFA reset runbook sign-off yet.
 - No secret-manager integration evidence beyond encrypted database vault.
 - No full dependency vulnerability review evidence yet.
 - No customer integration test evidence for SmartLabs/Postiz/GHL/social channels yet.
+
+The independent review scope and evidence contract are defined in `docs/security/INDEPENDENT_SECURITY_REVIEW_BRIEF.md`.

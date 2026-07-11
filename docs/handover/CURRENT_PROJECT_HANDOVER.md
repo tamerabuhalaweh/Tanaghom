@@ -14,6 +14,8 @@ Primary active deployment: Hybrid
 
 Hybrid URL: `https://tanaghum-hybrid.163-123-180-104.sslip.io`
 
+Current production-operations closure work is tracked by GitHub issue `#171` and branch `feature/hybrid-production-ops-171`. The source-of-truth acceptance contract is `docs/operations/HYBRID_PRODUCTION_OPERATIONS_ACCEPTANCE.md`.
+
 AB reference URL: `https://tanaghum-ab.163-123-180-104.sslip.io`
 
 Main legacy/governed URL: `https://tanaghum.163-123-180-104.sslip.io`

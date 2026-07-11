@@ -1,0 +1,29 @@
+services:
+  prometheus:
+    volumes:
+      - ./monitoring/prometheus-alerting.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    secrets:
+      - source: alert_webhook_url
+        target: alert_webhook_url
+        mode: 0400
+    ports:
+      - "127.0.0.1:9093:9093"
+
+volumes:
+  alertmanager_data:
+
+secrets:
+  alert_webhook_url:
+    file: ./monitoring/secrets/alert_webhook_url
