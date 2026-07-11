@@ -28,7 +28,7 @@ async function expectOk(response: Awaited<ReturnType<APIRequestContext['get']>>)
 async function loginInBrowser(page: Page, email: string, password: string) {
   await page.goto('/login');
   await page.getByLabel('Email', { exact: true }).fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Open Command Center' }).click();
   await expect(page).toHaveURL(/\/(command-center)?$/);
 }
