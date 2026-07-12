@@ -1,0 +1,49 @@
+name: Agentic Hybrid Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Deployed Hybrid URL to test
+        required: true
+        default: https://tanaghum-hybrid.163-123-180-104.sslip.io
+
+jobs:
+  multi-role-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_AGENTIC_HYBRID_LIVE: 'true'
+      E2E_BASE_URL: ${{ inputs.base_url }}
+      E2E_MANAGER_EMAIL: ${{ secrets.E2E_MANAGER_EMAIL }}
+      E2E_MANAGER_PASSWORD: ${{ secrets.E2E_MANAGER_PASSWORD }}
+      E2E_SPECIALIST_EMAIL: ${{ secrets.E2E_SPECIALIST_EMAIL }}
+      E2E_SPECIALIST_PASSWORD: ${{ secrets.E2E_SPECIALIST_PASSWORD }}
+      E2E_CCO_EMAIL: ${{ secrets.E2E_CCO_EMAIL }}
+      E2E_CCO_PASSWORD: ${{ secrets.E2E_CCO_PASSWORD }}
+      E2E_VIEWER_EMAIL: ${{ secrets.E2E_VIEWER_EMAIL }}
+      E2E_VIEWER_PASSWORD: ${{ secrets.E2E_VIEWER_PASSWORD }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run multi-role Hybrid acceptance
+        run: npm run test:e2e:agentic-hybrid-live
+      - name: Upload role evidence and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentic-hybrid-acceptance-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
