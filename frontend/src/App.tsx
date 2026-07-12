@@ -1,52 +1,54 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthProvider'
 import { useAuth } from './contexts/useAuth'
 import Layout from './components/Layout'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import Login from './pages/Login'
-import NotFound from './pages/NotFound'
-import CampaignWorkspace from './pages/CampaignWorkspace'
-import ApprovalQueue from './pages/ApprovalQueue'
-import SaifDecisions from './pages/SaifDecisions'
-import CapabilityResolution from './pages/CapabilityResolution'
-import McpMediation from './pages/McpMediation'
-import PublishingPrep from './pages/PublishingPrep'
-import SpineTimeline from './pages/SpineTimeline'
-import Observability from './pages/Observability'
-import AssetCognition from './pages/AssetCognition'
-import Analytics from './pages/Analytics'
-import LearningSignals from './pages/LearningSignals'
-import CrmConversion from './pages/CrmConversion'
-import ProductionRendering from './pages/ProductionRendering'
-import SafetyStatus from './pages/SafetyStatus'
-import AIProviderSettings from './pages/AIProviderSettings'
-import McpEngine from './pages/McpEngine'
-import AgentSkills from './pages/AgentSkills'
-import GhlReadiness from './pages/GhlReadiness'
-import GhlWizard from './pages/GhlWizard'
-import DemoCommandCenter from './pages/DemoCommandCenter'
-import PostIdeas from './pages/PostIdeas'
-import IntegrationCredentials from './pages/IntegrationCredentials'
-import AdminUsers from './pages/AdminUsers'
-import MyAgentRep from './pages/MyAgentRep'
-import AcceptOnboarding from './pages/AcceptOnboarding'
-import AccountSecurity from './pages/AccountSecurity'
-import TenantAdmin from './pages/TenantAdmin'
-import OperationsReadiness from './pages/OperationsReadiness'
-import RuntimeInfrastructure from './pages/RuntimeInfrastructure'
-import SmartLabsVoice from './pages/SmartLabsVoice'
-import SocialGrowthIntelligence from './pages/SocialGrowthIntelligence'
-import EventDashboard from './pages/EventDashboard'
-import EventStrategyWizard from './pages/EventStrategyWizard'
-import MasterEventsDashboard from './pages/MasterEventsDashboard'
-import HybridEventWorkspace from './pages/HybridEventWorkspace'
-import AieroInspiredPreview from './pages/AieroInspiredPreview'
-import Stitchi from './pages/Stitchi'
-import CommercialCommandCenter from './pages/CommercialCommandCenter'
-import CommercialDisciplines from './pages/CommercialDisciplines'
-import ExecutiveDashboard from './pages/ExecutiveDashboard'
-import CommercialToday from './pages/CommercialToday'
-import UXR1D3Reference from './pages/UXR1D3Reference'
+
+const Login = lazy(() => import('./pages/Login'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const CampaignWorkspace = lazy(() => import('./pages/CampaignWorkspace'))
+const ApprovalQueue = lazy(() => import('./pages/ApprovalQueue'))
+const SaifDecisions = lazy(() => import('./pages/SaifDecisions'))
+const CapabilityResolution = lazy(() => import('./pages/CapabilityResolution'))
+const McpMediation = lazy(() => import('./pages/McpMediation'))
+const PublishingPrep = lazy(() => import('./pages/PublishingPrep'))
+const SpineTimeline = lazy(() => import('./pages/SpineTimeline'))
+const Observability = lazy(() => import('./pages/Observability'))
+const AssetCognition = lazy(() => import('./pages/AssetCognition'))
+const Analytics = lazy(() => import('./pages/Analytics'))
+const LearningSignals = lazy(() => import('./pages/LearningSignals'))
+const CrmConversion = lazy(() => import('./pages/CrmConversion'))
+const ProductionRendering = lazy(() => import('./pages/ProductionRendering'))
+const SafetyStatus = lazy(() => import('./pages/SafetyStatus'))
+const AIProviderSettings = lazy(() => import('./pages/AIProviderSettings'))
+const McpEngine = lazy(() => import('./pages/McpEngine'))
+const AgentSkills = lazy(() => import('./pages/AgentSkills'))
+const GhlReadiness = lazy(() => import('./pages/GhlReadiness'))
+const GhlWizard = lazy(() => import('./pages/GhlWizard'))
+const DemoCommandCenter = lazy(() => import('./pages/DemoCommandCenter'))
+const PostIdeas = lazy(() => import('./pages/PostIdeas'))
+const IntegrationCredentials = lazy(() => import('./pages/IntegrationCredentials'))
+const AdminUsers = lazy(() => import('./pages/AdminUsers'))
+const MyAgentRep = lazy(() => import('./pages/MyAgentRep'))
+const AcceptOnboarding = lazy(() => import('./pages/AcceptOnboarding'))
+const AccountSecurity = lazy(() => import('./pages/AccountSecurity'))
+const TenantAdmin = lazy(() => import('./pages/TenantAdmin'))
+const OperationsReadiness = lazy(() => import('./pages/OperationsReadiness'))
+const RuntimeInfrastructure = lazy(() => import('./pages/RuntimeInfrastructure'))
+const SmartLabsVoice = lazy(() => import('./pages/SmartLabsVoice'))
+const SocialGrowthIntelligence = lazy(() => import('./pages/SocialGrowthIntelligence'))
+const EventDashboard = lazy(() => import('./pages/EventDashboard'))
+const EventStrategyWizard = lazy(() => import('./pages/EventStrategyWizard'))
+const MasterEventsDashboard = lazy(() => import('./pages/MasterEventsDashboard'))
+const HybridEventWorkspace = lazy(() => import('./pages/HybridEventWorkspace'))
+const AieroInspiredPreview = lazy(() => import('./pages/AieroInspiredPreview'))
+const Stitchi = lazy(() => import('./pages/Stitchi'))
+const CommercialCommandCenter = lazy(() => import('./pages/CommercialCommandCenter'))
+const CommercialDisciplines = lazy(() => import('./pages/CommercialDisciplines'))
+const ExecutiveDashboard = lazy(() => import('./pages/ExecutiveDashboard'))
+const CommercialToday = lazy(() => import('./pages/CommercialToday'))
+const UXR1D3Reference = lazy(() => import('./pages/UXR1D3Reference'))
 
 const ADMIN_ROLES = ['admin', 'cco']
 const EXECUTIVE_ROLES = ['admin', 'cco']
@@ -110,8 +112,9 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
+        <Suspense fallback={<LoadingWorkspace />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
           <Route path="/accept-onboarding" element={<AcceptOnboarding />} />
           <Route path="/ux/aiero-preview" element={<AieroInspiredPreview page="home" />} />
           <Route path="/ux/aiero-preview/events" element={<AieroInspiredPreview page="events" />} />
@@ -172,7 +175,8 @@ function App() {
             <Route path="performance" element={<Analytics />} />
             <Route path="*" element={<NotFound />} />
           </Route>
-        </Routes>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   )
