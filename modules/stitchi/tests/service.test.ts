@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError, ForbiddenError } from '@shared/errors';
+import { LLMProviderError } from '@shared/providers/llm-provider';
 
 vi.mock('@shared/logging', () => ({ auditLog: vi.fn() }));
 const providerMocks = vi.hoisted(() => ({
@@ -459,6 +460,31 @@ describe('Stitchi service RBAC', () => {
     expect(result.provider.model).toBeNull();
   });
 
+  it('stores an honest no-write answer when the configured provider rejects the request', async () => {
+    providerMocks.generate.mockRejectedValueOnce(
+      new LLMProviderError('Gemma rejected the configured credential.', 400, 'LLM_PROVIDER_UNAVAILABLE'),
+    );
+
+    const result = await service.generateReadOnlyAssistantResponse('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'What should I prioritize today?',
+    });
+
+    expect(result.provider).toMatchObject({ status: 'unavailable', type: 'none', model: null });
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('test the connection'),
+      expect.objectContaining({
+        providerUnavailable: true,
+        writesExecuted: false,
+        externalExecution: 'blocked',
+      }),
+    );
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+  });
+
   it('streams provider tokens and stores the final assistant answer', async () => {
     const events = [];
     for await (const event of service.streamReadOnlyAssistantResponse('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
@@ -493,5 +519,31 @@ describe('Stitchi service RBAC', () => {
         model: 'gemma4-26b-a4b-canary',
       }),
     );
+  });
+
+  it('completes the response stream without a server error when the provider is unavailable', async () => {
+    providerMocks.streamGenerate.mockImplementationOnce(async function* () {
+      yield await Promise.reject(
+        new LLMProviderError('Gemma rejected the configured credential.', 400, 'LLM_PROVIDER_UNAVAILABLE'),
+      );
+    });
+
+    const events = [];
+    for await (const event of service.streamReadOnlyAssistantResponse('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'What should I prioritize today?',
+    })) {
+      events.push(event);
+    }
+
+    expect(events.map(event => event.type)).toEqual([
+      'started',
+      'user_message_saved',
+      'context_loaded',
+      'provider_unavailable',
+      'completed',
+    ]);
+    const completed = events.find(event => event.type === 'completed');
+    expect(completed && completed.type === 'completed' ? completed.answer.provider.status : null).toBe('unavailable');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
   });
 });

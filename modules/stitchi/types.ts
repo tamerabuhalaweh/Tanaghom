@@ -122,7 +122,7 @@ export interface StitchiReadOnlyAnswer {
   userMessage: StitchiMessageSummary;
   assistantMessage: StitchiMessageSummary;
   provider: {
-    status: 'used' | 'required';
+    status: 'used' | 'required' | 'unavailable';
     name: string;
     type: string;
     model: string | null;
@@ -140,5 +140,6 @@ export type StitchiResponseStreamEvent =
   | { type: 'user_message_saved'; message: StitchiMessageSummary }
   | { type: 'context_loaded'; selectedEventId: string | null; contextShape: Record<string, unknown> }
   | { type: 'provider_required'; message: StitchiMessageSummary }
+  | { type: 'provider_unavailable'; message: StitchiMessageSummary }
   | { type: 'token'; text: string }
   | { type: 'completed'; answer: StitchiReadOnlyAnswer };

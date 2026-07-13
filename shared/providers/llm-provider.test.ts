@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaudeLLMProvider, DeepSeekLLMProvider, GemmaLLMProvider, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
+import { ClaudeLLMProvider, DeepSeekLLMProvider, GemmaLLMProvider, LLMProviderError, MockLLMProvider, OpenAILLMProvider, createLLMProvider } from './llm-provider';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -123,6 +123,19 @@ describe('LLM provider adapter', () => {
     expect(response.text).toBe('Gemma live generated draft');
     expect(response.provider).toBe('gemma');
     expect(response.usage).toEqual({ promptTokens: 10, completionTokens: 6 });
+  });
+
+  it('reports rejected Gemma credentials accurately without exposing provider response data', async () => {
+    process.env.GEMMA_API_KEY = 'test-gemma-key';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 401 } as Response);
+
+    const provider = new GemmaLLMProvider();
+    const error = await provider.generate('Campaign brief', { timeoutMs: 1000 }).catch(value => value);
+
+    expect(error).toBeInstanceOf(LLMProviderError);
+    expect(error).toMatchObject({ code: 'LLM_PROVIDER_UNAVAILABLE', statusCode: 400 });
+    expect(error.message).toContain('rejected the configured credential');
+    expect(error.message).not.toContain('test-gemma-key');
   });
 
   it('streams Gemma OpenAI-compatible chat completion tokens', async () => {
