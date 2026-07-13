@@ -6,6 +6,7 @@ import type { LLMResponse } from '@shared/providers/llm-provider';
 import { executeStitchiAction, isExecutableStitchiAction, requiresApprovalForAction } from './actions';
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext, type StitchiReadOnlyContext } from './context';
 import { orchestrateStitchiMessage } from './orchestrator';
+import { classifyStitchiProviderFailure, stitchiProviderUnavailableMessage } from './provider-failure';
 import {
   checkStitchiPermission,
   canApproveStitchiActions,
@@ -189,6 +190,38 @@ export async function generateReadOnlyAssistantResponse(
         safety: READ_ONLY_SAFETY,
       };
     }
+    if (classifyStitchiProviderFailure(err) === 'unavailable') {
+      const assistantMessage = await repo.createAssistantMessage(
+        tenantKey,
+        userId,
+        role,
+        conversationId,
+        stitchiProviderUnavailableMessage(),
+        {
+          mode: 'read_only',
+          writesExecuted: false,
+          externalExecution: 'blocked',
+          providerUnavailable: true,
+          selectedEventId: context.selectedEvent?.id || null,
+          contextShape: summarizeContextShape(context),
+        },
+      );
+      auditLog(
+        { actor: `user:${userId}`, action: 'stitchi_provider_unavailable', object_type: 'stitchi_message', object_id: assistantMessage.id, result: 'failure' },
+        'Stitchi AI provider was unavailable; no system data was changed',
+      );
+      return {
+        userMessage,
+        assistantMessage,
+        provider: {
+          status: 'unavailable',
+          name: 'AI connection unavailable',
+          type: 'none',
+          model: null,
+        },
+        safety: READ_ONLY_SAFETY,
+      };
+    }
     throw err;
   }
 }
@@ -312,6 +345,44 @@ export async function* streamReadOnlyAssistantResponse(
           provider: {
             status: 'required',
             name: 'Customer AI model required',
+            type: 'none',
+            model: null,
+          },
+          safety: READ_ONLY_SAFETY,
+        },
+      };
+      return;
+    }
+    if (classifyStitchiProviderFailure(err) === 'unavailable') {
+      const assistantMessage = await repo.createAssistantMessage(
+        tenantKey,
+        userId,
+        role,
+        conversationId,
+        stitchiProviderUnavailableMessage(),
+        {
+          mode: 'read_only',
+          streamed: true,
+          writesExecuted: false,
+          externalExecution: 'blocked',
+          providerUnavailable: true,
+          selectedEventId: context.selectedEvent?.id || null,
+          contextShape,
+        },
+      );
+      auditLog(
+        { actor: `user:${userId}`, action: 'stitchi_provider_unavailable', object_type: 'stitchi_message', object_id: assistantMessage.id, result: 'failure' },
+        'Stitchi streaming AI provider was unavailable; no system data was changed',
+      );
+      yield { type: 'provider_unavailable', message: assistantMessage };
+      yield {
+        type: 'completed',
+        answer: {
+          userMessage,
+          assistantMessage,
+          provider: {
+            status: 'unavailable',
+            name: 'AI connection unavailable',
             type: 'none',
             model: null,
           },

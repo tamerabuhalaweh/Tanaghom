@@ -431,7 +431,7 @@ export class GemmaLLMProvider implements LLMProvider {
 
     if (!response.ok) {
       throw new LLMProviderError(
-        `Gemma API returned ${response.status}. The provider may be busy; please try again.`,
+        gemmaHttpErrorMessage(response.status),
         response.status >= 500 || response.status === 429 ? 502 : 400,
         'LLM_PROVIDER_UNAVAILABLE',
       );
@@ -502,6 +502,15 @@ export class GemmaLLMProvider implements LLMProvider {
       apiKeyStatus: this.apiKey.length > 0 ? 'configured' : 'missing',
     };
   }
+}
+
+function gemmaHttpErrorMessage(status: number): string {
+  if (status === 401 || status === 403) {
+    return `Gemma rejected the configured credential with HTTP ${status}. Reconnect or replace the credential in AI Settings.`;
+  }
+  if (status === 429) return 'Gemma is rate limited. Please wait and try again.';
+  if (status >= 500) return `Gemma is temporarily unavailable (HTTP ${status}). Please try again.`;
+  return `Gemma rejected the request with HTTP ${status}. Check the model and provider configuration.`;
 }
 
 export function createLLMProvider(): LLMProvider {

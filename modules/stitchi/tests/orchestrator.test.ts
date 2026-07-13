@@ -92,6 +92,7 @@ import * as repo from '../repository';
 import { loadReadOnlyContext } from '../context';
 import { orchestrateStitchiMessage } from '../orchestrator';
 import { AppError } from '@shared/errors';
+import { LLMProviderError } from '@shared/providers/llm-provider';
 
 describe('Stitchi natural-language orchestration', () => {
   beforeEach(() => {
@@ -778,5 +779,53 @@ describe('Stitchi natural-language orchestration', () => {
         externalExecution: 'blocked',
       }),
     );
+  });
+
+  it('returns an actionable no-write answer when the configured provider rejects a read-only request', async () => {
+    providerMocks.generate.mockRejectedValueOnce(
+      new LLMProviderError('Gemma rejected the configured credential.', 400, 'LLM_PROVIDER_UNAVAILABLE'),
+    );
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'What should I focus on today?',
+    });
+
+    expect(result.status).toBe('answered');
+    expect(result.provider).toMatchObject({ status: 'unavailable', type: 'gemma' });
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('No system data was changed'),
+      expect.objectContaining({
+        providerStatus: 'unavailable',
+        writesExecuted: false,
+        externalExecution: 'blocked',
+      }),
+    );
+  });
+
+  it('does not create a commercial action when AI enrichment is unavailable', async () => {
+    providerMocks.generate.mockRejectedValueOnce(
+      new LLMProviderError('Gemma rejected the configured credential.', 400, 'LLM_PROVIDER_UNAVAILABLE'),
+    );
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Objective: sell to entrepreneurs.',
+        'Audience: warm followers and previous buyers.',
+        'Budget target: 5000.',
+        'Revenue target: 30000.',
+        'Action plan: content, ads, GHL follow-up, WhatsApp reminders.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('answered');
+    expect(result.provider).toMatchObject({ status: 'unavailable', type: 'gemma' });
+    expect(result.actionRun).toBeNull();
+    expect(repo.createActionRun).not.toHaveBeenCalled();
   });
 });

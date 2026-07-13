@@ -9,6 +9,7 @@ import type { CommercialCurrency, CommercialRevenueLineType } from '@modules/com
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext, type StitchiReadOnlyContext } from './context';
 import { checkStitchiPermission } from './policy';
 import * as repo from './repository';
+import { classifyStitchiProviderFailure, stitchiProviderUnavailableMessage } from './provider-failure';
 import { sanitizeForStorage } from './redaction';
 import { startStitchiActionApprovalWorkflow } from './workflow';
 import type { StitchiExecutableActionType } from './actions';
@@ -35,6 +36,7 @@ interface FollowUpResponse {
   assistantText: string;
   providerType?: string;
   providerModel?: string;
+  providerStatus?: 'used' | 'required' | 'unavailable';
 }
 
 type CommercialDerivation = ActionProposal | FollowUpResponse | null;
@@ -64,7 +66,7 @@ export interface StitchiOrchestrationResult {
   actionRun: StitchiActionRunSummary | null;
   status: OrchestrationStatus;
   provider: {
-    status: 'used' | 'required' | 'not_needed';
+    status: 'used' | 'required' | 'unavailable' | 'not_needed';
     type: string;
     model: string | null;
   };
@@ -90,6 +92,7 @@ const orchestrationState = Annotation.Root({
   assistantText: Annotation<string | undefined>,
   providerType: Annotation<string | undefined>,
   providerModel: Annotation<string | undefined>,
+  providerStatus: Annotation<'used' | 'required' | 'unavailable' | undefined>,
   status: Annotation<OrchestrationStatus | undefined>,
 });
 
@@ -120,6 +123,7 @@ async function classifyNode(state: typeof orchestrationState.State): Promise<Par
       assistantText: proposal.assistantText,
       providerType: proposal.providerType,
       providerModel: proposal.providerModel,
+      providerStatus: proposal.providerStatus,
     };
   }
   if (proposal) return { actionProposal: proposal, providerType: proposal.providerType, providerModel: proposal.providerModel };
@@ -147,9 +151,11 @@ async function respondNode(state: typeof orchestrationState.State) {
 
   if (state.status === 'blocked' || state.assistantText) return {};
 
+  let configuredProvider: { type: string; model: string } | null = null;
   try {
     const provider = await resolveUserLLMProvider(state.userId);
     const providerStatus = provider.getStatus();
+    configuredProvider = { type: providerStatus.type, model: providerStatus.model };
     const response = await provider.generate(buildOrchestrationPrompt(state.content, state.context), {
       systemPrompt: ORCHESTRATOR_READ_ONLY_PROMPT,
       maxTokens: 650,
@@ -169,6 +175,16 @@ async function respondNode(state: typeof orchestrationState.State) {
         status: 'answered' as const,
         assistantText: 'I can answer and plan more deeply once your AI model is connected. No system data was changed.',
         providerType: 'none',
+        providerStatus: 'required' as const,
+      };
+    }
+    if (classifyStitchiProviderFailure(err) === 'unavailable') {
+      return {
+        status: 'answered' as const,
+        assistantText: stitchiProviderUnavailableMessage(),
+        providerType: configuredProvider?.type || 'none',
+        providerModel: configuredProvider?.model,
+        providerStatus: 'unavailable' as const,
       };
     }
     throw err;
@@ -263,6 +279,7 @@ export async function orchestrateStitchiMessage(
         assistantText: fallbackProposal.assistantText,
         providerType: fallbackProposal.providerType,
         providerModel: fallbackProposal.providerModel,
+        providerStatus: fallbackProposal.providerStatus,
       };
     } else if (fallbackProposal) {
       const { actionRun, assistantText } = await createActionRunFromProposal({
@@ -301,6 +318,7 @@ export async function orchestrateStitchiMessage(
       selectedEventId: result.eventId || null,
       provider: result.providerType || 'not_needed',
       model: result.providerModel || null,
+      providerStatus: result.providerStatus || (result.providerType ? 'used' : 'not_needed'),
     },
   );
 
@@ -333,7 +351,8 @@ export async function orchestrateStitchiMessage(
     actionRun: result.actionRun || null,
     status,
     provider: {
-      status: result.providerType === 'none' ? 'required' : result.providerType ? 'used' : 'not_needed',
+      status: result.providerStatus
+        || (result.providerType === 'none' ? 'required' : result.providerType ? 'used' : 'not_needed'),
       type: result.providerType || 'none',
       model: result.providerModel || null,
     },
@@ -1195,6 +1214,7 @@ async function enrichCommercialPlanWithLLM(input: {
       return {
         kind: 'follow_up',
         providerType: 'none',
+        providerStatus: 'required',
         assistantText: [
           'I can prepare this commercial plan only after your AI model is connected.',
           'Open AI Settings, connect Gemma or another approved provider, then send the request again.',
@@ -1237,6 +1257,15 @@ async function enrichCommercialPlanWithLLM(input: {
           'No commercial plan was created.',
           'Please send the request again, and I will prepare a new approval card.',
         ].join('\n'),
+      };
+    }
+    if (classifyStitchiProviderFailure(err) === 'unavailable') {
+      return {
+        kind: 'follow_up',
+        providerType: status.type,
+        providerModel: status.model,
+        providerStatus: 'unavailable',
+        assistantText: stitchiProviderUnavailableMessage(),
       };
     }
     throw err;
