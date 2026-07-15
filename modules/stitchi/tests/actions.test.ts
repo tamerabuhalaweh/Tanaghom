@@ -23,6 +23,9 @@ const commercialDisciplineMocks = vi.hoisted(() => ({
 const commercialExecutiveMocks = vi.hoisted(() => ({
   createSchedule: vi.fn(),
 }));
+const annualPlanningMocks = vi.hoisted(() => ({
+  createAnnualPlan: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
@@ -31,6 +34,7 @@ vi.mock('@modules/event-campaign-planner/service', () => plannerServiceMocks);
 vi.mock('@modules/commercial-command-center/service', () => commercialCenterMocks);
 vi.mock('@modules/commercial-disciplines/service', () => commercialDisciplineMocks);
 vi.mock('@modules/commercial-executive-reporting/service', () => commercialExecutiveMocks);
+vi.mock('@modules/commercial-annual-planning/service', () => annualPlanningMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -53,6 +57,7 @@ describe('Stitchi action registry', () => {
     commercialCenterMocks.createAssessmentSignal.mockResolvedValue({ id: 'commercial-signal-1' });
     commercialDisciplineMocks.createRecord.mockResolvedValue({ id: 'discipline-record-1' });
     commercialExecutiveMocks.createSchedule.mockResolvedValue({ id: 'executive-report-schedule-1' });
+    annualPlanningMocks.createAnnualPlan.mockResolvedValue({ id: 'annual-plan-1', year: 2027 });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -74,6 +79,7 @@ describe('Stitchi action registry', () => {
       'create_commercial_assessment_signal',
       'create_commercial_discipline_record',
       'create_executive_report_schedule',
+      'create_annual_commercial_plan',
     ]);
   });
 
@@ -373,6 +379,37 @@ describe('Stitchi action registry', () => {
       objectType: 'commercial_executive_report_schedule',
       objectId: 'executive-report-schedule-1',
     });
+  });
+
+  it('executes approved annual commercial plans through the governed annual planning service', async () => {
+    const result = await executeStitchiAction({
+      role: 'department_head',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      actionType: 'create_annual_commercial_plan',
+      inputPayload: {
+        year: 2027,
+        title: '2027 Commercial Growth Plan',
+        strategy: 'Use approved historical learning to sequence the annual portfolio.',
+        currency: 'AED',
+        budgetTarget: 500000,
+        revenueTarget: 2500000,
+        learningSetIds: ['00000000-0000-0000-0000-000000000090'],
+      },
+    });
+
+    expect(annualPlanningMocks.createAnnualPlan).toHaveBeenCalledWith(
+      'department_head',
+      'tenant-a',
+      'user-1',
+      expect.objectContaining({
+        year: 2027,
+        currency: 'AED',
+        budgetTarget: 500000,
+        revenueTarget: 2500000,
+      }),
+    );
+    expect(result).toMatchObject({ objectType: 'annual_commercial_plan', objectId: 'annual-plan-1' });
   });
 
   it('rejects unsupported external/write actions', async () => {

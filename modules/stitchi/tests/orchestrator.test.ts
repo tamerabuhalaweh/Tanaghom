@@ -63,6 +63,17 @@ vi.mock('../context', () => ({
       ],
       recentPlans: [],
     },
+    annualPlanning: {
+      currentPlan: null,
+      approvedLearningSets: [
+        {
+          id: '00000000-0000-0000-0000-000000000090',
+          title: '2026 Approved Commercial Learning',
+          findingCount: 4,
+        },
+      ],
+      requiredActions: ['Create the next annual commercial plan.'],
+    },
     guardrails: {
       mode: 'read_only',
       writesExecuted: false,
@@ -422,6 +433,79 @@ describe('Stitchi natural-language orchestration', () => {
       type: 'gemma',
       model: 'gemma4-26b-a4b-canary',
     });
+  });
+
+  it('asks for missing annual targets before asking the AI provider to prepare a yearly plan', async () => {
+    const result = await orchestrateStitchiMessage('department_head', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Prepare our 2027 annual commercial plan and 12-month portfolio. Annual budget target: 500000 AED.',
+    });
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(providerMocks.generate).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.stringContaining('annual revenue target'),
+      expect.objectContaining({ writesExecuted: false, externalExecution: 'blocked' }),
+    );
+  });
+
+  it('uses Gemma and approved learning to propose an approval-gated annual commercial plan', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        title: '2027 Commercial Growth Portfolio',
+        strategy: 'Prioritize proven course and event motions, then stage launches around seasonal buying periods.',
+        portfolioPriorities: ['Grow proven revenue lines', 'Protect budget for high-conversion periods'],
+        seasonalityNotes: ['Keep Ramadan virtual-event timing visible in the monthly portfolio'],
+        assumptions: ['Live connector results remain pending customer credentials'],
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage('department_head', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Stitchi, create our 2027 annual commercial plan and twelve-month portfolio.',
+        'Annual budget target: 500000 AED.',
+        'Annual revenue target: 2500000 AED.',
+        'Use approved historical learning and account for seasonality.',
+      ].join('\n'),
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(providerMocks.generate).toHaveBeenCalledWith(
+      expect.stringContaining('Prepare an evidence-aware annual commercial strategy'),
+      expect.objectContaining({ systemPrompt: expect.stringContaining('annual commercial planning operator') }),
+    );
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_annual_commercial_plan',
+        requiresApproval: true,
+        riskLevel: 'high',
+        inputPayload: expect.objectContaining({
+          year: 2027,
+          title: '2027 Commercial Growth Portfolio',
+          currency: 'AED',
+          budgetTarget: 500000,
+          revenueTarget: 2500000,
+          learningSetIds: ['00000000-0000-0000-0000-000000000090'],
+          strategy: expect.stringContaining('Portfolio priorities'),
+        }),
+        previewPayload: expect.objectContaining({
+          approvedLearningSets: 1,
+          approvalRequired: true,
+          externalSystemsCalled: false,
+        }),
+      }),
+    );
+    expect(result.provider).toMatchObject({ status: 'used', type: 'gemma', model: 'gemma4-26b-a4b-canary' });
   });
 
   it('configures an unconfigured Online Courses revenue line before proposing the plan', async () => {

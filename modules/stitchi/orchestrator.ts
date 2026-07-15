@@ -55,6 +55,14 @@ const commercialPlanAiEnrichmentSchema = z.object({
   assumptions: z.array(z.string().trim().min(1).max(260)).max(8).optional(),
 });
 
+const annualPlanAiEnrichmentSchema = z.object({
+  title: z.string().trim().min(3).max(220),
+  strategy: z.string().trim().min(20).max(12000),
+  portfolioPriorities: z.array(z.string().trim().min(2).max(320)).min(1).max(12),
+  seasonalityNotes: z.array(z.string().trim().min(2).max(320)).max(12).default([]),
+  assumptions: z.array(z.string().trim().min(2).max(320)).max(10).default([]),
+});
+
 type CommercialPlanAiEnrichment = z.infer<typeof commercialPlanAiEnrichmentSchema> & {
   providerType: string;
   providerModel: string | null;
@@ -374,6 +382,8 @@ async function deriveActionProposal(
 ): Promise<ActionProposal | FollowUpResponse | null> {
   const executiveReportProposal = deriveExecutiveReportActionProposal(content);
   if (executiveReportProposal) return executiveReportProposal;
+  const annualPlanProposal = await deriveAnnualPlanActionProposal(content, userId, context);
+  if (annualPlanProposal) return annualPlanProposal;
   const commercialProposal = await deriveCommercialCenterActionProposalV2(content, userId, context, metadata);
   if (commercialProposal) return commercialProposal;
   const disciplineProposal = deriveDisciplineActionProposal(content, eventId, context, metadata);
@@ -434,6 +444,115 @@ async function deriveActionProposal(
   }
 
   return null;
+}
+
+async function deriveAnnualPlanActionProposal(
+  content: string,
+  userId: string,
+  context?: StitchiReadOnlyContext,
+): Promise<ActionProposal | FollowUpResponse | null> {
+  const lower = content.toLowerCase();
+  if (!/(annual|yearly|year plan|12[- ]month|twelve[- ]month|next year)/i.test(lower)) return null;
+  if (!/(prepare|create|build|draft|plan|strategy|portfolio|calendar|allocate)/i.test(lower)) return null;
+
+  const yearMatch = /\b(20\d{2})\b/.exec(content);
+  const year = yearMatch ? Number(yearMatch[1]) : new Date().getFullYear() + 1;
+  const budgetTarget = extractMoneyValue(content, ['annual budget target', 'total budget', 'budget target', 'annual budget', 'budget']);
+  const revenueTarget = extractMoneyValue(content, ['annual revenue target', 'total revenue target', 'revenue target', 'annual revenue', 'revenue']);
+  const currency = extractCommercialCurrency(content, context?.commercialCenter.defaultCurrency || 'AED');
+  const missing = [budgetTarget == null ? 'annual budget target' : null, revenueTarget == null ? 'annual revenue target' : null].filter(Boolean);
+  if (missing.length) {
+    return {
+      kind: 'follow_up',
+      providerType: 'none',
+      assistantText: [
+        `I can prepare the ${year} annual commercial plan, but I still need the ${missing.join(' and ')}.`,
+        `The workspace currency is ${currency}. Tell me both totals, and I will use approved historical learning to prepare the strategy for review.`,
+        'No plan has been created or changed.',
+      ].join('\n'),
+    };
+  }
+
+  let provider;
+  try {
+    provider = await resolveUserLLMProvider(userId);
+  } catch (error) {
+    if (isProviderRequiredError(error)) {
+      return {
+        kind: 'follow_up', providerType: 'none', providerStatus: 'required',
+        assistantText: 'Connect Gemma or another approved AI model before Stitchi prepares an annual strategy. No plan has been created.',
+      };
+    }
+    throw error;
+  }
+  const providerStatus = provider.getStatus();
+  if (providerStatus.type === 'mock') {
+    return {
+      kind: 'follow_up', providerType: 'none', providerStatus: 'required',
+      assistantText: 'A real AI model is required for annual strategy preparation. Mock output is not accepted for this production workflow.',
+    };
+  }
+
+  let response;
+  let enrichment: z.infer<typeof annualPlanAiEnrichmentSchema>;
+  try {
+    response = await provider.generate([
+      'Prepare an evidence-aware annual commercial strategy for Tanaghum.',
+      'Return JSON only with this exact shape:',
+      JSON.stringify({ title: 'short annual plan title', strategy: 'annual strategic direction', portfolioPriorities: ['priority'], seasonalityNotes: ['seasonality note'], assumptions: ['assumption'] }),
+      'Rules:',
+      '- Use approved historical learning and current commercial context when available.',
+      '- Do not change or invent the supplied budget, revenue target, year, or currency.',
+      '- Do not claim external publishing, CRM writes, messaging, or live analytics.',
+      '- Identify assumptions honestly when customer data or connectors are missing.',
+      `Year: ${year}`,
+      `Currency: ${currency}`,
+      `Annual budget target: ${budgetTarget}`,
+      `Annual revenue target: ${revenueTarget}`,
+      `User request: ${content}`,
+      `Tanaghum context: ${context ? formatReadOnlyContextForPrompt(context) : '{}'}`,
+    ].join('\n'), {
+      systemPrompt: 'You are Stitchi, Tanaghum\'s governed annual commercial planning operator. Return valid JSON only and never claim external execution.',
+      maxTokens: 1300,
+      temperature: 0.2,
+      timeoutMs: 30000,
+    });
+    const json = extractJsonObject(response.text);
+    if (!json) throw new AppError('AI provider did not return annual plan JSON.', 502, 'STITCHI_AI_ANNUAL_PLAN_INVALID');
+    enrichment = annualPlanAiEnrichmentSchema.parse(JSON.parse(json));
+  } catch (error) {
+    if (classifyStitchiProviderFailure(error) === 'unavailable') {
+      return { kind: 'follow_up', providerType: providerStatus.type, providerModel: providerStatus.model, providerStatus: 'unavailable', assistantText: stitchiProviderUnavailableMessage() };
+    }
+    if (error instanceof AppError && error.code === 'STITCHI_AI_ANNUAL_PLAN_INVALID') throw error;
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      throw new AppError('AI provider returned annual plan JSON that failed backend validation.', 502, 'STITCHI_AI_ANNUAL_PLAN_INVALID');
+    }
+    throw error;
+  }
+
+  const learningSetIds = context?.annualPlanning.approvedLearningSets.map(set => set.id) || [];
+  const strategy = [
+    enrichment.strategy,
+    `Portfolio priorities:\n${enrichment.portfolioPriorities.map(value => `- ${value}`).join('\n')}`,
+    enrichment.seasonalityNotes.length ? `Seasonality:\n${enrichment.seasonalityNotes.map(value => `- ${value}`).join('\n')}` : null,
+    enrichment.assumptions.length ? `Assumptions:\n${enrichment.assumptions.map(value => `- ${value}`).join('\n')}` : null,
+  ].filter(Boolean).join('\n\n');
+  return {
+    actionType: 'create_annual_commercial_plan',
+    inputPayload: { year, title: enrichment.title, strategy, currency, budgetTarget, revenueTarget, learningSetIds },
+    previewPayload: {
+      year, title: enrichment.title, currency, budgetTarget, revenueTarget,
+      portfolioPriorities: enrichment.portfolioPriorities,
+      approvedLearningSets: learningSetIds.length,
+      approvalRequired: true,
+      externalSystemsCalled: false,
+    },
+    riskLevel: 'high',
+    reason: `create the ${year} annual commercial plan using approved learning`,
+    providerType: response.provider || providerStatus.type,
+    providerModel: response.model || providerStatus.model || undefined,
+  };
 }
 
 function deriveExecutiveReportActionProposal(content: string): ActionProposal | null {

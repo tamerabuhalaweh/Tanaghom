@@ -65,13 +65,13 @@ const PRIMARY_NAV: NavItem[] = [
     activePaths: ['/', '/command-center'],
   },
   {
-    path: '/commercial-plans',
+    path: '/commercial-planning',
     label: 'Plans',
     shortLabel: 'Plans',
     description: 'Commercial plans, discipline work, and event handoffs',
     icon: CalendarDays,
     roles: PRODUCT_ROLES,
-    activePaths: ['/commercial-assessment', '/commercial-plans', '/disciplines', '/events'],
+    activePaths: ['/commercial-assessment', '/commercial-planning', '/commercial-plans', '/disciplines', '/events'],
   },
   {
     path: '/ideas',
@@ -157,6 +157,7 @@ const ADMIN_LINKS: NavItem[] = [
 const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = [
   { match: path => path === '/' || path === '/command-center', title: 'Today' },
   { match: path => path === '/commercial-plans', title: 'Commercial Plans' },
+  { match: path => path === '/commercial-planning', title: 'Annual Planning' },
   { match: path => path === '/commercial-assessment', title: 'Historical Assessment' },
   { match: path => path === '/disciplines', title: 'Discipline Workspaces' },
   { match: path => path.startsWith('/events'), title: 'Event Operations' },
