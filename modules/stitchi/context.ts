@@ -125,6 +125,22 @@ export interface StitchiReadOnlyContext {
     approvedLearningSets: Array<{ id: string; title: string; findingCount: number }>;
     requiredActions: string[];
   };
+  commercialHierarchy: {
+    linkedPlans: Array<{
+      commercialPlanId: string;
+      commercialPlanTitle: string;
+      annualPlanId: string;
+      annualPlanTitle: string;
+      year: number;
+      monthlyPortfolioItemId: string;
+      monthlyTitle: string;
+      month: number;
+      linkedEvents: number;
+      linkedCampaigns: number;
+    }>;
+    orphanPlans: Array<{ id: string; title: string; status: string }>;
+    requiredActions: string[];
+  };
   commercialExecutive: {
     recentReports: number;
     activeSchedules: number;
@@ -205,6 +221,18 @@ export async function loadReadOnlyContext(
         currency?: unknown;
         linked_event_id: string | null;
         revenue_line: { name: string };
+        hierarchy_assignment?: { id: string } | null;
+      }>>;
+    };
+    commercialPlanHierarchyAssignment?: {
+      findMany(args: unknown): Promise<Array<{
+        commercial_plan_id: string;
+        annual_plan_id: string;
+        monthly_portfolio_item_id: string;
+        commercial_plan: { title: string };
+        annual_plan: { title: string; year: number };
+        monthly_item: { title: string; month: number };
+        _count?: { event_links?: number; campaign_links?: number };
       }>>;
     };
     commercialAssessmentSignal?: {
@@ -269,6 +297,7 @@ export async function loadReadOnlyContext(
     historicalAssessmentRuns,
     learningSets,
     annualPlans,
+    hierarchyAssignments,
   ] = await Promise.all([
     commercialClients.tenant?.findUnique({
       where: { tenant_key: tenantKey },
@@ -377,6 +406,7 @@ export async function loadReadOnlyContext(
         currency: true,
         linked_event_id: true,
         revenue_line: { select: { name: true } },
+        hierarchy_assignment: { select: { id: true } },
       },
       orderBy: { updated_at: 'desc' },
       take: 5,
@@ -437,6 +467,25 @@ export async function loadReadOnlyContext(
       orderBy: [{ year: 'desc' }, { scenario_version: 'desc' }],
       take: 3,
     }) ?? Promise.resolve([]),
+    commercialClients.commercialPlanHierarchyAssignment?.findMany({
+      where: { tenant_key: tenantKey, status: 'active' },
+      select: {
+        commercial_plan_id: true,
+        annual_plan_id: true,
+        monthly_portfolio_item_id: true,
+        commercial_plan: { select: { title: true } },
+        annual_plan: { select: { title: true, year: true } },
+        monthly_item: { select: { title: true, month: true } },
+        _count: {
+          select: {
+            event_links: { where: { status: 'active' } },
+            campaign_links: { where: { status: 'active' } },
+          },
+        },
+      },
+      orderBy: { linked_at: 'desc' },
+      take: 20,
+    }) ?? Promise.resolve([]),
   ]);
 
   return {
@@ -486,6 +535,7 @@ export async function loadReadOnlyContext(
       })),
     },
     annualPlanning: summarizeAnnualPlanning(annualPlans, learningSets),
+    commercialHierarchy: summarizeCommercialHierarchy(commercialPlans, hierarchyAssignments),
     commercialExecutive: summarizeExecutiveReporting(executiveReports, executiveSchedules),
     historicalAssessment: {
       recentRuns: historicalAssessmentRuns.length,
@@ -547,6 +597,50 @@ function summarizeAnnualPlanning(
     approvedLearningSets: learningSets.map(set => ({ id: set.id, title: set.title, findingCount: set.findings.length })),
     requiredActions,
   };
+}
+
+function summarizeCommercialHierarchy(
+  plans: Array<{
+    id: string;
+    title: string;
+    status: unknown;
+    hierarchy_assignment?: { id: string } | null;
+  }>,
+  assignments: Array<{
+    commercial_plan_id: string;
+    annual_plan_id: string;
+    monthly_portfolio_item_id: string;
+    commercial_plan: { title: string };
+    annual_plan: { title: string; year: number };
+    monthly_item: { title: string; month: number };
+    _count?: { event_links?: number; campaign_links?: number };
+  }>,
+): StitchiReadOnlyContext['commercialHierarchy'] {
+  const linkedPlanIds = new Set(assignments.map(assignment => assignment.commercial_plan_id));
+  const orphanPlans = plans
+    .filter(plan => !plan.hierarchy_assignment && !linkedPlanIds.has(plan.id))
+    .filter(plan => !['archived', 'superseded'].includes(String(plan.status)))
+    .map(plan => ({ id: plan.id, title: plan.title, status: String(plan.status) }));
+  const linkedPlans = assignments.map(assignment => ({
+    commercialPlanId: assignment.commercial_plan_id,
+    commercialPlanTitle: assignment.commercial_plan.title,
+    annualPlanId: assignment.annual_plan_id,
+    annualPlanTitle: assignment.annual_plan.title,
+    year: assignment.annual_plan.year,
+    monthlyPortfolioItemId: assignment.monthly_portfolio_item_id,
+    monthlyTitle: assignment.monthly_item.title,
+    month: assignment.monthly_item.month,
+    linkedEvents: assignment._count?.event_links || 0,
+    linkedCampaigns: assignment._count?.campaign_links || 0,
+  }));
+  const requiredActions: string[] = [];
+  if (orphanPlans.length) {
+    requiredActions.push(`${orphanPlans.length} recent execution plan(s) still need an annual and monthly parent.`);
+  }
+  if (linkedPlans.some(plan => plan.linkedEvents + plan.linkedCampaigns === 0)) {
+    requiredActions.push('Connect operating events or campaigns to plans that have no execution work yet.');
+  }
+  return { linkedPlans, orphanPlans, requiredActions };
 }
 
 function summarizeExecutiveReporting(

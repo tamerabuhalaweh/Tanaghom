@@ -654,6 +654,30 @@ export const annualCommercialPlanningApi = {
     apiFetch<unknown>(`/annual-commercial-plans/${id}/items/${itemId}/archive`, { method: 'POST', body: data, token }),
 };
 
+export const commercialHierarchyApi = {
+  plan: (id: string, token: string) => apiFetch<unknown>(`/commercial-hierarchy/plans/${id}`, { token }),
+  annualPlan: (id: string, token: string) => apiFetch<unknown>(`/commercial-hierarchy/annual-plans/${id}`, { token }),
+  orphans: (token: string) => apiFetch<unknown[]>('/commercial-hierarchy/orphans', { token }),
+  assignParent: (planId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/parent`, { method: 'PUT', body: data, token }),
+  unlinkParent: (planId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/parent`, { method: 'DELETE', body: data, token }),
+  linkEvent: (planId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/events`, { method: 'POST', body: data, token }),
+  unlinkEvent: (planId: string, eventId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/events/${eventId}`, { method: 'DELETE', body: data, token }),
+  linkCampaign: (planId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/campaigns`, { method: 'POST', body: data, token }),
+  unlinkCampaign: (planId: string, campaignId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/campaigns/${campaignId}`, { method: 'DELETE', body: data, token }),
+  linkLearning: (planId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/learning`, { method: 'POST', body: data, token }),
+  unlinkLearning: (planId: string, findingId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/learning/${findingId}`, { method: 'DELETE', body: data, token }),
+  supersede: (planId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-hierarchy/plans/${planId}/supersede`, { method: 'POST', body: data, token }),
+};
+
 export const commercialExecutiveApi = {
   dashboard: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';

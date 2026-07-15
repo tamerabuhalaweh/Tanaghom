@@ -17,6 +17,14 @@ const tx = vi.hoisted(() => ({
     create: vi.fn(),
     update: vi.fn(),
   },
+  commercialPlanHierarchyAssignment: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  commercialPlanEventLink: { count: vi.fn(), updateMany: vi.fn(), upsert: vi.fn() },
+  commercialPlanCampaignLink: { count: vi.fn() },
   commercialRevenueLine: { findFirst: vi.fn() },
   commercialPlan: { findFirst: vi.fn() },
   commercialEvent: { findFirst: vi.fn() },
@@ -32,7 +40,7 @@ const prismaMocks = vi.hoisted(() => ({
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
 
-import { createAnnualPlan, createPortfolioItem, updateAnnualPlan } from '../repository';
+import { createAnnualPlan, createPortfolioItem, updateAnnualPlan, updatePortfolioItem } from '../repository';
 
 function planRecord(overrides: Record<string, unknown> = {}) {
   const now = new Date('2027-01-01T00:00:00.000Z');
@@ -156,6 +164,40 @@ describe('annual commercial planning repository governance', () => {
     ).rejects.toThrow(ConflictError);
 
     expect(tx.auditRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('requires governed supersession instead of silently replacing a monthly execution plan', async () => {
+    const oldPlanId = '00000000-0000-0000-0000-000000000301';
+    const replacementPlanId = '00000000-0000-0000-0000-000000000302';
+    tx.annualCommercialPlan.findFirst.mockResolvedValue(planRecord());
+    tx.monthlyPortfolioItem.findFirst.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000401',
+      month: 3,
+      revenue_line_id: '00000000-0000-0000-0000-000000000200',
+      commercial_plan_id: oldPlanId,
+      event_id: null,
+      planned_start_date: null,
+      planned_end_date: null,
+      owner_user_id: null,
+    });
+    tx.commercialRevenueLine.findFirst.mockResolvedValue({ id: '00000000-0000-0000-0000-000000000200' });
+    tx.commercialPlan.findFirst.mockResolvedValue({
+      id: replacementPlanId,
+      linked_event_id: null,
+      revenue_line_id: '00000000-0000-0000-0000-000000000200',
+      status: 'draft',
+      superseded_by_plan_id: null,
+    });
+
+    await expect(updatePortfolioItem(
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000100',
+      '00000000-0000-0000-0000-000000000401',
+      { expectedRevision: 2, commercialPlanId: replacementPlanId },
+    )).rejects.toThrow(/governed supersede action/);
+
+    expect(tx.commercialPlanHierarchyAssignment.updateMany).not.toHaveBeenCalled();
   });
 
   it('records persistent audit evidence after a successful atomic annual-plan update', async () => {

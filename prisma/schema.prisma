@@ -133,6 +133,10 @@ model Tenant {
   annual_commercial_plans AnnualCommercialPlan[]
   monthly_portfolio_items MonthlyPortfolioItem[]
   annual_commercial_plan_learning_sets AnnualCommercialPlanLearningSet[]
+  commercial_plan_hierarchy_assignments     CommercialPlanHierarchyAssignment[]
+  commercial_plan_event_links               CommercialPlanEventLink[]
+  commercial_plan_campaign_links            CommercialPlanCampaignLink[]
+  commercial_plan_learning_influences       CommercialPlanLearningInfluence[]
   commercial_assessment_signals CommercialAssessmentSignal[]
   commercial_historical_assessment_runs CommercialHistoricalAssessmentRun[]
   commercial_historical_assessment_evidence CommercialHistoricalAssessmentEvidence[]
@@ -317,6 +321,13 @@ model User {
   annual_commercial_plans_approved AnnualCommercialPlan[] @relation("AnnualCommercialPlanApprovedBy")
   monthly_portfolio_items_owned MonthlyPortfolioItem[] @relation("MonthlyPortfolioItemOwner")
   monthly_portfolio_items_created MonthlyPortfolioItem[] @relation("MonthlyPortfolioItemCreatedBy")
+  commercial_hierarchy_links_created                CommercialPlanHierarchyAssignment[]     @relation("CommercialPlanHierarchyLinkedBy")
+  commercial_hierarchy_exceptions_approved          CommercialPlanHierarchyAssignment[]     @relation("CommercialPlanHierarchyExceptionApprovedBy")
+  commercial_event_links_created                    CommercialPlanEventLink[]               @relation("CommercialPlanEventLinkCreatedBy")
+  commercial_event_link_exceptions_approved         CommercialPlanEventLink[]               @relation("CommercialPlanEventLinkExceptionApprovedBy")
+  commercial_campaign_links_created                 CommercialPlanCampaignLink[]            @relation("CommercialPlanCampaignLinkCreatedBy")
+  commercial_campaign_link_exceptions_approved      CommercialPlanCampaignLink[]            @relation("CommercialPlanCampaignLinkExceptionApprovedBy")
+  commercial_learning_influences_created            CommercialPlanLearningInfluence[]       @relation("CommercialPlanLearningInfluenceCreatedBy")
   commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
   commercial_historical_assessment_runs_requested CommercialHistoricalAssessmentRun[] @relation("CommercialHistoricalAssessmentRunRequestedBy")
   commercial_historical_assessment_findings_decided CommercialHistoricalAssessmentFinding[] @relation("CommercialHistoricalAssessmentFindingDecidedBy")
@@ -791,6 +802,7 @@ model ContentRequest {
   event         CommercialEvent? @relation("EventCampaigns", fields: [event_id], references: [id])
   content_items ContentItem[]
   commercial_workflow_runs CommercialWorkflowRun[]
+  commercial_plan_links    CommercialPlanCampaignLink[]
 
   @@index([tenant_key])
   @@index([event_id])
@@ -3721,6 +3733,12 @@ enum MonthlyPortfolioReadiness {
   completed
 }
 
+enum CommercialHierarchyLinkStatus {
+  active
+  archived
+  superseded
+}
+
 enum CommercialAssessmentSeverity {
   info
   watch
@@ -3904,6 +3922,9 @@ model CommercialPlan {
   action_plan        String?                  @db.Text
   status             CommercialPlanStatus     @default(draft)
   owner_user_id      String?                  @db.Uuid
+  superseded_by_plan_id String?                  @db.Uuid
+  superseded_at         DateTime?
+  superseded_reason     String?                  @db.Text
   created_by_user_id String                   @db.Uuid
   created_at         DateTime                 @default(now())
   updated_at         DateTime                 @updatedAt
@@ -3913,9 +3934,15 @@ model CommercialPlan {
   linked_event       CommercialEvent?         @relation(fields: [linked_event_id], references: [id], onDelete: SetNull)
   owner              User?                    @relation("CommercialPlanOwner", fields: [owner_user_id], references: [id])
   created_by         User                     @relation("CommercialPlanCreatedBy", fields: [created_by_user_id], references: [id])
+  superseded_by           CommercialPlan?                    @relation("CommercialPlanSupersession", fields: [superseded_by_plan_id], references: [id], onDelete: SetNull)
+  supersedes              CommercialPlan[]                   @relation("CommercialPlanSupersession")
   assessment_signals CommercialAssessmentSignal[]
   discipline_records CommercialDisciplineRecord[]
   monthly_portfolio_items MonthlyPortfolioItem[]
+  hierarchy_assignment    CommercialPlanHierarchyAssignment?
+  event_links             CommercialPlanEventLink[]
+  campaign_links          CommercialPlanCampaignLink[]
+  learning_influences     CommercialPlanLearningInfluence[]
 
   @@index([tenant_key])
   @@index([revenue_line_id])
@@ -3924,6 +3951,7 @@ model CommercialPlan {
   @@index([stage])
   @@index([status])
   @@index([owner_user_id])
+  @@index([superseded_by_plan_id])
   @@map("commercial_plans")
 }
 
@@ -4043,6 +4071,7 @@ model CommercialHistoricalAssessmentFinding {
   assessment_run CommercialHistoricalAssessmentRun @relation(fields: [assessment_run_id], references: [id], onDelete: Cascade)
   learning_set   CommercialLearningSet?             @relation(fields: [learning_set_id], references: [id], onDelete: SetNull)
   decided_by     User?                              @relation("CommercialHistoricalAssessmentFindingDecidedBy", fields: [decided_by_user_id], references: [id])
+  commercial_plan_influences CommercialPlanLearningInfluence[]
 
   @@index([tenant_key])
   @@index([assessment_run_id])
@@ -4069,6 +4098,7 @@ model CommercialLearningSet {
   approved_by     User                              @relation("CommercialLearningSetApprovedBy", fields: [approved_by_user_id], references: [id])
   findings        CommercialHistoricalAssessmentFinding[]
   annual_plan_links AnnualCommercialPlanLearningSet[]
+  commercial_plan_influences CommercialPlanLearningInfluence[]
 
   @@index([tenant_key])
   @@index([status])
@@ -4108,6 +4138,7 @@ model AnnualCommercialPlan {
   approved_by    User?                             @relation("AnnualCommercialPlanApprovedBy", fields: [approved_by_user_id], references: [id])
   items          MonthlyPortfolioItem[]
   learning_links AnnualCommercialPlanLearningSet[]
+  execution_plan_assignments CommercialPlanHierarchyAssignment[]
 
   @@unique([tenant_key, year, scenario_version])
   @@index([tenant_key])
@@ -4147,6 +4178,7 @@ model MonthlyPortfolioItem {
   event           CommercialEvent?      @relation(fields: [event_id], references: [id], onDelete: SetNull)
   owner           User?                 @relation("MonthlyPortfolioItemOwner", fields: [owner_user_id], references: [id])
   created_by      User                  @relation("MonthlyPortfolioItemCreatedBy", fields: [created_by_user_id], references: [id])
+  execution_plan_assignments CommercialPlanHierarchyAssignment[]
 
   @@index([tenant_key])
   @@index([annual_plan_id, month, sort_order])
@@ -4173,6 +4205,115 @@ model AnnualCommercialPlanLearningSet {
   @@index([tenant_key])
   @@index([learning_set_id])
   @@map("annual_commercial_plan_learning_sets")
+}
+
+model CommercialPlanHierarchyAssignment {
+  id                            String                        @id @default(uuid()) @db.Uuid
+  tenant_key                    String
+  commercial_plan_id            String                        @unique @db.Uuid
+  annual_plan_id                String                        @db.Uuid
+  monthly_portfolio_item_id     String                        @db.Uuid
+  status                        CommercialHierarchyLinkStatus @default(active)
+  period_exception_reason       String?                       @db.Text
+  exception_approved_by_user_id String?                       @db.Uuid
+  exception_approved_at         DateTime?
+  linked_by_user_id             String                        @db.Uuid
+  archived_at                   DateTime?
+  created_at                    DateTime                      @default(now())
+  updated_at                    DateTime                      @updatedAt
+
+  tenant                Tenant               @relation(fields: [tenant_key], references: [tenant_key])
+  commercial_plan       CommercialPlan       @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  annual_plan           AnnualCommercialPlan @relation(fields: [annual_plan_id], references: [id], onDelete: Restrict)
+  monthly_item          MonthlyPortfolioItem @relation(fields: [monthly_portfolio_item_id], references: [id], onDelete: Restrict)
+  linked_by             User                 @relation("CommercialPlanHierarchyLinkedBy", fields: [linked_by_user_id], references: [id])
+  exception_approved_by User?                @relation("CommercialPlanHierarchyExceptionApprovedBy", fields: [exception_approved_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([annual_plan_id])
+  @@index([monthly_portfolio_item_id])
+  @@index([status])
+  @@map("commercial_plan_hierarchy_assignments")
+}
+
+model CommercialPlanEventLink {
+  id                            String                        @id @default(uuid()) @db.Uuid
+  tenant_key                    String
+  commercial_plan_id            String                        @db.Uuid
+  event_id                      String                        @db.Uuid
+  status                        CommercialHierarchyLinkStatus @default(active)
+  is_primary                    Boolean                       @default(false)
+  period_exception_reason       String?                       @db.Text
+  exception_approved_by_user_id String?                       @db.Uuid
+  exception_approved_at         DateTime?
+  linked_by_user_id             String                        @db.Uuid
+  archived_at                   DateTime?
+  created_at                    DateTime                      @default(now())
+  updated_at                    DateTime                      @updatedAt
+
+  tenant                Tenant          @relation(fields: [tenant_key], references: [tenant_key])
+  commercial_plan       CommercialPlan  @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  event                 CommercialEvent @relation(fields: [event_id], references: [id], onDelete: Restrict)
+  linked_by             User            @relation("CommercialPlanEventLinkCreatedBy", fields: [linked_by_user_id], references: [id])
+  exception_approved_by User?           @relation("CommercialPlanEventLinkExceptionApprovedBy", fields: [exception_approved_by_user_id], references: [id])
+
+  @@unique([commercial_plan_id, event_id])
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([status])
+  @@map("commercial_plan_event_links")
+}
+
+model CommercialPlanCampaignLink {
+  id                            String                        @id @default(uuid()) @db.Uuid
+  tenant_key                    String
+  commercial_plan_id            String                        @db.Uuid
+  campaign_id                   String                        @db.Uuid
+  status                        CommercialHierarchyLinkStatus @default(active)
+  period_exception_reason       String?                       @db.Text
+  exception_approved_by_user_id String?                       @db.Uuid
+  exception_approved_at         DateTime?
+  linked_by_user_id             String                        @db.Uuid
+  archived_at                   DateTime?
+  created_at                    DateTime                      @default(now())
+  updated_at                    DateTime                      @updatedAt
+
+  tenant                Tenant         @relation(fields: [tenant_key], references: [tenant_key])
+  commercial_plan       CommercialPlan @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  campaign              ContentRequest @relation(fields: [campaign_id], references: [id], onDelete: Restrict)
+  linked_by             User           @relation("CommercialPlanCampaignLinkCreatedBy", fields: [linked_by_user_id], references: [id])
+  exception_approved_by User?          @relation("CommercialPlanCampaignLinkExceptionApprovedBy", fields: [exception_approved_by_user_id], references: [id])
+
+  @@unique([commercial_plan_id, campaign_id])
+  @@index([tenant_key])
+  @@index([campaign_id])
+  @@index([status])
+  @@map("commercial_plan_campaign_links")
+}
+
+model CommercialPlanLearningInfluence {
+  id                 String    @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  commercial_plan_id String    @db.Uuid
+  learning_set_id    String    @db.Uuid
+  finding_id         String    @db.Uuid
+  rationale          String?   @db.Text
+  linked_by_user_id  String    @db.Uuid
+  archived_at        DateTime?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  tenant          Tenant                                @relation(fields: [tenant_key], references: [tenant_key])
+  commercial_plan CommercialPlan                        @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  learning_set    CommercialLearningSet                 @relation(fields: [learning_set_id], references: [id], onDelete: Restrict)
+  finding         CommercialHistoricalAssessmentFinding @relation(fields: [finding_id], references: [id], onDelete: Restrict)
+  linked_by       User                                  @relation("CommercialPlanLearningInfluenceCreatedBy", fields: [linked_by_user_id], references: [id])
+
+  @@unique([commercial_plan_id, finding_id])
+  @@index([tenant_key])
+  @@index([learning_set_id])
+  @@index([finding_id])
+  @@map("commercial_plan_learning_influences")
 }
 
 model CommercialDisciplineRecord {
@@ -4325,6 +4466,7 @@ model CommercialEvent {
   commercial_plans    CommercialPlan[]
   discipline_records  CommercialDisciplineRecord[]
   monthly_portfolio_items MonthlyPortfolioItem[]
+  commercial_plan_links    CommercialPlanEventLink[]
 
   @@index([tenant_key])
   @@index([event_type])

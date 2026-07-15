@@ -435,6 +435,192 @@
   color: var(--ops-danger);
 }
 
+.trace-plan-selector {
+  display: grid;
+  min-width: min(280px, 100%);
+  gap: 5px;
+}
+
+.trace-plan-selector > span {
+  color: var(--ops-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.trace-plan-selector select {
+  width: 100%;
+}
+
+.traceability-workspace,
+.trace-detail-column,
+.trace-record-list,
+.trace-operating-actions {
+  display: grid;
+  min-width: 0;
+}
+
+.traceability-workspace {
+  gap: 18px;
+  padding: 18px;
+  border-top: 1px solid var(--ops-border);
+}
+
+.trace-loading {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+
+.trace-chain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.trace-chain > svg {
+  color: var(--ops-muted);
+}
+
+.trace-step {
+  display: flex;
+  min-width: 0;
+  min-height: 76px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  background: var(--ops-surface-subtle);
+}
+
+.trace-step > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--ops-muted);
+  background: var(--ops-surface);
+}
+
+.trace-step.is-ready > span {
+  color: var(--ops-accent);
+  background: var(--ops-accent-soft);
+}
+
+.trace-step > div,
+.trace-record > span,
+.trace-detail-column > header span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.trace-step small,
+.trace-record small,
+.trace-detail-column > header small {
+  color: var(--ops-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.trace-step strong,
+.trace-record strong {
+  color: var(--ops-ink);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.trace-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.trace-detail-column {
+  align-content: start;
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+}
+
+.trace-detail-column > header,
+.trace-detail-column > header > div,
+.trace-record,
+.trace-add-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.trace-detail-column > header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trace-detail-column > header > div {
+  gap: 9px;
+}
+
+.trace-record-list,
+.trace-operating-actions {
+  gap: 8px;
+}
+
+.trace-record-list > p {
+  margin: 0;
+  color: var(--ops-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.trace-record {
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 11px;
+  border-radius: 7px;
+  background: var(--ops-surface-subtle);
+}
+
+.trace-record button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--ops-border);
+  border-radius: 7px;
+  color: var(--ops-muted);
+  background: var(--ops-surface);
+  cursor: pointer;
+}
+
+.trace-record button:hover,
+.trace-record button:focus-visible {
+  color: var(--ops-danger);
+  border-color: var(--ops-danger);
+}
+
+.trace-add-row {
+  align-items: end;
+  gap: 9px;
+}
+
+.trace-add-row > label {
+  min-width: 0;
+  flex: 1;
+}
+
+.trace-add-row .ops-button {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 1100px) {
   .annual-summary-band,
   .annual-item-form {
@@ -459,6 +645,15 @@
     padding: 18px 0 0;
     border-top: 1px solid var(--ops-border);
     border-left: 0;
+  }
+
+  .trace-chain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .trace-chain > svg {
+    justify-self: center;
+    transform: rotate(90deg);
   }
 }
 
@@ -522,6 +717,26 @@
   .annual-status-buttons .ops-button,
   .annual-status-buttons .ops-text-button,
   .annual-item-actions .ops-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .trace-loading,
+  .trace-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .traceability-workspace,
+  .trace-loading {
+    padding: 14px;
+  }
+
+  .trace-add-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .trace-add-row .ops-button {
     width: 100%;
     justify-content: center;
   }
