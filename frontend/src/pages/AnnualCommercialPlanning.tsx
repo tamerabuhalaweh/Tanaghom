@@ -21,6 +21,7 @@ import {
 } from '../api';
 import { CommercialWorkspaceNav } from '../components/CommercialWorkspaceNav';
 import { CommercialTraceabilityPanel } from '../components/CommercialTraceabilityPanel';
+import { BudgetReconciliationPanel } from '../components/BudgetReconciliationPanel';
 import { Field } from '../components/ProductUI';
 import {
   OpsEmpty,
@@ -474,7 +475,7 @@ export default function AnnualCommercialPlanning() {
               className="ops-button is-secondary"
               type="button"
               onClick={() =>
-                navigate(`/stitchi?mode=prepare&prompt=${encodeURIComponent(stitchiPrompt)}`)
+                navigate(`/stitchi?mode=prepare&annualPlanId=${encodeURIComponent(text(plan?.id))}&prompt=${encodeURIComponent(stitchiPrompt)}`)
               }
             >
               <Sparkles size={17} aria-hidden="true" />
@@ -895,6 +896,13 @@ export default function AnnualCommercialPlanning() {
                 canManage={canManage}
                 canApproveException={canApprove}
                 onChanged={load}
+                onMessage={setMessage}
+              />
+
+              <BudgetReconciliationPanel
+                token={token || ''}
+                annualPlanId={text(plan.id)}
+                planRevision={numberValue(plan.revision)}
                 onMessage={setMessage}
               />
 

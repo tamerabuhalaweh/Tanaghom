@@ -14,6 +14,7 @@ const revenueLineId = '44444444-4444-4444-8444-444444444444';
 const detailedPlanId = '55555555-5555-4555-8555-555555555555';
 const eventId = '66666666-6666-4666-8666-666666666666';
 const itemId = '77777777-7777-4777-8777-777777777777';
+const allocationId = '88888888-8888-4888-8888-888888888888';
 
 const revenueLine = {
   id: revenueLineId,
@@ -147,6 +148,64 @@ function makeAnnualPlan(status = 'draft', revision = 1, items: Record<string, un
   };
 }
 
+function makeBudgetSummary(
+  currentPlan: ReturnType<typeof makeAnnualPlan>,
+  budgetAllocation: Record<string, unknown> | null,
+) {
+  const items = currentPlan.items as Array<Record<string, unknown>>;
+  const allocations = budgetAllocation ? [budgetAllocation] : [];
+  const allocated = budgetAllocation ? Number(budgetAllocation.amount) : 0;
+  return {
+    annualPlan: {
+      id: annualPlanId,
+      title: currentPlan.title,
+      year: currentPlan.year,
+      status: currentPlan.status,
+      currency: currentPlan.currency,
+      budgetTarget: currentPlan.budgetTarget,
+    },
+    currencies: [{
+      currency: 'AED',
+      annualEnvelope: currentPlan.budgetTarget,
+      allocated,
+      approved: 0,
+      committed: 0,
+      verifiedActual: 0,
+      remaining: Number(currentPlan.budgetTarget) - allocated,
+      variance: Number(currentPlan.budgetTarget),
+      overAllocated: false,
+      envelopeMissing: false,
+    }],
+    allocations,
+    monthlyItems: items.map(item => ({
+      id: item.id,
+      month: item.month,
+      title: item.title,
+      revenueLineId,
+      revenueLineName: 'Online Courses',
+      currency: item.currency,
+      requestedTarget: item.budgetAllocation,
+      allocationId: budgetAllocation ? allocationId : null,
+      governedAllocation: budgetAllocation ? budgetAllocation.amount : 0,
+      status: budgetAllocation ? budgetAllocation.status : null,
+    })),
+    availableTargets: items.length ? [{
+      level: 'commercial_plan',
+      id: detailedPlanId,
+      label: detailedPlan.title,
+      parentTargetId: itemId,
+    }] : [],
+    evidence: {
+      verifiedCount: 0,
+      unverifiedCount: 0,
+      rejectedCount: 0,
+      sourceMissing: true,
+      records: [],
+    },
+    permissions: { canManage: true, canApprove: true, canVerifyEvidence: true },
+  };
+}
+
 function makeHierarchy(learningLinked = false) {
   return {
     ...detailedPlan,
@@ -177,6 +236,7 @@ async function installMocks(page: Page, seeded = false) {
     ? makeAnnualPlan('draft', 2, [makeItem()])
     : null;
   let learningLinked = false;
+  let budgetAllocation: Record<string, unknown> | null = null;
   const failedResponses: string[] = [];
   const browserProblems: string[] = [];
   const unexpectedRequests: string[] = [];
@@ -237,6 +297,51 @@ async function installMocks(page: Page, seeded = false) {
     if (path === `/annual-commercial-plans/${annualPlanId}/approve` && method === 'POST') {
       currentPlan = makeAnnualPlan('approved', 4, [makeItem()]);
       return json(currentPlan);
+    }
+    if (
+      path === `/commercial-budget-reconciliation/annual-plans/${annualPlanId}` &&
+      method === 'GET'
+    ) {
+      return json(makeBudgetSummary(currentPlan || makeAnnualPlan(), budgetAllocation));
+    }
+    if (
+      path === `/commercial-budget-reconciliation/annual-plans/${annualPlanId}/allocations` &&
+      method === 'POST'
+    ) {
+      const payload = request.postDataJSON() as Record<string, unknown>;
+      expect(payload).toMatchObject({
+        level: 'monthly_item',
+        monthlyPortfolioItemId: itemId,
+        currency: 'AED',
+        amount: 50000,
+        allowOverAllocation: false,
+      });
+      budgetAllocation = {
+        id: allocationId,
+        parentAllocationId: null,
+        level: 'monthly_item',
+        target: {
+          id: itemId,
+          label: 'Ramadan Leadership Course',
+          month: 3,
+          revenueLineId,
+          revenueLineName: 'Online Courses',
+        },
+        currency: 'AED',
+        amount: 50000,
+        status: 'planned',
+        revision: 1,
+        reason: payload.reason,
+        exceptionApproved: false,
+        exceptionReason: null,
+        verifiedActual: 0,
+        remaining: 50000,
+        variance: 50000,
+        childAllocated: 0,
+        childRemaining: 50000,
+        children: [],
+      };
+      return json(makeBudgetSummary(currentPlan || makeAnnualPlan(), budgetAllocation), 201);
     }
     if (path === '/commercial-command-center/revenue-lines') return json([revenueLine]);
     if (path === '/commercial-command-center/plans') return json([detailedPlan]);
@@ -374,7 +479,20 @@ test.describe('SRD-R14B annual commercial planning', () => {
     await expect(page.getByText('Approved learning is now recorded behind this execution plan.')).toBeVisible();
     await expect(page.getByText('Repeat warm-audience launch sequence')).toBeVisible();
 
-    await page.getByRole('button', { name: /Ramadan Leadership Course/ }).click();
+    await expect(page.getByRole('heading', { name: 'Budget control' })).toBeVisible();
+    await page.getByLabel('Choose work to allocate').selectOption({
+      label: 'Ramadan Leadership Course - Online Courses',
+    });
+    await expect(page.getByLabel('Amount (AED)')).toHaveValue('50000');
+    await page.getByRole('button', { name: 'Save allocation' }).click();
+    await expect(
+      page.getByText('Budget allocation saved. It remains planned until an executive approves it.'),
+    ).toBeVisible();
+    await expect(page.locator(`[data-allocation-id="${allocationId}"]`)).toContainText(
+      'Ramadan Leadership Course',
+    );
+
+    await page.locator('button.annual-initiative').filter({ hasText: 'Ramadan Leadership Course' }).click();
     await page.getByRole('button', { name: /Open detailed plan/ }).click();
     await expect(page).toHaveURL(new RegExp(`/commercial-plans\\?.*planId=${detailedPlanId}`));
     await expect(page.getByRole('heading', { name: 'Commercial Plans' })).toBeVisible();

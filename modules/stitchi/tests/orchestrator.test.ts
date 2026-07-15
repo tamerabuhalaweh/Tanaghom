@@ -910,4 +910,73 @@ describe('Stitchi natural-language orchestration', () => {
     expect(result.actionRun).toBeNull();
     expect(repo.createActionRun).not.toHaveBeenCalled();
   });
+
+  it('asks for a missing amount before preparing a commercial budget allocation', async () => {
+    const result = await orchestrateStitchiMessage(
+      'department_head',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Allocate budget to the selected January course launch.',
+        metadata: {
+          annualPlanId: '00000000-0000-0000-0000-000000000900',
+          budgetLevel: 'monthly_item',
+          budgetTargetId: '00000000-0000-0000-0000-000000000903',
+          budgetCurrency: 'AED',
+        },
+      },
+    );
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.stringContaining('amount'),
+      expect.objectContaining({ writesExecuted: false, externalExecution: 'blocked' }),
+    );
+  });
+
+  it('prepares an approval-gated allocation for the selected annual work item', async () => {
+    const result = await orchestrateStitchiMessage(
+      'department_head',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Allocate budget amount 25000 AED to the selected January course launch.',
+        metadata: {
+          annualPlanId: '00000000-0000-0000-0000-000000000900',
+          budgetLevel: 'monthly_item',
+          budgetTargetId: '00000000-0000-0000-0000-000000000903',
+          budgetCurrency: 'AED',
+        },
+      },
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_commercial_budget_allocation',
+        requiresApproval: true,
+        riskLevel: 'high',
+        inputPayload: expect.objectContaining({
+          annualPlanId: '00000000-0000-0000-0000-000000000900',
+          allocation: expect.objectContaining({
+            level: 'monthly_item',
+            monthlyPortfolioItemId: '00000000-0000-0000-0000-000000000903',
+            currency: 'AED',
+            amount: 25000,
+          }),
+        }),
+      }),
+    );
+  });
 });

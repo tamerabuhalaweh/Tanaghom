@@ -462,6 +462,11 @@ export async function approveAndImport(
 
   const event = await prisma.commercialEvent.findFirst({ where: { id: eventId, tenant_key: tenantKey } });
   if (!event) throw new NotFoundError('CommercialEvent', eventId);
+  const tenant = await prisma.tenant.findUnique({
+    where: { tenant_key: tenantKey },
+    select: { default_currency: true },
+  });
+  if (!tenant) throw new NotFoundError('Tenant', tenantKey);
 
   const job = await prisma.connectorImportJob.findFirst({
     where: { tenant_key: tenantKey, connector_id: connectorId, event_id: eventId },
@@ -540,7 +545,17 @@ export async function approveAndImport(
 
   // Write exactly the rows from dry-run payload with exact metrics
   const importedKpiIds: string[] = [];
-  for (const row of kpiRows) {
+  for (let index = 0; index < kpiRows.length; index++) {
+    const row = kpiRows[index];
+    const sourceRecordKey = `${job.id}:${index}:${row.metricDate}:${row.channel}`;
+    const existing = await prisma.eventKpiRecord.findFirst({
+      where: { tenant_key: tenantKey, source_name: connectorId, source_record_key: sourceRecordKey },
+      select: { id: true },
+    });
+    if (existing) {
+      importedKpiIds.push(existing.id);
+      continue;
+    }
     const kpiRecord = await prisma.eventKpiRecord.create({
       data: {
         tenant_key: tenantKey,
@@ -560,6 +575,13 @@ export async function approveAndImport(
         purchases: row.purchases,
         no_shows: row.noShows,
         spend: row.spend,
+        currency: tenant.default_currency,
+        verification_status: 'verified',
+        connector_import_job_id: job.id,
+        source_record_key: sourceRecordKey,
+        verified_by_user_id: userId,
+        verified_at: new Date(),
+        verification_reason: 'Approved connector import',
         notes: row.notes,
         created_by_user_id: userId,
         updated_by_user_id: userId,

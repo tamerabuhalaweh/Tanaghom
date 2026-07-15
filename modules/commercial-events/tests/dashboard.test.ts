@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const prismaMocks = vi.hoisted(() => ({
+  tenant: {
+    findUnique: vi.fn(),
+  },
   commercialEvent: {
     findFirst: vi.fn(),
   },
@@ -86,6 +89,7 @@ function kpi(overrides: Record<string, unknown>) {
 describe('Commercial Events dashboard and KPI records', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMocks.tenant.findUnique.mockResolvedValue({ default_currency: 'AED' });
     prismaMocks.commercialEvent.findFirst.mockResolvedValue(baseEvent);
     prismaMocks.contentRequest.findMany.mockResolvedValue([
       {
@@ -143,8 +147,8 @@ describe('Commercial Events dashboard and KPI records', () => {
 
   it('aggregates event dashboard metrics from KPI records and linked leads', async () => {
     prismaMocks.eventKpiRecord.findMany.mockResolvedValue([
-      kpi({ id: 'kpi-1', channel: 'instagram' }),
-      kpi({ id: 'kpi-2', channel: 'whatsapp', reach: 5000, impressions: 7000, interactions: 500, leads: 20, purchases: 3, spend: 800 }),
+      kpi({ id: 'kpi-1', channel: 'instagram', verification_status: 'verified' }),
+      kpi({ id: 'kpi-2', channel: 'whatsapp', reach: 5000, impressions: 7000, interactions: 500, leads: 20, purchases: 3, spend: 800, verification_status: 'verified' }),
     ]);
 
     const dashboard = await eventRepo.getEventDashboard('tenant-a', baseEvent.id);

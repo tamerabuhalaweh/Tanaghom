@@ -21,6 +21,9 @@ export type CommercialEventStatus = (typeof COMMERCIAL_EVENT_STATUSES)[number];
 
 export const EVENT_KPI_SOURCE_TYPES = ['manual', 'imported', 'connector'] as const;
 export type EventKpiSourceType = (typeof EVENT_KPI_SOURCE_TYPES)[number];
+export const COMMERCIAL_CURRENCIES = ['AED', 'USD'] as const;
+export type CommercialCurrency = (typeof COMMERCIAL_CURRENCIES)[number];
+export type EventKpiVerificationStatus = 'unverified' | 'verified' | 'rejected';
 
 export const EVENT_TRANSITION_TABLE: Record<CommercialEventStatus, CommercialEventStatus[]> = {
   draft: ['planning', 'cancelled'],
@@ -132,13 +135,18 @@ export const createKpiRecordSchema = z.object({
   purchases: nonNegativeMetric,
   noShows: nonNegativeMetric,
   spend: z.number().min(0).optional(),
+  currency: z.enum(COMMERCIAL_CURRENCIES).optional(),
+  campaignId: z.string().uuid().nullable().optional(),
   notes: z.string().max(5000).nullable().optional(),
 });
 
-export const updateKpiRecordSchema = createKpiRecordSchema.partial().refine(
-  value => Object.keys(value).length > 0,
-  'At least one KPI field must be provided',
-);
+export const updateKpiRecordSchema = createKpiRecordSchema
+  .partial()
+  .extend({ expectedRevision: z.number().int().min(1).optional() })
+  .refine(
+    value => Object.keys(value).some(key => key !== 'expectedRevision'),
+    'At least one KPI field must be provided',
+  );
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
@@ -197,6 +205,14 @@ export interface EventKpiRecordSummary {
   purchases: number;
   noShows: number;
   spend: number;
+  currency: CommercialCurrency;
+  verificationStatus: EventKpiVerificationStatus;
+  revision: number;
+  connectorImportJobId: string | null;
+  campaignId: string | null;
+  sourceRecordKey: string | null;
+  verifiedAt: Date | null;
+  verificationReason: string | null;
   notes: string | null;
   createdByUserId: string;
   updatedByUserId: string | null;
@@ -256,6 +272,8 @@ export interface EventDashboardSummary {
     manualRecords: number;
     importedRecords: number;
     connectorRecords: number;
+    verifiedRecords: number;
+    unverifiedRecords: number;
     primarySource: 'connector' | 'imported' | 'manual' | 'none';
     manualFallbackActive: boolean;
     connectorFirstReady: boolean;

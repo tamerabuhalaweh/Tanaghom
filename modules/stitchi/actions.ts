@@ -34,6 +34,13 @@ import {
   linkEventSchema,
   linkLearningSchema,
 } from '@modules/commercial-plan-hierarchy/types';
+import * as commercialBudgetService from '@modules/commercial-budget-reconciliation/service';
+import {
+  budgetTransitionSchema,
+  createBudgetAllocationSchema,
+  reallocateBudgetSchema,
+  verifyKpiEvidenceSchema,
+} from '@modules/commercial-budget-reconciliation/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -58,6 +65,12 @@ const SUPPORTED_ACTIONS = [
   'link_commercial_plan_event',
   'link_commercial_plan_campaign',
   'link_commercial_plan_learning',
+  'create_commercial_budget_allocation',
+  'reallocate_commercial_budget',
+  'approve_commercial_budget',
+  'commit_commercial_budget',
+  'archive_commercial_budget',
+  'review_commercial_spend_evidence',
 ] as const;
 
 export type StitchiExecutableActionType = (typeof SUPPORTED_ACTIONS)[number];
@@ -105,6 +118,28 @@ const linkCommercialPlanCampaignActionSchema = z.object({
 const linkCommercialPlanLearningActionSchema = z.object({
   commercialPlanId: z.string().uuid(),
 }).merge(linkLearningSchema);
+
+const createCommercialBudgetActionSchema = z.object({
+  annualPlanId: z.string().uuid(),
+  allocation: createBudgetAllocationSchema,
+});
+
+const reallocateCommercialBudgetActionSchema = z.object({
+  annualPlanId: z.string().uuid(),
+  allocationId: z.string().uuid(),
+  change: reallocateBudgetSchema,
+});
+
+const transitionCommercialBudgetActionSchema = z.object({
+  annualPlanId: z.string().uuid(),
+  allocationId: z.string().uuid(),
+  decision: budgetTransitionSchema,
+});
+
+const reviewCommercialSpendEvidenceActionSchema = z.object({
+  kpiId: z.string().uuid(),
+  review: verifyKpiEvidenceSchema,
+});
 
 export function isExecutableStitchiAction(actionType: string): actionType is StitchiExecutableActionType {
   return SUPPORTED_ACTIONS.includes(actionType as StitchiExecutableActionType);
@@ -291,6 +326,64 @@ export async function executeStitchiAction(input: {
         },
       );
       return { objectType: 'commercial_plan', objectId: payload.commercialPlanId, result };
+    }
+    case 'create_commercial_budget_allocation': {
+      const payload = createCommercialBudgetActionSchema.parse(input.inputPayload);
+      const result = await commercialBudgetService.createBudgetAllocation(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.annualPlanId,
+        payload.allocation,
+      );
+      return {
+        objectType: 'commercial_budget_allocation',
+        objectId: result.changedAllocationId,
+        result,
+      };
+    }
+    case 'reallocate_commercial_budget': {
+      const payload = reallocateCommercialBudgetActionSchema.parse(input.inputPayload);
+      const result = await commercialBudgetService.reallocateBudget(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.annualPlanId,
+        payload.allocationId,
+        payload.change,
+      );
+      return { objectType: 'commercial_budget_allocation', objectId: payload.allocationId, result };
+    }
+    case 'approve_commercial_budget':
+    case 'commit_commercial_budget':
+    case 'archive_commercial_budget': {
+      const payload = transitionCommercialBudgetActionSchema.parse(input.inputPayload);
+      const target = input.actionType === 'approve_commercial_budget'
+        ? 'approved'
+        : input.actionType === 'commit_commercial_budget'
+          ? 'committed'
+          : 'archived';
+      const result = await commercialBudgetService.transitionBudgetAllocation(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.annualPlanId,
+        payload.allocationId,
+        target,
+        payload.decision,
+      );
+      return { objectType: 'commercial_budget_allocation', objectId: payload.allocationId, result };
+    }
+    case 'review_commercial_spend_evidence': {
+      const payload = reviewCommercialSpendEvidenceActionSchema.parse(input.inputPayload);
+      const result = await commercialBudgetService.verifyKpiEvidence(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.kpiId,
+        payload.review,
+      );
+      return { objectType: 'event_kpi_record', objectId: payload.kpiId, result };
     }
     default:
       throw new ForbiddenError('Stitchi action is not executable');
