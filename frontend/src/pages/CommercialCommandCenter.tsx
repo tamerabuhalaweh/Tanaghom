@@ -36,9 +36,8 @@ import './CommercialR1D.css';
 type RecordMap = Record<string, unknown>;
 
 const STAGES = [
-  { id: 'assess', number: '1', title: 'Assess', detail: 'Review demand, blockers, customer signals, and data readiness.' },
-  { id: 'strategy_planning', number: '2', title: 'Strategy & Planning', detail: 'Set the objective, audience, offer, channels, budget, and expected result.' },
-  { id: 'implementation_engagement', number: '3', title: 'Implementation & Engagement', detail: 'Coordinate campaigns, leads, follow-up, and learning until revenue is visible.' },
+  { id: 'strategy_planning', number: '1', title: 'Strategy & Planning', detail: 'Set the objective, audience, offer, channels, budget, and expected result.' },
+  { id: 'implementation_engagement', number: '2', title: 'Implementation & Engagement', detail: 'Coordinate campaigns, leads, follow-up, and learning until revenue is visible.' },
 ] as const;
 
 const REVENUE_ICONS = {
@@ -53,8 +52,8 @@ const REVENUE_ICONS = {
 };
 
 const PLAN_CURRENCIES = [
-  { code: 'USD', label: 'USD - US Dollar' },
   { code: 'AED', label: 'AED - UAE Dirham' },
+  { code: 'USD', label: 'USD - US Dollar' },
 ] as const;
 
 function list(value: unknown): RecordMap[] {
@@ -133,10 +132,11 @@ function dateLabel(value: unknown): string {
 function stageLabel(stage: string): string {
   if (stage === 'strategy_planning') return 'Strategy & Planning';
   if (stage === 'implementation_engagement') return 'Implementation & Engagement';
-  return titleCase(stage || 'assess');
+  if (stage === 'assess') return 'Legacy assessment record';
+  return titleCase(stage || 'strategy_planning');
 }
 
-function makePlanDraft(lineId = '') {
+function makePlanDraft(lineId = '', defaultCurrency = 'AED') {
   return {
     id: '',
     revenueLineId: lineId,
@@ -145,7 +145,7 @@ function makePlanDraft(lineId = '') {
     horizon: 'quarterly',
     stage: 'strategy_planning',
     status: 'draft',
-    currency: 'USD',
+    currency: defaultCurrency,
     objective: '',
     audience: '',
     budgetTarget: '',
@@ -181,8 +181,9 @@ export default function CommercialCommandCenter() {
   const activeRevenueLines = revenueLines.filter(line => text(line.availability) !== 'future' && text(line.status) !== 'archived');
   const futureRevenueLines = revenueLines.filter(line => text(line.availability) === 'future' && text(line.status) !== 'archived');
   const selectedLine = object(lineDashboard?.revenueLine || revenueLines.find(line => text(line.revenueLineType) === selectedType));
+  const defaultCurrency = text(dashboard?.defaultCurrency || lineDashboard?.defaultCurrency, 'AED');
   const rollups = object(lineDashboard?.rollups);
-  const rollupCurrency = text(rollups.currency, 'USD');
+  const rollupCurrency = text(rollups.currency, defaultCurrency);
   const currencyBreakdown = list(rollups.currencyBreakdown);
   const dataStatus = object(lineDashboard?.dataStatus);
   const plans = list(lineDashboard?.plans);
@@ -191,6 +192,7 @@ export default function CommercialCommandCenter() {
   const availableEvents = list(lineDashboard?.availableEvents);
   const eventChoices = availableEvents.length ? availableEvents : linkedEvents;
   const openSignals = list(lineDashboard?.openSignals);
+  const approvedLearning = list(lineDashboard?.approvedLearning);
   const nextAction = object(lineDashboard?.nextAction);
   const stageSummary = dashboard?.stageSummary && typeof dashboard.stageSummary === 'object' ? dashboard.stageSummary as RecordMap : {};
 
@@ -207,7 +209,7 @@ export default function CommercialCommandCenter() {
     setSelectedType(targetType);
     const detail = await commercialCommandCenterApi.revenueLineDashboard(targetType, token) as RecordMap;
     setLineDashboard(detail);
-    setPlanDraft(current => current.revenueLineId ? current : makePlanDraft(text(object(detail.revenueLine).id)));
+    setPlanDraft(current => current.revenueLineId ? current : makePlanDraft(text(object(detail.revenueLine).id), text(main.defaultCurrency, 'AED')));
     setLoading(false);
   }, [selectedType, token]);
 
@@ -217,7 +219,7 @@ export default function CommercialCommandCenter() {
     setMessage('');
     const detail = await commercialCommandCenterApi.revenueLineDashboard(revenueLineType, token) as RecordMap;
     setLineDashboard(detail);
-    setPlanDraft(makePlanDraft(text(object(detail.revenueLine).id)));
+    setPlanDraft(makePlanDraft(text(object(detail.revenueLine).id), text(detail.defaultCurrency, 'AED')));
   }, [token]);
 
   useEffect(() => {
@@ -286,7 +288,7 @@ export default function CommercialCommandCenter() {
       horizon: text(plan.horizon, 'quarterly'),
       stage: text(plan.stage, 'strategy_planning'),
       status: text(plan.status, 'draft'),
-      currency: text(plan.currency, 'USD'),
+      currency: text(plan.currency, defaultCurrency),
       objective: text(plan.objective),
       audience: text(plan.audience),
       budgetTarget: nullableNumber(plan.budgetTarget)?.toString() || '',
@@ -362,7 +364,7 @@ export default function CommercialCommandCenter() {
           <>
             <button className="ops-button is-secondary" type="button" onClick={() => navigate(stitchiPath())}><Sparkles size={17} aria-hidden="true" />Ask Stitchi</button>
             <button className="ops-button is-primary" type="button" onClick={() => {
-              setPlanDraft(makePlanDraft(text(selectedLine.id)));
+              setPlanDraft(makePlanDraft(text(selectedLine.id), defaultCurrency));
               document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }}><Plus size={17} aria-hidden="true" />Create plan</button>
           </>
@@ -416,11 +418,10 @@ export default function CommercialCommandCenter() {
               <div className="commercial-stage-flow">
                 {STAGES.map((stage, index) => {
                   const active = text(primaryPlan.stage, 'strategy_planning') === stage.id;
-                  const complete = stage.id === 'assess' && text(primaryPlan.stage) !== 'assess';
                   const count = plans.filter(plan => text(plan.stage) === stage.id).length || numberValue(stageSummary[stage.id]);
                   return (
-                    <div className={active ? 'is-active' : complete ? 'is-complete' : ''} key={stage.id}>
-                      <span>{complete ? <CheckCircle2 size={17} aria-hidden="true" /> : index + 1}</span>
+                    <div className={active ? 'is-active' : ''} key={stage.id}>
+                      <span>{index + 1}</span>
                       <div><strong>{stage.title}</strong><small>{count} record{count === 1 ? '' : 's'} / {active ? 'Current stage' : stage.detail}</small></div>
                     </div>
                   );
@@ -452,7 +453,7 @@ export default function CommercialCommandCenter() {
             <OpsSection
               title={canManagePlans ? (planDraft.id ? 'Edit commercial plan' : 'Create commercial plan') : 'Prepare a plan request'}
               subtitle={canManagePlans ? 'Capture the information the team needs to run this plan.' : 'Ask Stitchi to prepare a governed proposal for leadership approval.'}
-              action={canManagePlans && planDraft.id ? <button className="ops-button is-secondary" type="button" onClick={() => setPlanDraft(makePlanDraft(text(selectedLine.id)))}>New plan</button> : undefined}
+              action={canManagePlans && planDraft.id ? <button className="ops-button is-secondary" type="button" onClick={() => setPlanDraft(makePlanDraft(text(selectedLine.id), defaultCurrency))}>New plan</button> : undefined}
             >
               {canManagePlans ? (
                 <div className="commercial-form">
@@ -460,7 +461,7 @@ export default function CommercialCommandCenter() {
                     <Field label="Revenue line"><select value={planDraft.revenueLineId || text(selectedLine.id)} onChange={event => setPlanDraft(current => ({ ...current, revenueLineId: event.target.value }))}><option value="">Choose configured line</option>{configuredRevenueLines.map(line => <option key={text(line.id)} value={text(line.id)}>{text(line.name)}</option>)}</select></Field>
                     <Field label="Plan title"><input value={planDraft.title} onChange={event => setPlanDraft(current => ({ ...current, title: event.target.value }))} placeholder="Example: Q3 book launch plan" /></Field>
                     <Field label="Linked event"><select value={planDraft.linkedEventId} onChange={event => setPlanDraft(current => ({ ...current, linkedEventId: event.target.value }))}><option value="">No event linked</option>{eventChoices.map(event => <option key={text(event.id)} value={text(event.id)}>{customerLabel(event.name)} - {titleCase(text(event.status, 'draft'))}</option>)}</select><p>Use this only when the commercial plan supports a live event. Event execution stays in Event Operations.</p></Field>
-                    <Field label="Stage"><select value={planDraft.stage} onChange={event => setPlanDraft(current => ({ ...current, stage: event.target.value }))}><option value="assess">Assess</option><option value="strategy_planning">Strategy & Planning</option><option value="implementation_engagement">Implementation & Engagement</option></select></Field>
+                    <Field label="Stage"><select value={planDraft.stage} onChange={event => setPlanDraft(current => ({ ...current, stage: event.target.value }))}><option value="strategy_planning">Strategy & Planning</option><option value="implementation_engagement">Implementation & Engagement</option></select></Field>
                     <Field label="Horizon"><select value={planDraft.horizon} onChange={event => setPlanDraft(current => ({ ...current, horizon: event.target.value }))}><option value="quarterly">Quarterly</option><option value="product_or_event">Product or event</option><option value="one_year">One year</option><option value="three_year">Three year</option></select></Field>
                     <Field label="Status"><select value={planDraft.status} onChange={event => setPlanDraft(current => ({ ...current, status: event.target.value }))}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></Field>
                     <Field label="Currency"><select value={planDraft.currency} onChange={event => setPlanDraft(current => ({ ...current, currency: event.target.value }))}>{PLAN_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}</select></Field>
@@ -485,7 +486,7 @@ export default function CommercialCommandCenter() {
                     <button key={text(plan.id)} type="button" onClick={() => editPlan(plan)} disabled={!canManagePlans} className={text(plan.id) === planDraft.id ? 'is-selected' : ''}>
                       <div><strong>{customerLabel(plan.title, 'Untitled plan')}</strong><small>{stageLabel(text(plan.stage))} / {titleCase(text(plan.horizon))}</small></div>
                       <OpsStatus tone={statusTone(text(plan.status))}>{titleCase(text(plan.status))}</OpsStatus>
-                      <dl><div><dt>Budget</dt><dd>{formatMoney(plan.budgetTarget, text(plan.currency, 'USD'))}</dd></div><div><dt>Target</dt><dd>{formatMoney(plan.revenueTarget, text(plan.currency, 'USD'))}</dd></div></dl>
+                      <dl><div><dt>Budget</dt><dd>{formatMoney(plan.budgetTarget, text(plan.currency, defaultCurrency))}</dd></div><div><dt>Target</dt><dd>{formatMoney(plan.revenueTarget, text(plan.currency, defaultCurrency))}</dd></div></dl>
                       <p>{text(plan.linkedEventName) ? `Supports event: ${customerLabel(plan.linkedEventName)}` : 'No event linked'}</p>
                     </button>
                   ))}
@@ -493,6 +494,30 @@ export default function CommercialCommandCenter() {
               ) : <OpsEmpty title="No plans yet" message="Create the first plan for this revenue line to connect objectives, budgets, audience, and operating work." />}
             </OpsSection>
           </div>
+
+          <OpsSection
+            title="Approved historical learning"
+            subtitle="Evidence reviewed by your team that can guide this revenue line. These lessons inform planning but never change a plan automatically."
+            action={<button className="ops-button is-secondary" type="button" onClick={() => navigate('/commercial-assessment')}>Open Assessment</button>}
+          >
+            {approvedLearning.length ? (
+              <div className="commercial-learning-list">
+                {approvedLearning.map(finding => (
+                  <article key={text(finding.id)}>
+                    <div>
+                      <OpsStatus tone={text(finding.type) === 'avoid' ? 'warning' : text(finding.type) === 'repeat' ? 'positive' : 'info'}>{titleCase(text(finding.type))}</OpsStatus>
+                      <small>{Math.round(numberValue(finding.confidence) * 100)}% confidence</small>
+                    </div>
+                    <strong>{text(finding.title, 'Approved learning')}</strong>
+                    <p>{text(finding.recommendation)}</p>
+                    <small>From {text(finding.assessmentTitle, 'historical assessment')}</small>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <OpsEmpty title="No approved learning yet" message="Assess previous outcomes, generate evidence-backed findings, and approve the lessons that should guide future planning." action={<button className="ops-button is-secondary" type="button" onClick={() => navigate('/commercial-assessment')}>Start Assessment</button>} />
+            )}
+          </OpsSection>
 
           {currencyBreakdown.length ? (
             <OpsSection title="Currency view" subtitle="Targets remain separated by currency. Tanaghum never performs an unapproved conversion.">

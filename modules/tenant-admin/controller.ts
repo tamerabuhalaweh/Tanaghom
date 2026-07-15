@@ -72,6 +72,7 @@ tenantAdminRouter.get('/', async (req: Request, res: Response, next: NextFunctio
         tenantKey: tenant.tenant_key,
         name: tenant.name,
         status: tenant.status,
+        defaultCurrency: tenant.default_currency,
         createdAt: tenant.created_at,
         updatedAt: tenant.updated_at,
       } : {
@@ -125,16 +126,23 @@ tenantAdminRouter.put('/', async (req: Request, res: Response, next: NextFunctio
     requireAdmin(payload.role);
     const tenantKey = payload.tenantKey || 'default';
     const input = z.object({
-      name: z.string().trim().min(2).max(160),
+      name: z.string().trim().min(2).max(160).optional(),
+      defaultCurrency: z.enum(['AED', 'USD']).optional(),
+    }).refine(value => value.name !== undefined || value.defaultCurrency !== undefined, {
+      message: 'Provide a tenant name or default currency',
     }).parse(req.body);
     const tenant = await prisma.tenant.upsert({
       where: { tenant_key: tenantKey },
       create: {
         tenant_key: tenantKey,
-        name: input.name,
+        name: input.name || (tenantKey === 'default' ? 'Tanaghum Default Tenant' : tenantKey),
         status: 'active',
+        default_currency: input.defaultCurrency || 'AED',
       },
-      update: { name: input.name },
+      update: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.defaultCurrency !== undefined ? { default_currency: input.defaultCurrency } : {}),
+      },
     });
     auditLog(
       { actor: `user:${payload.sub}`, action: 'tenant_updated', object_type: 'tenant', object_id: tenant.id, result: 'success' },
@@ -144,6 +152,7 @@ tenantAdminRouter.put('/', async (req: Request, res: Response, next: NextFunctio
       tenantKey: tenant.tenant_key,
       name: tenant.name,
       status: tenant.status,
+      defaultCurrency: tenant.default_currency,
       _label: 'Tenant updated',
     });
   } catch (err) {

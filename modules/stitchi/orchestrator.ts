@@ -1179,7 +1179,7 @@ function asCommercialRevenueLineType(value: string): CommercialRevenueLineType |
 function extractCommercialPlanFields(content: string, context?: StitchiReadOnlyContext): ExtractedCommercialPlan {
   const objective = extractLabelValue(content, ['objective', 'goal', 'purpose']);
   const audience = extractLabelValue(content, ['audience', 'target audience', 'segment']);
-  const currency = extractCommercialCurrency(content);
+  const currency = extractCommercialCurrency(content, context?.commercialCenter.defaultCurrency || 'AED');
   const budgetTarget = extractMoneyValue(content, ['budget target', 'budget', 'spend target']);
   const revenueTarget = extractMoneyValue(content, ['revenue target', 'sales target', 'target revenue']);
   const actionPlan = extractLabelValue(content, ['action plan', 'plan', 'next actions']);
@@ -1468,10 +1468,10 @@ function extractMoneyValue(content: string, labels: string[]): number | null {
   return null;
 }
 
-function extractCommercialCurrency(content: string): CommercialCurrency {
+function extractCommercialCurrency(content: string, defaultCurrency: CommercialCurrency): CommercialCurrency {
   if (/\b(AED|UAE\s*dirham|dirhams?)\b/i.test(content)) return 'AED';
   if (/\b(USD|US\s*dollar|dollars?)\b|\$/i.test(content)) return 'USD';
-  return 'USD';
+  return defaultCurrency;
 }
 
 function inferLinkedEvent(content: string, context?: StitchiReadOnlyContext): { id: string; name: string } | null {

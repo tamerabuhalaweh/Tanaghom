@@ -45,6 +45,7 @@ const HybridEventWorkspace = lazy(() => import('./pages/HybridEventWorkspace'))
 const AieroInspiredPreview = lazy(() => import('./pages/AieroInspiredPreview'))
 const Stitchi = lazy(() => import('./pages/Stitchi'))
 const CommercialCommandCenter = lazy(() => import('./pages/CommercialCommandCenter'))
+const CommercialAssessment = lazy(() => import('./pages/CommercialAssessment'))
 const CommercialDisciplines = lazy(() => import('./pages/CommercialDisciplines'))
 const ExecutiveDashboard = lazy(() => import('./pages/ExecutiveDashboard'))
 const CommercialToday = lazy(() => import('./pages/CommercialToday'))
@@ -164,6 +165,7 @@ function App() {
             <Route path="dashboard" element={<MasterEventsDashboard />} />
             <Route path="command-center" element={<CommercialToday />} />
             <Route path="commercial-plans" element={<CommercialCommandCenter />} />
+            <Route path="commercial-assessment" element={<CommercialAssessment />} />
             <Route path="ceo-dashboard" element={executiveOnly(<ExecutiveDashboard />)} />
             <Route path="content-workflow" element={<DemoCommandCenter />} />
             <Route path="growth-intelligence" element={<SocialGrowthIntelligence />} />

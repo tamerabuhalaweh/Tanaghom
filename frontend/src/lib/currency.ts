@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 export const CURRENCY_STORAGE_KEY = 'tanaghum-display-currency';
 
 export const CURRENCY_OPTIONS = [
-  { code: 'USD', label: 'USD - US Dollar' },
   { code: 'AED', label: 'AED - UAE Dirham' },
+  { code: 'USD', label: 'USD - US Dollar' },
   { code: 'SAR', label: 'SAR - Saudi Riyal' },
   { code: 'JOD', label: 'JOD - Jordanian Dinar' },
   { code: 'KWD', label: 'KWD - Kuwaiti Dinar' },
@@ -17,7 +17,7 @@ export const CURRENCY_OPTIONS = [
 
 export type CurrencyCode = typeof CURRENCY_OPTIONS[number]['code'];
 
-const DEFAULT_CURRENCY: CurrencyCode = 'USD';
+const DEFAULT_CURRENCY: CurrencyCode = 'AED';
 
 export function isCurrencyCode(value: string): value is CurrencyCode {
   return CURRENCY_OPTIONS.some(option => option.code === value);

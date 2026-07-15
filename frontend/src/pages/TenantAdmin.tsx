@@ -70,6 +70,7 @@ export default function TenantAdmin() {
   const [privacyGovernance, setPrivacyGovernance] = useState<RecordMap | null>(null);
   const [exportSummary, setExportSummary] = useState<RecordMap | null>(null);
   const [name, setName] = useState('');
+  const [defaultCurrency, setDefaultCurrency] = useState('AED');
   const [lifecycleReason, setLifecycleReason] = useState('');
   const [subscriptionPlanKey, setSubscriptionPlanKey] = useState('commercial_social_production');
   const [subscriptionStatus, setSubscriptionStatus] = useState('active');
@@ -113,6 +114,7 @@ export default function TenantAdmin() {
     setDeletionReadiness(deletionResult as RecordMap);
     applyPrivacyState(privacyResult as RecordMap);
     setName(text(objectValue(nextSummary.tenant).name, ''));
+    setDefaultCurrency(text(objectValue(nextSummary.tenant).defaultCurrency, 'AED'));
     setSubscriptionPlanKey(text(currentSubscription.planKey, 'commercial_social_production'));
     setSubscriptionStatus(text(currentSubscription.status, 'active'));
     setSubscriptionSource(text(currentSubscription.source, 'manual'));
@@ -146,6 +148,7 @@ export default function TenantAdmin() {
         setDeletionReadiness(deletionResult as RecordMap);
         applyPrivacyState(privacyResult as RecordMap);
         setName(text(objectValue(nextSummary.tenant).name, ''));
+        setDefaultCurrency(text(objectValue(nextSummary.tenant).defaultCurrency, 'AED'));
         setSubscriptionPlanKey(text(currentSubscription.planKey, 'commercial_social_production'));
         setSubscriptionStatus(text(currentSubscription.status, 'active'));
         setSubscriptionSource(text(currentSubscription.source, 'manual'));
@@ -180,8 +183,8 @@ export default function TenantAdmin() {
     setSaving(true);
     setMessage('');
     try {
-      await tenantAdminApi.update({ name }, token);
-      setMessage('Tenant name updated.');
+      await tenantAdminApi.update({ name, defaultCurrency }, token);
+      setMessage('Workspace identity and planning currency updated. Existing plans keep their stored currency.');
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to update tenant');
@@ -360,8 +363,19 @@ export default function TenantAdmin() {
                 className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
               />
             </Field>
+            <Field label="Default planning currency">
+              <select
+                value={defaultCurrency}
+                onChange={(event) => setDefaultCurrency(event.target.value)}
+                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+              >
+                <option value="AED">AED - UAE Dirham</option>
+                <option value="USD">USD - US Dollar</option>
+              </select>
+            </Field>
+            <Notice tone="info">New commercial plans inherit this currency. Plans intentionally saved in another currency are never rewritten or converted.</Notice>
             <PrimaryAction disabled={saving || !name.trim()} onClick={saveTenantName}>
-              {saving ? 'Saving...' : 'Save Tenant Name'}
+              {saving ? 'Saving...' : 'Save Workspace Settings'}
             </PrimaryAction>
           </div>
         </ProductCard>

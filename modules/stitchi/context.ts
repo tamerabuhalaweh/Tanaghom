@@ -86,6 +86,7 @@ export interface StitchiReadOnlyContext {
     rawSecretsReturned: false;
   };
   commercialCenter: {
+    defaultCurrency: 'AED' | 'USD';
     configuredRevenueLines: number;
     activePlans: number;
     openAssessmentSignals: number;
@@ -115,6 +116,18 @@ export interface StitchiReadOnlyContext {
     latestReportTitle: string | null;
     latestReportStatus: string | null;
     latestReportConfidence: string | null;
+    requiredActions: string[];
+  };
+  historicalAssessment: {
+    recentRuns: number;
+    latestRunStatus: string | null;
+    latestRunTitle: string | null;
+    approvedLearning: Array<{
+      type: string;
+      title: string;
+      recommendation: string;
+      confidence: number;
+    }>;
     requiredActions: string[];
   };
   guardrails: {
@@ -154,6 +167,9 @@ export async function loadReadOnlyContext(
 ): Promise<StitchiReadOnlyContext> {
   const eventId = requestedEventId || conversation.eventId || undefined;
   const commercialClients = prisma as unknown as {
+    tenant?: {
+      findUnique(args: unknown): Promise<{ default_currency?: unknown } | null>;
+    };
     commercialRevenueLine?: {
       findMany(args: unknown): Promise<Array<{
         id: string;
@@ -190,9 +206,23 @@ export async function loadReadOnlyContext(
     commercialExecutiveReportSchedule?: {
       findMany(args: unknown): Promise<Array<{ id: string }>>;
     };
+    commercialHistoricalAssessmentRun?: {
+      findMany(args: unknown): Promise<Array<{ title: string; status: unknown; created_at: Date }>>;
+    };
+    commercialLearningSet?: {
+      findMany(args: unknown): Promise<Array<{
+        findings: Array<{
+          finding_type: unknown;
+          title: string;
+          recommendation: string;
+          confidence: unknown;
+        }>;
+      }>>;
+    };
   };
 
   const [
+    tenantSettings,
     currentUser,
     selectedEvent,
     recentEvents,
@@ -207,7 +237,13 @@ export async function loadReadOnlyContext(
     assessmentSignals,
     executiveReports,
     executiveSchedules,
+    historicalAssessmentRuns,
+    learningSets,
   ] = await Promise.all([
+    commercialClients.tenant?.findUnique({
+      where: { tenant_key: tenantKey },
+      select: { default_currency: true },
+    }) ?? Promise.resolve(null),
     prisma.user.findFirst({
       where: { id: conversation.userId, tenant_key: tenantKey },
       select: {
@@ -336,6 +372,24 @@ export async function loadReadOnlyContext(
       select: { id: true },
       take: 20,
     }) ?? Promise.resolve([]),
+    commercialClients.commercialHistoricalAssessmentRun?.findMany({
+      where: { tenant_key: tenantKey },
+      select: { title: true, status: true, created_at: true },
+      orderBy: { created_at: 'desc' },
+      take: 3,
+    }) ?? Promise.resolve([]),
+    commercialClients.commercialLearningSet?.findMany({
+      where: { tenant_key: tenantKey, status: 'active' },
+      select: {
+        findings: {
+          where: { decision: 'approved' },
+          select: { finding_type: true, title: true, recommendation: true, confidence: true },
+          take: 12,
+        },
+      },
+      orderBy: { approved_at: 'desc' },
+      take: 3,
+    }) ?? Promise.resolve([]),
   ]);
 
   return {
@@ -360,6 +414,7 @@ export async function loadReadOnlyContext(
     unifiedDataLayer: summarizeUnifiedDataLayer(credentials, connectorJobs),
     ghlCrm,
     commercialCenter: {
+      defaultCurrency: String(tenantSettings?.default_currency) === 'USD' ? 'USD' : 'AED',
       configuredRevenueLines: revenueLines.filter(line => String(line.status) === 'active').length,
       activePlans: commercialPlans.filter(plan => String(plan.status) === 'active').length,
       openAssessmentSignals: assessmentSignals.length,
@@ -379,11 +434,25 @@ export async function loadReadOnlyContext(
         status: String(plan.status),
         budgetTarget: decimalToNumber(plan.budget_target),
         revenueTarget: decimalToNumber(plan.revenue_target),
-        currency: String(plan.currency || 'USD'),
+        currency: String(plan.currency || tenantSettings?.default_currency || 'AED'),
         linkedEventId: plan.linked_event_id,
       })),
     },
     commercialExecutive: summarizeExecutiveReporting(executiveReports, executiveSchedules),
+    historicalAssessment: {
+      recentRuns: historicalAssessmentRuns.length,
+      latestRunStatus: historicalAssessmentRuns[0] ? String(historicalAssessmentRuns[0].status) : null,
+      latestRunTitle: historicalAssessmentRuns[0]?.title || null,
+      approvedLearning: learningSets.flatMap(set => set.findings).slice(0, 12).map(finding => ({
+        type: String(finding.finding_type),
+        title: finding.title,
+        recommendation: finding.recommendation,
+        confidence: decimalToNumber(finding.confidence) || 0,
+      })),
+      requiredActions: historicalAssessmentRuns.length
+        ? learningSets.length ? [] : ['Review and approve evidence-backed historical findings before reusing them in future plans.']
+        : ['Create a historical assessment before preparing the next commercial plan.'],
+    },
     guardrails: {
       mode: 'read_only',
       writesExecuted: false,

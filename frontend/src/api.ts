@@ -617,6 +617,23 @@ export const commercialCommandCenterApi = {
     apiFetch<unknown>('/commercial-command-center/assessment-signals', { method: 'POST', body: data, token }),
 };
 
+export const commercialAssessmentApi = {
+  preview: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-assessments/preview', { method: 'POST', body: data, token }),
+  list: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/commercial-assessments${params}`, { token });
+  },
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-assessments', { method: 'POST', body: data, token }),
+  get: (id: string, token: string) => apiFetch<unknown>(`/commercial-assessments/${id}`, { token }),
+  generate: (id: string, token: string) =>
+    apiFetch<unknown>(`/commercial-assessments/${id}/generate`, { method: 'POST', token }),
+  decideFinding: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-assessments/findings/${id}/decision`, { method: 'POST', body: data, token }),
+  learningSets: (token: string) => apiFetch<unknown[]>('/commercial-assessments/learning-sets', { token }),
+};
+
 export const commercialExecutiveApi = {
   dashboard: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';

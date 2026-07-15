@@ -1,12 +1,18 @@
-import { BriefcaseBusiness, CalendarDays, ClipboardList } from 'lucide-react';
+import { BriefcaseBusiness, CalendarDays, ClipboardList, History } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import './CommercialWorkspaceNav.css';
 
 const ITEMS = [
   {
+    path: '/commercial-assessment',
+    label: 'Assessment',
+    description: 'Learn from previous results',
+    icon: History,
+  },
+  {
     path: '/commercial-plans',
-    label: 'Commercial Plans',
-    description: 'Targets, budgets, and execution',
+    label: 'Planning',
+    description: 'Targets, budgets, and future execution',
     icon: ClipboardList,
   },
   {

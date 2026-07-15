@@ -106,6 +106,7 @@ export async function createPlan(
   await assertRevenueLineInTenant(tenantKey, input.revenueLineId);
   if (input.linkedEventId) await assertEventInTenant(tenantKey, input.linkedEventId);
   if (input.ownerUserId) await assertUserInTenant(tenantKey, input.ownerUserId);
+  const defaultCurrency = input.currency || await getTenantDefaultCurrency(tenantKey);
 
   const plan = await prisma.commercialPlan.create({
     data: {
@@ -113,11 +114,11 @@ export async function createPlan(
       revenue_line_id: input.revenueLineId,
       linked_event_id: input.linkedEventId ?? null,
       horizon: input.horizon,
-      stage: input.stage || 'assess',
+      stage: input.stage || 'strategy_planning',
       title: input.title,
       objective: input.objective ?? null,
       audience: input.audience ?? null,
-      currency: input.currency || 'USD',
+      currency: defaultCurrency,
       budget_target: input.budgetTarget != null ? new Prisma.Decimal(input.budgetTarget) : null,
       revenue_target: input.revenueTarget != null ? new Prisma.Decimal(input.revenueTarget) : null,
       kpi_targets: input.kpiTargets == null ? Prisma.JsonNull : toJsonObject(input.kpiTargets),
@@ -236,7 +237,8 @@ export async function getDashboard(
   tenantKey: string,
   filters: DashboardQueryInput,
 ): Promise<CommercialCommandCenterDashboard> {
-  const [revenueLines, plans, signals, eventCounts] = await Promise.all([
+  const [defaultCurrency, revenueLines, plans, signals, eventCounts] = await Promise.all([
+    getTenantDefaultCurrency(tenantKey),
     listRevenueLines(tenantKey),
     listPlans(tenantKey, {
       stage: filters.stage,
@@ -266,6 +268,7 @@ export async function getDashboard(
   }
 
   return {
+    defaultCurrency,
     revenueLines: filters.revenueLineType
       ? revenueLines.filter(line => line.revenueLineType === filters.revenueLineType)
       : revenueLines,
@@ -302,6 +305,7 @@ export async function getRevenueLineDashboard(
 ): Promise<CommercialRevenueLineDashboard> {
   const catalogLine = REVENUE_LINE_CATALOG.find(line => line.type === revenueLineType);
   if (!catalogLine) throw new NotFoundError('CommercialRevenueLineType', revenueLineType);
+  const defaultCurrency = await getTenantDefaultCurrency(tenantKey);
 
   const configuredLine = await prisma.commercialRevenueLine.findUnique({
     where: {
@@ -365,7 +369,7 @@ export async function getRevenueLineDashboard(
   const availableEvents = rawAvailableEvents.filter(event => isCustomerVisibleRecordName(event.name));
   const eventIds = linkedEvents.map(event => event.id);
 
-  const [signals, kpis, leads, connectorJobs] = await Promise.all([
+  const [signals, kpis, leads, connectorJobs, learningSets] = await Promise.all([
     configuredLine
       ? prisma.commercialAssessmentSignal.findMany({
         where: {
@@ -415,6 +419,36 @@ export async function getRevenueLineDashboard(
         take: 200,
       })
       : Promise.resolve([]),
+    configuredLine
+      ? prisma.commercialLearningSet.findMany({
+        where: {
+          tenant_key: tenantKey,
+          status: 'active',
+          OR: [
+            { assessment_run: { revenue_line_id: configuredLine.id } },
+            { assessment_run: { revenue_line_id: null } },
+          ],
+        },
+        select: {
+          approved_at: true,
+          assessment_run: { select: { title: true } },
+          findings: {
+            where: { decision: 'approved' },
+            select: {
+              id: true,
+              finding_type: true,
+              title: true,
+              recommendation: true,
+              confidence: true,
+            },
+            orderBy: { created_at: 'asc' },
+            take: 12,
+          },
+        },
+        orderBy: { approved_at: 'desc' },
+        take: 5,
+      })
+      : Promise.resolve([]),
   ]);
 
   const plannedRevenueTarget = plans.reduce((total, plan) => total + (plan.revenueTarget || 0), 0)
@@ -453,11 +487,12 @@ export async function getRevenueLineDashboard(
   if (!connectorJobs.length) missingDataSources.push('Set up connector dry-runs for this revenue line when customer credentials are available.');
 
   return {
+    defaultCurrency,
     revenueLine,
     rollups: {
       plannedRevenueTarget,
       knownRevenue,
-      currency: uniquePlanCurrencies.length === 0 ? 'USD' : uniquePlanCurrencies.length === 1 ? uniquePlanCurrencies[0] : 'mixed',
+      currency: uniquePlanCurrencies.length === 0 ? defaultCurrency : uniquePlanCurrencies.length === 1 ? uniquePlanCurrencies[0] : 'mixed',
       currencyBreakdown,
       plannedBudget,
       knownSpend,
@@ -479,6 +514,15 @@ export async function getRevenueLineDashboard(
       missingDataSources,
     },
     plans,
+    approvedLearning: learningSets.flatMap(set => set.findings.map(finding => ({
+      id: finding.id,
+      type: String(finding.finding_type) as 'repeat' | 'improve' | 'avoid' | 'investigate',
+      title: finding.title,
+      recommendation: finding.recommendation,
+      confidence: decimalToNumber(finding.confidence) || 0,
+      assessmentTitle: set.assessment_run.title,
+      approvedAt: set.approved_at.toISOString(),
+    }))).slice(0, 12),
     openSignals: signals.map(mapAssessmentSignal),
     linkedEvents: linkedEvents.map(event => mapEventBridge(event, plansByEvent.get(event.id))),
     availableEvents: availableEvents.map(event => mapEventBridge(event, plansByEvent.get(event.id))),
@@ -495,6 +539,17 @@ export async function getRevenueLineDashboard(
       supportedCurrencies: [...COMMERCIAL_CURRENCIES],
     },
   };
+}
+
+export async function getTenantDefaultCurrency(tenantKey: string): Promise<(typeof COMMERCIAL_CURRENCIES)[number]> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { tenant_key: tenantKey },
+    select: { default_currency: true },
+  });
+  const value = String(tenant?.default_currency || 'AED');
+  return COMMERCIAL_CURRENCIES.includes(value as (typeof COMMERCIAL_CURRENCIES)[number])
+    ? value as (typeof COMMERCIAL_CURRENCIES)[number]
+    : 'AED';
 }
 
 async function assertRevenueLineInTenant(tenantKey: string, id: string): Promise<void> {
@@ -618,7 +673,7 @@ function mapPlan(plan: {
     title: plan.title,
     objective: plan.objective,
     audience: plan.audience,
-    currency: String(plan.currency || 'USD') as CommercialPlanSummary['currency'],
+    currency: String(plan.currency || 'AED') as CommercialPlanSummary['currency'],
     budgetTarget: decimalToNumber(plan.budget_target),
     revenueTarget: decimalToNumber(plan.revenue_target),
     kpiTargets: plan.kpi_targets,
