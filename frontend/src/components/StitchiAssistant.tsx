@@ -141,6 +141,7 @@ function actionTitle(actionType: string): string {
     create_commercial_plan_with_revenue_line: 'Set up revenue line and create plan',
     update_commercial_plan: 'Update commercial plan',
     create_commercial_assessment_signal: 'Record commercial signal',
+    create_annual_commercial_plan: 'Create annual commercial plan',
   };
   return labels[actionType] || actionType.replaceAll('_', ' ');
 }

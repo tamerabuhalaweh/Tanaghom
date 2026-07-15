@@ -1,0 +1,528 @@
+.annual-planning-page {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+}
+
+.annual-loading,
+.annual-direction-grid,
+.annual-quarter-grid {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.annual-loading,
+.annual-direction-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.annual-year-toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--ops-border);
+  border-radius: 10px;
+  background: var(--ops-surface);
+}
+
+.annual-year-toolbar label,
+.annual-current-state {
+  display: grid;
+  min-width: 180px;
+  gap: 6px;
+}
+
+.annual-year-toolbar label > span,
+.annual-current-state > span,
+.annual-summary-band span,
+.annual-summary-band small {
+  color: var(--ops-ink-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.annual-year-toolbar select,
+.annual-create-form input,
+.annual-create-form select,
+.annual-create-form textarea,
+.annual-direction-form input,
+.annual-direction-form select,
+.annual-direction-form textarea,
+.annual-item-form input,
+.annual-item-form select,
+.annual-status-buttons input {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  color: var(--ops-ink);
+  background: var(--ops-surface);
+  font: inherit;
+}
+
+.annual-create-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+  padding: 18px;
+}
+
+.annual-create-form > :nth-child(5),
+.annual-create-form > :nth-child(6) {
+  grid-column: 1 / -1;
+}
+
+.annual-create-form > .ops-button {
+  justify-self: start;
+}
+
+.annual-summary-band {
+  position: sticky;
+  z-index: 2;
+  top: 78px;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--ops-border);
+  border-radius: 10px;
+  background: var(--ops-surface);
+}
+
+.annual-summary-band > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 15px 18px;
+  border-left: 1px solid var(--ops-border);
+}
+
+.annual-summary-band > div:first-child {
+  border-left: 0;
+}
+
+.annual-summary-band span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.annual-summary-band strong {
+  color: var(--ops-ink);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  line-height: 26px;
+  overflow-wrap: anywhere;
+}
+
+.annual-summary-band .is-warning {
+  background: var(--ops-warning-soft);
+}
+
+.annual-direction-grid {
+  padding: 18px;
+  border-top: 1px solid var(--ops-border);
+}
+
+.annual-direction-form,
+.annual-learning-panel {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 14px;
+}
+
+.annual-target-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.annual-learning-panel {
+  padding-left: 18px;
+  border-left: 1px solid var(--ops-border);
+}
+
+.annual-learning-panel > p,
+.annual-learning-selector > p {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--ops-ink-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.annual-learning-selector {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.annual-learning-selector legend {
+  margin-bottom: 8px;
+  color: var(--ops-ink);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.annual-learning-selector label {
+  display: flex;
+  min-width: 0;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  background: var(--ops-surface-subtle);
+}
+
+.annual-learning-selector input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+}
+
+.annual-learning-selector label span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.annual-learning-selector strong {
+  color: var(--ops-ink);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.annual-learning-selector small {
+  color: var(--ops-ink-secondary);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.annual-status-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 18px;
+  border-top: 1px solid var(--ops-border);
+  background: var(--ops-surface-subtle);
+}
+
+.annual-status-actions > div:first-child {
+  display: flex;
+  min-width: 260px;
+  flex: 1;
+  align-items: start;
+  gap: 10px;
+}
+
+.annual-status-actions > div:first-child span {
+  display: grid;
+  gap: 2px;
+}
+
+.annual-status-actions strong {
+  color: var(--ops-ink);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.annual-status-actions small {
+  color: var(--ops-ink-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.annual-status-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.annual-status-buttons label {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 6px;
+}
+
+.annual-status-buttons label > span {
+  grid-column: 1 / -1;
+  color: var(--ops-ink-secondary);
+  font-size: 10px;
+}
+
+.annual-quarter-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 18px;
+  border-top: 1px solid var(--ops-border);
+}
+
+.annual-quarter {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ops-border);
+  border-radius: 10px;
+  background: var(--ops-surface);
+}
+
+.annual-quarter > header,
+.annual-month-heading,
+.annual-initiative {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.annual-quarter > header {
+  justify-content: space-between;
+  padding: 11px 14px;
+  color: var(--ops-ink);
+  background: var(--ops-surface-strong);
+}
+
+.annual-quarter > header strong {
+  font-size: 13px;
+}
+
+.annual-quarter > header span {
+  color: var(--ops-ink-secondary);
+  font-size: 11px;
+}
+
+.annual-month {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 120px minmax(0, 1fr);
+  border-top: 1px solid var(--ops-border);
+}
+
+.annual-month-heading {
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 13px;
+  border-right: 1px solid var(--ops-border);
+  background: var(--ops-surface-subtle);
+}
+
+.annual-month-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.annual-month-heading strong {
+  color: var(--ops-ink);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.annual-month-heading small,
+.annual-initiative small,
+.annual-month-items > p {
+  color: var(--ops-ink-secondary);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.annual-month-heading button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ops-border);
+  border-radius: 7px;
+  color: var(--ops-ink);
+  background: var(--ops-surface);
+  cursor: pointer;
+}
+
+.annual-month-items {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 5px;
+  padding: 8px;
+}
+
+.annual-month-items > p {
+  margin: 0;
+  padding: 8px;
+}
+
+.annual-initiative {
+  width: 100%;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.annual-initiative:hover,
+.annual-initiative:focus-visible {
+  background: var(--ops-accent-soft);
+}
+
+.annual-initiative > span:first-child {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.annual-initiative strong {
+  color: var(--ops-ink);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.annual-initiative .ops-status {
+  flex: 0 0 auto;
+}
+
+.annual-item-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  padding: 18px;
+  border-top: 1px solid var(--ops-border);
+}
+
+.annual-item-form > :nth-child(3) {
+  grid-column: span 2;
+}
+
+.annual-item-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  padding: 0 18px 18px;
+}
+
+.annual-item-actions .ops-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.annual-item-actions .is-danger {
+  color: var(--ops-danger);
+}
+
+@media (max-width: 1100px) {
+  .annual-summary-band,
+  .annual-item-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .annual-summary-band > div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--ops-border);
+  }
+
+  .annual-summary-band > div:nth-child(4) {
+    border-top: 1px solid var(--ops-border);
+  }
+
+  .annual-quarter-grid,
+  .annual-direction-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .annual-learning-panel {
+    padding: 18px 0 0;
+    border-top: 1px solid var(--ops-border);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .annual-loading,
+  .annual-create-form,
+  .annual-target-fields,
+  .annual-item-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .annual-summary-band {
+    position: static;
+  }
+
+  .annual-summary-band > div,
+  .annual-summary-band > div:nth-child(3) {
+    border-top: 1px solid var(--ops-border);
+    border-left: 0;
+  }
+
+  .annual-summary-band > div:first-child {
+    border-top: 0;
+  }
+
+  .annual-create-form > :nth-child(5),
+  .annual-create-form > :nth-child(6),
+  .annual-item-form > :nth-child(3) {
+    grid-column: auto;
+  }
+
+  .annual-quarter-grid,
+  .annual-direction-grid,
+  .annual-item-form,
+  .annual-create-form {
+    padding: 14px;
+  }
+
+  .annual-month {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .annual-month-heading {
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid var(--ops-border);
+  }
+
+  .annual-status-actions,
+  .annual-status-buttons,
+  .annual-status-buttons label {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .annual-status-buttons label > span {
+    grid-column: auto;
+  }
+
+  .annual-status-buttons .ops-button,
+  .annual-status-buttons .ops-text-button,
+  .annual-item-actions .ops-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

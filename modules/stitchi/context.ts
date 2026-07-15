@@ -110,6 +110,21 @@ export interface StitchiReadOnlyContext {
         linkedEventId: string | null;
     }>;
   };
+  annualPlanning: {
+    currentPlan: {
+      id: string;
+      year: number;
+      title: string;
+      status: string;
+      currency: string;
+      budgetTarget: number;
+      revenueTarget: number;
+      itemCount: number;
+      allocatedBudget: number;
+    } | null;
+    approvedLearningSets: Array<{ id: string; title: string; findingCount: number }>;
+    requiredActions: string[];
+  };
   commercialExecutive: {
     recentReports: number;
     activeSchedules: number;
@@ -211,12 +226,26 @@ export async function loadReadOnlyContext(
     };
     commercialLearningSet?: {
       findMany(args: unknown): Promise<Array<{
+        id: string;
+        title: string;
         findings: Array<{
           finding_type: unknown;
           title: string;
           recommendation: string;
           confidence: unknown;
         }>;
+      }>>;
+    };
+    annualCommercialPlan?: {
+      findMany(args: unknown): Promise<Array<{
+        id: string;
+        year: number;
+        title: string;
+        status: unknown;
+        currency: unknown;
+        budget_target: unknown;
+        revenue_target: unknown;
+        items: Array<{ budget_allocation: unknown; currency: unknown }>;
       }>>;
     };
   };
@@ -239,6 +268,7 @@ export async function loadReadOnlyContext(
     executiveSchedules,
     historicalAssessmentRuns,
     learningSets,
+    annualPlans,
   ] = await Promise.all([
     commercialClients.tenant?.findUnique({
       where: { tenant_key: tenantKey },
@@ -381,6 +411,8 @@ export async function loadReadOnlyContext(
     commercialClients.commercialLearningSet?.findMany({
       where: { tenant_key: tenantKey, status: 'active' },
       select: {
+        id: true,
+        title: true,
         findings: {
           where: { decision: 'approved' },
           select: { finding_type: true, title: true, recommendation: true, confidence: true },
@@ -388,6 +420,21 @@ export async function loadReadOnlyContext(
         },
       },
       orderBy: { approved_at: 'desc' },
+      take: 3,
+    }) ?? Promise.resolve([]),
+    commercialClients.annualCommercialPlan?.findMany({
+      where: { tenant_key: tenantKey, status: { not: 'archived' } },
+      select: {
+        id: true,
+        year: true,
+        title: true,
+        status: true,
+        currency: true,
+        budget_target: true,
+        revenue_target: true,
+        items: { where: { archived_at: null }, select: { budget_allocation: true, currency: true } },
+      },
+      orderBy: [{ year: 'desc' }, { scenario_version: 'desc' }],
       take: 3,
     }) ?? Promise.resolve([]),
   ]);
@@ -438,6 +485,7 @@ export async function loadReadOnlyContext(
         linkedEventId: plan.linked_event_id,
       })),
     },
+    annualPlanning: summarizeAnnualPlanning(annualPlans, learningSets),
     commercialExecutive: summarizeExecutiveReporting(executiveReports, executiveSchedules),
     historicalAssessment: {
       recentRuns: historicalAssessmentRuns.length,
@@ -459,6 +507,45 @@ export async function loadReadOnlyContext(
       externalExecution: 'blocked',
       secretsReturned: false,
     },
+  };
+}
+
+function summarizeAnnualPlanning(
+  plans: Array<{
+    id: string;
+    year: number;
+    title: string;
+    status: unknown;
+    currency: unknown;
+    budget_target: unknown;
+    revenue_target: unknown;
+    items: Array<{ budget_allocation: unknown; currency: unknown }>;
+  }>,
+  learningSets: Array<{ id: string; title: string; findings: unknown[] }>,
+): StitchiReadOnlyContext['annualPlanning'] {
+  const current = plans.find(plan => ['active', 'approved'].includes(String(plan.status))) || plans[0] || null;
+  const currentCurrency = current ? String(current.currency) : 'AED';
+  const currentPlan = current ? {
+    id: current.id,
+    year: current.year,
+    title: current.title,
+    status: String(current.status),
+    currency: currentCurrency,
+    budgetTarget: decimalToNumber(current.budget_target) || 0,
+    revenueTarget: decimalToNumber(current.revenue_target) || 0,
+    itemCount: current.items.length,
+    allocatedBudget: current.items
+      .filter(item => String(item.currency) === currentCurrency)
+      .reduce((sum, item) => sum + (decimalToNumber(item.budget_allocation) || 0), 0),
+  } : null;
+  const requiredActions: string[] = [];
+  if (!currentPlan) requiredActions.push('Prepare the next annual commercial strategy and total budget for approval.');
+  else if (!currentPlan.itemCount) requiredActions.push(`Add the monthly products and events that will deliver the ${currentPlan.year} plan.`);
+  if (!learningSets.length) requiredActions.push('Approve historical assessment findings before reusing them in annual planning.');
+  return {
+    currentPlan,
+    approvedLearningSets: learningSets.map(set => ({ id: set.id, title: set.title, findingCount: set.findings.length })),
+    requiredActions,
   };
 }
 

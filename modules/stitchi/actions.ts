@@ -25,6 +25,8 @@ import * as commercialDisciplineService from '@modules/commercial-disciplines/se
 import { createDisciplineRecordSchema } from '@modules/commercial-disciplines/types';
 import * as commercialExecutiveService from '@modules/commercial-executive-reporting/service';
 import { createExecutiveReportScheduleSchema } from '@modules/commercial-executive-reporting/types';
+import * as annualPlanningService from '@modules/commercial-annual-planning/service';
+import { createAnnualPlanSchema } from '@modules/commercial-annual-planning/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -44,6 +46,7 @@ const SUPPORTED_ACTIONS = [
   'create_commercial_assessment_signal',
   'create_commercial_discipline_record',
   'create_executive_report_schedule',
+  'create_annual_commercial_plan',
 ] as const;
 
 export type StitchiExecutableActionType = (typeof SUPPORTED_ACTIONS)[number];
@@ -198,6 +201,11 @@ export async function executeStitchiAction(input: {
       const payload = createExecutiveReportScheduleSchema.parse(input.inputPayload);
       const result = await commercialExecutiveService.createSchedule(input.role, input.tenantKey, input.userId, payload);
       return { objectType: 'commercial_executive_report_schedule', objectId: result.id, result };
+    }
+    case 'create_annual_commercial_plan': {
+      const payload = createAnnualPlanSchema.parse(input.inputPayload);
+      const result = await annualPlanningService.createAnnualPlan(input.role, input.tenantKey, input.userId, payload);
+      return { objectType: 'annual_commercial_plan', objectId: result.id, result };
     }
     default:
       throw new ForbiddenError('Stitchi action is not executable');

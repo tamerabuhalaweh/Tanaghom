@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
   BookOpen,
@@ -156,6 +156,16 @@ function makePlanDraft(lineId = '', defaultCurrency = 'AED') {
   };
 }
 
+function planDraftFrom(plan: RecordMap, defaultCurrency = 'AED') {
+  return {
+    id: text(plan.id), revenueLineId: text(plan.revenueLineId), linkedEventId: text(plan.linkedEventId),
+    title: text(plan.title), horizon: text(plan.horizon, 'quarterly'), stage: text(plan.stage, 'strategy_planning'),
+    status: text(plan.status, 'draft'), currency: text(plan.currency, defaultCurrency), objective: text(plan.objective),
+    audience: text(plan.audience), budgetTarget: nullableNumber(plan.budgetTarget)?.toString() || '',
+    revenueTarget: nullableNumber(plan.revenueTarget)?.toString() || '', strategySummary: text(plan.strategySummary), actionPlan: text(plan.actionPlan),
+  };
+}
+
 function normalizeRoleFromUser(user: unknown): string {
   if (!user || typeof user !== 'object') return 'unknown';
   const value = (user as RecordMap).role;
@@ -167,10 +177,12 @@ function normalizeRoleFromUser(user: unknown): string {
 export default function CommercialCommandCenter() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedPlanId = searchParams.get('planId');
   const userRole = normalizeRoleFromUser(user);
   const canManagePlans = ['admin', 'cco', 'department_head'].includes(userRole);
   const [dashboard, setDashboard] = useState<RecordMap | null>(null);
-  const [selectedType, setSelectedType] = useState('live_event');
+  const [selectedType, setSelectedType] = useState(searchParams.get('revenueLineType') || 'live_event');
   const [lineDashboard, setLineDashboard] = useState<RecordMap | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(Boolean(token));
@@ -210,9 +222,12 @@ export default function CommercialCommandCenter() {
     setSelectedType(targetType);
     const detail = await commercialCommandCenterApi.revenueLineDashboard(targetType, token) as RecordMap;
     setLineDashboard(detail);
-    setPlanDraft(current => current.revenueLineId ? current : makePlanDraft(text(object(detail.revenueLine).id), text(main.defaultCurrency, 'AED')));
+    const requestedPlan = list(detail.plans).find(candidate => text(candidate.id) === requestedPlanId);
+    setPlanDraft(requestedPlan
+      ? planDraftFrom(requestedPlan, text(main.defaultCurrency, 'AED'))
+      : makePlanDraft(text(object(detail.revenueLine).id), text(main.defaultCurrency, 'AED')));
     setLoading(false);
-  }, [selectedType, token]);
+  }, [requestedPlanId, selectedType, token]);
 
   const loadLine = useCallback(async (revenueLineType: string) => {
     if (!token) return;
@@ -281,22 +296,7 @@ export default function CommercialCommandCenter() {
 
   function editPlan(plan: RecordMap) {
     if (!canManagePlans) return;
-    setPlanDraft({
-      id: text(plan.id),
-      revenueLineId: text(plan.revenueLineId),
-      linkedEventId: text(plan.linkedEventId),
-      title: text(plan.title),
-      horizon: text(plan.horizon, 'quarterly'),
-      stage: text(plan.stage, 'strategy_planning'),
-      status: text(plan.status, 'draft'),
-      currency: text(plan.currency, defaultCurrency),
-      objective: text(plan.objective),
-      audience: text(plan.audience),
-      budgetTarget: nullableNumber(plan.budgetTarget)?.toString() || '',
-      revenueTarget: nullableNumber(plan.revenueTarget)?.toString() || '',
-      strategySummary: text(plan.strategySummary),
-      actionPlan: text(plan.actionPlan),
-    });
+    setPlanDraft(planDraftFrom(plan, defaultCurrency));
     document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 

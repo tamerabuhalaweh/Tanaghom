@@ -10,10 +10,16 @@ const ITEMS = [
     icon: History,
   },
   {
-    path: '/commercial-plans',
-    label: 'Planning',
-    description: 'Targets, budgets, and future execution',
+    path: '/commercial-planning',
+    label: 'Annual Plan',
+    description: 'Yearly strategy and monthly portfolio',
     icon: ClipboardList,
+  },
+  {
+    path: '/commercial-plans',
+    label: 'Execution Plans',
+    description: 'Product and event detail',
+    icon: CalendarDays,
   },
   {
     path: '/disciplines',

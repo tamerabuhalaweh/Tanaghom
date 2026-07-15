@@ -634,6 +634,26 @@ export const commercialAssessmentApi = {
   learningSets: (token: string) => apiFetch<unknown[]>('/commercial-assessments/learning-sets', { token }),
 };
 
+export const annualCommercialPlanningApi = {
+  list: (token: string, filters?: Record<string, string>) => {
+    const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';
+    return apiFetch<unknown[]>(`/annual-commercial-plans${params}`, { token });
+  },
+  get: (id: string, token: string) => apiFetch<unknown>(`/annual-commercial-plans/${id}`, { token }),
+  create: (data: unknown, token: string) => apiFetch<unknown>('/annual-commercial-plans', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/annual-commercial-plans/${id}`, { method: 'PUT', body: data, token }),
+  transition: (id: string, transition: 'submit' | 'approve' | 'reject' | 'activate' | 'close' | 'archive', data: unknown, token: string) =>
+    apiFetch<unknown>(`/annual-commercial-plans/${id}/${transition}`, { method: 'POST', body: data, token }),
+  updateLearningSets: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/annual-commercial-plans/${id}/learning-sets`, { method: 'PUT', body: data, token }),
+  createItem: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/annual-commercial-plans/${id}/items`, { method: 'POST', body: data, token }),
+  updateItem: (id: string, itemId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/annual-commercial-plans/${id}/items/${itemId}`, { method: 'PUT', body: data, token }),
+  archiveItem: (id: string, itemId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/annual-commercial-plans/${id}/items/${itemId}/archive`, { method: 'POST', body: data, token }),
+};
+
 export const commercialExecutiveApi = {
   dashboard: (token: string, filters?: Record<string, string>) => {
     const params = filters ? `?${new URLSearchParams(filters).toString()}` : '';

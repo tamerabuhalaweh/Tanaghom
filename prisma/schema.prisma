@@ -130,6 +130,9 @@ model Tenant {
   connector_field_mappings ConnectorFieldMapping[]
   commercial_revenue_lines CommercialRevenueLine[]
   commercial_plans CommercialPlan[]
+  annual_commercial_plans AnnualCommercialPlan[]
+  monthly_portfolio_items MonthlyPortfolioItem[]
+  annual_commercial_plan_learning_sets AnnualCommercialPlanLearningSet[]
   commercial_assessment_signals CommercialAssessmentSignal[]
   commercial_historical_assessment_runs CommercialHistoricalAssessmentRun[]
   commercial_historical_assessment_evidence CommercialHistoricalAssessmentEvidence[]
@@ -308,6 +311,12 @@ model User {
   commercial_revenue_lines_created CommercialRevenueLine[] @relation("CommercialRevenueLineCreatedBy")
   commercial_plans_owned CommercialPlan[] @relation("CommercialPlanOwner")
   commercial_plans_created CommercialPlan[] @relation("CommercialPlanCreatedBy")
+  annual_commercial_plans_owned AnnualCommercialPlan[] @relation("AnnualCommercialPlanOwner")
+  annual_commercial_plans_created AnnualCommercialPlan[] @relation("AnnualCommercialPlanCreatedBy")
+  annual_commercial_plans_submitted AnnualCommercialPlan[] @relation("AnnualCommercialPlanSubmittedBy")
+  annual_commercial_plans_approved AnnualCommercialPlan[] @relation("AnnualCommercialPlanApprovedBy")
+  monthly_portfolio_items_owned MonthlyPortfolioItem[] @relation("MonthlyPortfolioItemOwner")
+  monthly_portfolio_items_created MonthlyPortfolioItem[] @relation("MonthlyPortfolioItemCreatedBy")
   commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
   commercial_historical_assessment_runs_requested CommercialHistoricalAssessmentRun[] @relation("CommercialHistoricalAssessmentRunRequestedBy")
   commercial_historical_assessment_findings_decided CommercialHistoricalAssessmentFinding[] @relation("CommercialHistoricalAssessmentFindingDecidedBy")
@@ -3687,6 +3696,31 @@ enum CommercialPlanStatus {
   archived
 }
 
+enum AnnualCommercialPlanStatus {
+  draft
+  pending_approval
+  approved
+  rejected
+  active
+  closed
+  archived
+}
+
+enum MonthlyPortfolioPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum MonthlyPortfolioReadiness {
+  planned
+  needs_brief
+  ready
+  blocked
+  completed
+}
+
 enum CommercialAssessmentSeverity {
   info
   watch
@@ -3839,6 +3873,7 @@ model CommercialRevenueLine {
   owner              User?                       @relation("CommercialRevenueLineOwner", fields: [owner_user_id], references: [id])
   created_by         User                        @relation("CommercialRevenueLineCreatedBy", fields: [created_by_user_id], references: [id])
   plans              CommercialPlan[]
+  monthly_portfolio_items MonthlyPortfolioItem[]
   assessment_signals CommercialAssessmentSignal[]
   historical_assessment_runs CommercialHistoricalAssessmentRun[]
   discipline_records CommercialDisciplineRecord[]
@@ -3880,6 +3915,7 @@ model CommercialPlan {
   created_by         User                     @relation("CommercialPlanCreatedBy", fields: [created_by_user_id], references: [id])
   assessment_signals CommercialAssessmentSignal[]
   discipline_records CommercialDisciplineRecord[]
+  monthly_portfolio_items MonthlyPortfolioItem[]
 
   @@index([tenant_key])
   @@index([revenue_line_id])
@@ -4032,11 +4068,111 @@ model CommercialLearningSet {
   assessment_run  CommercialHistoricalAssessmentRun @relation(fields: [assessment_run_id], references: [id], onDelete: Cascade)
   approved_by     User                              @relation("CommercialLearningSetApprovedBy", fields: [approved_by_user_id], references: [id])
   findings        CommercialHistoricalAssessmentFinding[]
+  annual_plan_links AnnualCommercialPlanLearningSet[]
 
   @@index([tenant_key])
   @@index([status])
   @@index([approved_by_user_id])
   @@map("commercial_learning_sets")
+}
+
+model AnnualCommercialPlan {
+  id                   String                     @id @default(uuid()) @db.Uuid
+  tenant_key           String
+  year                 Int
+  scenario_version     Int                        @default(1)
+  revision             Int                        @default(1)
+  title                String
+  strategy             String?                    @db.Text
+  currency             CommercialCurrency         @default(AED)
+  budget_target        Decimal                    @default(0) @db.Decimal(14, 2)
+  revenue_target       Decimal                    @default(0) @db.Decimal(14, 2)
+  status               AnnualCommercialPlanStatus @default(draft)
+  owner_user_id        String?                    @db.Uuid
+  created_by_user_id   String                     @db.Uuid
+  submitted_by_user_id String?                    @db.Uuid
+  submitted_at         DateTime?
+  approved_by_user_id  String?                    @db.Uuid
+  approved_at          DateTime?
+  rejection_reason     String?                    @db.Text
+  activated_at         DateTime?
+  closed_at            DateTime?
+  archived_at          DateTime?
+  created_at           DateTime                   @default(now())
+  updated_at           DateTime                   @updatedAt
+
+  tenant         Tenant                            @relation(fields: [tenant_key], references: [tenant_key])
+  owner          User?                             @relation("AnnualCommercialPlanOwner", fields: [owner_user_id], references: [id])
+  created_by     User                              @relation("AnnualCommercialPlanCreatedBy", fields: [created_by_user_id], references: [id])
+  submitted_by   User?                             @relation("AnnualCommercialPlanSubmittedBy", fields: [submitted_by_user_id], references: [id])
+  approved_by    User?                             @relation("AnnualCommercialPlanApprovedBy", fields: [approved_by_user_id], references: [id])
+  items          MonthlyPortfolioItem[]
+  learning_links AnnualCommercialPlanLearningSet[]
+
+  @@unique([tenant_key, year, scenario_version])
+  @@index([tenant_key])
+  @@index([year])
+  @@index([status])
+  @@index([owner_user_id])
+  @@map("annual_commercial_plans")
+}
+
+model MonthlyPortfolioItem {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  annual_plan_id     String                    @db.Uuid
+  month              Int
+  sort_order         Int                       @default(0)
+  revenue_line_id    String                    @db.Uuid
+  commercial_plan_id String?                   @db.Uuid
+  event_id           String?                   @db.Uuid
+  title              String
+  planned_start_date DateTime?
+  planned_end_date   DateTime?
+  currency           CommercialCurrency        @default(AED)
+  budget_allocation  Decimal                   @default(0) @db.Decimal(14, 2)
+  revenue_target     Decimal                   @default(0) @db.Decimal(14, 2)
+  priority           MonthlyPortfolioPriority  @default(medium)
+  readiness          MonthlyPortfolioReadiness @default(planned)
+  owner_user_id      String?                   @db.Uuid
+  created_by_user_id String                    @db.Uuid
+  archived_at        DateTime?
+  created_at         DateTime                  @default(now())
+  updated_at         DateTime                  @updatedAt
+
+  tenant          Tenant                @relation(fields: [tenant_key], references: [tenant_key])
+  annual_plan     AnnualCommercialPlan  @relation(fields: [annual_plan_id], references: [id], onDelete: Cascade)
+  revenue_line    CommercialRevenueLine @relation(fields: [revenue_line_id], references: [id])
+  commercial_plan CommercialPlan?       @relation(fields: [commercial_plan_id], references: [id], onDelete: SetNull)
+  event           CommercialEvent?      @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  owner           User?                 @relation("MonthlyPortfolioItemOwner", fields: [owner_user_id], references: [id])
+  created_by      User                  @relation("MonthlyPortfolioItemCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([annual_plan_id, month, sort_order])
+  @@index([revenue_line_id])
+  @@index([commercial_plan_id])
+  @@index([event_id])
+  @@index([readiness])
+  @@index([owner_user_id])
+  @@map("monthly_portfolio_items")
+}
+
+model AnnualCommercialPlanLearningSet {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenant_key      String
+  annual_plan_id  String   @db.Uuid
+  learning_set_id String   @db.Uuid
+  linked_at       DateTime @default(now())
+
+  tenant       Tenant                @relation(fields: [tenant_key], references: [tenant_key])
+  annual_plan  AnnualCommercialPlan  @relation(fields: [annual_plan_id], references: [id], onDelete: Cascade)
+  learning_set CommercialLearningSet @relation(fields: [learning_set_id], references: [id], onDelete: Cascade)
+
+  @@unique([annual_plan_id, learning_set_id])
+  @@index([tenant_key])
+  @@index([learning_set_id])
+  @@map("annual_commercial_plan_learning_sets")
 }
 
 model CommercialDisciplineRecord {
@@ -4185,9 +4321,10 @@ model CommercialEvent {
     connector_imports   ConnectorImportJob[]
     connector_field_mappings ConnectorFieldMapping[]
     ghl_lead_sync_runs  GhlLeadSyncRun[]
-    stitchi_conversations StitchiConversation[]
+  stitchi_conversations StitchiConversation[]
   commercial_plans    CommercialPlan[]
   discipline_records  CommercialDisciplineRecord[]
+  monthly_portfolio_items MonthlyPortfolioItem[]
 
   @@index([tenant_key])
   @@index([event_type])

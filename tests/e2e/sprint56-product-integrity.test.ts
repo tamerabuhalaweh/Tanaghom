@@ -26,6 +26,7 @@ describe('Sprint 56 production product integrity contracts', () => {
       '/leads',
       '/social-growth',
       '/events',
+      '/annual-commercial-plans',
     ];
 
     for (const prefix of contracts) {
@@ -40,7 +41,7 @@ describe('Sprint 56 production product integrity contracts', () => {
 
     const navigationContracts = [
       { path: '/command-center', route: 'command-center', label: 'Today' },
-      { path: '/commercial-plans', route: 'commercial-plans', label: 'Plans' },
+      { path: '/commercial-planning', route: 'commercial-planning', label: 'Plans' },
       { path: '/events', route: 'events', label: 'Event Operations' },
       { path: '/ideas', route: 'ideas', label: 'Content' },
       { path: '/approvals', route: 'approvals', label: 'Review Queue' },
@@ -65,6 +66,7 @@ describe('Sprint 56 production product integrity contracts', () => {
     }
 
     expect(app, 'Campaign Workspace route must remain available for direct and legacy links').toContain('path="campaigns"');
+    expect(app, 'Detailed commercial execution plans must remain available below annual planning').toContain('path="commercial-plans"');
     expect(layout, 'Campaign Workspace must not compete with the connected Content journey').not.toContain("path: '/campaigns'");
 
     for (const hiddenTechnicalRoute of ['agent-skills', 'runtime-infrastructure', 'smartlabs-voice', 'mcp-engine', 'safety']) {
@@ -272,7 +274,8 @@ describe('Sprint 56 production product integrity contracts', () => {
     expect(app).toContain('path="events/new"');
     expect(app).toContain('path="events/:eventId"');
     expect(layout).toContain("label: 'Event Operations'");
-    expect(layout).toContain("path: '/commercial-plans'");
+    expect(layout).toContain("path: '/commercial-planning'");
+    expect(app).toContain('path="commercial-plans"');
 
     for (const customerCue of [
       'Event Revenue Operations',
