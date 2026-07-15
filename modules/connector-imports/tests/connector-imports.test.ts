@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const prismaMocks = vi.hoisted(() => ({
+  tenant: { findUnique: vi.fn() },
   connectorImportJob: {
     findMany: vi.fn().mockResolvedValue([]),
     findFirst: vi.fn(),
@@ -10,7 +11,7 @@ const prismaMocks = vi.hoisted(() => ({
   commercialEvent: { findFirst: vi.fn() },
   integrationCredential: { findFirst: vi.fn(), findUnique: vi.fn() },
   auditRecord: { create: vi.fn() },
-  eventKpiRecord: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+  eventKpiRecord: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
 }));
 
 const integrationCredentialMocks = vi.hoisted(() => ({
@@ -67,6 +68,7 @@ function sampleDryRunResult(overrides: Record<string, unknown> = {}) {
 describe('Connector Imports', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMocks.tenant.findUnique.mockResolvedValue({ default_currency: 'AED' });
     delete process.env.ACQUISITION_READ_SYNC_ENABLED;
     delete process.env.KAJABI_READ_SYNC_ENABLED;
     prismaMocks.integrationCredential.findFirst.mockResolvedValue(null);

@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const prismaMocks = vi.hoisted(() => ({
+  tenant: { findUnique: vi.fn() },
   connectorFieldMapping: { findFirst: vi.fn() },
   commercialEvent: { findFirst: vi.fn() },
   connectorImportJob: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
   auditRecord: { create: vi.fn() },
-  eventKpiRecord: { create: vi.fn() },
+  eventKpiRecord: { create: vi.fn(), findFirst: vi.fn() },
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
@@ -67,6 +68,7 @@ function validRow(overrides: Record<string, string> = {}) {
 describe('CSV Import', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMocks.tenant.findUnique.mockResolvedValue({ default_currency: 'AED' });
   });
 
   describe('Dry run', () => {

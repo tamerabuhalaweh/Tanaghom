@@ -256,6 +256,12 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
       campaignId: text(params.get('campaignId')),
       learningSetId: text(params.get('learningSetId')),
       findingId: text(params.get('findingId')),
+      budgetAllocationId: text(params.get('budgetAllocationId')),
+      budgetLevel: text(params.get('budgetLevel')),
+      parentAllocationId: text(params.get('parentAllocationId')),
+      budgetTargetId: text(params.get('budgetTargetId')),
+      budgetRevision: text(params.get('budgetRevision')),
+      budgetCurrency: text(params.get('budgetCurrency')),
       prompt: text(params.get('prompt')),
       mode: text(params.get('mode')),
     };
@@ -330,6 +336,12 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
         ...(searchContext.campaignId ? { campaignId: searchContext.campaignId } : {}),
         ...(searchContext.learningSetId ? { learningSetId: searchContext.learningSetId } : {}),
         ...(searchContext.findingId ? { findingId: searchContext.findingId } : {}),
+        ...(searchContext.budgetAllocationId ? { budgetAllocationId: searchContext.budgetAllocationId } : {}),
+        ...(searchContext.budgetLevel ? { budgetLevel: searchContext.budgetLevel } : {}),
+        ...(searchContext.parentAllocationId ? { parentAllocationId: searchContext.parentAllocationId } : {}),
+        ...(searchContext.budgetTargetId ? { budgetTargetId: searchContext.budgetTargetId } : {}),
+        ...(searchContext.budgetRevision ? { budgetRevision: searchContext.budgetRevision } : {}),
+        ...(searchContext.budgetCurrency ? { budgetCurrency: searchContext.budgetCurrency } : {}),
       },
     };
   }

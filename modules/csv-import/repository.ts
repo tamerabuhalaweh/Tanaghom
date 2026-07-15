@@ -150,7 +150,6 @@ export async function dryRunCsv(
     where: { id: eventId, tenant_key: tenantKey },
   });
   if (!event) throw new NotFoundError('CommercialEvent', eventId);
-
   const fieldMappings = assertMappingCanImport(mapping as ConnectorFieldMappingRecord, eventId);
   const validationErrors: Array<{ row: number; field: string; error: string }> = [];
   const kpiRows: CsvDryRunResult['kpiRows'] = [];
@@ -310,6 +309,11 @@ export async function approveCsvImport(
     where: { id: eventId, tenant_key: tenantKey },
   });
   if (!event) throw new NotFoundError('CommercialEvent', eventId);
+  const tenant = await prisma.tenant.findUnique({
+    where: { tenant_key: tenantKey },
+    select: { default_currency: true },
+  });
+  if (!tenant) throw new NotFoundError('Tenant', tenantKey);
   assertMappingCanImport(mapping as ConnectorFieldMappingRecord, eventId);
 
   // Read last dry run result from connector import job
@@ -361,7 +365,21 @@ export async function approveCsvImport(
 
   // Write exactly the rows from dry-run
   const importedIds: string[] = [];
-  for (const row of validatedRows.rows) {
+  for (let index = 0; index < validatedRows.rows.length; index++) {
+    const row = validatedRows.rows[index];
+    const sourceRecordKey = `${job.id}:${index}:${row.metricDate}:${row.channel}`;
+    const existing = await prisma.eventKpiRecord.findFirst({
+      where: {
+        tenant_key: tenantKey,
+        source_name: CSV_MANUAL_CONNECTOR_ID,
+        source_record_key: sourceRecordKey,
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      importedIds.push(existing.id);
+      continue;
+    }
     const kpiRecord = await prisma.eventKpiRecord.create({
       data: {
         tenant_key: tenantKey,
@@ -381,6 +399,13 @@ export async function approveCsvImport(
         purchases: row.purchases,
         no_shows: row.noShows,
         spend: row.spend,
+        currency: tenant.default_currency,
+        verification_status: 'verified',
+        connector_import_job_id: job.id,
+        source_record_key: sourceRecordKey,
+        verified_by_user_id: userId,
+        verified_at: new Date(),
+        verification_reason: 'Approved CSV import',
         notes: row.notes,
         created_by_user_id: userId,
         updated_by_user_id: userId,

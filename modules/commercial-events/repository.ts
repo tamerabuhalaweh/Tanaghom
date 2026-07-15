@@ -1,5 +1,5 @@
 import { prisma } from '@shared/database';
-import { NotFoundError } from '@shared/errors';
+import { ConflictError, NotFoundError, ValidationError } from '@shared/errors';
 import { Prisma } from '@prisma/client';
 import type {
   CreateEventInput,
@@ -243,14 +243,29 @@ export async function createKpiRecord(
   userId: string,
   input: CreateKpiRecordInput,
 ): Promise<EventKpiRecordSummary> {
+  if (input.sourceType && input.sourceType !== 'manual') {
+    throw new ValidationError('Imported and connector KPI evidence must use an approved import workflow');
+  }
   const event = await prisma.commercialEvent.findFirst({ where: { id: eventId, tenant_key: tenantKey }, select: { id: true } });
   if (!event) throw new NotFoundError('CommercialEvent', eventId);
+  if (input.campaignId) {
+    const campaign = await prisma.contentRequest.findFirst({
+      where: { id: input.campaignId, tenant_key: tenantKey, event_id: eventId },
+      select: { id: true },
+    });
+    if (!campaign) throw new ValidationError('The selected campaign does not belong to this event');
+  }
+  const tenant = await prisma.tenant.findUnique({
+    where: { tenant_key: tenantKey },
+    select: { default_currency: true },
+  });
+  if (!tenant) throw new NotFoundError('Tenant', tenantKey);
 
   const record = await prisma.eventKpiRecord.create({
     data: {
       tenant_key: tenantKey,
       event_id: eventId,
-      source_type: input.sourceType || 'manual',
+      source_type: 'manual',
       source_name: input.sourceName || 'manual',
       metric_date: new Date(input.metricDate),
       channel: input.channel || 'manual',
@@ -265,6 +280,9 @@ export async function createKpiRecord(
       purchases: input.purchases || 0,
       no_shows: input.noShows || 0,
       spend: input.spend != null ? new Prisma.Decimal(input.spend) : new Prisma.Decimal(0),
+      currency: input.currency || tenant.default_currency,
+      campaign_id: input.campaignId ?? null,
+      verification_status: 'unverified',
       notes: input.notes || null,
       created_by_user_id: userId,
     },
@@ -283,11 +301,31 @@ export async function updateKpiRecord(
   const event = await prisma.commercialEvent.findFirst({ where: { id: eventId, tenant_key: tenantKey }, select: { id: true } });
   if (!event) throw new NotFoundError('CommercialEvent', eventId);
 
-  const existing = await prisma.eventKpiRecord.findFirst({ where: { id: kpiId, event_id: eventId, tenant_key: tenantKey }, select: { id: true } });
+  const existing = await prisma.eventKpiRecord.findFirst({ where: { id: kpiId, event_id: eventId, tenant_key: tenantKey } });
   if (!existing) throw new NotFoundError('EventKpiRecord', kpiId);
+  if (input.expectedRevision != null && input.expectedRevision !== existing.revision) {
+    throw new ConflictError('KPI evidence changed; refresh before saving again');
+  }
+  if (input.sourceType && input.sourceType !== 'manual') {
+    throw new ValidationError('Imported and connector KPI evidence cannot be edited through the manual KPI form');
+  }
+  if (input.campaignId) {
+    const campaign = await prisma.contentRequest.findFirst({
+      where: { id: input.campaignId, tenant_key: tenantKey, event_id: eventId },
+      select: { id: true },
+    });
+    if (!campaign) throw new ValidationError('The selected campaign does not belong to this event');
+  }
 
-  const data: Prisma.EventKpiRecordUpdateInput = { updated_by_user_id: userId };
-  if (input.sourceType !== undefined) data.source_type = input.sourceType;
+  const data: Prisma.EventKpiRecordUpdateInput = {
+    updated_by_user_id: userId,
+    source_type: 'manual',
+    verification_status: 'unverified',
+    verified_by_user_id: null,
+    verified_at: null,
+    verification_reason: 'Evidence changed after its previous review',
+    revision: { increment: 1 },
+  };
   if (input.sourceName !== undefined) data.source_name = input.sourceName;
   if (input.metricDate !== undefined) data.metric_date = new Date(input.metricDate);
   if (input.channel !== undefined) data.channel = input.channel;
@@ -302,6 +340,10 @@ export async function updateKpiRecord(
   if (input.purchases !== undefined) data.purchases = input.purchases;
   if (input.noShows !== undefined) data.no_shows = input.noShows;
   if (input.spend !== undefined) data.spend = new Prisma.Decimal(input.spend);
+  if (input.currency !== undefined) data.currency = input.currency;
+  if (input.campaignId !== undefined) data.campaign = input.campaignId
+    ? { connect: { id: input.campaignId } }
+    : { disconnect: true };
   if (input.notes !== undefined) data.notes = input.notes;
 
   const record = await prisma.eventKpiRecord.update({ where: { id: kpiId }, data });
@@ -384,10 +426,12 @@ export async function getEventDashboard(tenantKey: string, eventId: string): Pro
   ]);
 
   const records = kpiRecords.map(record => mapKpiRecord(record as unknown as Record<string, unknown>));
+  const verifiedRecords = records.filter(record => record.verificationStatus === 'verified');
   const totals = aggregateRecords(records);
+  const verifiedTotals = aggregateRecords(verifiedRecords);
   const capturedLeads = leads.length;
   const newLeads = Math.max(capturedLeads, totals.leads);
-  const actualSpend = totals.spend;
+  const actualSpend = verifiedTotals.spend;
   const plannedBudget = event.plannedBudget || 0;
   const meetingsNotAttended = Math.max(0, totals.meetingsBooked - totals.meetingsAttended);
   const noShows = Math.max(totals.noShows, meetingsNotAttended);
@@ -490,6 +534,14 @@ function mapKpiRecord(record: Record<string, unknown>): EventKpiRecordSummary {
     purchases: Number(record.purchases || 0),
     noShows: Number(record.no_shows || 0),
     spend: Number(record.spend || 0),
+    currency: (record.currency as EventKpiRecordSummary['currency']) || 'AED',
+    verificationStatus: (record.verification_status as EventKpiRecordSummary['verificationStatus']) || 'unverified',
+    revision: Number(record.revision || 1),
+    connectorImportJobId: record.connector_import_job_id as string | null,
+    campaignId: record.campaign_id as string | null,
+    sourceRecordKey: record.source_record_key as string | null,
+    verifiedAt: record.verified_at as Date | null,
+    verificationReason: record.verification_reason as string | null,
     notes: record.notes as string | null,
     createdByUserId: record.created_by_user_id as string,
     updatedByUserId: record.updated_by_user_id as string | null,
@@ -536,6 +588,8 @@ function buildSourceStatus(
   const manualRecords = records.filter(record => record.sourceType === 'manual').length;
   const importedRecords = records.filter(record => record.sourceType === 'imported' || record.sourceName === 'csv_manual').length;
   const connectorRecords = records.filter(record => record.sourceType === 'connector' && record.sourceName !== 'csv_manual').length;
+  const verifiedRecords = records.filter(record => record.verificationStatus === 'verified').length;
+  const unverifiedRecords = records.filter(record => record.verificationStatus === 'unverified').length;
   const primarySource = connectorRecords > 0
     ? 'connector'
     : importedRecords > 0
@@ -565,6 +619,8 @@ function buildSourceStatus(
     manualRecords,
     importedRecords,
     connectorRecords,
+    verifiedRecords,
+    unverifiedRecords,
     primarySource,
     manualFallbackActive: primarySource === 'manual' || (manualRecords > 0 && connectorRecords === 0),
     connectorFirstReady: connectorRecords > 0 || jobs.some(job => job.syncStatus === 'synced'),

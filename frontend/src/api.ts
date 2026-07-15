@@ -654,6 +654,38 @@ export const annualCommercialPlanningApi = {
     apiFetch<unknown>(`/annual-commercial-plans/${id}/items/${itemId}/archive`, { method: 'POST', body: data, token }),
 };
 
+export const commercialBudgetApi = {
+  reconciliation: (annualPlanId: string, token: string) =>
+    apiFetch<unknown>(`/commercial-budget-reconciliation/annual-plans/${annualPlanId}`, { token }),
+  createAllocation: (annualPlanId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(
+      `/commercial-budget-reconciliation/annual-plans/${annualPlanId}/allocations`,
+      { method: 'POST', body: data, token },
+    ),
+  reallocate: (annualPlanId: string, allocationId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(
+      `/commercial-budget-reconciliation/annual-plans/${annualPlanId}/allocations/${allocationId}`,
+      { method: 'PUT', body: data, token },
+    ),
+  transition: (
+    annualPlanId: string,
+    allocationId: string,
+    transition: 'approve' | 'commit' | 'archive',
+    data: unknown,
+    token: string,
+  ) =>
+    apiFetch<unknown>(
+      `/commercial-budget-reconciliation/annual-plans/${annualPlanId}/allocations/${allocationId}/${transition}`,
+      { method: 'POST', body: data, token },
+    ),
+  reviewEvidence: (kpiId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-budget-reconciliation/evidence/${kpiId}/review`, {
+      method: 'POST',
+      body: data,
+      token,
+    }),
+};
+
 export const commercialHierarchyApi = {
   plan: (id: string, token: string) => apiFetch<unknown>(`/commercial-hierarchy/plans/${id}`, { token }),
   annualPlan: (id: string, token: string) => apiFetch<unknown>(`/commercial-hierarchy/annual-plans/${id}`, { token }),

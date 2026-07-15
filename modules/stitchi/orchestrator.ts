@@ -382,6 +382,8 @@ async function deriveActionProposal(
 ): Promise<ActionProposal | FollowUpResponse | null> {
   const executiveReportProposal = deriveExecutiveReportActionProposal(content);
   if (executiveReportProposal) return executiveReportProposal;
+  const budgetProposal = deriveCommercialBudgetActionProposal(content, context, metadata);
+  if (budgetProposal) return budgetProposal;
   const hierarchyProposal = deriveCommercialHierarchyActionProposal(content, eventId, context, metadata);
   if (hierarchyProposal) return hierarchyProposal;
   const annualPlanProposal = await deriveAnnualPlanActionProposal(content, userId, context);
@@ -446,6 +448,115 @@ async function deriveActionProposal(
   }
 
   return null;
+}
+
+function deriveCommercialBudgetActionProposal(
+  content: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): CommercialDerivation {
+  const lower = content.toLowerCase();
+  if (!/(budget allocation|allocate budget|reallocate|budget exception|approve budget|commit budget|archive budget)/i.test(lower)) {
+    return null;
+  }
+  const annualPlanId = textMetadata(metadata, 'annualPlanId') || context?.annualPlanning?.currentPlan?.id;
+  const allocationId = textMetadata(metadata, 'budgetAllocationId') || extractUuidAfter(lower, 'allocation');
+  const expectedRevision = numberMetadata(metadata, 'budgetRevision');
+  const reason = cleanText(content);
+
+  if (/(approve budget|commit budget|archive budget)/i.test(lower)) {
+    const actionType = /commit budget/i.test(lower)
+      ? 'commit_commercial_budget'
+      : /archive budget/i.test(lower)
+        ? 'archive_commercial_budget'
+        : 'approve_commercial_budget';
+    const missing = [annualPlanId ? null : 'annual plan', allocationId ? null : 'budget allocation', expectedRevision ? null : 'current allocation revision'].filter(Boolean);
+    if (missing.length) {
+      return {
+        kind: 'follow_up',
+        assistantText: `Open the budget allocation in Annual Planning first so I can safely ${actionType.split('_')[0]} it with the current revision. Missing: ${missing.join(', ')}. No budget was changed.`,
+      };
+    }
+    return {
+      actionType,
+      inputPayload: {
+        annualPlanId,
+        allocationId,
+        decision: { expectedRevision, reason },
+      },
+      previewPayload: { annualPlanId, allocationId, expectedRevision, approvalRequired: true },
+      riskLevel: 'high',
+      reason: `${actionType.split('_')[0]} the selected governed budget allocation`,
+    };
+  }
+
+  const amount = extractMoneyValue(content, ['allocation amount', 'allocate', 'reallocate', 'amount', 'budget']);
+  if (/reallocate/i.test(lower)) {
+    const missing = [annualPlanId ? null : 'annual plan', allocationId ? null : 'budget allocation', expectedRevision ? null : 'current allocation revision', amount == null ? 'new amount' : null].filter(Boolean);
+    if (missing.length) {
+      return {
+        kind: 'follow_up',
+        assistantText: `I can prepare the reallocation after you provide the ${missing.join(', ')}. Open the allocation in Annual Planning and state the new amount. No budget was changed.`,
+      };
+    }
+    const allowOverAllocation = /exception|over[- ]allocat/i.test(lower);
+    return {
+      actionType: 'reallocate_commercial_budget',
+      inputPayload: {
+        annualPlanId,
+        allocationId,
+        change: {
+          expectedRevision,
+          amount,
+          reason,
+          allowOverAllocation,
+          ...(allowOverAllocation ? { exceptionReason: reason } : {}),
+        },
+      },
+      previewPayload: { annualPlanId, allocationId, amount, allowOverAllocation, approvalRequired: true },
+      riskLevel: 'high',
+      reason: 'reallocate the selected governed budget with permanent audit evidence',
+    };
+  }
+
+  const level = textMetadata(metadata, 'budgetLevel');
+  const targetId = textMetadata(metadata, 'budgetTargetId');
+  const parentAllocationId = textMetadata(metadata, 'parentAllocationId') || null;
+  const currency = textMetadata(metadata, 'budgetCurrency') || context?.commercialCenter.defaultCurrency || 'AED';
+  const missing = [annualPlanId ? null : 'annual plan', level ? null : 'allocation level', targetId ? null : 'target work item', amount == null ? 'amount' : null].filter(Boolean);
+  if (missing.length) {
+    return {
+      kind: 'follow_up',
+      assistantText: `I can allocate this budget after you select the work item in Annual Planning and provide the ${missing.join(', ')}. No budget was changed.`,
+    };
+  }
+  const targetKey = level === 'monthly_item'
+    ? 'monthlyPortfolioItemId'
+    : level === 'commercial_plan'
+      ? 'commercialPlanId'
+      : level === 'event'
+        ? 'eventId'
+        : 'campaignId';
+  const allowOverAllocation = /exception|over[- ]allocat/i.test(lower);
+  return {
+    actionType: 'create_commercial_budget_allocation',
+    inputPayload: {
+      annualPlanId,
+      allocation: {
+        level,
+        parentAllocationId,
+        [targetKey]: targetId,
+        currency,
+        amount,
+        reason,
+        allowOverAllocation,
+        ...(allowOverAllocation ? { exceptionReason: reason } : {}),
+      },
+    },
+    previewPayload: { annualPlanId, level, targetId, currency, amount, allowOverAllocation, approvalRequired: true },
+    riskLevel: 'high',
+    reason: 'allocate budget to the selected commercial work item',
+  };
 }
 
 function deriveCommercialHierarchyActionProposal(
@@ -1303,6 +1414,12 @@ function disciplineLabel(value: DisciplineId): string {
 function textMetadata(metadata: Record<string, unknown> | undefined, key: string): string {
   const value = metadata?.[key];
   return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function numberMetadata(metadata: Record<string, unknown> | undefined, key: string): number | null {
+  const value = metadata?.[key];
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 type ResolvedRevenueLine = {

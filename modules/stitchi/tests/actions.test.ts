@@ -32,6 +32,12 @@ const commercialHierarchyMocks = vi.hoisted(() => ({
   linkCampaign: vi.fn(),
   linkLearning: vi.fn(),
 }));
+const commercialBudgetMocks = vi.hoisted(() => ({
+  createBudgetAllocation: vi.fn(),
+  reallocateBudget: vi.fn(),
+  transitionBudgetAllocation: vi.fn(),
+  verifyKpiEvidence: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
@@ -42,6 +48,7 @@ vi.mock('@modules/commercial-disciplines/service', () => commercialDisciplineMoc
 vi.mock('@modules/commercial-executive-reporting/service', () => commercialExecutiveMocks);
 vi.mock('@modules/commercial-annual-planning/service', () => annualPlanningMocks);
 vi.mock('@modules/commercial-plan-hierarchy/service', () => commercialHierarchyMocks);
+vi.mock('@modules/commercial-budget-reconciliation/service', () => commercialBudgetMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -69,6 +76,17 @@ describe('Stitchi action registry', () => {
     commercialHierarchyMocks.linkEvent.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialHierarchyMocks.linkCampaign.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialHierarchyMocks.linkLearning.mockResolvedValue({ id: 'commercial-plan-1' });
+    commercialBudgetMocks.createBudgetAllocation.mockResolvedValue({
+      changedAllocationId: '00000000-0000-0000-0000-000000000902',
+      allocations: [],
+    });
+    commercialBudgetMocks.reallocateBudget.mockResolvedValue({ allocations: [] });
+    commercialBudgetMocks.transitionBudgetAllocation.mockResolvedValue({ allocations: [] });
+    commercialBudgetMocks.verifyKpiEvidence.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000901',
+      verificationStatus: 'verified',
+      revision: 2,
+    });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -95,7 +113,64 @@ describe('Stitchi action registry', () => {
       'link_commercial_plan_event',
       'link_commercial_plan_campaign',
       'link_commercial_plan_learning',
+      'create_commercial_budget_allocation',
+      'reallocate_commercial_budget',
+      'approve_commercial_budget',
+      'commit_commercial_budget',
+      'archive_commercial_budget',
+      'review_commercial_spend_evidence',
     ]);
+  });
+
+  it('routes verified spend review through the governed budget service', async () => {
+    const result = await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'review_commercial_spend_evidence',
+      inputPayload: {
+        kpiId: '00000000-0000-0000-0000-000000000901',
+        review: {
+          expectedRevision: 1,
+          decision: 'verified',
+          reason: 'Matched the approved connector import evidence.',
+        },
+      },
+    });
+
+    expect(commercialBudgetMocks.verifyKpiEvidence).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000901',
+      expect.objectContaining({ decision: 'verified', expectedRevision: 1 }),
+    );
+    expect(result.objectType).toBe('event_kpi_record');
+  });
+
+  it('returns the exact allocation created by a governed Stitchi budget action', async () => {
+    const result = await executeStitchiAction({
+      role: 'department_head',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'create_commercial_budget_allocation',
+      inputPayload: {
+        annualPlanId: '00000000-0000-0000-0000-000000000900',
+        allocation: {
+          level: 'monthly_item',
+          monthlyPortfolioItemId: '00000000-0000-0000-0000-000000000903',
+          currency: 'AED',
+          amount: 25000,
+          reason: 'Fund the approved January course launch.',
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      objectType: 'commercial_budget_allocation',
+      objectId: '00000000-0000-0000-0000-000000000902',
+    });
+    expect(commercialBudgetMocks.createBudgetAllocation).toHaveBeenCalled();
   });
 
   it('executes create_event_problem through the event problem service', async () => {

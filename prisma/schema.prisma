@@ -137,6 +137,8 @@ model Tenant {
   commercial_plan_event_links               CommercialPlanEventLink[]
   commercial_plan_campaign_links            CommercialPlanCampaignLink[]
   commercial_plan_learning_influences       CommercialPlanLearningInfluence[]
+  commercial_budget_allocations             CommercialBudgetAllocation[]
+  commercial_budget_ledger_entries          CommercialBudgetLedgerEntry[]
   commercial_assessment_signals CommercialAssessmentSignal[]
   commercial_historical_assessment_runs CommercialHistoricalAssessmentRun[]
   commercial_historical_assessment_evidence CommercialHistoricalAssessmentEvidence[]
@@ -803,6 +805,8 @@ model ContentRequest {
   content_items ContentItem[]
   commercial_workflow_runs CommercialWorkflowRun[]
   commercial_plan_links    CommercialPlanCampaignLink[]
+  budget_allocations       CommercialBudgetAllocation[]
+  kpi_records              EventKpiRecord[]             @relation("CampaignKpiRecords")
 
   @@index([tenant_key])
   @@index([event_id])
@@ -3739,6 +3743,35 @@ enum CommercialHierarchyLinkStatus {
   superseded
 }
 
+enum CommercialBudgetAllocationLevel {
+  monthly_item
+  commercial_plan
+  event
+  campaign
+}
+
+enum CommercialBudgetAllocationStatus {
+  planned
+  approved
+  committed
+  archived
+}
+
+enum CommercialBudgetLedgerEntryType {
+  allocated
+  reallocated
+  approved
+  committed
+  archived
+  exception_approved
+}
+
+enum EventKpiVerificationStatus {
+  unverified
+  verified
+  rejected
+}
+
 enum CommercialAssessmentSeverity {
   info
   watch
@@ -3943,6 +3976,7 @@ model CommercialPlan {
   event_links             CommercialPlanEventLink[]
   campaign_links          CommercialPlanCampaignLink[]
   learning_influences     CommercialPlanLearningInfluence[]
+  budget_allocations      CommercialBudgetAllocation[]
 
   @@index([tenant_key])
   @@index([revenue_line_id])
@@ -4139,6 +4173,7 @@ model AnnualCommercialPlan {
   items          MonthlyPortfolioItem[]
   learning_links AnnualCommercialPlanLearningSet[]
   execution_plan_assignments CommercialPlanHierarchyAssignment[]
+  budget_allocations         CommercialBudgetAllocation[]
 
   @@unique([tenant_key, year, scenario_version])
   @@index([tenant_key])
@@ -4179,6 +4214,7 @@ model MonthlyPortfolioItem {
   owner           User?                 @relation("MonthlyPortfolioItemOwner", fields: [owner_user_id], references: [id])
   created_by      User                  @relation("MonthlyPortfolioItemCreatedBy", fields: [created_by_user_id], references: [id])
   execution_plan_assignments CommercialPlanHierarchyAssignment[]
+  budget_allocations         CommercialBudgetAllocation[]
 
   @@index([tenant_key])
   @@index([annual_plan_id, month, sort_order])
@@ -4314,6 +4350,81 @@ model CommercialPlanLearningInfluence {
   @@index([learning_set_id])
   @@index([finding_id])
   @@map("commercial_plan_learning_influences")
+}
+
+model CommercialBudgetAllocation {
+  id                               String                           @id @default(uuid()) @db.Uuid
+  tenant_key                       String
+  annual_plan_id                   String                           @db.Uuid
+  parent_allocation_id             String?                          @db.Uuid
+  level                            CommercialBudgetAllocationLevel
+  monthly_portfolio_item_id        String?                          @db.Uuid
+  commercial_plan_id               String?                          @db.Uuid
+  event_id                         String?                          @db.Uuid
+  campaign_id                      String?                          @db.Uuid
+  currency                         CommercialCurrency               @default(AED)
+  amount                           Decimal                          @db.Decimal(14, 2)
+  status                           CommercialBudgetAllocationStatus @default(planned)
+  revision                         Int                              @default(1)
+  reason                           String                           @db.Text
+  over_allocation_exception_reason String?                          @db.Text
+  exception_approved_by_user_id    String?                          @db.Uuid
+  exception_approved_at            DateTime?
+  created_by_user_id               String                           @db.Uuid
+  approved_by_user_id              String?                          @db.Uuid
+  approved_at                      DateTime?
+  committed_by_user_id             String?                          @db.Uuid
+  committed_at                     DateTime?
+  archived_by_user_id              String?                          @db.Uuid
+  archived_at                      DateTime?
+  created_at                       DateTime                         @default(now())
+  updated_at                       DateTime                         @updatedAt
+
+  tenant                 Tenant                        @relation(fields: [tenant_key], references: [tenant_key])
+  annual_plan            AnnualCommercialPlan          @relation(fields: [annual_plan_id], references: [id], onDelete: Restrict)
+  parent_allocation      CommercialBudgetAllocation?   @relation("CommercialBudgetAllocationTree", fields: [parent_allocation_id], references: [id], onDelete: Restrict)
+  child_allocations      CommercialBudgetAllocation[]  @relation("CommercialBudgetAllocationTree")
+  monthly_portfolio_item MonthlyPortfolioItem?         @relation(fields: [monthly_portfolio_item_id], references: [id], onDelete: Restrict)
+  commercial_plan        CommercialPlan?               @relation(fields: [commercial_plan_id], references: [id], onDelete: Restrict)
+  event                  CommercialEvent?              @relation(fields: [event_id], references: [id], onDelete: Restrict)
+  campaign               ContentRequest?               @relation(fields: [campaign_id], references: [id], onDelete: Restrict)
+  ledger_entries         CommercialBudgetLedgerEntry[]
+
+  @@index([tenant_key])
+  @@index([annual_plan_id])
+  @@index([parent_allocation_id])
+  @@index([monthly_portfolio_item_id])
+  @@index([commercial_plan_id])
+  @@index([event_id])
+  @@index([campaign_id])
+  @@index([currency])
+  @@index([status])
+  @@map("commercial_budget_allocations")
+}
+
+model CommercialBudgetLedgerEntry {
+  id            String                            @id @default(uuid()) @db.Uuid
+  tenant_key    String
+  allocation_id String                            @db.Uuid
+  entry_type    CommercialBudgetLedgerEntryType
+  currency      CommercialCurrency
+  amount_before Decimal?                          @db.Decimal(14, 2)
+  amount_after  Decimal?                          @db.Decimal(14, 2)
+  status_before CommercialBudgetAllocationStatus?
+  status_after  CommercialBudgetAllocationStatus?
+  reason        String                            @db.Text
+  actor_user_id String                            @db.Uuid
+  metadata      Json?
+  created_at    DateTime                          @default(now())
+
+  tenant     Tenant                     @relation(fields: [tenant_key], references: [tenant_key])
+  allocation CommercialBudgetAllocation @relation(fields: [allocation_id], references: [id], onDelete: Restrict)
+
+  @@index([tenant_key])
+  @@index([allocation_id])
+  @@index([entry_type])
+  @@index([created_at])
+  @@map("commercial_budget_ledger_entries")
 }
 
 model CommercialDisciplineRecord {
@@ -4467,6 +4578,7 @@ model CommercialEvent {
   discipline_records  CommercialDisciplineRecord[]
   monthly_portfolio_items MonthlyPortfolioItem[]
   commercial_plan_links    CommercialPlanEventLink[]
+  budget_allocations       CommercialBudgetAllocation[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -4495,6 +4607,15 @@ model EventKpiRecord {
   purchases          Int                @default(0)
   no_shows           Int                @default(0)
   spend              Decimal            @default(0) @db.Decimal(12, 2)
+  currency                CommercialCurrency         @default(AED)
+  verification_status     EventKpiVerificationStatus @default(unverified)
+  revision                Int                        @default(1)
+  connector_import_job_id String?                    @db.Uuid
+  campaign_id             String?                    @db.Uuid
+  source_record_key       String?
+  verified_by_user_id     String?                    @db.Uuid
+  verified_at             DateTime?
+  verification_reason     String?                    @db.Text
   notes              String?            @db.Text
   created_by_user_id String             @db.Uuid
   updated_by_user_id String?            @db.Uuid
@@ -4503,12 +4624,18 @@ model EventKpiRecord {
 
   tenant             Tenant             @relation(fields: [tenant_key], references: [tenant_key])
   event              CommercialEvent    @relation(fields: [event_id], references: [id], onDelete: Cascade)
+  connector_import_job ConnectorImportJob? @relation(fields: [connector_import_job_id], references: [id], onDelete: SetNull)
+  campaign             ContentRequest?     @relation("CampaignKpiRecords", fields: [campaign_id], references: [id], onDelete: SetNull)
 
+  @@unique([tenant_key, source_name, source_record_key])
   @@index([tenant_key])
   @@index([event_id])
   @@index([metric_date])
   @@index([channel])
   @@index([source_type])
+  @@index([verification_status])
+  @@index([connector_import_job_id])
+  @@index([campaign_id])
   @@map("event_kpi_records")
 }
 
@@ -4829,6 +4956,7 @@ model ConnectorImportJob {
   field_mapping ConnectorFieldMapping? @relation(fields: [mapping_id], references: [id])
   created_by   User            @relation("ConnectorImportCreatedBy", fields: [created_by_user_id], references: [id])
   approved_by  User?           @relation("ConnectorImportApprovedBy", fields: [approved_by_user_id], references: [id])
+  kpi_records   EventKpiRecord[]
 
   @@index([tenant_key])
   @@index([event_id])
