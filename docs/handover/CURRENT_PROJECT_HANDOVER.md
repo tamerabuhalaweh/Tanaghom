@@ -1,6 +1,6 @@
 # Tanaghum Project Handover For GPT 5.6 Sol
 
-Last updated: 2026-07-09
+Last updated: 2026-07-15
 
 Repository: `tamerabuhalaweh/Tanaghom`
 
@@ -8,13 +8,13 @@ Local path: `C:\Users\tamer\Desktop\New\tanaghum-platform`
 
 Current branch: `main`
 
-Current head at handover: `4defe17 feat: add tenant privacy governance`
+Current head at handover: `e2ce0fa SRD-R14B: Annual Commercial Plan and Monthly Portfolio Calendar (#189)`
 
 Primary active deployment: Hybrid
 
 Hybrid URL: `https://tanaghum-hybrid.163-123-180-104.sslip.io`
 
-Current production-operations closure work is tracked by GitHub issue `#171` and branch `feature/hybrid-production-ops-171`. The source-of-truth acceptance contract is `docs/operations/HYBRID_PRODUCTION_OPERATIONS_ACCEPTANCE.md`.
+Current product work is the SRD-R14 historical-learning and hierarchical-planning wave tracked by epic `#180`. Annual planning issue `#182` is complete; the next recommended implementation issue is `#183`. Production-operations closure remains tracked by `#171`.
 
 AB reference URL: `https://tanaghum-ab.163-123-180-104.sslip.io`
 
@@ -77,11 +77,11 @@ git branch --show-current
 # main
 
 git log -5 --oneline
-# 4defe17 feat: add tenant privacy governance
-# 6bde85b test: respect hybrid live rate limit
-# 3490af1 feat: add executive report workflow builder
-# a25e527 fix: align commercial roles and approvals policy
-# 9f24d08 feat: configure commercial revenue lines and currency
+# e2ce0fa SRD-R14B: Annual Commercial Plan and Monthly Portfolio Calendar (#189)
+# d0999a2 Wave 1: Historical Assessment and AED Planning Default (#188)
+# 4fe8b9c Fix Stitchi provider failure recovery (#178)
+# 814524e QA-A1: add multi-role Hybrid acceptance agents (#176)
+# 7d130e3 P1: Split Hybrid routes and enforce quality budgets (#174)
 ```
 
 `tmp/` may contain local screenshots from live QA. Do not commit `tmp/` unless explicitly needed.
@@ -94,55 +94,38 @@ origin https://github.com/tamerabuhalaweh/Tanaghom.git
 
 ## 5. Last Completed Job
 
-Last job completed: `#143 / SRD-R13: Data Retention, Export/Delete, And UAE PDPL Legal Review`
+Last job completed: `#182 / SRD-R14B: Annual Commercial Plan And Monthly Portfolio Calendar`
 
-Commit: `4defe17 feat: add tenant privacy governance`
+Commit: `e2ce0fa SRD-R14B: Annual Commercial Plan and Monthly Portfolio Calendar (#189)`
 
 Deployment: Hybrid VPS deployed successfully.
 
-Migration applied on VPS:
+Latest migration applied on VPS:
 
 ```text
-20260709_tenant_privacy_governance
+20260715_z_annual_commercial_portfolio
 ```
 
 What was added:
 
-- Tenant privacy governance persistence:
-  - `Tenant.privacy_policy`
-  - `Tenant.privacy_review_status`
-  - `Tenant.privacy_review_updated_at`
-  - `Tenant.privacy_review_updated_by_user_id`
-- Admin API:
-  - `GET /api/admin/tenant/privacy-governance`
-  - `PUT /api/admin/tenant/privacy-governance`
-- Tenant Admin UI section:
-  - `Privacy, Retention & Export/Delete Policy`
-- UAE PDPL/customer explanation document:
-  - `docs/product/UAE_PDPL_PRIVACY_REVIEW_GUIDE.md`
-- Tenant export now includes privacy review state and policy.
-- Tenant deletion readiness is blocked until privacy/legal review is approved.
-- Live social, CRM, voice, and AI-agent workflows remain gated until privacy/legal review is ready.
+- Tenant-scoped annual plan, monthly portfolio item, and approved-learning link models.
+- Governed annual lifecycle: draft, pending approval, approved/rejected, active, closed, archived.
+- Revision-conflict handling, RBAC, tenant-link validation, and persistent audit records.
+- Hybrid `/commercial-planning` workspace with year/version selection, annual AED targets, allocations, unallocated budget, twelve months, and child-plan/Event Operations drill-down.
+- Stitchi annual-plan preparation using a configured real AI provider, deterministic backend validation, and human approval before save.
+- Customer navigation now separates Assessment, Annual Plan, Execution Plans, Discipline Workspaces, and Event Operations.
 
 Verification:
 
-- `npm run lint` passed.
-- `npm --prefix frontend run lint` passed.
-- `npm run typecheck` passed.
-- `npm test` passed: 134 files, 1,925 tests.
-- `npm --prefix frontend run build` passed with existing non-blocking bundle-size warning.
-- GitHub CI on `main` passed.
-- Live health: `/api/health` returned healthy app/database/Redis.
-- Live API smoke:
-  - admin can access `/api/admin/tenant/privacy-governance`
-  - specialist gets `403`
-  - `rawSecretsReturned: false`
-- Live browser QA:
-  - admin login worked
-  - `/tenant-admin` rendered the new privacy section
-  - no browser console errors or failed requests
+- Full backend suite passed: 153 files, 2,036 tests.
+- Focused annual-planning and Stitchi suite passed: 60 tests.
+- Backend/frontend lint, typecheck, builds, and frontend bundle budget passed.
+- Fresh PostgreSQL rehearsal applied all 37 migrations in order.
+- GitHub CI passed backend, frontend, frontend E2E, production acceptance, Docker, security, static analysis, production operations, and CodeQL.
+- Live CCO browser QA passed desktop and mobile with no API failures, console errors, or horizontal overflow.
+- Pre-deploy PostgreSQL backup, checksum, and manifest were created.
 
-GitHub issue #143 remains open because customer/legal decisions are still pending.
+GitHub issue #182 is closed with completion evidence. The live tenant intentionally has no annual plan or approved learning yet; no customer data was fabricated during QA.
 
 ## 6. Product Context
 
@@ -196,10 +179,15 @@ gh issue list --repo tamerabuhalaweh/Tanaghom --state open --limit 100
 
 ## 8. Current Open GitHub Issues
 
-Snapshot from 2026-07-09. Always refresh before work.
+Snapshot from 2026-07-15. Always refresh before work.
 
 | Issue | Title | Current truth |
 | --- | --- | --- |
+| #187 | SRD-R14G: Role-Based E2E, Browser, And Live Hybrid Acceptance | Open. Expand annual-planning and historical-assessment acceptance across approved product roles. |
+| #186 | SRD-R14F: Stitchi Historical Assessment And Annual Planning Operator | Partially delivered by #181/#182. Keep open until the full multi-turn annual operator definition is proven. |
+| #184 | SRD-R14D: Hierarchical Budget Allocation, Actual Spend, And Reconciliation | Open P0. Annual targets/allocations exist; actual-spend ingestion and hierarchy reconciliation remain. |
+| #183 | SRD-R14C: Annual-To-Execution Planning Hierarchy And Traceability | Recommended next sprint. Strengthen annual -> initiative -> execution plan/event lineage and progress rollups. |
+| #180 | SRD-R14 Epic: Historical Assessment, AI Learning, And Hierarchical Commercial Planning | Open parent epic. #181, #182, and #185 are complete; #183/#184/#186/#187 remain. |
 | #143 | SRD-R13: Data Retention, Export/Delete, And UAE PDPL Legal Review | Backend/UI implemented and deployed. Keep open until customer/legal decisions are confirmed. |
 | #142 | SRD-R12: Forms Intake Strategy - Tanaghum Forms Builder Versus Zapier/GHL | Open. Needs product decision and likely implementation. |
 | #141 | SRD-R11: Executive Reporting Workflow Builder And Daily Delivery Policy | Implemented foundation, but keep open until customer confirms KPI thresholds, recipients, cadence, and delivery policy. |
@@ -232,16 +220,16 @@ Important: some closed issues are foundation-complete, not necessarily "every SR
 
 ## 10. Best Next Move
 
-The best next non-credential sprint is likely:
+The best next sprint is:
 
-1. `#135 / SRD-R8: Customer-Facing Social And Voice AI Agent Safety Layer`
-   - Reason: P0, customer-visible, can harden safety and product behavior without waiting for external credentials.
-   - Goal: define and enforce safe behavior for social/voice AI agent workflows, especially around consent, approval, previews, and blocked live execution.
+1. `#183 / SRD-R14C: Annual-To-Execution Planning Hierarchy And Traceability`
+   - Reason: #182 now provides the annual parent and monthly portfolio. The next gap is durable lineage and progress rollup from annual initiative to detailed commercial plan and Event Operations.
+   - Goal: make ownership, status, budget/revenue lineage, execution progress, and drill-down traceable without duplicating event execution data.
 
-Alternative if product leadership wants forms next:
+Then:
 
-2. `#142 / SRD-R12: Forms Intake Strategy`
-   - Reason: customer needs form intake clarity, but it needs product decision around Tanaghum native forms versus Zapier/GHL/Formaloo.
+2. `#184 / SRD-R14D: Hierarchical Budget Allocation, Actual Spend, And Reconciliation`
+   - Reason: annual planned allocations exist, but actual spend and variance must be reconciled from customer-owned source systems before executive reporting is complete.
 
 Do not start `#128` live GHL acceptance until customer-owned GHL credentials and mapping data are available.
 
