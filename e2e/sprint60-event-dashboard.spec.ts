@@ -403,7 +403,7 @@ test('Sprint 60 event strategy and KPI dashboard workflow is wired', async ({ pa
 
   await expect(page.getByText(/Event KPI update saved/i)).toBeVisible();
   await expect(page.getByText(/80 forms completed/i)).toBeVisible();
-  await expect(page.getByText(/\$2,800 actual spend/i)).toBeVisible();
+  await expect(page.getByText(/AED\s*2,800 actual spend/i)).toBeVisible();
   await expect(page.getByRole('heading', { name: /^Channel Performance$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^KPI Evidence$/i })).toBeVisible();
   const recommendationHeading = page.getByRole('heading', { name: /^What To Improve Next$/i });

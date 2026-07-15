@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { calculateNextWorkingRunAt, createReportPreview, createSchedule, getExecutiveDashboard } from '../repository';
 
 const prismaMocks = vi.hoisted(() => ({
+  tenant: { findUnique: vi.fn() },
   commercialRevenueLine: { findMany: vi.fn() },
   commercialPlan: { findMany: vi.fn() },
   commercialEvent: { findMany: vi.fn() },
@@ -21,6 +22,7 @@ vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
 const now = new Date('2026-07-08T12:00:00.000Z');
 
 function seedHappyPath() {
+  prismaMocks.tenant.findUnique.mockResolvedValue({ default_currency: 'AED' });
   prismaMocks.commercialRevenueLine.findMany.mockResolvedValue([
     { id: 'line-1', revenue_line_type: 'online_course', name: 'Online Courses', status: 'active' },
   ]);
@@ -31,6 +33,7 @@ function seedHappyPath() {
       linked_event_id: 'event-1',
       budget_target: 5000,
       revenue_target: 30000,
+      currency: 'AED',
       status: 'active',
       revenue_line: { id: 'line-1', revenue_line_type: 'online_course', name: 'Online Courses' },
     },
@@ -136,6 +139,7 @@ describe('Commercial executive reporting repository', () => {
       }),
     }));
     expect(dashboard.metrics).toMatchObject({
+      currency: 'AED',
       plannedRevenueTarget: 30000,
       plannedBudget: 5000,
       knownSpend: 3500,
@@ -152,6 +156,10 @@ describe('Commercial executive reporting repository', () => {
     expect(dashboard.channelPerformance).toHaveLength(1);
     expect(dashboard.channelPerformance[0]).toMatchObject({ channel: 'meta', spend: 3500, leads: 60, purchases: 8 });
     expect(dashboard.revenueLines[0]).toMatchObject({ type: 'online_course', knownRevenue: 12000, knownSpend: 3500 });
+    expect(dashboard).toMatchObject({ defaultCurrency: 'AED', currency: 'AED', ambiguousCurrencyRecordCount: 0 });
+    expect(dashboard.currencyBreakdown).toEqual([
+      { currency: 'AED', plannedRevenueTarget: 30000, plannedBudget: 5000, knownRevenue: 12000, knownSpend: 3500, planCount: 1 },
+    ]);
     expect(dashboard.confidence).toBe('high');
     expect(dashboard.missingSources).not.toContain('No KPI records from manual import or connectors are available.');
     expect(dashboard.alerts.some(alert => alert.code === 'high_no_show_rate')).toBe(true);
@@ -179,6 +187,42 @@ describe('Commercial executive reporting repository', () => {
       'No lead or purchase records are available from CRM or lead capture.',
     ]));
     expect(dashboard.alerts[0]).toMatchObject({ code: 'missing_sources', severity: 'watch' });
+  });
+
+  it('keeps AED and USD executive amounts separated without a converted combined total', async () => {
+    prismaMocks.commercialPlan.findMany.mockResolvedValue([
+      {
+        id: 'plan-aed', revenue_line_id: 'line-1', linked_event_id: 'event-1', budget_target: 5000,
+        revenue_target: 30000, currency: 'AED', status: 'active',
+        revenue_line: { id: 'line-1', revenue_line_type: 'online_course', name: 'Online Courses' },
+      },
+      {
+        id: 'plan-usd', revenue_line_id: 'line-1', linked_event_id: 'event-2', budget_target: 1000,
+        revenue_target: 7000, currency: 'USD', status: 'active',
+        revenue_line: { id: 'line-1', revenue_line_type: 'online_course', name: 'Online Courses' },
+      },
+    ]);
+    prismaMocks.commercialEvent.findMany.mockResolvedValue([
+      { id: 'event-1', name: 'AED Course Launch', planned_budget: 5000, revenue_target: 30000, event_date: now },
+      { id: 'event-2', name: 'USD Course Launch', planned_budget: 1000, revenue_target: 7000, event_date: now },
+    ]);
+    prismaMocks.eventKpiRecord.findMany.mockResolvedValue([
+      { event_id: 'event-1', source_type: 'connector', metric_date: now, channel: 'meta', reach: 100, impressions: 200, interactions: 20, clicks: 10, form_completions: 5, leads: 4, meetings_booked: 1, meetings_attended: 1, purchases: 1, no_shows: 0, spend: 600 },
+      { event_id: 'event-2', source_type: 'connector', metric_date: now, channel: 'meta', reach: 80, impressions: 160, interactions: 16, clicks: 8, form_completions: 4, leads: 3, meetings_booked: 1, meetings_attended: 1, purchases: 1, no_shows: 0, spend: 200 },
+    ]);
+    prismaMocks.leadCaptureRecord.findMany.mockResolvedValue([
+      { event_id: 'event-1', lead_status: 'purchased', purchase_amount: 3000, meeting_date: null, meeting_outcome: null, channel_attribution: 'meta', external_last_synced_at: now, created_at: now },
+      { event_id: 'event-2', lead_status: 'purchased', purchase_amount: 900, meeting_date: null, meeting_outcome: null, channel_attribution: 'meta', external_last_synced_at: now, created_at: now },
+    ]);
+
+    const dashboard = await getExecutiveDashboard('tenant-a', { revenueLineType: 'online_course' });
+
+    expect(dashboard.currency).toBe('mixed');
+    expect(dashboard.metrics).toMatchObject({ currency: 'mixed', plannedRevenueTarget: 0, knownRevenue: 0, plannedBudget: 0, knownSpend: 0 });
+    expect(dashboard.currencyBreakdown).toEqual([
+      { currency: 'AED', plannedRevenueTarget: 30000, plannedBudget: 5000, knownRevenue: 3000, knownSpend: 600, planCount: 1 },
+      { currency: 'USD', plannedRevenueTarget: 7000, plannedBudget: 1000, knownRevenue: 900, knownSpend: 200, planCount: 1 },
+    ]);
   });
 
   it('persists report previews with metrics, alerts, missing sources and no external send', async () => {

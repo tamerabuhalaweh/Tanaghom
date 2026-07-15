@@ -9,6 +9,8 @@ import type {
   ExecutiveDashboardQueryInput,
   ExecutiveReportDeliveryChannel,
   ExecutiveReportDeliveryReadiness,
+  ExecutiveCurrency,
+  ExecutiveCurrencySummary,
   ExecutiveMetricSummary,
   ExecutiveReportCadence,
   ExecutiveReportLanguage,
@@ -160,6 +162,7 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
   };
 
   const [
+    tenant,
     revenueLines,
     plans,
     rawEvents,
@@ -171,6 +174,10 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
     recentReports,
     schedules,
   ] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { tenant_key: tenantKey },
+      select: { default_currency: true },
+    }),
     prisma.commercialRevenueLine.findMany({
       where: {
         tenant_key: tenantKey,
@@ -196,6 +203,7 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
         linked_event_id: true,
         budget_target: true,
         revenue_target: true,
+        currency: true,
         status: true,
         revenue_line: { select: { id: true, revenue_line_type: true, name: true } },
       },
@@ -318,11 +326,13 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
   const filteredLeads = leads.filter(row => !row.event_id || visibleEventIds.has(row.event_id));
   const filteredConnectorJobs = connectorJobs.filter(row => !row.event_id || visibleEventIds.has(row.event_id));
   const eventIdsWithPlans = new Set(plans.map(plan => plan.linked_event_id).filter((id): id is string => Boolean(id)));
+  const defaultCurrency = normalizeCurrency(tenant?.default_currency);
+  const currencyContext = buildCurrencyContext(defaultCurrency, plans, events, filteredKpis, filteredLeads);
 
-  const metrics = summarizeMetrics(plans, events, filteredKpis, filteredLeads);
-  const revenueLineRows = summarizeRevenueLines(revenueLines, plans, filteredKpis, filteredLeads);
-  const channelPerformance = summarizeChannels(filteredKpis, filteredLeads);
-  const sourceBreakdown = summarizeSourceTypes(filteredKpis);
+  const metrics = summarizeMetrics(plans, events, filteredKpis, filteredLeads, currencyContext);
+  const revenueLineRows = summarizeRevenueLines(revenueLines, plans, filteredKpis, filteredLeads, defaultCurrency);
+  const channelPerformance = summarizeChannels(filteredKpis, filteredLeads, currencyContext.eventCurrency, defaultCurrency);
+  const sourceBreakdown = summarizeSourceTypes(filteredKpis, currencyContext.eventCurrency, defaultCurrency);
   const disciplineSummary = summarizeDisciplines(disciplineRecords);
   const connectorReadiness = summarizeConnectorReadiness(filteredConnectorJobs);
   const missingSources = getMissingSources({
@@ -334,6 +344,9 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
     schedules: schedules.length,
     customerThresholdsConfigured: false,
   });
+  if (currencyContext.ambiguousRecordCount > 0) {
+    missingSources.push(`${currencyContext.ambiguousRecordCount} monetary record(s) could not be assigned to one currency because their event is linked to plans in multiple currencies.`);
+  }
   const alerts = buildAlerts({
     metrics,
     missingSources,
@@ -351,6 +364,10 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
   const workflow = buildExecutiveReportWorkflowReadiness(scheduleSummaries, defaultDeliveryReadiness);
 
   const dashboard: ExecutiveDashboard = {
+    defaultCurrency,
+    currency: currencyContext.currency,
+    currencyBreakdown: currencyContext.breakdown,
+    ambiguousCurrencyRecordCount: currencyContext.ambiguousRecordCount,
     generatedAt: new Date(),
     period: {
       startDate: filters.startDate || null,
@@ -381,6 +398,108 @@ async function buildSnapshot(tenantKey: string, filters: ExecutiveDashboardQuery
   return { dashboard };
 }
 
+interface ExecutiveCurrencyContext {
+  currency: ExecutiveCurrency | 'mixed';
+  breakdown: ExecutiveCurrencySummary[];
+  eventCurrency: Map<string, ExecutiveCurrency | 'mixed'>;
+  ambiguousRecordCount: number;
+}
+
+function normalizeCurrency(value: unknown, fallback: ExecutiveCurrency = 'AED'): ExecutiveCurrency {
+  return String(value) === 'USD' ? 'USD' : String(value) === 'AED' ? 'AED' : fallback;
+}
+
+function buildCurrencyContext(
+  defaultCurrency: ExecutiveCurrency,
+  plans: Array<{ linked_event_id: string | null; currency: unknown; budget_target: unknown; revenue_target: unknown }>,
+  events: Array<{ id: string; planned_budget: unknown; revenue_target: unknown }>,
+  kpis: Array<{ event_id: string; spend: unknown }>,
+  leads: Array<{ event_id: string | null; purchase_amount: unknown }>,
+): ExecutiveCurrencyContext {
+  const rows = new Map<ExecutiveCurrency, ExecutiveCurrencySummary>();
+  const eventCurrencies = new Map<string, Set<ExecutiveCurrency>>();
+  const ensure = (currency: ExecutiveCurrency) => {
+    const existing = rows.get(currency);
+    if (existing) return existing;
+    const created: ExecutiveCurrencySummary = {
+      currency,
+      plannedRevenueTarget: 0,
+      knownRevenue: 0,
+      plannedBudget: 0,
+      knownSpend: 0,
+      planCount: 0,
+    };
+    rows.set(currency, created);
+    return created;
+  };
+
+  for (const plan of plans) {
+    const currency = normalizeCurrency(plan.currency, defaultCurrency);
+    const row = ensure(currency);
+    row.plannedRevenueTarget += decimalToNumber(plan.revenue_target) || 0;
+    row.plannedBudget += decimalToNumber(plan.budget_target) || 0;
+    row.planCount += 1;
+    if (plan.linked_event_id) {
+      const currencies = eventCurrencies.get(plan.linked_event_id) || new Set<ExecutiveCurrency>();
+      currencies.add(currency);
+      eventCurrencies.set(plan.linked_event_id, currencies);
+    }
+  }
+
+  const planRevenue = plans.reduce((total, plan) => total + (decimalToNumber(plan.revenue_target) || 0), 0);
+  const planBudget = plans.reduce((total, plan) => total + (decimalToNumber(plan.budget_target) || 0), 0);
+  if (planRevenue === 0 || planBudget === 0) {
+    const row = ensure(defaultCurrency);
+    if (planRevenue === 0) row.plannedRevenueTarget += sumDecimal(events, 'revenue_target');
+    if (planBudget === 0) row.plannedBudget += sumDecimal(events, 'planned_budget');
+  }
+
+  const eventCurrency = new Map<string, ExecutiveCurrency | 'mixed'>();
+  for (const event of events) {
+    const currencies = eventCurrencies.get(event.id);
+    eventCurrency.set(event.id, !currencies?.size ? defaultCurrency : currencies.size === 1 ? [...currencies][0] : 'mixed');
+  }
+
+  let ambiguousRecordCount = 0;
+  for (const kpi of kpis) {
+    const spend = decimalToNumber(kpi.spend) || 0;
+    if (spend <= 0) continue;
+    const currency = eventCurrency.get(kpi.event_id) || defaultCurrency;
+    if (currency === 'mixed') {
+      ambiguousRecordCount += 1;
+      continue;
+    }
+    ensure(currency).knownSpend += spend;
+  }
+  for (const lead of leads) {
+    const revenue = decimalToNumber(lead.purchase_amount) || 0;
+    if (revenue <= 0) continue;
+    const currency = lead.event_id ? eventCurrency.get(lead.event_id) || defaultCurrency : defaultCurrency;
+    if (currency === 'mixed') {
+      ambiguousRecordCount += 1;
+      continue;
+    }
+    ensure(currency).knownRevenue += revenue;
+  }
+
+  if (!rows.size) ensure(defaultCurrency);
+  const breakdown = [...rows.values()]
+    .map(row => ({
+      ...row,
+      plannedRevenueTarget: round2(row.plannedRevenueTarget),
+      knownRevenue: round2(row.knownRevenue),
+      plannedBudget: round2(row.plannedBudget),
+      knownSpend: round2(row.knownSpend),
+    }))
+    .sort((a, b) => a.currency === defaultCurrency ? -1 : b.currency === defaultCurrency ? 1 : a.currency.localeCompare(b.currency));
+  return {
+    currency: breakdown.length === 1 ? breakdown[0].currency : 'mixed',
+    breakdown,
+    eventCurrency,
+    ambiguousRecordCount,
+  };
+}
+
 function summarizeMetrics(
   plans: Array<{ budget_target: unknown; revenue_target: unknown }>,
   events: Array<{ planned_budget: unknown; revenue_target: unknown }>,
@@ -398,11 +517,13 @@ function summarizeMetrics(
     spend: unknown;
   }>,
   leads: Array<{ lead_status: unknown; purchase_amount: unknown; meeting_date: Date | null; meeting_outcome: string | null }>,
+  currencyContext: ExecutiveCurrencyContext,
 ): ExecutiveMetricSummary {
-  const plannedRevenueTarget = sumDecimal(plans, 'revenue_target') || sumDecimal(events, 'revenue_target');
-  const plannedBudget = sumDecimal(plans, 'budget_target') || sumDecimal(events, 'planned_budget');
-  const knownSpend = kpis.reduce((total, row) => total + (decimalToNumber(row.spend) || 0), 0);
-  const knownRevenue = leads.reduce((total, lead) => total + (decimalToNumber(lead.purchase_amount) || 0), 0);
+  const canCombineMoney = currencyContext.currency !== 'mixed';
+  const plannedRevenueTarget = canCombineMoney ? currencyContext.breakdown[0]?.plannedRevenueTarget || 0 : 0;
+  const plannedBudget = canCombineMoney ? currencyContext.breakdown[0]?.plannedBudget || 0 : 0;
+  const knownSpend = canCombineMoney ? currencyContext.breakdown[0]?.knownSpend || 0 : 0;
+  const knownRevenue = canCombineMoney ? currencyContext.breakdown[0]?.knownRevenue || 0 : 0;
   const kpiLeads = kpis.reduce((total, row) => total + row.leads, 0);
   const leadRecords = leads.length;
   const totalLeads = Math.max(kpiLeads, leadRecords);
@@ -429,6 +550,7 @@ function summarizeMetrics(
   const formCompletions = kpis.reduce((total, row) => total + row.form_completions, 0);
 
   return {
+    currency: currencyContext.currency,
     plannedRevenueTarget: round2(plannedRevenueTarget),
     knownRevenue: round2(knownRevenue),
     plannedBudget: round2(plannedBudget),
@@ -454,9 +576,10 @@ function summarizeMetrics(
 
 function summarizeRevenueLines(
   lines: Array<{ id: string; revenue_line_type: unknown; name: string; status: unknown }>,
-  plans: Array<{ revenue_line_id: string; revenue_line: { revenue_line_type: unknown; name: string }; linked_event_id: string | null; budget_target: unknown; revenue_target: unknown }>,
+  plans: Array<{ revenue_line_id: string; revenue_line: { revenue_line_type: unknown; name: string }; linked_event_id: string | null; budget_target: unknown; revenue_target: unknown; currency: unknown }>,
   kpis: Array<{ event_id: string; spend: unknown; leads: number; purchases: number }>,
   leads: Array<{ event_id: string | null; purchase_amount: unknown; lead_status: unknown }>,
+  defaultCurrency: ExecutiveCurrency,
 ) {
   const byType = new Map<string, {
     type: string;
@@ -468,6 +591,7 @@ function summarizeRevenueLines(
     knownSpend: number;
     leads: number;
     purchases: number;
+    currencies: Set<ExecutiveCurrency>;
   }>();
 
   for (const line of lines) {
@@ -481,6 +605,7 @@ function summarizeRevenueLines(
       knownSpend: 0,
       leads: 0,
       purchases: 0,
+      currencies: new Set<ExecutiveCurrency>(),
     });
   }
 
@@ -490,6 +615,7 @@ function summarizeRevenueLines(
     const row = ensureRevenueLine(byType, type, plan.revenue_line.name);
     row.plannedBudget += decimalToNumber(plan.budget_target) || 0;
     row.plannedRevenueTarget += decimalToNumber(plan.revenue_target) || 0;
+    row.currencies.add(normalizeCurrency(plan.currency, defaultCurrency));
     if (plan.linked_event_id) eventToType.set(plan.linked_event_id, type);
   }
 
@@ -510,19 +636,26 @@ function summarizeRevenueLines(
   }
 
   return Array.from(byType.values()).map(row => ({
-    ...row,
+    type: row.type,
+    name: row.name,
+    status: row.status,
     plannedRevenueTarget: round2(row.plannedRevenueTarget),
     plannedBudget: round2(row.plannedBudget),
     knownRevenue: round2(row.knownRevenue),
     knownSpend: round2(row.knownSpend),
+    leads: row.leads,
+    purchases: row.purchases,
+    currency: row.currencies.size > 1 ? 'mixed' as const : [...row.currencies][0] || defaultCurrency,
   })).sort((a, b) => b.plannedRevenueTarget - a.plannedRevenueTarget || a.name.localeCompare(b.name));
 }
 
 function summarizeChannels(
-  kpis: Array<{ channel: string; spend: unknown; reach: number; leads: number; purchases: number }>,
+  kpis: Array<{ event_id: string; channel: string; spend: unknown; reach: number; leads: number; purchases: number }>,
   leads: Array<{ channel_attribution: unknown }>,
+  eventCurrency: Map<string, ExecutiveCurrency | 'mixed'>,
+  defaultCurrency: ExecutiveCurrency,
 ) {
-  const byChannel = new Map<string, { channel: string; spend: number; reach: number; leads: number; purchases: number }>();
+  const byChannel = new Map<string, { channel: string; spend: number; reach: number; leads: number; purchases: number; currencies: Set<ExecutiveCurrency | 'mixed'> }>();
   for (const kpi of kpis) {
     const channel = kpi.channel || 'manual';
     const row = ensureChannel(byChannel, channel);
@@ -530,31 +663,48 @@ function summarizeChannels(
     row.reach += kpi.reach;
     row.leads += kpi.leads;
     row.purchases += kpi.purchases;
+    row.currencies.add(eventCurrency.get(kpi.event_id) || defaultCurrency);
   }
   for (const lead of leads) {
     const channel = lead.channel_attribution ? String(lead.channel_attribution) : 'manual';
     ensureChannel(byChannel, channel);
   }
   return Array.from(byChannel.values()).map(row => ({
-    ...row,
+    channel: row.channel,
     spend: round2(row.spend),
+    reach: row.reach,
+    leads: row.leads,
+    purchases: row.purchases,
     costPerLead: row.leads > 0 && row.spend > 0 ? round2(row.spend / row.leads) : null,
     costPerPurchase: row.purchases > 0 && row.spend > 0 ? round2(row.spend / row.purchases) : null,
+    currency: row.currencies.has('mixed') || row.currencies.size > 1 ? 'mixed' as const : [...row.currencies][0] || defaultCurrency,
   })).sort((a, b) => b.spend - a.spend || b.leads - a.leads).slice(0, 12);
 }
 
-function summarizeSourceTypes(kpis: Array<{ source_type: unknown; spend: unknown; leads: number; purchases: number }>) {
-  const bySource = new Map<string, { sourceType: string; records: number; spend: number; leads: number; purchases: number }>();
+function summarizeSourceTypes(
+  kpis: Array<{ event_id: string; source_type: unknown; spend: unknown; leads: number; purchases: number }>,
+  eventCurrency: Map<string, ExecutiveCurrency | 'mixed'>,
+  defaultCurrency: ExecutiveCurrency,
+) {
+  const bySource = new Map<string, { sourceType: string; records: number; spend: number; leads: number; purchases: number; currencies: Set<ExecutiveCurrency | 'mixed'> }>();
   for (const kpi of kpis) {
     const sourceType = String(kpi.source_type);
-    const row = bySource.get(sourceType) || { sourceType, records: 0, spend: 0, leads: 0, purchases: 0 };
+    const row = bySource.get(sourceType) || { sourceType, records: 0, spend: 0, leads: 0, purchases: 0, currencies: new Set<ExecutiveCurrency | 'mixed'>() };
     row.records += 1;
     row.spend += decimalToNumber(kpi.spend) || 0;
     row.leads += kpi.leads;
     row.purchases += kpi.purchases;
+    row.currencies.add(eventCurrency.get(kpi.event_id) || defaultCurrency);
     bySource.set(sourceType, row);
   }
-  return Array.from(bySource.values()).map(row => ({ ...row, spend: round2(row.spend) }));
+  return Array.from(bySource.values()).map(row => ({
+    sourceType: row.sourceType,
+    records: row.records,
+    spend: round2(row.spend),
+    leads: row.leads,
+    purchases: row.purchases,
+    currency: row.currencies.has('mixed') || row.currencies.size > 1 ? 'mixed' as const : [...row.currencies][0] || defaultCurrency,
+  }));
 }
 
 function summarizeDisciplines(records: Array<{ status: unknown; priority: unknown }>) {
@@ -895,19 +1045,26 @@ function emptyRevenueLine(type: string, name: string) {
     knownSpend: 0,
     leads: 0,
     purchases: 0,
+    currencies: new Set<ExecutiveCurrency>(),
   };
 }
 
-function ensureChannel(map: Map<string, { channel: string; spend: number; reach: number; leads: number; purchases: number }>, channel: string) {
+function ensureChannel(map: Map<string, { channel: string; spend: number; reach: number; leads: number; purchases: number; currencies: Set<ExecutiveCurrency | 'mixed'> }>, channel: string) {
   const existing = map.get(channel);
   if (existing) return existing;
-  const row = { channel, spend: 0, reach: 0, leads: 0, purchases: 0 };
+  const row = { channel, spend: 0, reach: 0, leads: 0, purchases: 0, currencies: new Set<ExecutiveCurrency | 'mixed'>() };
   map.set(channel, row);
   return row;
 }
 
 function buildExecutiveSummary(dashboard: ExecutiveDashboard): string {
   const alerts = dashboard.alerts.filter(alert => ['risk', 'critical'].includes(alert.severity)).length;
+  if (dashboard.currency === 'mixed') {
+    const currencies = dashboard.currencyBreakdown
+      .map(row => `${row.currency}: revenue ${row.knownRevenue}, spend ${row.knownSpend}`)
+      .join('; ');
+    return `Currency totals are reported separately with no conversion (${currencies}). Leads ${dashboard.metrics.leads}, purchases ${dashboard.metrics.purchases}. Confidence is ${dashboard.confidence}. ${alerts} risk/critical alert(s) need executive attention.`;
+  }
   return `Known revenue ${dashboard.metrics.knownRevenue}, spend ${dashboard.metrics.knownSpend}, leads ${dashboard.metrics.leads}, purchases ${dashboard.metrics.purchases}. Confidence is ${dashboard.confidence}. ${alerts} risk/critical alert(s) need executive attention.`;
 }
 

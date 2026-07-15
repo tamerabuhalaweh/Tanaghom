@@ -71,7 +71,7 @@ const PRIMARY_NAV: NavItem[] = [
     description: 'Commercial plans, discipline work, and event handoffs',
     icon: CalendarDays,
     roles: PRODUCT_ROLES,
-    activePaths: ['/commercial-plans', '/disciplines', '/events'],
+    activePaths: ['/commercial-assessment', '/commercial-plans', '/disciplines', '/events'],
   },
   {
     path: '/ideas',
@@ -141,7 +141,7 @@ const WORKFLOW_LINKS: NavItem[] = [
 ];
 
 const SETUP_LINKS: NavItem[] = [
-  { path: '/my-agent-rep', label: 'My Profile', description: 'Role, preferences, and display currency', icon: UserRound, roles: PRODUCT_ROLES },
+  { path: '/my-agent-rep', label: 'My Profile', description: 'Your role, department, and skills', icon: UserRound, roles: PRODUCT_ROLES },
   { path: '/account-security', label: 'Account Security', description: 'MFA and recovery codes', icon: ShieldCheck, roles: PRODUCT_ROLES },
   { path: '/ai-settings', label: 'AI Model', description: 'Connect the AI model used by your workspace', icon: Brain, roles: PRODUCT_ROLES },
   { path: '/integration-credentials', label: 'Integrations', description: 'Connect customer-owned systems', icon: KeyRound, roles: SETUP_ROLES },
@@ -157,6 +157,7 @@ const ADMIN_LINKS: NavItem[] = [
 const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = [
   { match: path => path === '/' || path === '/command-center', title: 'Today' },
   { match: path => path === '/commercial-plans', title: 'Commercial Plans' },
+  { match: path => path === '/commercial-assessment', title: 'Historical Assessment' },
   { match: path => path === '/disciplines', title: 'Discipline Workspaces' },
   { match: path => path.startsWith('/events'), title: 'Event Operations' },
   { match: path => path === '/ideas' || path === '/content', title: 'Content' },

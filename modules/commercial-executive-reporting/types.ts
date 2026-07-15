@@ -39,6 +39,16 @@ export type ExecutiveReportScheduleStatus = (typeof EXECUTIVE_REPORT_SCHEDULE_ST
 export type ExecutiveReportRecipientRole = (typeof EXECUTIVE_REPORT_RECIPIENT_ROLES)[number];
 export type ExecutiveReportLanguage = (typeof EXECUTIVE_REPORT_LANGUAGES)[number];
 export type ExecutiveReportSection = (typeof EXECUTIVE_REPORT_SECTIONS)[number];
+export type ExecutiveCurrency = 'AED' | 'USD';
+
+export interface ExecutiveCurrencySummary {
+  currency: ExecutiveCurrency;
+  plannedRevenueTarget: number;
+  knownRevenue: number;
+  plannedBudget: number;
+  knownSpend: number;
+  planCount: number;
+}
 
 export const executiveDashboardQuerySchema = z.object({
   revenueLineType: z.enum(COMMERCIAL_REVENUE_LINE_TYPES).optional(),
@@ -89,6 +99,7 @@ export type CreateExecutiveReportScheduleInput = z.infer<typeof createExecutiveR
 export type ListExecutiveReportSchedulesQueryInput = z.infer<typeof listExecutiveReportSchedulesQuerySchema>;
 
 export interface ExecutiveMetricSummary {
+  currency: ExecutiveCurrency | 'mixed';
   plannedRevenueTarget: number;
   knownRevenue: number;
   plannedBudget: number;
@@ -120,6 +131,10 @@ export interface ExecutiveAlert {
 }
 
 export interface ExecutiveDashboard {
+  defaultCurrency: ExecutiveCurrency;
+  currency: ExecutiveCurrency | 'mixed';
+  currencyBreakdown: ExecutiveCurrencySummary[];
+  ambiguousCurrencyRecordCount: number;
   generatedAt: Date;
   period: {
     startDate: Date | null;
@@ -145,6 +160,7 @@ export interface ExecutiveDashboard {
     knownSpend: number;
     leads: number;
     purchases: number;
+    currency: ExecutiveCurrency | 'mixed';
   }>;
   channelPerformance: Array<{
     channel: string;
@@ -154,6 +170,7 @@ export interface ExecutiveDashboard {
     purchases: number;
     costPerLead: number | null;
     costPerPurchase: number | null;
+    currency: ExecutiveCurrency | 'mixed';
   }>;
   sourceBreakdown: Array<{
     sourceType: string;
@@ -161,6 +178,7 @@ export interface ExecutiveDashboard {
     spend: number;
     leads: number;
     purchases: number;
+    currency: ExecutiveCurrency | 'mixed';
   }>;
   disciplineSummary: {
     total: number;

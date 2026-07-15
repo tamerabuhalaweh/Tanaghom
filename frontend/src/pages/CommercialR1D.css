@@ -99,6 +99,51 @@
   overflow: hidden;
 }
 
+.executive-currency-section {
+  margin-top: 18px;
+}
+
+.executive-currency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.executive-currency-grid article {
+  padding: 18px;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  background: var(--ops-surface-subtle);
+}
+
+.executive-currency-grid article > strong {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 1.05rem;
+}
+
+.executive-currency-grid dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.executive-currency-grid dl div {
+  min-width: 0;
+}
+
+.executive-currency-grid dt {
+  color: var(--ops-text-muted);
+  font-size: 0.78rem;
+}
+
+.executive-currency-grid dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
 .executive-metrics article {
   position: relative;
   display: grid;
@@ -1256,6 +1301,49 @@
   margin: 4px 0;
 }
 
+.commercial-learning-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.commercial-learning-list article {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--ops-border);
+  border-radius: 9px;
+  background: var(--ops-surface-subtle);
+}
+
+.commercial-learning-list article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.commercial-learning-list article > div small,
+.commercial-learning-list article > small {
+  color: var(--ops-ink-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.commercial-learning-list article > strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.commercial-learning-list article > p {
+  margin: 5px 0 10px;
+  color: var(--ops-ink-secondary);
+  font-size: 11px;
+  line-height: 17px;
+}
+
 .commercial-bottom-grid {
   grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
   align-items: start;
@@ -1746,7 +1834,8 @@
 
   .commercial-stage-flow,
   .commercial-form,
-  .commercial-currency-grid {
+  .commercial-currency-grid,
+  .commercial-learning-list {
     padding: 15px 16px;
   }
 

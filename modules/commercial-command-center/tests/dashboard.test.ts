@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRevenueLineDashboard } from '../repository';
 
 const prismaMocks = vi.hoisted(() => ({
+  tenant: {
+    findUnique: vi.fn(),
+  },
   commercialRevenueLine: {
     findUnique: vi.fn(),
     findMany: vi.fn(),
@@ -29,6 +32,9 @@ const prismaMocks = vi.hoisted(() => ({
     findMany: vi.fn(),
   },
   connectorImportJob: {
+    findMany: vi.fn(),
+  },
+  commercialLearningSet: {
     findMany: vi.fn(),
   },
   user: {
@@ -86,8 +92,10 @@ function plan(eventId = 'event-1', eventName = 'Course Launch', currency = 'USD'
 describe('Commercial Command Center revenue-line dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMocks.tenant.findUnique.mockResolvedValue({ default_currency: 'AED' });
     prismaMocks.commercialAssessmentSignal.findMany.mockResolvedValue([]);
     prismaMocks.connectorImportJob.findMany.mockResolvedValue([]);
+    prismaMocks.commercialLearningSet.findMany.mockResolvedValue([]);
   });
 
   it('aggregates spend, leads and purchases from tenant-scoped event records', async () => {
@@ -165,6 +173,45 @@ describe('Commercial Command Center revenue-line dashboard', () => {
     expect(dashboard.rollups.currencyBreakdown).toEqual([
       { currency: 'USD', plannedRevenueTarget: 5000, plannedBudget: 1000, planCount: 1 },
     ]);
+  });
+
+  it('surfaces only approved historical learning for the selected revenue line', async () => {
+    prismaMocks.commercialRevenueLine.findUnique.mockResolvedValue(configuredLine());
+    prismaMocks.commercialPlan.findMany.mockResolvedValue([]);
+    prismaMocks.commercialEvent.findMany.mockResolvedValue([]);
+    prismaMocks.commercialLearningSet.findMany.mockResolvedValue([{
+      approved_at: now,
+      assessment_run: { title: '2025 Online Courses Review' },
+      findings: [{
+        id: 'finding-1',
+        finding_type: 'repeat',
+        title: 'Reuse buyer proof',
+        recommendation: 'Lead with verified outcomes from previous buyers.',
+        confidence: 0.86,
+      }],
+    }]);
+
+    const dashboard = await getRevenueLineDashboard('tenant-a', 'online_course');
+
+    expect(prismaMocks.commercialLearningSet.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        tenant_key: 'tenant-a',
+        status: 'active',
+        OR: [
+          { assessment_run: { revenue_line_id: 'line-1' } },
+          { assessment_run: { revenue_line_id: null } },
+        ],
+      }),
+    }));
+    expect(dashboard.approvedLearning).toEqual([{
+      id: 'finding-1',
+      type: 'repeat',
+      title: 'Reuse buyer proof',
+      recommendation: 'Lead with verified outcomes from previous buyers.',
+      confidence: 0.86,
+      assessmentTitle: '2025 Online Courses Review',
+      approvedAt: now.toISOString(),
+    }]);
   });
 
   it('keeps AED and USD plan targets separated in the currency breakdown', async () => {

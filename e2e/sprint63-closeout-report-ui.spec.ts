@@ -272,7 +272,7 @@ async function installCloseoutMocks(page: Page, report: unknown) {
 async function openEvent(page: Page) {
   await page.addInitScript(() => localStorage.setItem('token', 'e2e-token'));
   await page.goto(`/events/advanced/${eventRecord.id}`);
-  await expect(page.getByRole('heading', { name: /^Events$/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Generate Report', exact: true })).toBeVisible();
 }
 
 test('Sprint 63 closeout report renders populated event evidence and supports print', async ({ page }) => {
@@ -308,7 +308,7 @@ test('Sprint 63 closeout report renders populated event evidence and supports pr
   await expect(page.getByText(/Closeout report generated/i)).toBeVisible();
   await expect(page.getByText(/Executive closeout/i)).toBeVisible();
   await expect(page.getByText('Known Spend', { exact: true })).toBeVisible();
-  await expect(page.locator('#closeout-report').getByText('$8,200', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('#closeout-report').getByText(/AED\s*8,200/).first()).toBeVisible();
   await expect(page.locator('#closeout-report').getByText('Lead Funnel', { exact: true }).last()).toBeVisible();
   await expect(page.locator('#closeout-report').getByText('Sales Outcomes', { exact: true }).last()).toBeVisible();
   await expect(page.locator('#closeout-report').getByText(/Top recorded signal: Instagram/i)).toBeVisible();

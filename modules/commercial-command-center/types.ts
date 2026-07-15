@@ -97,11 +97,11 @@ export const createCommercialPlanSchema = z.object({
   revenueLineId: z.string().uuid(),
   linkedEventId: z.string().uuid().nullable().optional(),
   horizon: z.enum(COMMERCIAL_PLAN_HORIZONS),
-  stage: z.enum(COMMERCIAL_OPERATING_STAGES).default('assess').optional(),
+  stage: z.enum(COMMERCIAL_OPERATING_STAGES).default('strategy_planning').optional(),
   title: z.string().trim().min(1).max(260),
   objective: z.string().trim().max(5000).nullable().optional(),
   audience: z.string().trim().max(5000).nullable().optional(),
-  currency: z.enum(COMMERCIAL_CURRENCIES).default('USD').optional(),
+  currency: z.enum(COMMERCIAL_CURRENCIES).optional(),
   budgetTarget: z.number().min(0).nullable().optional(),
   revenueTarget: z.number().min(0).nullable().optional(),
   kpiTargets: z.record(z.unknown()).nullable().optional(),
@@ -241,6 +241,7 @@ export interface CommercialEventBridgeSummary {
 }
 
 export interface CommercialCommandCenterDashboard {
+  defaultCurrency: CommercialCurrency;
   revenueLines: CommercialRevenueLineSummary[];
   stageSummary: Record<CommercialOperatingStage, number>;
   planSummary: {
@@ -269,6 +270,7 @@ export interface CommercialCommandCenterDashboard {
 }
 
 export interface CommercialRevenueLineDashboard {
+  defaultCurrency: CommercialCurrency;
   revenueLine: CommercialRevenueLineSummary;
   rollups: {
     plannedRevenueTarget: number;
@@ -300,6 +302,15 @@ export interface CommercialRevenueLineDashboard {
     missingDataSources: string[];
   };
   plans: CommercialPlanSummary[];
+  approvedLearning: Array<{
+    id: string;
+    type: 'repeat' | 'improve' | 'avoid' | 'investigate';
+    title: string;
+    recommendation: string;
+    confidence: number;
+    assessmentTitle: string;
+    approvedAt: string;
+  }>;
   openSignals: CommercialAssessmentSignalSummary[];
   linkedEvents: CommercialEventBridgeSummary[];
   availableEvents: CommercialEventBridgeSummary[];

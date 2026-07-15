@@ -97,6 +97,7 @@ model Tenant {
   tenant_key  String       @unique
   name        String
   status      TenantStatus @default(active)
+  default_currency CommercialCurrency @default(AED)
   privacy_policy Json         @default("{}")
   privacy_review_status String @default("pending_customer_legal_review")
   privacy_review_updated_at DateTime?
@@ -130,6 +131,10 @@ model Tenant {
   commercial_revenue_lines CommercialRevenueLine[]
   commercial_plans CommercialPlan[]
   commercial_assessment_signals CommercialAssessmentSignal[]
+  commercial_historical_assessment_runs CommercialHistoricalAssessmentRun[]
+  commercial_historical_assessment_evidence CommercialHistoricalAssessmentEvidence[]
+  commercial_historical_assessment_findings CommercialHistoricalAssessmentFinding[]
+  commercial_learning_sets CommercialLearningSet[]
   commercial_discipline_records CommercialDisciplineRecord[]
   commercial_executive_reports CommercialExecutiveReport[]
   commercial_executive_report_schedules CommercialExecutiveReportSchedule[]
@@ -304,6 +309,9 @@ model User {
   commercial_plans_owned CommercialPlan[] @relation("CommercialPlanOwner")
   commercial_plans_created CommercialPlan[] @relation("CommercialPlanCreatedBy")
   commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
+  commercial_historical_assessment_runs_requested CommercialHistoricalAssessmentRun[] @relation("CommercialHistoricalAssessmentRunRequestedBy")
+  commercial_historical_assessment_findings_decided CommercialHistoricalAssessmentFinding[] @relation("CommercialHistoricalAssessmentFindingDecidedBy")
+  commercial_learning_sets_approved CommercialLearningSet[] @relation("CommercialLearningSetApprovedBy")
   commercial_discipline_records_owned CommercialDisciplineRecord[] @relation("CommercialDisciplineRecordOwner")
   commercial_discipline_records_created CommercialDisciplineRecord[] @relation("CommercialDisciplineRecordCreatedBy")
   commercial_executive_reports_generated CommercialExecutiveReport[] @relation("CommercialExecutiveReportGeneratedBy")
@@ -3693,6 +3701,45 @@ enum CommercialAssessmentStatus {
   dismissed
 }
 
+enum CommercialHistoricalAssessmentRunStatus {
+  draft
+  evidence_ready
+  generating
+  generated
+  approved
+  failed
+  archived
+}
+
+enum CommercialHistoricalAssessmentEvidenceType {
+  commercial_plan
+  campaign
+  event
+  event_kpi
+  lead_outcome
+  event_problem
+  assessment_signal
+  connector_status
+}
+
+enum CommercialHistoricalAssessmentFindingType {
+  repeat
+  improve
+  avoid
+  investigate
+}
+
+enum CommercialHistoricalAssessmentFindingDecision {
+  pending
+  approved
+  rejected
+}
+
+enum CommercialLearningSetStatus {
+  active
+  archived
+}
+
 enum CommercialDisciplineId {
   brand_positioning
   acquisition
@@ -3793,6 +3840,7 @@ model CommercialRevenueLine {
   created_by         User                        @relation("CommercialRevenueLineCreatedBy", fields: [created_by_user_id], references: [id])
   plans              CommercialPlan[]
   assessment_signals CommercialAssessmentSignal[]
+  historical_assessment_runs CommercialHistoricalAssessmentRun[]
   discipline_records CommercialDisciplineRecord[]
 
   @@unique([tenant_key, revenue_line_type])
@@ -3809,11 +3857,11 @@ model CommercialPlan {
   revenue_line_id    String                   @db.Uuid
   linked_event_id    String?                  @db.Uuid
   horizon            CommercialPlanHorizon
-  stage              CommercialOperatingStage @default(assess)
+  stage              CommercialOperatingStage @default(strategy_planning)
   title              String
   objective          String?                  @db.Text
   audience           String?                  @db.Text
-  currency           CommercialCurrency       @default(USD)
+  currency           CommercialCurrency       @default(AED)
   budget_target      Decimal?                 @db.Decimal(12, 2)
   revenue_target     Decimal?                 @db.Decimal(12, 2)
   kpi_targets        Json?
@@ -3870,6 +3918,125 @@ model CommercialAssessmentSignal {
   @@index([status])
   @@index([created_by_user_id])
   @@map("commercial_assessment_signals")
+}
+
+model CommercialHistoricalAssessmentRun {
+  id                   String                                  @id @default(uuid()) @db.Uuid
+  tenant_key           String
+  revenue_line_id      String?                                 @db.Uuid
+  event_ids            String[]                                @default([])
+  campaign_ids         String[]                                @default([])
+  audience_query       String?
+  channels             String[]                                @default([])
+  title                String
+  date_from            DateTime
+  date_to              DateTime
+  status               CommercialHistoricalAssessmentRunStatus @default(draft)
+  evidence_summary     Json?
+  missing_data         Json?
+  provider_type        String?
+  provider_model       String?
+  prompt_version       String                                  @default("commercial-historical-assessment.v1")
+  requested_by_user_id String                                  @db.Uuid
+  generated_at         DateTime?
+  approved_at          DateTime?
+  failure_reason       String?                                 @db.Text
+  created_at           DateTime                                @default(now())
+  updated_at           DateTime                                @updatedAt
+
+  tenant            Tenant                                   @relation(fields: [tenant_key], references: [tenant_key])
+  revenue_line      CommercialRevenueLine?                   @relation(fields: [revenue_line_id], references: [id], onDelete: SetNull)
+  requested_by      User                                     @relation("CommercialHistoricalAssessmentRunRequestedBy", fields: [requested_by_user_id], references: [id])
+  evidence          CommercialHistoricalAssessmentEvidence[]
+  findings          CommercialHistoricalAssessmentFinding[]
+  learning_set      CommercialLearningSet?
+
+  @@index([tenant_key])
+  @@index([revenue_line_id])
+  @@index([status])
+  @@index([date_from, date_to])
+  @@index([requested_by_user_id])
+  @@map("commercial_historical_assessment_runs")
+}
+
+model CommercialHistoricalAssessmentEvidence {
+  id                 String                                     @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  assessment_run_id  String                                     @db.Uuid
+  evidence_type      CommercialHistoricalAssessmentEvidenceType
+  source_object_type String
+  source_object_id   String
+  source_name        String?
+  metric_key         String
+  metric_value       Decimal?                                   @db.Decimal(16, 4)
+  metric_unit        String?
+  observed_at        DateTime?
+  payload            Json?
+  created_at         DateTime                                   @default(now())
+
+  tenant         Tenant                            @relation(fields: [tenant_key], references: [tenant_key])
+  assessment_run CommercialHistoricalAssessmentRun @relation(fields: [assessment_run_id], references: [id], onDelete: Cascade)
+
+  @@unique([assessment_run_id, evidence_type, source_object_type, source_object_id, metric_key])
+  @@index([tenant_key])
+  @@index([assessment_run_id])
+  @@index([evidence_type])
+  @@index([source_object_type, source_object_id])
+  @@map("commercial_historical_assessment_evidence")
+}
+
+model CommercialHistoricalAssessmentFinding {
+  id                 String                                        @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  assessment_run_id  String                                        @db.Uuid
+  learning_set_id    String?                                       @db.Uuid
+  finding_type       CommercialHistoricalAssessmentFindingType
+  title              String
+  summary            String                                        @db.Text
+  recommendation     String                                        @db.Text
+  confidence         Decimal                                       @db.Decimal(5, 4)
+  evidence_ids       String[]
+  decision           CommercialHistoricalAssessmentFindingDecision @default(pending)
+  decision_reason    String?                                       @db.Text
+  decided_by_user_id String?                                       @db.Uuid
+  decided_at         DateTime?
+  created_at         DateTime                                      @default(now())
+  updated_at         DateTime                                      @updatedAt
+
+  tenant         Tenant                            @relation(fields: [tenant_key], references: [tenant_key])
+  assessment_run CommercialHistoricalAssessmentRun @relation(fields: [assessment_run_id], references: [id], onDelete: Cascade)
+  learning_set   CommercialLearningSet?             @relation(fields: [learning_set_id], references: [id], onDelete: SetNull)
+  decided_by     User?                              @relation("CommercialHistoricalAssessmentFindingDecidedBy", fields: [decided_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([assessment_run_id])
+  @@index([learning_set_id])
+  @@index([finding_type])
+  @@index([decision])
+  @@index([decided_by_user_id])
+  @@map("commercial_historical_assessment_findings")
+}
+
+model CommercialLearningSet {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  tenant_key          String
+  assessment_run_id   String                      @unique @db.Uuid
+  title               String
+  status              CommercialLearningSetStatus @default(active)
+  approved_by_user_id String                      @db.Uuid
+  approved_at         DateTime                    @default(now())
+  created_at          DateTime                    @default(now())
+  updated_at          DateTime                    @updatedAt
+
+  tenant          Tenant                            @relation(fields: [tenant_key], references: [tenant_key])
+  assessment_run  CommercialHistoricalAssessmentRun @relation(fields: [assessment_run_id], references: [id], onDelete: Cascade)
+  approved_by     User                              @relation("CommercialLearningSetApprovedBy", fields: [approved_by_user_id], references: [id])
+  findings        CommercialHistoricalAssessmentFinding[]
+
+  @@index([tenant_key])
+  @@index([status])
+  @@index([approved_by_user_id])
+  @@map("commercial_learning_sets")
 }
 
 model CommercialDisciplineRecord {
