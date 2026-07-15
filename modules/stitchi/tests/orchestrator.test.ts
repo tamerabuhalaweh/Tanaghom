@@ -332,17 +332,15 @@ describe('Stitchi natural-language orchestration', () => {
       'marketing_manager',
       'conversation-1',
       expect.objectContaining({
-        actionType: 'update_commercial_plan',
+        actionType: 'link_commercial_plan_event',
         inputPayload: expect.objectContaining({
           commercialPlanId: '00000000-0000-0000-0000-000000000020',
-          plan: expect.objectContaining({
-            linkedEventId: '00000000-0000-0000-0000-000000000001',
-          }),
+          eventId: '00000000-0000-0000-0000-000000000001',
+          primary: true,
         }),
         previewPayload: expect.objectContaining({
-          linkedEventName: 'Leadership Event',
+          eventId: '00000000-0000-0000-0000-000000000001',
           approvalRequired: true,
-          externalExecution: 'blocked',
         }),
       }),
     );

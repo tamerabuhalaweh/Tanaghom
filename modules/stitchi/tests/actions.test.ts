@@ -26,6 +26,12 @@ const commercialExecutiveMocks = vi.hoisted(() => ({
 const annualPlanningMocks = vi.hoisted(() => ({
   createAnnualPlan: vi.fn(),
 }));
+const commercialHierarchyMocks = vi.hoisted(() => ({
+  assignPlan: vi.fn(),
+  linkEvent: vi.fn(),
+  linkCampaign: vi.fn(),
+  linkLearning: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
@@ -35,6 +41,7 @@ vi.mock('@modules/commercial-command-center/service', () => commercialCenterMock
 vi.mock('@modules/commercial-disciplines/service', () => commercialDisciplineMocks);
 vi.mock('@modules/commercial-executive-reporting/service', () => commercialExecutiveMocks);
 vi.mock('@modules/commercial-annual-planning/service', () => annualPlanningMocks);
+vi.mock('@modules/commercial-plan-hierarchy/service', () => commercialHierarchyMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -58,6 +65,10 @@ describe('Stitchi action registry', () => {
     commercialDisciplineMocks.createRecord.mockResolvedValue({ id: 'discipline-record-1' });
     commercialExecutiveMocks.createSchedule.mockResolvedValue({ id: 'executive-report-schedule-1' });
     annualPlanningMocks.createAnnualPlan.mockResolvedValue({ id: 'annual-plan-1', year: 2027 });
+    commercialHierarchyMocks.assignPlan.mockResolvedValue({ id: 'commercial-plan-1' });
+    commercialHierarchyMocks.linkEvent.mockResolvedValue({ id: 'commercial-plan-1' });
+    commercialHierarchyMocks.linkCampaign.mockResolvedValue({ id: 'commercial-plan-1' });
+    commercialHierarchyMocks.linkLearning.mockResolvedValue({ id: 'commercial-plan-1' });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -80,6 +91,10 @@ describe('Stitchi action registry', () => {
       'create_commercial_discipline_record',
       'create_executive_report_schedule',
       'create_annual_commercial_plan',
+      'assign_commercial_plan_hierarchy',
+      'link_commercial_plan_event',
+      'link_commercial_plan_campaign',
+      'link_commercial_plan_learning',
     ]);
   });
 
@@ -410,6 +425,54 @@ describe('Stitchi action registry', () => {
       }),
     );
     expect(result).toMatchObject({ objectType: 'annual_commercial_plan', objectId: 'annual-plan-1' });
+  });
+
+  it('executes commercial hierarchy actions only through the governed hierarchy service', async () => {
+    const commercialPlanId = '00000000-0000-0000-0000-000000000020';
+    const annualPlanId = '00000000-0000-0000-0000-000000000021';
+    const monthlyPortfolioItemId = '00000000-0000-0000-0000-000000000022';
+    const eventId = '00000000-0000-0000-0000-000000000023';
+    const campaignId = '00000000-0000-0000-0000-000000000024';
+    const learningSetId = '00000000-0000-0000-0000-000000000025';
+    const findingId = '00000000-0000-0000-0000-000000000026';
+
+    await executeStitchiAction({
+      role: 'marketing_manager', tenantKey: 'tenant-a', userId: 'user-1',
+      actionType: 'assign_commercial_plan_hierarchy',
+      inputPayload: { commercialPlanId, annualPlanId, monthlyPortfolioItemId },
+    });
+    await executeStitchiAction({
+      role: 'marketing_manager', tenantKey: 'tenant-a', userId: 'user-1',
+      actionType: 'link_commercial_plan_event',
+      inputPayload: { commercialPlanId, eventId, primary: true },
+    });
+    await executeStitchiAction({
+      role: 'marketing_manager', tenantKey: 'tenant-a', userId: 'user-1',
+      actionType: 'link_commercial_plan_campaign',
+      inputPayload: { commercialPlanId, campaignId },
+    });
+    await executeStitchiAction({
+      role: 'marketing_manager', tenantKey: 'tenant-a', userId: 'user-1',
+      actionType: 'link_commercial_plan_learning',
+      inputPayload: { commercialPlanId, learningSetId, findingIds: [findingId] },
+    });
+
+    expect(commercialHierarchyMocks.assignPlan).toHaveBeenCalledWith(
+      'marketing_manager', 'tenant-a', 'user-1', commercialPlanId,
+      { annualPlanId, monthlyPortfolioItemId },
+    );
+    expect(commercialHierarchyMocks.linkEvent).toHaveBeenCalledWith(
+      'marketing_manager', 'tenant-a', 'user-1', commercialPlanId,
+      { eventId, primary: true, periodExceptionReason: undefined },
+    );
+    expect(commercialHierarchyMocks.linkCampaign).toHaveBeenCalledWith(
+      'marketing_manager', 'tenant-a', 'user-1', commercialPlanId,
+      { campaignId, periodExceptionReason: undefined },
+    );
+    expect(commercialHierarchyMocks.linkLearning).toHaveBeenCalledWith(
+      'marketing_manager', 'tenant-a', 'user-1', commercialPlanId,
+      { learningSetId, findingIds: [findingId], rationale: undefined },
+    );
   });
 
   it('rejects unsupported external/write actions', async () => {

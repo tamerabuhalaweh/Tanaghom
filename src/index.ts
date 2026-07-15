@@ -62,6 +62,7 @@ import { commercialDisciplinesRouter } from '../modules/commercial-disciplines/c
 import { commercialExecutiveReportingRouter } from '../modules/commercial-executive-reporting/controller';
 import { commercialHistoricalAssessmentRouter } from '../modules/commercial-historical-assessment/controller';
 import { commercialAnnualPlanningRouter } from '../modules/commercial-annual-planning/controller';
+import { commercialPlanHierarchyRouter } from '../modules/commercial-plan-hierarchy/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -292,6 +293,7 @@ app.use('/stitchi', stitchiRouter);
 app.use('/commercial-command-center', commercialCommandCenterRouter);
 app.use('/commercial-assessments', commercialHistoricalAssessmentRouter);
 app.use('/annual-commercial-plans', commercialAnnualPlanningRouter);
+app.use('/commercial-hierarchy', commercialPlanHierarchyRouter);
 app.use('/commercial-disciplines', commercialDisciplinesRouter);
 app.use('/commercial-executive', commercialExecutiveReportingRouter);
 app.use('/kajabi', kajabiConnectorRouter);

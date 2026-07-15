@@ -142,6 +142,10 @@ function actionTitle(actionType: string): string {
     update_commercial_plan: 'Update commercial plan',
     create_commercial_assessment_signal: 'Record commercial signal',
     create_annual_commercial_plan: 'Create annual commercial plan',
+    assign_commercial_plan_hierarchy: 'Connect plan to annual strategy',
+    link_commercial_plan_event: 'Connect event to execution plan',
+    link_commercial_plan_campaign: 'Connect campaign to execution plan',
+    link_commercial_plan_learning: 'Use approved learning in plan',
   };
   return labels[actionType] || actionType.replaceAll('_', ' ');
 }
@@ -246,6 +250,12 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
       eventId: routeEventId || text(params.get('eventId')),
       revenueLineId: text(params.get('revenueLineId')),
       revenueLineType: text(params.get('revenueLineType')),
+      annualPlanId: text(params.get('annualPlanId')),
+      monthlyPortfolioItemId: text(params.get('monthlyPortfolioItemId')),
+      commercialPlanId: text(params.get('commercialPlanId')),
+      campaignId: text(params.get('campaignId')),
+      learningSetId: text(params.get('learningSetId')),
+      findingId: text(params.get('findingId')),
       prompt: text(params.get('prompt')),
       mode: text(params.get('mode')),
     };
@@ -314,6 +324,12 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
         currentPath: `${location.pathname}${location.search}`,
         ...(searchContext.revenueLineId ? { revenueLineId: searchContext.revenueLineId } : {}),
         ...(searchContext.revenueLineType ? { revenueLineType: searchContext.revenueLineType } : {}),
+        ...(searchContext.annualPlanId ? { annualPlanId: searchContext.annualPlanId } : {}),
+        ...(searchContext.monthlyPortfolioItemId ? { monthlyPortfolioItemId: searchContext.monthlyPortfolioItemId } : {}),
+        ...(searchContext.commercialPlanId ? { commercialPlanId: searchContext.commercialPlanId } : {}),
+        ...(searchContext.campaignId ? { campaignId: searchContext.campaignId } : {}),
+        ...(searchContext.learningSetId ? { learningSetId: searchContext.learningSetId } : {}),
+        ...(searchContext.findingId ? { findingId: searchContext.findingId } : {}),
       },
     };
   }

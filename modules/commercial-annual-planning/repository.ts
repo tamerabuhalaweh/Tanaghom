@@ -332,6 +332,16 @@ export async function createPortfolioItem(
         created_by_user_id: userId,
       },
     });
+    await syncExecutionPlanAssignment(
+      tx,
+      tenantKey,
+      userId,
+      annualPlanId,
+      item.id,
+      null,
+      input.commercialPlanId ?? null,
+      input.eventId ?? null,
+    );
     await createAudit(tx, {
       action: 'monthly_portfolio_item_created',
       userId,
@@ -405,6 +415,16 @@ export async function updatePortfolioItem(
         ...(input.ownerUserId !== undefined ? { owner_user_id: input.ownerUserId } : {}),
       },
     });
+    await syncExecutionPlanAssignment(
+      tx,
+      tenantKey,
+      userId,
+      annualPlanId,
+      itemId,
+      existing.commercial_plan_id,
+      merged.commercialPlanId,
+      merged.eventId,
+    );
     await createAudit(tx, {
       action: 'monthly_portfolio_item_updated',
       userId,
@@ -433,13 +453,28 @@ export async function archivePortfolioItem(
     assertRevision(plan.revision, input.expectedRevision);
     const item = await tx.monthlyPortfolioItem.findFirst({
       where: { id: itemId, annual_plan_id: annualPlanId, tenant_key: tenantKey, archived_at: null },
-      select: { id: true },
+      select: {
+        id: true,
+        execution_plan_assignments: {
+          where: { status: 'active' },
+          select: { id: true, commercial_plan: { select: { status: true } } },
+        },
+      },
     });
     if (!item) throw new NotFoundError('MonthlyPortfolioItem', itemId);
+    if (item.execution_plan_assignments.some((assignment) => assignment.commercial_plan.status !== 'archived')) {
+      throw new ValidationError(
+        'Archive or supersede the linked execution plan before archiving this monthly initiative',
+      );
+    }
     await bumpPlanRevision(tx, tenantKey, annualPlanId, input.expectedRevision, {});
     await tx.monthlyPortfolioItem.update({
       where: { id: itemId },
       data: { archived_at: new Date() },
+    });
+    await tx.commercialPlanHierarchyAssignment.updateMany({
+      where: { monthly_portfolio_item_id: itemId, status: 'active' },
+      data: { status: 'archived', archived_at: new Date() },
     });
     await createAudit(tx, {
       action: 'monthly_portfolio_item_archived',
@@ -670,9 +705,14 @@ async function validatePortfolioReferences(
   if (input.eventId) {
     const event = await tx.commercialEvent.findFirst({
       where: { id: input.eventId, tenant_key: tenantKey },
-      select: { id: true },
+      select: { id: true, event_date: true },
     });
     if (!event) throw new NotFoundError('CommercialEvent', input.eventId);
+    if (event.event_date.getUTCFullYear() !== year || event.event_date.getUTCMonth() + 1 !== input.month) {
+      throw new ValidationError(
+        'Linked event date must fall inside the selected portfolio month; use an approved hierarchy exception for intentional moves',
+      );
+    }
   }
   assertDateInYear(input.plannedStartDate, year, 'Planned start date');
   assertDateInYear(input.plannedEndDate, year, 'Planned end date');
@@ -687,6 +727,118 @@ async function validatePortfolioReferences(
     if (value && value.getUTCMonth() + 1 !== input.month) {
       throw new ValidationError('Planned dates must fall inside the selected portfolio month');
     }
+  }
+}
+
+async function syncExecutionPlanAssignment(
+  tx: Prisma.TransactionClient,
+  tenantKey: string,
+  userId: string,
+  annualPlanId: string,
+  itemId: string,
+  previousPlanId: string | null,
+  nextPlanId: string | null,
+  eventId: string | null,
+): Promise<void> {
+  if (previousPlanId && previousPlanId !== nextPlanId) {
+    if (nextPlanId) {
+      throw new ConflictError(
+        'Replace an assigned execution plan through the governed supersede action so its history remains traceable',
+      );
+    }
+    const [previousPlan, activeEvents, activeCampaigns] = await Promise.all([
+      tx.commercialPlan.findFirst({
+        where: { id: previousPlanId, tenant_key: tenantKey },
+        select: { status: true },
+      }),
+      tx.commercialPlanEventLink.count({
+        where: { commercial_plan_id: previousPlanId, tenant_key: tenantKey, status: 'active' },
+      }),
+      tx.commercialPlanCampaignLink.count({
+        where: { commercial_plan_id: previousPlanId, tenant_key: tenantKey, status: 'active' },
+      }),
+    ]);
+    if (!previousPlan) throw new NotFoundError('CommercialPlan', previousPlanId);
+    if (previousPlan.status !== 'archived' || activeEvents + activeCampaigns > 0) {
+      throw new ConflictError(
+        'Archive the execution plan and its active event or campaign links before clearing the monthly assignment',
+      );
+    }
+    await tx.commercialPlanHierarchyAssignment.updateMany({
+      where: { commercial_plan_id: previousPlanId, monthly_portfolio_item_id: itemId, status: 'active' },
+      data: { status: 'archived', archived_at: new Date() },
+    });
+  }
+  if (!nextPlanId) return;
+
+  const occupied = await tx.commercialPlanHierarchyAssignment.findFirst({
+    where: {
+      monthly_portfolio_item_id: itemId,
+      status: 'active',
+      commercial_plan_id: { not: nextPlanId },
+    },
+    select: { commercial_plan_id: true },
+  });
+  if (occupied) throw new ConflictError('This monthly initiative already has an active execution plan');
+
+  const existing = await tx.commercialPlanHierarchyAssignment.findUnique({
+    where: { commercial_plan_id: nextPlanId },
+    select: { annual_plan_id: true, monthly_portfolio_item_id: true },
+  });
+  if (existing && existing.monthly_portfolio_item_id !== itemId) {
+    throw new ConflictError(
+      'This execution plan already has a historical monthly assignment; create a replacement plan and supersede it instead',
+    );
+  }
+  if (existing && existing.annual_plan_id !== annualPlanId) {
+    throw new ConflictError(
+      'This execution plan already belongs to another annual plan; create a replacement plan and supersede it instead',
+    );
+  }
+  await tx.commercialPlanHierarchyAssignment.upsert({
+    where: { commercial_plan_id: nextPlanId },
+    create: {
+      tenant_key: tenantKey,
+      commercial_plan_id: nextPlanId,
+      annual_plan_id: annualPlanId,
+      monthly_portfolio_item_id: itemId,
+      linked_by_user_id: userId,
+    },
+    update: {
+      annual_plan_id: annualPlanId,
+      monthly_portfolio_item_id: itemId,
+      status: 'active',
+      linked_by_user_id: userId,
+      archived_at: null,
+    },
+  });
+  if (eventId) {
+    await tx.commercialPlanEventLink.updateMany({
+      where: { commercial_plan_id: nextPlanId, status: 'active' },
+      data: { is_primary: false },
+    });
+    await tx.commercialPlanEventLink.upsert({
+      where: {
+        commercial_plan_id_event_id: { commercial_plan_id: nextPlanId, event_id: eventId },
+      },
+      create: {
+        tenant_key: tenantKey,
+        commercial_plan_id: nextPlanId,
+        event_id: eventId,
+        is_primary: true,
+        linked_by_user_id: userId,
+      },
+      update: {
+        status: 'active',
+        is_primary: true,
+        linked_by_user_id: userId,
+        archived_at: null,
+      },
+    });
+    await tx.commercialPlan.update({
+      where: { id: nextPlanId },
+      data: { linked_event_id: eventId },
+    });
   }
 }
 

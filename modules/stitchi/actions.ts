@@ -27,6 +27,13 @@ import * as commercialExecutiveService from '@modules/commercial-executive-repor
 import { createExecutiveReportScheduleSchema } from '@modules/commercial-executive-reporting/types';
 import * as annualPlanningService from '@modules/commercial-annual-planning/service';
 import { createAnnualPlanSchema } from '@modules/commercial-annual-planning/types';
+import * as commercialHierarchyService from '@modules/commercial-plan-hierarchy/service';
+import {
+  assignPlanSchema,
+  linkCampaignSchema,
+  linkEventSchema,
+  linkLearningSchema,
+} from '@modules/commercial-plan-hierarchy/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -47,6 +54,10 @@ const SUPPORTED_ACTIONS = [
   'create_commercial_discipline_record',
   'create_executive_report_schedule',
   'create_annual_commercial_plan',
+  'assign_commercial_plan_hierarchy',
+  'link_commercial_plan_event',
+  'link_commercial_plan_campaign',
+  'link_commercial_plan_learning',
 ] as const;
 
 export type StitchiExecutableActionType = (typeof SUPPORTED_ACTIONS)[number];
@@ -78,6 +89,22 @@ const createCommercialPlanWithRevenueLineActionSchema = z.object({
   revenueLine: createRevenueLineSchema,
   plan: createCommercialPlanSchema.omit({ revenueLineId: true }),
 });
+
+const assignCommercialPlanHierarchyActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+}).merge(assignPlanSchema);
+
+const linkCommercialPlanEventActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+}).merge(linkEventSchema);
+
+const linkCommercialPlanCampaignActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+}).merge(linkCampaignSchema);
+
+const linkCommercialPlanLearningActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+}).merge(linkLearningSchema);
 
 export function isExecutableStitchiAction(actionType: string): actionType is StitchiExecutableActionType {
   return SUPPORTED_ACTIONS.includes(actionType as StitchiExecutableActionType);
@@ -206,6 +233,64 @@ export async function executeStitchiAction(input: {
       const payload = createAnnualPlanSchema.parse(input.inputPayload);
       const result = await annualPlanningService.createAnnualPlan(input.role, input.tenantKey, input.userId, payload);
       return { objectType: 'annual_commercial_plan', objectId: result.id, result };
+    }
+    case 'assign_commercial_plan_hierarchy': {
+      const payload = assignCommercialPlanHierarchyActionSchema.parse(input.inputPayload);
+      const result = await commercialHierarchyService.assignPlan(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.commercialPlanId,
+        {
+          annualPlanId: payload.annualPlanId,
+          monthlyPortfolioItemId: payload.monthlyPortfolioItemId,
+        },
+      );
+      return { objectType: 'commercial_plan', objectId: payload.commercialPlanId, result };
+    }
+    case 'link_commercial_plan_event': {
+      const payload = linkCommercialPlanEventActionSchema.parse(input.inputPayload);
+      const result = await commercialHierarchyService.linkEvent(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.commercialPlanId,
+        {
+          eventId: payload.eventId,
+          primary: payload.primary,
+          periodExceptionReason: payload.periodExceptionReason,
+        },
+      );
+      return { objectType: 'commercial_plan', objectId: payload.commercialPlanId, result };
+    }
+    case 'link_commercial_plan_campaign': {
+      const payload = linkCommercialPlanCampaignActionSchema.parse(input.inputPayload);
+      const result = await commercialHierarchyService.linkCampaign(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.commercialPlanId,
+        {
+          campaignId: payload.campaignId,
+          periodExceptionReason: payload.periodExceptionReason,
+        },
+      );
+      return { objectType: 'commercial_plan', objectId: payload.commercialPlanId, result };
+    }
+    case 'link_commercial_plan_learning': {
+      const payload = linkCommercialPlanLearningActionSchema.parse(input.inputPayload);
+      const result = await commercialHierarchyService.linkLearning(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.commercialPlanId,
+        {
+          learningSetId: payload.learningSetId,
+          findingIds: payload.findingIds,
+          rationale: payload.rationale,
+        },
+      );
+      return { objectType: 'commercial_plan', objectId: payload.commercialPlanId, result };
     }
     default:
       throw new ForbiddenError('Stitchi action is not executable');

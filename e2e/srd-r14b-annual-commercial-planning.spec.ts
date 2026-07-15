@@ -147,10 +147,36 @@ function makeAnnualPlan(status = 'draft', revision = 1, items: Record<string, un
   };
 }
 
+function makeHierarchy(learningLinked = false) {
+  return {
+    ...detailedPlan,
+    hierarchy_assignment: {
+      annual_plan: { id: annualPlanId, year: 2027, title: '2027 Commercial Growth Portfolio' },
+      monthly_item: { id: itemId, month: 3, title: 'Ramadan Leadership Course' },
+    },
+    activeEventLinks: [
+      { id: 'event-link-1', event: { ...linkedEvent, name: linkedEvent.name } },
+    ],
+    activeCampaignLinks: [],
+    activeLearningInfluences: learningLinked
+      ? [{
+          id: 'learning-link-1',
+          finding: {
+            id: 'finding-1',
+            title: 'Repeat warm-audience launch sequence',
+            recommendation: 'Reuse the proven warm-audience launch sequence.',
+          },
+        }]
+      : [],
+    outcomes: { leads: 12, purchases: 3, knownRevenue: 75000, contentItems: 4 },
+  };
+}
+
 async function installMocks(page: Page, seeded = false) {
   let currentPlan: ReturnType<typeof makeAnnualPlan> | null = seeded
     ? makeAnnualPlan('draft', 2, [makeItem()])
     : null;
+  let learningLinked = false;
   const failedResponses: string[] = [];
   const browserProblems: string[] = [];
   const unexpectedRequests: string[] = [];
@@ -215,6 +241,13 @@ async function installMocks(page: Page, seeded = false) {
     if (path === '/commercial-command-center/revenue-lines') return json([revenueLine]);
     if (path === '/commercial-command-center/plans') return json([detailedPlan]);
     if (path === '/events') return json([linkedEvent]);
+    if (path === '/campaigns') return json([]);
+    if (path === `/commercial-hierarchy/plans/${detailedPlanId}` && method === 'GET')
+      return json(makeHierarchy(learningLinked));
+    if (path === `/commercial-hierarchy/plans/${detailedPlanId}/learning` && method === 'POST') {
+      learningLinked = true;
+      return json(makeHierarchy(true));
+    }
     if (path === '/commercial-assessments/learning-sets')
       return json([
         {
@@ -333,6 +366,13 @@ test.describe('SRD-R14B annual commercial planning', () => {
     await expect(page.getByText('Monthly initiative added to the annual portfolio.')).toBeVisible();
     await expect(page.getByRole('button', { name: /Ramadan Leadership Course/ })).toBeVisible();
     await expect(page.getByLabel('Annual plan totals').getByText(/450,000/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Strategy to results' })).toBeVisible();
+    await expect(page.getByText('2027 / 2027 Commercial Growth Portfolio')).toBeVisible();
+    await expect(page.getByText('12 leads / 3 purchases')).toBeVisible();
+    await page.getByLabel('Use approved learning').selectOption('finding-1');
+    await page.getByRole('button', { name: 'Use learning' }).click();
+    await expect(page.getByText('Approved learning is now recorded behind this execution plan.')).toBeVisible();
+    await expect(page.getByText('Repeat warm-audience launch sequence')).toBeVisible();
 
     await page.getByRole('button', { name: /Ramadan Leadership Course/ }).click();
     await page.getByRole('button', { name: /Open detailed plan/ }).click();

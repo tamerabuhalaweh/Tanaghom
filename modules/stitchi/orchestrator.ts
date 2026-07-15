@@ -382,6 +382,8 @@ async function deriveActionProposal(
 ): Promise<ActionProposal | FollowUpResponse | null> {
   const executiveReportProposal = deriveExecutiveReportActionProposal(content);
   if (executiveReportProposal) return executiveReportProposal;
+  const hierarchyProposal = deriveCommercialHierarchyActionProposal(content, eventId, context, metadata);
+  if (hierarchyProposal) return hierarchyProposal;
   const annualPlanProposal = await deriveAnnualPlanActionProposal(content, userId, context);
   if (annualPlanProposal) return annualPlanProposal;
   const commercialProposal = await deriveCommercialCenterActionProposalV2(content, userId, context, metadata);
@@ -443,6 +445,105 @@ async function deriveActionProposal(
     };
   }
 
+  return null;
+}
+
+function deriveCommercialHierarchyActionProposal(
+  content: string,
+  eventId?: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): CommercialDerivation {
+  const lower = content.toLowerCase();
+  if (!/(connect|link|assign|attach|use approved learning)/i.test(lower)) return null;
+
+  const commercialPlanId = extractUuidAfter(lower, 'commercial plan')
+    || textMetadata(metadata, 'commercialPlanId');
+  const annualPlanId = extractUuidAfter(lower, 'annual plan')
+    || textMetadata(metadata, 'annualPlanId')
+    || context?.annualPlanning?.currentPlan?.id;
+  const monthlyPortfolioItemId = extractUuidAfter(lower, 'monthly item')
+    || extractUuidAfter(lower, 'monthly initiative')
+    || textMetadata(metadata, 'monthlyPortfolioItemId');
+
+  if (/(annual plan|annual strategy|monthly item|monthly initiative|annual parent)/i.test(lower)) {
+    const missing = [
+      commercialPlanId ? null : 'execution plan',
+      annualPlanId ? null : 'annual plan',
+      monthlyPortfolioItemId ? null : 'monthly initiative',
+    ].filter(Boolean);
+    if (missing.length) {
+      return {
+        kind: 'follow_up',
+        assistantText: `I can connect this hierarchy after you select the ${missing.join(', ')} in Annual Planning. No record has been changed.`,
+      };
+    }
+    return {
+      actionType: 'assign_commercial_plan_hierarchy',
+      inputPayload: { commercialPlanId, annualPlanId, monthlyPortfolioItemId },
+      previewPayload: {
+        commercialPlanId,
+        annualPlanId,
+        monthlyPortfolioItemId,
+        approvalRequired: true,
+      },
+      riskLevel: 'medium',
+      reason: 'connect the execution plan to its annual strategy and monthly initiative',
+    };
+  }
+
+  if (/(event|event operations)/i.test(lower)) {
+    const selectedEventId = extractUuidAfter(lower, 'event') || textMetadata(metadata, 'eventId') || eventId;
+    if (!commercialPlanId) return null;
+    if (!selectedEventId) {
+      return {
+        kind: 'follow_up',
+        assistantText: 'Choose both the execution plan and event first. I will then prepare the connection for approval.',
+      };
+    }
+    return {
+      actionType: 'link_commercial_plan_event',
+      inputPayload: { commercialPlanId, eventId: selectedEventId, primary: true },
+      previewPayload: { commercialPlanId, eventId: selectedEventId, approvalRequired: true },
+      riskLevel: 'medium',
+      reason: 'connect Event Operations to the approved commercial execution plan',
+    };
+  }
+
+  if (/campaign/i.test(lower)) {
+    const campaignId = extractUuidAfter(lower, 'campaign') || textMetadata(metadata, 'campaignId');
+    if (!commercialPlanId || !campaignId) {
+      return {
+        kind: 'follow_up',
+        assistantText: 'Choose both the execution plan and campaign first. I will then prepare the connection for approval.',
+      };
+    }
+    return {
+      actionType: 'link_commercial_plan_campaign',
+      inputPayload: { commercialPlanId, campaignId },
+      previewPayload: { commercialPlanId, campaignId, approvalRequired: true },
+      riskLevel: 'medium',
+      reason: 'connect the campaign to the approved commercial execution plan',
+    };
+  }
+
+  if (/(learning|finding)/i.test(lower)) {
+    const learningSetId = extractUuidAfter(lower, 'learning set') || textMetadata(metadata, 'learningSetId');
+    const findingId = extractUuidAfter(lower, 'finding') || textMetadata(metadata, 'findingId');
+    if (!commercialPlanId || !learningSetId || !findingId) {
+      return {
+        kind: 'follow_up',
+        assistantText: 'Choose the execution plan and an approved assessment finding first. I will record why that learning guides the plan after approval.',
+      };
+    }
+    return {
+      actionType: 'link_commercial_plan_learning',
+      inputPayload: { commercialPlanId, learningSetId, findingIds: [findingId], rationale: cleanText(content) },
+      previewPayload: { commercialPlanId, learningSetId, findingId, approvalRequired: true },
+      riskLevel: 'medium',
+      reason: 'record approved historical learning behind the execution plan',
+    };
+  }
   return null;
 }
 

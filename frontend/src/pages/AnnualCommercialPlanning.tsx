@@ -20,6 +20,7 @@ import {
   eventsApi,
 } from '../api';
 import { CommercialWorkspaceNav } from '../components/CommercialWorkspaceNav';
+import { CommercialTraceabilityPanel } from '../components/CommercialTraceabilityPanel';
 import { Field } from '../components/ProductUI';
 import {
   OpsEmpty,
@@ -885,6 +886,17 @@ export default function AnnualCommercialPlanning() {
                   ))}
                 </div>
               </OpsSection>
+
+              <CommercialTraceabilityPanel
+                token={token || ''}
+                annualPlan={plan}
+                executionPlans={executionPlans}
+                events={events}
+                canManage={canManage}
+                canApproveException={canApprove}
+                onChanged={load}
+                onMessage={setMessage}
+              />
 
               {showItemEditor ? (
                 <div id="portfolio-item-editor">
