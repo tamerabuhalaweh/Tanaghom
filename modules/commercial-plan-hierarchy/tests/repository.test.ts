@@ -33,6 +33,7 @@ vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
 import {
   assignPlan,
   getAnnualHierarchy,
+  getPlanHierarchy,
   linkCampaign,
   linkEvent,
   linkLearning,
@@ -103,6 +104,89 @@ describe('commercial hierarchy repository integrity', () => {
     expect(tx.commercialPlanHierarchyAssignment.upsert).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['an archived execution plan', { status: 'archived' }, { status: 'draft' }, {}, /Archived or superseded/],
+    ['a superseded execution plan', { superseded_by_plan_id: ids.event }, { status: 'draft' }, {}, /Archived or superseded/],
+    ['an archived annual plan', {}, { status: 'archived' }, {}, /Archived annual plans/],
+    ['an archived monthly initiative', {}, { status: 'draft' }, { archived_at: new Date() }, /Archived monthly initiatives/],
+    ['a revenue-line mismatch', {}, { status: 'draft' }, { revenue_line_id: 'line-b' }, /revenue line must match/],
+  ])('rejects %s during parent assignment', async (_label, planOverrides, annualOverrides, itemOverrides, expected) => {
+    tx.commercialPlan.findFirst.mockResolvedValue({
+      id: ids.plan,
+      status: 'draft',
+      revenue_line_id: 'line-a',
+      superseded_by_plan_id: null,
+      ...planOverrides,
+    });
+    tx.annualCommercialPlan.findFirst.mockResolvedValue({
+      id: ids.annual,
+      year: 2027,
+      status: 'draft',
+      ...annualOverrides,
+    });
+    tx.monthlyPortfolioItem.findFirst.mockResolvedValue({
+      id: ids.item,
+      annual_plan_id: ids.annual,
+      revenue_line_id: 'line-a',
+      archived_at: null,
+      ...itemOverrides,
+    });
+
+    await expect(assignPlan('tenant-a', ids.user, ids.plan, {
+      annualPlanId: ids.annual,
+      monthlyPortfolioItemId: ids.item,
+    })).rejects.toThrow(expected as RegExp);
+    expect(tx.commercialPlanHierarchyAssignment.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects assignment when the monthly initiative is already occupied', async () => {
+    tx.commercialPlan.findFirst.mockResolvedValue({
+      id: ids.plan,
+      status: 'draft',
+      revenue_line_id: 'line-a',
+      superseded_by_plan_id: null,
+    });
+    tx.annualCommercialPlan.findFirst.mockResolvedValue({ id: ids.annual, year: 2027, status: 'draft' });
+    tx.monthlyPortfolioItem.findFirst.mockResolvedValue({
+      id: ids.item,
+      annual_plan_id: ids.annual,
+      revenue_line_id: 'line-a',
+      archived_at: null,
+    });
+    tx.commercialPlanHierarchyAssignment.findFirst.mockResolvedValue({ commercial_plan_id: ids.event });
+
+    await expect(assignPlan('tenant-a', ids.user, ids.plan, {
+      annualPlanId: ids.annual,
+      monthlyPortfolioItemId: ids.item,
+    })).rejects.toThrow(/already has an active execution plan/);
+  });
+
+  it('rejects a conflicting annual parent even when the monthly id matches', async () => {
+    tx.commercialPlan.findFirst.mockResolvedValue({
+      id: ids.plan,
+      status: 'draft',
+      revenue_line_id: 'line-a',
+      superseded_by_plan_id: null,
+    });
+    tx.annualCommercialPlan.findFirst.mockResolvedValue({ id: ids.annual, year: 2027, status: 'draft' });
+    tx.monthlyPortfolioItem.findFirst.mockResolvedValue({
+      id: ids.item,
+      annual_plan_id: ids.annual,
+      revenue_line_id: 'line-a',
+      archived_at: null,
+    });
+    tx.commercialPlanHierarchyAssignment.findFirst.mockResolvedValue(null);
+    tx.commercialPlanHierarchyAssignment.findUnique.mockResolvedValue({
+      annual_plan_id: '00000000-0000-0000-0000-000000000021',
+      monthly_portfolio_item_id: ids.item,
+    });
+
+    await expect(assignPlan('tenant-a', ids.user, ids.plan, {
+      annualPlanId: ids.annual,
+      monthlyPortfolioItemId: ids.item,
+    })).rejects.toThrow(/belongs to another annual plan/);
+  });
+
   it('rejects a plan that is not owned by the authenticated tenant', async () => {
     tx.commercialPlan.findFirst.mockResolvedValue(null);
     tx.annualCommercialPlan.findFirst.mockResolvedValue({ id: ids.annual, year: 2027, status: 'draft' });
@@ -159,6 +243,44 @@ describe('commercial hierarchy repository integrity', () => {
     expect(tx.commercialPlanEventLink.upsert).not.toHaveBeenCalled();
   });
 
+  it('requires an executive approver when a dated exception reason is supplied', async () => {
+    tx.commercialPlan.findFirst.mockResolvedValue(assignedPlan());
+    tx.commercialEvent.findFirst.mockResolvedValue({ id: ids.event, event_date: new Date('2027-06-15T00:00:00Z') });
+
+    await expect(linkEvent('tenant-a', ids.user, null, ids.plan, {
+      eventId: ids.event,
+      primary: true,
+      periodExceptionReason: 'Launch intentionally moved to June',
+    })).rejects.toThrow(/executive approver is required/);
+  });
+
+  it.each([
+    ['missing plan', null, /CommercialPlan.*not found/],
+    ['archived plan', assignedPlan({ status: 'archived' }), /Archived or superseded/],
+    ['unassigned plan', assignedPlan({ hierarchy_assignment: null }), /Assign this plan/],
+    ['archived parent month', assignedPlan({ hierarchy_assignment: {
+      status: 'active',
+      annual_plan: { id: ids.annual, year: 2027, status: 'active' },
+      monthly_item: { id: ids.item, month: 5, archived_at: new Date() },
+    } }), /parent monthly initiative is archived/],
+  ])('blocks event linkage for a %s', async (_label, plan, expected) => {
+    tx.commercialPlan.findFirst.mockResolvedValue(plan);
+    await expect(linkEvent('tenant-a', ids.user, null, ids.plan, {
+      eventId: ids.event,
+      primary: false,
+    })).rejects.toThrow(expected as RegExp);
+    expect(tx.commercialPlanEventLink.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects an event that is not owned by the tenant', async () => {
+    tx.commercialPlan.findFirst.mockResolvedValue(assignedPlan());
+    tx.commercialEvent.findFirst.mockResolvedValue(null);
+    await expect(linkEvent('tenant-a', ids.user, null, ids.plan, {
+      eventId: ids.event,
+      primary: false,
+    })).rejects.toThrow(/CommercialEvent.*not found/);
+  });
+
   it('prevents one event from feeding two active commercial plans', async () => {
     tx.commercialPlan.findFirst.mockResolvedValue(assignedPlan());
     tx.commercialEvent.findFirst.mockResolvedValue({ id: ids.event, event_date: new Date('2027-05-15T00:00:00Z') });
@@ -185,6 +307,15 @@ describe('commercial hierarchy repository integrity', () => {
       campaignId,
     })).rejects.toThrow(/already connected to another active commercial plan/);
     expect(tx.commercialPlanCampaignLink.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a campaign that is not owned by the tenant', async () => {
+    const campaignId = '00000000-0000-0000-0000-000000000041';
+    tx.commercialPlan.findFirst.mockResolvedValue(assignedPlan());
+    tx.contentRequest.findFirst.mockResolvedValue(null);
+    await expect(linkCampaign('tenant-a', ids.user, null, ids.plan, {
+      campaignId,
+    })).rejects.toThrow(/Campaign.*not found/);
   });
 
   it('records executive evidence when an out-of-period event is approved', async () => {
@@ -246,6 +377,16 @@ describe('commercial hierarchy repository integrity', () => {
     expect(tx.commercialPlanHierarchyAssignment.update).not.toHaveBeenCalled();
   });
 
+  it('rejects parent removal when no active assignment exists', async () => {
+    tx.commercialPlan.findFirst.mockResolvedValue({
+      id: ids.plan,
+      status: 'archived',
+      hierarchy_assignment: null,
+    });
+    await expect(unlinkParent('tenant-a', ids.user, ids.plan, { reason: 'Historical cleanup' }))
+      .rejects.toThrow(/does not have an active annual parent/);
+  });
+
   it('rejects learning that is not approved for the parent annual plan', async () => {
     tx.commercialPlan.findFirst.mockResolvedValue(assignedPlan());
     tx.annualCommercialPlanLearningSet.findFirst.mockResolvedValue(null);
@@ -275,6 +416,38 @@ describe('commercial hierarchy repository integrity', () => {
       reason: 'Approved replacement',
     })).rejects.toThrow(/historical annual assignment evidence/);
     expect(tx.commercialPlanHierarchyAssignment.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a plan superseding itself', async () => {
+    await expect(supersedePlan('tenant-a', ids.user, ids.plan, {
+      replacementPlanId: ids.plan,
+      reason: 'Invalid cycle',
+    })).rejects.toThrow(/cannot supersede itself/);
+  });
+
+  it.each([
+    ['missing', null, /CommercialPlan.*not found/],
+    ['different revenue line', { id: ids.event, revenue_line_id: 'line-b', status: 'draft', superseded_by_plan_id: null, hierarchy_assignment: null }, /same revenue line/],
+    ['archived', { id: ids.event, revenue_line_id: '00000000-0000-0000-0000-000000000070', status: 'archived', superseded_by_plan_id: null, hierarchy_assignment: null }, /current and not superseded/],
+    ['superseded', { id: ids.event, revenue_line_id: '00000000-0000-0000-0000-000000000070', status: 'draft', superseded_by_plan_id: ids.learning, hierarchy_assignment: null }, /current and not superseded/],
+  ])('rejects a %s replacement plan', async (_label, replacement, expected) => {
+    tx.commercialPlan.findFirst
+      .mockResolvedValueOnce(assignedPlan())
+      .mockResolvedValueOnce(replacement);
+    await expect(supersedePlan('tenant-a', ids.user, ids.plan, {
+      replacementPlanId: ids.event,
+      reason: 'Governed replacement',
+    })).rejects.toThrow(expected as RegExp);
+  });
+
+  it('returns not found instead of leaking a cross-tenant plan hierarchy', async () => {
+    tx.commercialPlan.findFirst.mockResolvedValue(null);
+    await expect(getPlanHierarchy('tenant-a', ids.plan)).rejects.toThrow(/CommercialPlan.*not found/);
+  });
+
+  it('returns not found for a cross-tenant annual hierarchy', async () => {
+    tx.annualCommercialPlan.findFirst.mockResolvedValue(null);
+    await expect(getAnnualHierarchy('tenant-a', ids.annual)).rejects.toThrow(/AnnualCommercialPlan.*not found/);
   });
 
   it('returns an annual executive outcome rollup through governed IDs', async () => {
@@ -314,5 +487,59 @@ describe('commercial hierarchy repository integrity', () => {
       purchases: 1,
       knownRevenue: 900,
     });
+  });
+
+  it('aggregates campaign-only outcomes and safely normalizes nullable decimal values', async () => {
+    const campaignId = '00000000-0000-0000-0000-000000000041';
+    tx.commercialPlan.findFirst.mockResolvedValue({
+      ...assignedPlan(),
+      revenue_line: { id: 'line', name: 'Online Courses', revenue_line_type: 'online_course' },
+      owner: null,
+      superseded_by: null,
+      event_links: [],
+      campaign_links: [{ id: 'campaign-link', campaign_id: campaignId, status: 'active', campaign: { id: campaignId } }],
+      learning_influences: [],
+    });
+    prismaMocks.leadCaptureRecord.findMany.mockResolvedValue([
+      { id: 'lead-1', lead_status: 'qualified', purchase_amount: { toNumber: () => 500 } },
+      { id: 'lead-2', lead_status: 'qualified', purchase_amount: '50' },
+      { id: 'lead-3', lead_status: 'qualified', purchase_amount: null },
+      { id: 'lead-4', lead_status: 'qualified', purchase_amount: 'not-a-number' },
+    ]);
+    prismaMocks.publishingPackage.findMany.mockResolvedValue([
+      { id: 'package-1', package_status: 'ready_for_future_execution', campaign_id: campaignId },
+    ]);
+    prismaMocks.contentItem.count.mockResolvedValue(3);
+
+    const result = await getPlanHierarchy('tenant-a', ids.plan) as Record<string, unknown>;
+
+    expect(result.outcomes).toMatchObject({
+      leads: 4,
+      purchases: 2,
+      knownRevenue: 550,
+      contentItems: 3,
+      publishingPackages: 1,
+      readyPackages: 1,
+    });
+    expect(prismaMocks.eventKpiRecord.findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns honest zero outcomes when a plan has no execution links', async () => {
+    tx.commercialPlan.findFirst.mockResolvedValue({
+      ...assignedPlan(),
+      revenue_line: { id: 'line', name: 'Consulting', revenue_line_type: 'consulting' },
+      owner: null,
+      superseded_by: null,
+      event_links: [],
+      campaign_links: [],
+      learning_influences: [],
+    });
+
+    const result = await getPlanHierarchy('tenant-a', ids.plan) as Record<string, unknown>;
+
+    expect(result.outcomes).toMatchObject({ spend: 0, leads: 0, purchases: 0, knownRevenue: 0 });
+    expect(prismaMocks.leadCaptureRecord.findMany).not.toHaveBeenCalled();
+    expect(prismaMocks.publishingPackage.findMany).not.toHaveBeenCalled();
+    expect(prismaMocks.contentItem.count).not.toHaveBeenCalled();
   });
 });
