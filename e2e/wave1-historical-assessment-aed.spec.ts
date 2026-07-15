@@ -231,7 +231,7 @@ test.describe('Wave 1 historical assessment and AED default', () => {
     }).filter(control => control.width < 44 || control.height < 44));
     expect(undersized).toEqual([]);
 
-    await page.getByRole('link', { name: /Planning/ }).click();
+    await page.getByRole('link', { name: /Execution Plans/ }).click();
     await expect(page.getByRole('heading', { name: 'Approved historical learning' })).toBeVisible();
     await expect(page.getByText('Reuse the proven warm-audience sequence in the next course plan.')).toBeVisible();
     await expect(page.getByText('86% confidence')).toBeVisible();
