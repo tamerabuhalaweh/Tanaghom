@@ -235,7 +235,7 @@ test.describe('UX-R1B Hybrid customer shell', () => {
 
     await expect(page).toHaveTitle('Today | Tanaghum');
     await expect(page.getByRole('heading', { name: "Today's Commercial Priorities" })).toBeVisible();
-    await expect(page.getByLabel('Commercial performance summary').getByText('$18,420')).toBeVisible();
+    await expect(page.getByLabel('Commercial performance summary').getByText(/AED\s*18,420/)).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Product navigation' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Users & Roles' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Workspace Admin' })).toHaveCount(0);

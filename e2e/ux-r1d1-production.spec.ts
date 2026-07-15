@@ -170,8 +170,13 @@ const workspaces = [{
 
 function executiveDashboard() {
   return {
+    defaultCurrency: 'AED',
+    currency: 'USD',
+    currencyBreakdown: [{ currency: 'USD', plannedRevenueTarget: 30000, plannedBudget: 5000, knownRevenue: 12000, knownSpend: 2100, planCount: 1 }],
+    ambiguousCurrencyRecordCount: 0,
     confidence: 'medium',
     metrics: {
+      currency: 'USD',
       knownRevenue: 12000,
       plannedRevenueTarget: 30000,
       knownSpend: 2100,
@@ -196,8 +201,9 @@ function executiveDashboard() {
       knownSpend: 2100,
       leads: 96,
       purchases: 12,
+      currency: 'USD',
     }],
-    channelPerformance: [{ channel: 'email', reach: 3200, leads: 44, purchases: 8, spend: 500, costPerLead: 11.36 }],
+    channelPerformance: [{ channel: 'email', reach: 3200, leads: 44, purchases: 8, spend: 500, costPerLead: 11.36, currency: 'USD' }],
     dataFreshness: [{ source: 'Internal commercial records', detail: 'Current plan and lead records.', lastSeenAt: '2026-07-10T09:00:00.000Z', status: 'current' }],
     reports: {
       recent: [],

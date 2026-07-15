@@ -247,6 +247,18 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
   ]);
 
   const eventNameById = new Map(events.map(event => [event.id, event.name]));
+  const eventCurrencySets = new Map<string, Set<'AED' | 'USD'>>();
+  for (const plan of plans) {
+    if (!plan.linked_event_id) continue;
+    const currencies = eventCurrencySets.get(plan.linked_event_id) || new Set<'AED' | 'USD'>();
+    currencies.add(String(plan.currency) === 'USD' ? 'USD' : 'AED');
+    eventCurrencySets.set(plan.linked_event_id, currencies);
+  }
+  const currencyForEvent = (eventId: string): 'AED' | 'USD' | 'mixed' => {
+    const currencies = eventCurrencySets.get(eventId);
+    if (!currencies?.size) return defaultCurrency;
+    return currencies.size === 1 ? [...currencies][0] : 'mixed';
+  };
   const evidence: EvidenceDraft[] = [];
 
   for (const plan of plans) {
@@ -301,6 +313,7 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
   }
 
   for (const event of events) {
+    const eventCurrency = currencyForEvent(event.id);
     evidence.push({
       evidenceType: 'event',
       sourceObjectType: 'commercial_event',
@@ -308,7 +321,7 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
       sourceName: event.name,
       metricKey: 'completed_event_context',
       metricValue: null,
-      metricUnit: defaultCurrency,
+      metricUnit: eventCurrency,
       observedAt: event.event_date,
       payload: {
         eventType: String(event.event_type),
@@ -322,7 +335,7 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
         geography: event.geography,
         fomoAngle: event.fomo_angle,
         upsellPlan: event.upsell_plan,
-        currency: defaultCurrency,
+        currency: eventCurrency,
       },
     });
   }
@@ -365,6 +378,7 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
     kpiGroups.set(key, current);
   }
   for (const [key, group] of kpiGroups) {
+    const eventCurrency = currencyForEvent(String(group.eventId));
     evidence.push({
       evidenceType: 'event_kpi',
       sourceObjectType: 'event_channel_kpis',
@@ -372,13 +386,13 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
       sourceName: `${eventNameById.get(String(group.eventId)) || 'Event'} - ${String(group.channel)}`,
       metricKey: 'channel_performance',
       metricValue: Number(group.spend),
-      metricUnit: defaultCurrency,
+      metricUnit: eventCurrency,
       observedAt: group.latestDate as Date,
       payload: {
         ...group,
         sourceTypes: [...(group.sourceTypes as Set<string>)],
         sourceNames: [...(group.sourceNames as Set<string>)],
-        currency: defaultCurrency,
+        currency: eventCurrency,
       },
     });
   }
@@ -409,6 +423,7 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
     leadGroups.set(eventId, current);
   }
   for (const [eventId, group] of leadGroups) {
+    const eventCurrency = eventId === 'unlinked' ? defaultCurrency : currencyForEvent(eventId);
     evidence.push({
       evidenceType: 'lead_outcome',
       sourceObjectType: 'event_lead_outcomes',
@@ -416,12 +431,12 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
       sourceName: eventNameById.get(eventId) || 'Unlinked outcomes',
       metricKey: 'lead_funnel_outcomes',
       metricValue: Number(group.knownRevenue),
-      metricUnit: defaultCurrency,
+      metricUnit: eventCurrency,
       observedAt: group.latestObservedAt as Date,
       payload: {
         ...group,
         sourceOfTruth: [...(group.sourceOfTruth as Set<string>)],
-        currency: defaultCurrency,
+        currency: eventCurrency,
       },
     });
   }
@@ -500,6 +515,9 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
   if (!leads.length) missingData.push('No tenant-scoped lead outcomes were found for the completed events.');
   if (!connectorJobs.some(job => String(job.sync_status) === 'synced')) {
     missingData.push('No completed connector sync evidence was found; available records may be manual or incomplete.');
+  }
+  if (Number(summary.ambiguousCurrencyRecordCount || 0) > 0) {
+    missingData.push('Some monetary outcomes are linked to events with plans in more than one currency. Assign one event currency before comparing spend or revenue.');
   }
 
   return {
@@ -774,7 +792,7 @@ export function serializeAssessment<T>(value: T): T {
   })) as T;
 }
 
-function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' | 'USD'): Record<string, unknown> {
+export function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' | 'USD'): Record<string, unknown> {
   const sourceCounts: Record<string, number> = {};
   const eventIds = new Set<string>();
   const planIds = new Set<string>();
@@ -794,11 +812,13 @@ function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' 
     knownRevenue: 0,
   };
   const targetsByCurrency: Record<string, { budgetTarget: number; revenueTarget: number; plans: number }> = {};
+  const actualsByCurrency: Record<string, { knownSpend: number; knownRevenue: number }> = {};
+  let ambiguousCurrencyRecordCount = 0;
   const eventComparisonById = new Map<string, {
     eventId: string;
     eventName: string;
     eventDate: string | null;
-    currency: 'AED' | 'USD';
+    currency: 'AED' | 'USD' | 'mixed';
     reach: number;
     leads: number;
     purchases: number;
@@ -835,7 +855,8 @@ function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' 
       const comparison = eventComparison(item.sourceObjectId);
       comparison.eventName = item.sourceName || 'Completed event';
       comparison.eventDate = item.observedAt?.toISOString() || null;
-      comparison.currency = String(item.payload.currency) === 'USD' ? 'USD' : defaultCurrency;
+      const currency = String(item.payload.currency);
+      comparison.currency = currency === 'mixed' ? 'mixed' : currency === 'USD' ? 'USD' : defaultCurrency;
     }
     if (item.evidenceType === 'commercial_plan') {
       planIds.add(item.sourceObjectId);
@@ -847,29 +868,45 @@ function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' 
       targetsByCurrency[currency] = current;
     }
     if (item.evidenceType === 'event_kpi') {
+      const currency = String(item.payload.currency || defaultCurrency);
       channels.add(String(item.payload.channel || 'unknown'));
       for (const key of ['reach', 'impressions', 'interactions', 'clicks', 'formCompletions', 'leads', 'meetingsBooked', 'meetingsAttended', 'purchases', 'noShows'] as const) {
         outcomes[key] += Number(item.payload[key] || 0);
       }
-      outcomes.knownSpend += Number(item.payload.spend || 0);
+      const knownSpend = Number(item.payload.spend || 0);
+      if (currency === 'mixed') {
+        if (knownSpend > 0) ambiguousCurrencyRecordCount += 1;
+      } else {
+        const actuals = actualsByCurrency[currency] || { knownSpend: 0, knownRevenue: 0 };
+        actuals.knownSpend += knownSpend;
+        actualsByCurrency[currency] = actuals;
+      }
       const eventId = String(item.payload.eventId || '').trim();
       if (eventId) {
         const comparison = eventComparison(eventId);
         comparison.reach += Number(item.payload.reach || 0);
         comparison.leads += Number(item.payload.leads || 0);
         comparison.purchases += Number(item.payload.purchases || 0);
-        comparison.knownSpend += Number(item.payload.spend || 0);
+        if (currency !== 'mixed') comparison.knownSpend += knownSpend;
         comparison.meetingsBooked += Number(item.payload.meetingsBooked || 0);
         comparison.noShows += Number(item.payload.noShows || 0);
       }
     }
     if (item.evidenceType === 'lead_outcome') {
-      outcomes.knownRevenue += Number(item.payload.knownRevenue || 0);
+      const currency = String(item.payload.currency || defaultCurrency);
+      const knownRevenue = Number(item.payload.knownRevenue || 0);
+      if (currency === 'mixed') {
+        if (knownRevenue > 0) ambiguousCurrencyRecordCount += 1;
+      } else {
+        const actuals = actualsByCurrency[currency] || { knownSpend: 0, knownRevenue: 0 };
+        actuals.knownRevenue += knownRevenue;
+        actualsByCurrency[currency] = actuals;
+      }
       const eventId = item.sourceObjectId;
       if (eventId !== 'unlinked') {
         const comparison = eventComparison(eventId);
         comparison.leads = Math.max(comparison.leads, Number(item.payload.total || 0));
-        comparison.knownRevenue += Number(item.payload.knownRevenue || 0);
+        if (currency !== 'mixed') comparison.knownRevenue += knownRevenue;
         comparison.purchases = Math.max(
           comparison.purchases,
           Number((item.payload.byStatus as Record<string, unknown> | undefined)?.purchased || 0),
@@ -877,6 +914,13 @@ function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' 
         comparison.noShows = Math.max(comparison.noShows, Number(item.payload.noShows || 0));
       }
     }
+  }
+
+  const actualCurrencies = Object.keys(actualsByCurrency);
+  const operatingCurrency = actualCurrencies.length > 1 || ambiguousCurrencyRecordCount > 0 ? 'mixed' : actualCurrencies[0] || defaultCurrency;
+  if (operatingCurrency !== 'mixed') {
+    outcomes.knownSpend = actualsByCurrency[operatingCurrency]?.knownSpend || 0;
+    outcomes.knownRevenue = actualsByCurrency[operatingCurrency]?.knownRevenue || 0;
   }
 
   return {
@@ -888,7 +932,13 @@ function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' 
     sourceCounts,
     channels: [...channels].sort(),
     targetsByCurrency,
-    operatingActuals: { currency: defaultCurrency, ...outcomes },
+    actualsByCurrency,
+    ambiguousCurrencyRecordCount,
+    operatingActuals: {
+      currency: operatingCurrency,
+      ...outcomes,
+      ...(operatingCurrency === 'mixed' ? { knownSpend: 0, knownRevenue: 0 } : {}),
+    },
     eventComparison: [...eventComparisonById.values()]
       .filter(item => eventIds.has(item.eventId))
       .sort((left, right) => String(right.eventDate || '').localeCompare(String(left.eventDate || ''))),

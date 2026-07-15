@@ -112,6 +112,7 @@ function statusTone(status: string): 'neutral' | 'positive' | 'warning' | 'dange
 }
 
 function formatMoney(value: unknown, currency?: string): string {
+  if (currency === 'mixed') return 'Reported separately';
   const parsed = nullableNumber(value);
   return parsed == null ? 'Not available' : formatCurrency(parsed, currency === 'AED' || currency === 'USD' ? currency : undefined);
 }

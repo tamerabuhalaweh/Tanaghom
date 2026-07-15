@@ -1,7 +1,3 @@
-import { useEffect, useState } from 'react';
-
-export const CURRENCY_STORAGE_KEY = 'tanaghum-display-currency';
-
 export const CURRENCY_OPTIONS = [
   { code: 'AED', label: 'AED - UAE Dirham' },
   { code: 'USD', label: 'USD - US Dollar' },
@@ -24,15 +20,7 @@ export function isCurrencyCode(value: string): value is CurrencyCode {
 }
 
 export function getCurrencyPreference(): CurrencyCode {
-  if (typeof window === 'undefined') return DEFAULT_CURRENCY;
-  const stored = window.localStorage.getItem(CURRENCY_STORAGE_KEY);
-  return stored && isCurrencyCode(stored) ? stored : DEFAULT_CURRENCY;
-}
-
-export function setCurrencyPreference(currency: CurrencyCode) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(CURRENCY_STORAGE_KEY, currency);
-  window.dispatchEvent(new CustomEvent('tanaghum-currency-change', { detail: { currency } }));
+  return DEFAULT_CURRENCY;
 }
 
 export function formatCurrency(value: unknown, currency = getCurrencyPreference()): string {
@@ -47,25 +35,4 @@ export function formatCurrency(value: unknown, currency = getCurrencyPreference(
     currency,
     maximumFractionDigits: 0,
   }).format(safeNumber);
-}
-
-export function useCurrencyPreference() {
-  const [currency, setCurrency] = useState<CurrencyCode>(() => getCurrencyPreference());
-
-  useEffect(() => {
-    const handleChange = () => setCurrency(getCurrencyPreference());
-    window.addEventListener('storage', handleChange);
-    window.addEventListener('tanaghum-currency-change', handleChange as EventListener);
-    return () => {
-      window.removeEventListener('storage', handleChange);
-      window.removeEventListener('tanaghum-currency-change', handleChange as EventListener);
-    };
-  }, []);
-
-  function updateCurrency(nextCurrency: CurrencyCode) {
-    setCurrencyPreference(nextCurrency);
-    setCurrency(nextCurrency);
-  }
-
-  return { currency, updateCurrency };
 }

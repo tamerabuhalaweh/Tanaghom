@@ -141,7 +141,7 @@ const WORKFLOW_LINKS: NavItem[] = [
 ];
 
 const SETUP_LINKS: NavItem[] = [
-  { path: '/my-agent-rep', label: 'My Profile', description: 'Role, preferences, and display currency', icon: UserRound, roles: PRODUCT_ROLES },
+  { path: '/my-agent-rep', label: 'My Profile', description: 'Your role, department, and skills', icon: UserRound, roles: PRODUCT_ROLES },
   { path: '/account-security', label: 'Account Security', description: 'MFA and recovery codes', icon: ShieldCheck, roles: PRODUCT_ROLES },
   { path: '/ai-settings', label: 'AI Model', description: 'Connect the AI model used by your workspace', icon: Brain, roles: PRODUCT_ROLES },
   { path: '/integration-credentials', label: 'Integrations', description: 'Connect customer-owned systems', icon: KeyRound, roles: SETUP_ROLES },

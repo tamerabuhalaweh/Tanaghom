@@ -391,8 +391,9 @@ function EvidenceSummary({ summary, missingData, evidenceCount }: { summary: Rec
             <table>
               <thead><tr><th>Event</th><th>Reach</th><th>Leads</th><th>Purchases</th><th>Spend</th><th>Known revenue</th></tr></thead>
               <tbody>{eventComparison.map(event => {
-                const currency = text(event.currency) === 'USD' ? 'USD' : 'AED';
-                return <tr key={text(event.eventId)}><th>{text(event.eventName, 'Completed event')}<small>{dateLabel(event.eventDate)}</small></th><td>{numberValue(event.reach).toLocaleString()}</td><td>{numberValue(event.leads).toLocaleString()}</td><td>{numberValue(event.purchases).toLocaleString()}</td><td>{formatCurrency(numberValue(event.knownSpend), currency)}</td><td>{formatCurrency(numberValue(event.knownRevenue), currency)}</td></tr>;
+                const currency = text(event.currency) === 'mixed' ? 'mixed' : text(event.currency) === 'USD' ? 'USD' : 'AED';
+                const money = (value: unknown) => currency === 'mixed' ? 'Currency required' : formatCurrency(numberValue(value), currency);
+                return <tr key={text(event.eventId)}><th>{text(event.eventName, 'Completed event')}<small>{dateLabel(event.eventDate)}</small></th><td>{numberValue(event.reach).toLocaleString()}</td><td>{numberValue(event.leads).toLocaleString()}</td><td>{numberValue(event.purchases).toLocaleString()}</td><td>{money(event.knownSpend)}</td><td>{money(event.knownRevenue)}</td></tr>;
               })}</tbody>
             </table>
           </div>

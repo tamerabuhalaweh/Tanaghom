@@ -188,7 +188,7 @@ test('Sprint 63 master events dashboard shows executive portfolio metrics', asyn
 
   await expect(page.getByRole('heading', { name: 'Business Control Room' })).toBeVisible();
   await expect(page.getByText('185').first()).toBeVisible();
-  await expect(page.getByText('$61,200').first()).toBeVisible();
+  await expect(page.getByText(/AED\s*61,200/).first()).toBeVisible();
   await expect(page.getByText('Revenue Funnel')).toBeVisible();
   await expect(page.getByText('Channel Performance')).toBeVisible();
   await expect(page.getByText('Event Type Comparison')).toBeVisible();

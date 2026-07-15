@@ -84,9 +84,10 @@ function nullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatMoney(value: unknown): string {
+function formatMoney(value: unknown, currency: string): string {
+  if (currency === 'mixed') return 'Reported separately';
   const parsed = nullableNumber(value);
-  return parsed == null ? 'Not available' : formatCurrency(parsed);
+  return parsed == null ? 'Not available' : formatCurrency(parsed, currency === 'USD' ? 'USD' : 'AED');
 }
 
 function titleCase(value: string): string {
@@ -135,6 +136,8 @@ export default function ExecutiveDashboard() {
   const [saving, setSaving] = useState(false);
 
   const metrics = object(dashboard?.metrics);
+  const dashboardCurrency = text(dashboard?.currency, text(dashboard?.defaultCurrency, 'AED'));
+  const currencyBreakdown = list(dashboard?.currencyBreakdown);
   const connectorReadiness = object(dashboard?.connectorReadiness);
   const disciplineSummary = object(dashboard?.disciplineSummary);
   const reports = object(dashboard?.reports);
@@ -292,11 +295,33 @@ export default function ExecutiveDashboard() {
       ) : (
         <>
           <section className="executive-metrics" id="executive-performance" aria-label="Executive commercial summary">
-            <ExecutiveMetric label="Known revenue" value={formatMoney(metrics.knownRevenue)} detail="Verified internal records" tone="positive" />
-            <ExecutiveMetric label="Revenue target" value={formatMoney(metrics.plannedRevenueTarget)} detail="Across active products" />
+            <ExecutiveMetric label="Known revenue" value={formatMoney(metrics.knownRevenue, dashboardCurrency)} detail={dashboardCurrency === 'mixed' ? 'See currency breakdown below' : 'Verified internal records'} tone="positive" />
+            <ExecutiveMetric label="Revenue target" value={formatMoney(metrics.plannedRevenueTarget, dashboardCurrency)} detail={dashboardCurrency === 'mixed' ? 'No currency conversion applied' : 'Across active products'} />
             <ExecutiveMetric label="Qualified leads" value={String(numberValue(metrics.leads))} detail={`${numberValue(metrics.purchases)} recorded purchases`} />
             <ExecutiveMetric label="Data confidence" value={`${readinessScore}%`} detail={`${numberValue(connectorReadiness.readyForSync)} connectors ready for sync`} tone="warning" />
           </section>
+
+          {currencyBreakdown.length > 1 ? (
+            <OpsSection title="Currency breakdown" subtitle="AED and USD remain separate. Tanaghum does not convert or combine them." className="executive-currency-section">
+              <div className="executive-currency-grid" aria-label="Executive currency breakdown">
+                {currencyBreakdown.map(row => {
+                  const currency = text(row.currency, 'AED');
+                  return (
+                    <article key={currency}>
+                      <strong>{currency}</strong>
+                      <dl>
+                        <div><dt>Known revenue</dt><dd>{formatMoney(row.knownRevenue, currency)}</dd></div>
+                        <div><dt>Revenue target</dt><dd>{formatMoney(row.plannedRevenueTarget, currency)}</dd></div>
+                        <div><dt>Known spend</dt><dd>{formatMoney(row.knownSpend, currency)}</dd></div>
+                        <div><dt>Budget target</dt><dd>{formatMoney(row.plannedBudget, currency)}</dd></div>
+                      </dl>
+                    </article>
+                  );
+                })}
+              </div>
+              {numberValue(dashboard?.ambiguousCurrencyRecordCount) > 0 ? <OpsNotice tone="warning">Some monetary records are linked to events with plans in more than one currency. Assign one event currency before using those amounts in executive totals.</OpsNotice> : null}
+            </OpsSection>
+          ) : null}
 
           <div className="executive-overview">
             <OpsSection title="Revenue by active product" subtitle="Targets and known outcomes. Missing connector data is never estimated." className="executive-revenue-section">
@@ -304,16 +329,17 @@ export default function ExecutiveDashboard() {
                 <div className="executive-revenue-table" role="table" aria-label="Revenue by active product">
                   <div className="executive-revenue-head" role="row"><span>Product</span><span>Target</span><span>Known revenue</span><span>Spend</span><span>Results</span></div>
                   {revenueLines.map(line => {
+                    const currency = text(line.currency, dashboardCurrency);
                     const target = numberValue(line.plannedRevenueTarget);
                     const known = numberValue(line.knownRevenue);
-                    const progress = target > 0 ? Math.min(100, Math.round((known / target) * 100)) : 0;
+                    const progress = currency !== 'mixed' && target > 0 ? Math.min(100, Math.round((known / target) * 100)) : 0;
                     return (
                       <div className="executive-revenue-row" role="row" key={text(line.type)}>
                         <div><strong>{text(line.name, titleCase(text(line.type)))}</strong><small>{numberValue(line.leads)} leads / {numberValue(line.purchases)} purchases</small></div>
-                        <span>{formatMoney(line.plannedRevenueTarget)}</span>
-                        <span>{formatMoney(line.knownRevenue)}</span>
-                        <span>{formatMoney(line.knownSpend)}</span>
-                        <div><strong>{progress}%</strong><span><i style={{ width: `${progress}%` }} /></span></div>
+                        <span>{formatMoney(line.plannedRevenueTarget, currency)}</span>
+                        <span>{formatMoney(line.knownRevenue, currency)}</span>
+                        <span>{formatMoney(line.knownSpend, currency)}</span>
+                        <div><strong>{currency === 'mixed' ? 'Separate' : `${progress}%`}</strong><span><i style={{ width: `${progress}%` }} /></span></div>
                       </div>
                     );
                   })}
@@ -345,7 +371,7 @@ export default function ExecutiveDashboard() {
             </OpsSection>
 
             <OpsSection title="Channel efficiency" subtitle="Spend, reach, leads, purchases, and cost efficiency by available channel.">
-              <div className="executive-channel-list">{channels.length ? channels.map(channel => <article key={text(channel.channel)}><div><strong>{titleCase(text(channel.channel, 'manual'))}</strong><p>Reach {numberValue(channel.reach)} / Leads {numberValue(channel.leads)} / Purchases {numberValue(channel.purchases)}</p></div><div><strong>{formatMoney(channel.spend)}</strong><small>CPL {formatMoney(channel.costPerLead)}</small></div></article>) : <OpsEmpty title="Channel data is not connected" message="Connect analytics or approve an import to see real channel efficiency. Tanaghum will not estimate it." />}</div>
+              <div className="executive-channel-list">{channels.length ? channels.map(channel => <article key={text(channel.channel)}><div><strong>{titleCase(text(channel.channel, 'manual'))}</strong><p>Reach {numberValue(channel.reach)} / Leads {numberValue(channel.leads)} / Purchases {numberValue(channel.purchases)}</p></div><div><strong>{formatMoney(channel.spend, text(channel.currency, dashboardCurrency))}</strong><small>CPL {formatMoney(channel.costPerLead, text(channel.currency, dashboardCurrency))}</small></div></article>) : <OpsEmpty title="Channel data is not connected" message="Connect analytics or approve an import to see real channel efficiency. Tanaghum will not estimate it." />}</div>
             </OpsSection>
           </div>
 

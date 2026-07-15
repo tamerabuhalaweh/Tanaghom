@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { previewEvidence } from '../repository';
+import { buildEvidenceSummary, previewEvidence } from '../repository';
 
 const prismaMocks = vi.hoisted(() => ({
   tenant: { findUnique: vi.fn() },
@@ -137,7 +137,7 @@ describe('historical assessment evidence repository', () => {
     }]);
   });
 
-  it('collects tenant-scoped, non-PII evidence and keeps explicit USD targets separate from AED actuals', async () => {
+  it('collects tenant-scoped, non-PII evidence and assigns event actuals to the linked explicit USD plan', async () => {
     const preview = await previewEvidence('tenant-a', scope);
 
     expect(prismaMocks.commercialPlan.findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -155,13 +155,43 @@ describe('historical assessment evidence repository', () => {
       completedEvents: 1,
       commercialPlans: 1,
       targetsByCurrency: { USD: { budgetTarget: 1000, revenueTarget: 5000, plans: 1 } },
-      operatingActuals: { currency: 'AED', leads: 100, purchases: 10, knownSpend: 2500, knownRevenue: 3000 },
+      actualsByCurrency: { USD: { knownSpend: 2500, knownRevenue: 3000 } },
+      operatingActuals: { currency: 'USD', leads: 100, purchases: 10, knownSpend: 2500, knownRevenue: 3000 },
     });
     const storedText = JSON.stringify(preview.evidence);
     expect(storedText).not.toContain('emailAddress');
     expect(storedText).not.toContain('@example');
     expect(storedText).not.toContain('phone');
     expect(storedText).not.toContain('apiKey');
+  });
+
+  it('withholds mixed-currency event money instead of combining or relabeling it', () => {
+    const summary = buildEvidenceSummary([
+      {
+        evidenceType: 'event', sourceObjectType: 'commercial_event', sourceObjectId: 'event-1',
+        sourceName: 'Mixed plan event', metricKey: 'completed_event_context', metricValue: null,
+        metricUnit: 'mixed', observedAt: new Date('2025-06-15'), payload: { currency: 'mixed' },
+      },
+      {
+        evidenceType: 'event_kpi', sourceObjectType: 'event_channel_kpis', sourceObjectId: 'event-1:meta',
+        sourceName: 'Mixed plan event - meta', metricKey: 'channel_performance', metricValue: 2500,
+        metricUnit: 'mixed', observedAt: new Date('2025-06-16'),
+        payload: { eventId: 'event-1', currency: 'mixed', channel: 'meta', spend: 2500, leads: 10, purchases: 2 },
+      },
+      {
+        evidenceType: 'lead_outcome', sourceObjectType: 'event_lead_outcomes', sourceObjectId: 'event-1',
+        sourceName: 'Mixed plan event', metricKey: 'lead_funnel_outcomes', metricValue: 3000,
+        metricUnit: 'mixed', observedAt: new Date('2025-06-20'),
+        payload: { currency: 'mixed', knownRevenue: 3000, total: 10, byStatus: { purchased: 2 } },
+      },
+    ], 'AED');
+
+    expect(summary).toMatchObject({
+      ambiguousCurrencyRecordCount: 2,
+      actualsByCurrency: {},
+      operatingActuals: { currency: 'mixed', knownSpend: 0, knownRevenue: 0, leads: 10, purchases: 2 },
+      eventComparison: [expect.objectContaining({ currency: 'mixed', knownSpend: 0, knownRevenue: 0 })],
+    });
   });
 
   it('builds a deterministic side-by-side comparison when two completed events have evidence', async () => {
