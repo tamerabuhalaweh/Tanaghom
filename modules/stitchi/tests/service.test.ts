@@ -303,6 +303,43 @@ describe('Stitchi service RBAC', () => {
 
   it('approves and executes an internal action in one governed service call', async () => {
     actionMocks.isExecutableStitchiAction.mockReturnValue(true);
+    vi.mocked(repo.getActionRun)
+      .mockResolvedValueOnce({
+        id: 'action-1',
+        tenantKey: 'tenant-a',
+        conversationId: 'conversation-1',
+        userId: 'user-1',
+        actionType: 'create_commercial_plan',
+        status: 'awaiting_approval',
+        inputPayload: {},
+        previewPayload: null,
+        resultPayload: null,
+        requiresApproval: true,
+        riskLevel: 'medium',
+        auditRecordId: null,
+        langGraphThreadId: 'thread-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        completedAt: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'action-1',
+        tenantKey: 'tenant-a',
+        conversationId: 'conversation-1',
+        userId: 'user-1',
+        actionType: 'create_commercial_plan',
+        status: 'approved',
+        inputPayload: {},
+        previewPayload: null,
+        resultPayload: null,
+        requiresApproval: true,
+        riskLevel: 'medium',
+        auditRecordId: null,
+        langGraphThreadId: 'thread-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        completedAt: null,
+      });
     vi.mocked(repo.decideActionRun).mockResolvedValue({
       actionRun: {
         id: 'action-1',
@@ -393,6 +430,49 @@ describe('Stitchi service RBAC', () => {
     }));
     expect(result.actionRun.status).toBe('completed');
     expect(result.executed.objectId).toBe('plan-1');
+    expect(result.idempotent).toBe(false);
+  });
+
+  it('returns a completed action without executing it twice', async () => {
+    vi.mocked(repo.getActionRun).mockResolvedValue({
+      id: 'action-1',
+      tenantKey: 'tenant-a',
+      conversationId: 'conversation-1',
+      userId: 'user-1',
+      actionType: 'create_commercial_plan',
+      status: 'completed',
+      inputPayload: {},
+      previewPayload: null,
+      resultPayload: {
+        objectType: 'commercial_plan',
+        objectId: 'plan-1',
+        result: { id: 'plan-1', title: 'Leadership course launch' },
+      },
+      requiresApproval: true,
+      riskLevel: 'medium',
+      auditRecordId: null,
+      langGraphThreadId: 'thread-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    const result = await service.approveAndExecuteActionRun(
+      'cco',
+      'tenant-a',
+      'manager-1',
+      'action-1',
+      { notes: 'Duplicate browser submission' },
+    );
+
+    expect(result.idempotent).toBe(true);
+    expect(result.executed).toEqual({
+      objectType: 'commercial_plan',
+      objectId: 'plan-1',
+      result: { id: 'plan-1', title: 'Leadership course launch' },
+    });
+    expect(repo.decideActionRun).not.toHaveBeenCalled();
+    expect(actionMocks.executeStitchiAction).not.toHaveBeenCalled();
   });
 
   it('generates a read-only assistant answer with the configured user provider', async () => {

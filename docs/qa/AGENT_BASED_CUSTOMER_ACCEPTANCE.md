@@ -64,20 +64,58 @@ Every persona produces:
 
 ## Isolated Persistence Layer
 
-The existing `e2e/production-acceptance.spec.ts` remains the authority for governed persistence and tenant isolation. GitHub CI starts an isolated PostgreSQL acceptance database, seeds controlled fixtures, and verifies:
+`e2e/production-acceptance.spec.ts` is the authority for governed commercial persistence, role boundaries, responsive product behavior, and tenant isolation. The fixture manager in `scripts/seed-production-acceptance.ts` creates two dedicated acceptance tenants. It never changes the default tenant or customer users.
 
-1. A manager creates an event and prepares a commercial-plan action through Stitchi.
-2. No plan exists before approval.
-3. The manager cannot self-approve the governed action.
-4. The CCO approves and executes the internal action.
-5. The plan is persisted and linked to the event.
-6. Content approval follows the same role boundary.
-7. A publishing package is prepared with all external execution flags disabled.
-8. Audit evidence records approval and package preparation.
-9. A second tenant cannot read the plan, conversation, approval, package, or audit evidence.
-10. The browser can find the persisted plan and scheduling package without console, API, or horizontal-overflow failures.
+The primary acceptance tenant contains temporary manager, CCO, specialist, reviewer, viewer, and admin accounts. A second tenant contains the cross-tenant actor. The fixture includes a completed historical event, verified AED evidence, two historical findings, one deliberately preserved USD plan, a future event, a content campaign, and a revenue line.
 
-This layer may mutate data because its database is temporary and isolated. It must never be pointed at the deployed customer database.
+The serial acceptance journey verifies:
+
+1. Historical evidence can be previewed without invented results.
+2. A specialist cannot approve historical learning.
+3. A CCO can approve one finding and reject another.
+4. Approved learning becomes available to annual planning.
+5. Provider failure returns an honest dependency state and creates no findings.
+6. A specialist cannot create an annual plan and a viewer cannot create an execution plan.
+7. A manager creates an AED annual plan, monthly initiative, and governed budget allocation.
+8. Over-allocation is rejected and records are not silently changed.
+9. A manager cannot approve the manager's own annual plan; a CCO can approve it.
+10. An execution plan is linked to the annual initiative, future event, campaign, and approved learning.
+11. Stitchi can prepare and cancel an action without a write.
+12. A manager cannot approve the governed Stitchi action; a CCO can approve and execute it.
+13. A duplicate approval is idempotent and does not repeat execution.
+14. Audit evidence records Stitchi creation, approval, and completion.
+15. Future assessment evidence can trace the execution plan and campaign.
+16. Existing USD data remains USD; no automatic currency conversion occurs.
+17. The isolation tenant receives `404` for primary-tenant assessment, plan, hierarchy, and Stitchi records.
+18. Six browser personas traverse Today, Assessment, Annual Planning, Execution Plans, Events, Content, Sales & Leads, and Stitchi without hidden authorization failures.
+19. Customer pages show no raw UUIDs, sprint/test language, console warnings, failed API responses, or horizontal overflow.
+20. Annual-plan permissions, keyboard skip navigation, reduced motion, and 1440x900, 1920x1080, 768x1024, and 390x844 layouts are verified.
+
+### Local Or CI Run
+
+Use a disposable database and a password created only for this run:
+
+```powershell
+$env:E2E_PRODUCTION_ACCEPTANCE = 'true'
+$env:E2E_ACCEPTANCE_PASSWORD = '<temporary-16-plus-character-password>'
+$env:E2E_ACCEPTANCE_ACTION = 'seed'
+npm run build
+npm run acceptance:seed
+npm run test:e2e:production
+```
+
+Set `DATABASE_URL`, `JWT_SECRET`, `E2E_API_BASE_URL`, and `E2E_BASE_URL` for the target stack. GitHub CI supplies these values and uploads logs, traces, screenshots, and the Playwright report for 14 days.
+
+### Deployed Hybrid Run
+
+A persistence run against Hybrid is allowed only as an explicit release operation because the fixture is confined to `acceptance-primary` and `acceptance-isolation`. Use a new temporary password, seed immediately before each run, and always clean up afterward:
+
+```powershell
+$env:E2E_ACCEPTANCE_ACTION = 'cleanup'
+npm run acceptance:cleanup
+```
+
+Cleanup disables the temporary users, suspends their subscriptions, and archives both acceptance tenants. Confirm cleanup by proving that an acceptance login is rejected. Never reuse the temporary password, never seed the AB environment, and never point this harness at an unrelated deployment.
 
 ## GitHub Actions
 

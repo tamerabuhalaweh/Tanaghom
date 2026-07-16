@@ -1,7 +1,10 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: {
+    index: 'src/index.ts',
+    'seed-production-acceptance': 'scripts/seed-production-acceptance.ts',
+  },
   format: ['esm'],
   target: 'node20',
   outDir: 'dist',

@@ -122,9 +122,18 @@ export default function CampaignWorkspace() {
           ownerDepartmentId: current.ownerDepartmentId || String(departmentList[0]?.id || ''),
         }));
         try {
-          const active = await aiProviderApi.active(token as string) as RecordMap;
-          setProviderReady(active.apiKeyStatus === 'configured');
-          setProviderLabel(`${text(active.name, 'AI model')} / ${text(active.model, 'model configured')}`);
+          const status = await aiProviderApi.status(token as string) as RecordMap;
+          const providers = list(status.providers);
+          const active = providers.find(
+            (provider) => text(provider.type) === text(status.activeProvider),
+          );
+          const ready = Boolean(active?.configured && active?.apiKeyStatus === 'configured');
+          setProviderReady(ready);
+          setProviderLabel(
+            ready
+              ? `${text(active?.name, 'AI model')} / ${text(active?.model, 'model configured')}`
+              : 'Connect an AI model before draft generation',
+          );
         } catch (providerError) {
           setProviderReady(false);
           setProviderLabel(providerError instanceof Error ? providerError.message : 'Connect DeepSeek, OpenAI, or Claude before draft generation');
