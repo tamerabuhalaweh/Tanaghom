@@ -108,30 +108,50 @@ export async function createPlan(
   if (input.ownerUserId) await assertUserInTenant(tenantKey, input.ownerUserId);
   const defaultCurrency = input.currency || await getTenantDefaultCurrency(tenantKey);
 
-  const plan = await prisma.commercialPlan.create({
-    data: {
-      tenant_key: tenantKey,
-      revenue_line_id: input.revenueLineId,
-      linked_event_id: input.linkedEventId ?? null,
-      horizon: input.horizon,
-      stage: input.stage || 'strategy_planning',
-      title: input.title,
-      objective: input.objective ?? null,
-      audience: input.audience ?? null,
-      currency: defaultCurrency,
-      budget_target: input.budgetTarget != null ? new Prisma.Decimal(input.budgetTarget) : null,
-      revenue_target: input.revenueTarget != null ? new Prisma.Decimal(input.revenueTarget) : null,
-      kpi_targets: input.kpiTargets == null ? Prisma.JsonNull : toJsonObject(input.kpiTargets),
-      strategy_summary: input.strategySummary ?? null,
-      action_plan: input.actionPlan ?? null,
-      status: input.status || 'draft',
-      owner_user_id: input.ownerUserId ?? null,
-      created_by_user_id: userId,
-    },
-    include: planInclude,
+  return prisma.$transaction(async (tx) => {
+    const plan = await tx.commercialPlan.create({
+      data: {
+        tenant_key: tenantKey,
+        revenue_line_id: input.revenueLineId,
+        linked_event_id: input.linkedEventId ?? null,
+        horizon: input.horizon,
+        stage: input.stage || 'strategy_planning',
+        title: input.title,
+        objective: input.objective ?? null,
+        audience: input.audience ?? null,
+        currency: defaultCurrency,
+        budget_target: input.budgetTarget != null ? new Prisma.Decimal(input.budgetTarget) : null,
+        revenue_target: input.revenueTarget != null ? new Prisma.Decimal(input.revenueTarget) : null,
+        kpi_targets: input.kpiTargets == null ? Prisma.JsonNull : toJsonObject(input.kpiTargets),
+        strategy_summary: input.strategySummary ?? null,
+        action_plan: input.actionPlan ?? null,
+        status: input.status || 'draft',
+        origin: 'standalone_exception',
+        standalone_reason: input.standaloneReason,
+        owner_user_id: input.ownerUserId ?? null,
+        created_by_user_id: userId,
+      },
+      include: planInclude,
+    });
+    await tx.auditRecord.create({
+      data: {
+        audit_type: 'commercial_execution_plan',
+        action: 'standalone_execution_plan_created',
+        result: 'success',
+        human_user_id: userId,
+        target_object_type: 'commercial_plan',
+        target_object_id: plan.id,
+        source_module: 'commercial-command-center',
+        reason: input.standaloneReason,
+        after_state: {
+          origin: 'standalone_exception',
+          revenueLineId: input.revenueLineId,
+          linkedEventId: input.linkedEventId ?? null,
+        },
+      },
+    });
+    return mapPlan(plan);
   });
-
-  return mapPlan(plan);
 }
 
 export async function updatePlan(
@@ -570,6 +590,14 @@ async function assertUserInTenant(tenantKey: string, id: string): Promise<void> 
 const planInclude = {
   revenue_line: { select: { id: true, revenue_line_type: true, name: true } },
   linked_event: { select: { id: true, name: true } },
+  hierarchy_assignment: {
+    select: {
+      annual_plan_id: true,
+      monthly_portfolio_item_id: true,
+      annual_plan: { select: { title: true, year: true } },
+      monthly_item: { select: { title: true, month: true } },
+    },
+  },
 } as const;
 
 const assessmentSignalInclude = {
@@ -653,6 +681,14 @@ function mapPlan(plan: {
   strategy_summary: string | null;
   action_plan: string | null;
   status: unknown;
+  origin: unknown;
+  standalone_reason: string | null;
+  hierarchy_assignment: {
+    annual_plan_id: string;
+    monthly_portfolio_item_id: string;
+    annual_plan: { title: string; year: number };
+    monthly_item: { title: string; month: number };
+  } | null;
   owner_user_id: string | null;
   created_by_user_id: string;
   created_at: Date;
@@ -680,6 +716,14 @@ function mapPlan(plan: {
     strategySummary: plan.strategy_summary,
     actionPlan: plan.action_plan,
     status: String(plan.status) as CommercialPlanSummary['status'],
+    origin: String(plan.origin) as CommercialPlanSummary['origin'],
+    standaloneReason: plan.standalone_reason,
+    annualPlanId: plan.hierarchy_assignment?.annual_plan_id ?? null,
+    annualPlanTitle: plan.hierarchy_assignment?.annual_plan.title ?? null,
+    annualPlanYear: plan.hierarchy_assignment?.annual_plan.year ?? null,
+    monthlyPortfolioItemId: plan.hierarchy_assignment?.monthly_portfolio_item_id ?? null,
+    monthlyPortfolioItemTitle: plan.hierarchy_assignment?.monthly_item.title ?? null,
+    monthlyPortfolioMonth: plan.hierarchy_assignment?.monthly_item.month ?? null,
     ownerUserId: plan.owner_user_id,
     createdByUserId: plan.created_by_user_id,
     createdAt: plan.created_at,

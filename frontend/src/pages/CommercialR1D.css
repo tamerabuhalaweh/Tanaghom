@@ -1158,6 +1158,51 @@
   padding: 20px;
 }
 
+.execution-plan-default-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 20px;
+}
+
+.execution-plan-default-path > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.execution-plan-default-path strong {
+  color: var(--ops-ink);
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.execution-plan-default-path p {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--ops-ink-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.execution-plan-default-path > details {
+  grid-column: 1 / -1;
+  padding-top: 14px;
+  border-top: 1px solid var(--ops-border);
+}
+
+.execution-plan-default-path > details summary {
+  color: var(--ops-ink-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.execution-plan-default-path > details p {
+  margin: 10px 0 12px;
+}
+
 .commercial-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1791,8 +1836,14 @@
 
   .commercial-plan-facts,
   .commercial-form-grid,
+  .execution-plan-default-path,
   .commercial-discipline-summary {
     grid-template-columns: 1fr;
+  }
+
+  .execution-plan-default-path > .ops-button {
+    width: 100%;
+    justify-content: center;
   }
 
   .commercial-plan-facts > div {

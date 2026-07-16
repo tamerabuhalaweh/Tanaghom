@@ -6,6 +6,7 @@ import {
   validateAnnualPlanTransition,
   validateArchivePortfolioItem,
   validateCreateAnnualPlan,
+  validateCreateExecutionPlanForPortfolioItem,
   validateCreatePortfolioItem,
   validateLinkLearningSets,
   validateListAnnualPlans,
@@ -130,6 +131,23 @@ commercialAnnualPlanningRouter.post(
           validateCreatePortfolioItem(req.body),
         ),
       );
+  }),
+);
+
+commercialAnnualPlanningRouter.post(
+  '/:id/items/:itemId/execution-plan',
+  route(async (req, res) => {
+    const auth = context(req);
+    res.status(201).json(
+      await service.createExecutionPlanForPortfolioItem(
+        auth.role,
+        auth.tenantKey,
+        auth.userId,
+        String(req.params.id),
+        String(req.params.itemId),
+        validateCreateExecutionPlanForPortfolioItem(req.body),
+      ),
+    );
   }),
 );
 

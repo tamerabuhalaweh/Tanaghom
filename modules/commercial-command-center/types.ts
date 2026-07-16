@@ -16,6 +16,11 @@ export const COMMERCIAL_REVENUE_LINE_STATUSES = ['active', 'paused', 'archived']
 export const COMMERCIAL_OPERATING_STAGES = ['assess', 'strategy_planning', 'implementation_engagement'] as const;
 export const COMMERCIAL_PLAN_HORIZONS = ['three_year', 'one_year', 'quarterly', 'product_or_event'] as const;
 export const COMMERCIAL_PLAN_STATUSES = ['draft', 'active', 'paused', 'completed', 'archived'] as const;
+export const COMMERCIAL_PLAN_ORIGINS = [
+  'annual_month',
+  'standalone_exception',
+  'legacy_unclassified',
+] as const;
 export const COMMERCIAL_ASSESSMENT_SEVERITIES = ['info', 'watch', 'risk', 'critical'] as const;
 export const COMMERCIAL_ASSESSMENT_STATUSES = ['open', 'reviewing', 'resolved', 'dismissed'] as const;
 
@@ -25,6 +30,7 @@ export type CommercialRevenueLineStatus = (typeof COMMERCIAL_REVENUE_LINE_STATUS
 export type CommercialOperatingStage = (typeof COMMERCIAL_OPERATING_STAGES)[number];
 export type CommercialPlanHorizon = (typeof COMMERCIAL_PLAN_HORIZONS)[number];
 export type CommercialPlanStatus = (typeof COMMERCIAL_PLAN_STATUSES)[number];
+export type CommercialPlanOrigin = (typeof COMMERCIAL_PLAN_ORIGINS)[number];
 export type CommercialAssessmentSeverity = (typeof COMMERCIAL_ASSESSMENT_SEVERITIES)[number];
 export type CommercialAssessmentStatus = (typeof COMMERCIAL_ASSESSMENT_STATUSES)[number];
 
@@ -109,6 +115,7 @@ export const createCommercialPlanSchema = z.object({
   actionPlan: z.string().trim().max(8000).nullable().optional(),
   status: z.enum(COMMERCIAL_PLAN_STATUSES).default('draft').optional(),
   ownerUserId: z.string().uuid().nullable().optional(),
+  standaloneReason: z.string().trim().min(10).max(2000),
 });
 
 export const updateCommercialPlanSchema = z.object({
@@ -205,6 +212,14 @@ export interface CommercialPlanSummary {
   strategySummary: string | null;
   actionPlan: string | null;
   status: CommercialPlanStatus;
+  origin: CommercialPlanOrigin;
+  standaloneReason: string | null;
+  annualPlanId: string | null;
+  annualPlanTitle: string | null;
+  annualPlanYear: number | null;
+  monthlyPortfolioItemId: string | null;
+  monthlyPortfolioItemTitle: string | null;
+  monthlyPortfolioMonth: number | null;
   ownerUserId: string | null;
   createdByUserId: string;
   createdAt: Date;

@@ -4,6 +4,7 @@ import {
   annualPlanTransitionSchema,
   archivePortfolioItemSchema,
   createAnnualPlanSchema,
+  createExecutionPlanForPortfolioItemSchema,
   createPortfolioItemSchema,
   linkLearningSetsSchema,
   listAnnualPlansSchema,
@@ -37,3 +38,5 @@ export const validateUpdatePortfolioItem = (value: unknown) =>
   parse(updatePortfolioItemSchema, value);
 export const validateArchivePortfolioItem = (value: unknown) =>
   parse(archivePortfolioItemSchema, value);
+export const validateCreateExecutionPlanForPortfolioItem = (value: unknown) =>
+  parse(createExecutionPlanForPortfolioItemSchema, value);

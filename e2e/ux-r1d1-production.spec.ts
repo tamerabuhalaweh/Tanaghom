@@ -293,7 +293,7 @@ test.describe('UX-R1D1 production commercial workspaces', () => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('/commercial-plans');
 
-    await expect(page.getByRole('heading', { name: 'Commercial Plans' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Execution Plans' })).toBeVisible();
     const commercialNav = page.getByRole('navigation', { name: 'Commercial planning workspace' });
     await expect(commercialNav).toBeVisible();
     await expect(page.getByRole('link', { name: 'Executive Dashboard' })).toHaveCount(0);
@@ -302,17 +302,23 @@ test.describe('UX-R1D1 production commercial workspaces', () => {
     await expectNoHorizontalOverflow(page);
     await captureApprovedSurface(page, 'production-commercial-plans-desktop');
 
-    await page.getByRole('button', { name: 'Create plan' }).first().click();
+    await page.getByText('Need an unplanned exception?').click();
+    await page.getByRole('button', { name: 'Create standalone exception' }).click();
     await page.getByLabel('Plan title').fill('Autumn Leadership Launch');
     await page.getByLabel('Linked event').selectOption(event.id);
     await page.getByLabel('Status').selectOption('active');
     await page.getByLabel('Budget target').fill('7000');
     await page.getByLabel('Revenue target').fill('42000');
+    await page
+      .getByLabel('Standalone exception reason')
+      .fill('A time-sensitive launch was approved outside the current annual portfolio.');
     await page.getByLabel('Objective').fill('Convert warm followers into leadership course buyers.');
     await page.getByLabel('Audience').fill('Warm followers and previous customers.');
     await page.getByLabel('Action plan').fill('Prepare content, paid acquisition, CRM follow-up, and reminders.');
-    await page.getByRole('button', { name: 'Create plan' }).last().click();
-    await expect(page.getByText('Commercial plan created.')).toBeVisible();
+    await page.getByRole('button', { name: 'Create standalone exception' }).last().click();
+    await expect(
+      page.getByText('Standalone execution plan created with its exception reason recorded.'),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: /Autumn Leadership Launch/i })).toBeVisible();
 
     await commercialNav.getByRole('link', { name: /Discipline Workspaces/i }).click();
@@ -334,7 +340,7 @@ test.describe('UX-R1D1 production commercial workspaces', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/commercial-plans');
 
-    await expect(page.getByRole('heading', { name: 'Commercial Plans' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Execution Plans' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Mobile product navigation' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Event Operations' })).toBeVisible();
     await expectNoHorizontalOverflow(page);

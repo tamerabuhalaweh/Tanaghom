@@ -29,6 +29,7 @@ import * as annualPlanningService from '@modules/commercial-annual-planning/serv
 import {
   annualPlanTransitionSchema,
   createAnnualPlanSchema,
+  createExecutionPlanForPortfolioItemSchema,
   createPortfolioItemSchema,
   rejectAnnualPlanSchema,
   updatePortfolioItemSchema,
@@ -75,6 +76,7 @@ const SUPPORTED_ACTIONS = [
   'decide_historical_assessment_finding',
   'create_annual_commercial_plan',
   'create_monthly_portfolio_item',
+  'create_execution_plan_for_monthly_item',
   'update_monthly_portfolio_item',
   'transition_annual_commercial_plan',
   'assign_commercial_plan_hierarchy',
@@ -171,6 +173,12 @@ const updateMonthlyPortfolioItemActionSchema = z.object({
   annualPlanId: z.string().uuid(),
   itemId: z.string().uuid(),
   changes: updatePortfolioItemSchema,
+});
+
+const createExecutionPlanForMonthlyItemActionSchema = z.object({
+  annualPlanId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  executionPlan: createExecutionPlanForPortfolioItemSchema,
 });
 
 const transitionAnnualCommercialPlanActionSchema = z.object({
@@ -346,6 +354,22 @@ export async function executeStitchiAction(input: {
         payload.item,
       );
       return { objectType: 'annual_commercial_plan', objectId: payload.annualPlanId, result };
+    }
+    case 'create_execution_plan_for_monthly_item': {
+      const payload = createExecutionPlanForMonthlyItemActionSchema.parse(input.inputPayload);
+      const result = await annualPlanningService.createExecutionPlanForPortfolioItem(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.annualPlanId,
+        payload.itemId,
+        payload.executionPlan,
+      );
+      return {
+        objectType: 'commercial_plan',
+        objectId: result.executionPlan.id,
+        result,
+      };
     }
     case 'update_monthly_portfolio_item': {
       const payload = updateMonthlyPortfolioItemActionSchema.parse(input.inputPayload);

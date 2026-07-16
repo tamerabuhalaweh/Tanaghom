@@ -13,6 +13,7 @@ import type {
   ArchivePortfolioItemInput,
   CommercialCurrency,
   CreateAnnualPlanInput,
+  CreateExecutionPlanForPortfolioItemInput,
   CreatePortfolioItemInput,
   LinkLearningSetsInput,
   ListAnnualPlansInput,
@@ -356,6 +357,118 @@ export async function createPortfolioItem(
       },
     });
     return mapAnnualPlan(await fetchPlan(tx, tenantKey, annualPlanId));
+  });
+}
+
+export async function createExecutionPlanForPortfolioItem(
+  tenantKey: string,
+  userId: string,
+  annualPlanId: string,
+  itemId: string,
+  input: CreateExecutionPlanForPortfolioItemInput,
+) {
+  return prisma.$transaction(async (tx) => {
+    const annualPlan = await fetchPlan(tx, tenantKey, annualPlanId);
+    assertEditable(annualPlan.status);
+    assertRevision(annualPlan.revision, input.expectedRevision);
+    const item = await tx.monthlyPortfolioItem.findFirst({
+      where: {
+        id: itemId,
+        annual_plan_id: annualPlanId,
+        tenant_key: tenantKey,
+        archived_at: null,
+      },
+    });
+    if (!item) throw new NotFoundError('MonthlyPortfolioItem', itemId);
+    if (item.commercial_plan_id) {
+      throw new ConflictError('This monthly initiative already has an execution plan');
+    }
+    if (input.ownerUserId) await assertUserInTenant(tx, tenantKey, input.ownerUserId);
+
+    await bumpPlanRevision(tx, tenantKey, annualPlanId, input.expectedRevision, {});
+    const executionPlan = await tx.commercialPlan.create({
+      data: {
+        tenant_key: tenantKey,
+        revenue_line_id: item.revenue_line_id,
+        linked_event_id: item.event_id,
+        horizon: 'product_or_event',
+        stage: 'strategy_planning',
+        title: input.title,
+        objective: input.objective ?? null,
+        audience: input.audience ?? null,
+        currency: item.currency,
+        budget_target: item.budget_allocation,
+        revenue_target: item.revenue_target,
+        kpi_targets: Prisma.JsonNull,
+        strategy_summary: input.strategySummary ?? null,
+        action_plan: input.actionPlan ?? null,
+        status: 'draft',
+        origin: 'annual_month',
+        standalone_reason: null,
+        owner_user_id: input.ownerUserId ?? item.owner_user_id,
+        created_by_user_id: userId,
+      },
+    });
+    await tx.monthlyPortfolioItem.update({
+      where: { id: itemId },
+      data: { commercial_plan_id: executionPlan.id },
+    });
+    await syncExecutionPlanAssignment(
+      tx,
+      tenantKey,
+      userId,
+      annualPlanId,
+      itemId,
+      null,
+      executionPlan.id,
+      item.event_id,
+    );
+
+    const approvedFindings = annualPlan.learning_links.flatMap((link) =>
+      link.learning_set.findings.map((finding) => ({
+        tenant_key: tenantKey,
+        commercial_plan_id: executionPlan.id,
+        learning_set_id: link.learning_set.id,
+        finding_id: finding.id,
+        rationale: `Inherited from approved annual learning: ${finding.title}`,
+        linked_by_user_id: userId,
+      })),
+    );
+    if (approvedFindings.length) {
+      await tx.commercialPlanLearningInfluence.createMany({
+        data: approvedFindings,
+        skipDuplicates: true,
+      });
+    }
+
+    await createAudit(tx, {
+      action: 'monthly_execution_plan_created',
+      userId,
+      targetObjectType: 'commercial_plan',
+      targetObjectId: executionPlan.id,
+      reason: 'Execution plan created from an annual monthly initiative',
+      afterState: {
+        origin: 'annual_month',
+        annualPlanId,
+        monthlyPortfolioItemId: itemId,
+        revenueLineId: item.revenue_line_id,
+        eventId: item.event_id,
+        currency: item.currency,
+        budgetTarget: decimal(item.budget_allocation),
+        revenueTarget: decimal(item.revenue_target),
+        approvedLearningCount: approvedFindings.length,
+      },
+    });
+    return {
+      annualPlan: mapAnnualPlan(await fetchPlan(tx, tenantKey, annualPlanId)),
+      executionPlan: {
+        id: executionPlan.id,
+        title: executionPlan.title,
+        origin: executionPlan.origin,
+        annualPlanId,
+        monthlyPortfolioItemId: itemId,
+      },
+    };
   });
 }
 

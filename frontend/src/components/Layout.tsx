@@ -156,7 +156,7 @@ const ADMIN_LINKS: NavItem[] = [
 
 const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = [
   { match: path => path === '/' || path === '/command-center', title: 'Today' },
-  { match: path => path === '/commercial-plans', title: 'Commercial Plans' },
+  { match: path => path === '/commercial-plans', title: 'Execution Plans' },
   { match: path => path === '/commercial-planning', title: 'Annual Planning' },
   { match: path => path === '/commercial-assessment', title: 'Historical Assessment' },
   { match: path => path === '/disciplines', title: 'Discipline Workspaces' },

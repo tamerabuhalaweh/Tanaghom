@@ -7,6 +7,8 @@ const prismaMocks = vi.hoisted(() => ({
   commercialEvent: { findFirst: vi.fn() },
   user: { findFirst: vi.fn() },
   commercialPlan: { create: vi.fn() },
+  auditRecord: { create: vi.fn() },
+  $transaction: vi.fn(),
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
@@ -15,6 +17,7 @@ const baseInput = {
   revenueLineId: '11111111-1111-4111-8111-111111111111',
   horizon: 'quarterly' as const,
   title: 'Q3 course plan',
+  standaloneReason: 'Urgent partner launch outside the approved annual planning calendar.',
 };
 
 describe('commercial plan tenant currency default', () => {
@@ -30,6 +33,8 @@ describe('commercial plan tenant currency default', () => {
       created_at: new Date('2026-07-15'),
       updated_at: new Date('2026-07-15'),
     }));
+    prismaMocks.auditRecord.create.mockResolvedValue({ id: 'audit-1' });
+    prismaMocks.$transaction.mockImplementation(async (callback) => callback(prismaMocks));
   });
 
   it('inherits AED when the caller does not declare a currency', async () => {

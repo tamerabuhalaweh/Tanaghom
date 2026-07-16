@@ -26,6 +26,7 @@ const commercialExecutiveMocks = vi.hoisted(() => ({
 const annualPlanningMocks = vi.hoisted(() => ({
   createAnnualPlan: vi.fn(),
   createPortfolioItem: vi.fn(),
+  createExecutionPlanForPortfolioItem: vi.fn(),
   updatePortfolioItem: vi.fn(),
   transitionAnnualPlan: vi.fn(),
 }));
@@ -82,6 +83,10 @@ describe('Stitchi action registry', () => {
     commercialExecutiveMocks.createSchedule.mockResolvedValue({ id: 'executive-report-schedule-1' });
     annualPlanningMocks.createAnnualPlan.mockResolvedValue({ id: 'annual-plan-1', year: 2027 });
     annualPlanningMocks.createPortfolioItem.mockResolvedValue({ id: 'annual-plan-1', revision: 2 });
+    annualPlanningMocks.createExecutionPlanForPortfolioItem.mockResolvedValue({
+      annualPlan: { id: 'annual-plan-1', revision: 3 },
+      executionPlan: { id: 'commercial-plan-2', origin: 'annual_month' },
+    });
     annualPlanningMocks.updatePortfolioItem.mockResolvedValue({ id: 'annual-plan-1', revision: 3 });
     annualPlanningMocks.transitionAnnualPlan.mockResolvedValue({ id: 'annual-plan-1', status: 'approved' });
     historicalAssessmentMocks.createAssessment.mockResolvedValue({ id: '00000000-0000-0000-0000-000000000920' });
@@ -127,6 +132,7 @@ describe('Stitchi action registry', () => {
       'decide_historical_assessment_finding',
       'create_annual_commercial_plan',
       'create_monthly_portfolio_item',
+      'create_execution_plan_for_monthly_item',
       'update_monthly_portfolio_item',
       'transition_annual_commercial_plan',
       'assign_commercial_plan_hierarchy',
@@ -201,6 +207,36 @@ describe('Stitchi action registry', () => {
       '00000000-0000-0000-0000-000000000930',
       expect.objectContaining({ month: 3, expectedRevision: 4, currency: 'AED' }),
     );
+  });
+
+  it('creates a monthly execution plan through the annual planning state machine', async () => {
+    const result = await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'create_execution_plan_for_monthly_item',
+      inputPayload: {
+        annualPlanId: '00000000-0000-0000-0000-000000000930',
+        itemId: '00000000-0000-0000-0000-000000000931',
+        executionPlan: {
+          expectedRevision: 4,
+          title: 'Leadership launch execution plan',
+          objective: 'Sell the leadership course to entrepreneurs.',
+          audience: 'Warm followers and previous buyers.',
+          actionPlan: 'Prepare content, ads, CRM follow-up, and reminders.',
+        },
+      },
+    });
+
+    expect(annualPlanningMocks.createExecutionPlanForPortfolioItem).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000930',
+      '00000000-0000-0000-0000-000000000931',
+      expect.objectContaining({ expectedRevision: 4, title: 'Leadership launch execution plan' }),
+    );
+    expect(result).toMatchObject({ objectType: 'commercial_plan', objectId: 'commercial-plan-2' });
   });
 
   it('uses the executing user as the assessment requester when no original requester is supplied', async () => {
@@ -482,6 +518,7 @@ describe('Stitchi action registry', () => {
       actionType: 'create_commercial_plan',
       inputPayload: {
         revenueLineId: '00000000-0000-0000-0000-000000000020',
+        standaloneReason: 'Urgent partner launch outside the approved annual planning calendar.',
         horizon: 'quarterly',
         stage: 'strategy_planning',
         title: 'Q3 online course plan',
@@ -526,6 +563,7 @@ describe('Stitchi action registry', () => {
           systemOfRecord: 'tanaghum',
         },
         plan: {
+          standaloneReason: 'Urgent partner launch outside the approved annual planning calendar.',
           horizon: 'product_or_event',
           stage: 'strategy_planning',
           title: 'Leadership course launch plan',

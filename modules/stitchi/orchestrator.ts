@@ -445,6 +445,13 @@ async function deriveActionProposal(
     metadata,
   );
   if (historicalAssessmentProposal) return historicalAssessmentProposal;
+  const executionPlanProposal = await deriveMonthlyExecutionPlanActionProposal(
+    content,
+    userId,
+    context,
+    metadata,
+  );
+  if (executionPlanProposal) return executionPlanProposal;
   const annualPortfolioProposal = deriveAnnualPortfolioActionProposal(content, context, metadata);
   if (annualPortfolioProposal) return annualPortfolioProposal;
   const budgetProposal = deriveCommercialBudgetActionProposal(content, context, metadata);
@@ -513,6 +520,141 @@ async function deriveActionProposal(
   }
 
   return null;
+}
+
+async function deriveMonthlyExecutionPlanActionProposal(
+  content: string,
+  userId: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): Promise<CommercialDerivation> {
+  const lower = content.toLowerCase();
+  const selectedItemId = textMetadata(metadata, 'monthlyPortfolioItemId');
+  const asksForExecutionPlan = /(execution plan|execute this initiative|run this initiative|detailed plan for.*initiative|plan for.*monthly initiative)/i.test(lower)
+    || Boolean(selectedItemId && /(plan|strategy|launch|prepare|build)/i.test(lower));
+  if (!asksForExecutionPlan || !selectedItemId) return null;
+
+  const currentPlan = context?.annualPlanning?.currentPlan;
+  const selectedAnnualPlanId = textMetadata(metadata, 'annualPlanId') || currentPlan?.id;
+  if (!currentPlan || !selectedAnnualPlanId || currentPlan.id !== selectedAnnualPlanId) {
+    return {
+      kind: 'follow_up',
+      assistantText: 'Open the annual plan and select a monthly initiative first. I need that approved planning context before I prepare an execution plan.',
+    };
+  }
+  const item = currentPlan.monthlyItems.find(candidate => candidate.id === selectedItemId);
+  if (!item) {
+    return {
+      kind: 'follow_up',
+      assistantText: 'The selected monthly initiative is not part of the current annual plan. Refresh Annual Planning and choose the initiative again.',
+    };
+  }
+  if (item.commercialPlanId) {
+    return {
+      kind: 'follow_up',
+      assistantText: `The ${item.title} initiative already has an execution plan. Open that plan to review or update it instead of creating a duplicate.`,
+    };
+  }
+
+  const objective = extractLabelValue(content, ['objective', 'goal', 'purpose']);
+  const audience = extractLabelValue(content, ['audience', 'target audience', 'segment']);
+  const actionPlan = extractLabelValue(content, ['action plan', 'next actions']);
+  const missing = [
+    objective ? null : 'objective',
+    audience ? null : 'audience',
+    actionPlan ? null : 'action plan',
+  ].filter(Boolean);
+  if (missing.length) {
+    return {
+      kind: 'follow_up',
+      assistantText: [
+        `I found ${item.title} in ${monthName(item.month)} and will inherit its ${item.currency} ${item.budgetAllocation} budget and ${item.revenueTarget} revenue target.`,
+        `Before I prepare the execution plan, tell me the ${missing.join(', ')}.`,
+        'No plan has been created.',
+      ].join('\n'),
+    };
+  }
+
+  const revenueLine = context?.commercialCenter.revenueLines.find(line => line.id === item.revenueLineId);
+  const revenueLineType = revenueLine ? asCommercialRevenueLineType(revenueLine.type) : null;
+  if (!revenueLine || !revenueLineType) {
+    return {
+      kind: 'follow_up',
+      assistantText: 'The monthly initiative revenue line is not available. Ask a manager to repair the annual-plan item before creating execution work.',
+    };
+  }
+  const linkedEvent = item.eventId
+    ? context?.recentEvents.find(event => event.id === item.eventId) || context?.selectedEvent
+    : null;
+  const extractedPlan: ExtractedCommercialPlan = {
+    objective,
+    audience,
+    currency: item.currency === 'USD' ? 'USD' : 'AED',
+    budgetTarget: item.budgetAllocation,
+    revenueTarget: item.revenueTarget,
+    actionPlan,
+    strategySummary: cleanText(content),
+    linkedEventId: item.eventId,
+    linkedEventName: linkedEvent?.name || null,
+  };
+  const title = inferCommercialPlanTitle(content, item.title) || `${item.title} execution plan`;
+  const enrichment = await enrichCommercialPlanWithLLM({
+    userId,
+    content,
+    context,
+    revenueLine: {
+      id: revenueLine.id,
+      type: revenueLineType,
+      name: revenueLine.name,
+      status: revenueLine.status,
+    },
+    title,
+    stage: 'strategy_planning',
+    extractedPlan,
+  });
+  if (isFollowUpResponse(enrichment)) return enrichment;
+  const enrichedTitle = cleanAiText(enrichment.title, title, 260);
+  const enrichedObjective = cleanAiText(enrichment.objective, objective, 5000);
+  const enrichedAudience = cleanAiText(enrichment.audience, audience, 5000);
+  const enrichedStrategySummary = buildAiStrategySummary(enrichment, extractedPlan.strategySummary);
+  const enrichedActionPlan = buildAiActionPlan(enrichment, actionPlan);
+
+  return {
+    actionType: 'create_execution_plan_for_monthly_item',
+    inputPayload: {
+      annualPlanId: currentPlan.id,
+      itemId: item.id,
+      executionPlan: {
+        expectedRevision: currentPlan.revision,
+        title: enrichedTitle,
+        objective: enrichedObjective,
+        audience: enrichedAudience,
+        strategySummary: enrichedStrategySummary,
+        actionPlan: enrichedActionPlan,
+      },
+    },
+    previewPayload: {
+      annualPlanTitle: currentPlan.title,
+      year: currentPlan.year,
+      month: monthName(item.month),
+      monthlyInitiative: item.title,
+      title: enrichedTitle,
+      objective: enrichedObjective,
+      audience: enrichedAudience,
+      currency: item.currency,
+      budgetTarget: item.budgetAllocation,
+      revenueTarget: item.revenueTarget,
+      linkedEventId: item.eventId,
+      linkedEventName: linkedEvent?.name || null,
+      ...buildAiCommercialPreview(enrichment),
+      approvalRequired: true,
+      externalExecution: 'blocked',
+    },
+    riskLevel: 'high',
+    reason: `create the execution plan for ${item.title} under the ${currentPlan.year} annual plan`,
+    providerType: enrichment.providerType,
+    providerModel: enrichment.providerModel || undefined,
+  };
 }
 
 async function deriveHistoricalAssessmentActionProposal(
@@ -1313,6 +1455,27 @@ async function deriveCommercialCenterActionProposalV2(
         ].join('\n'),
       };
     }
+    const standaloneException = isStandaloneExceptionRequest(lower);
+    if (!standaloneException) {
+      const currentAnnualPlan = context?.annualPlanning?.currentPlan;
+      const availableItems = currentAnnualPlan?.monthlyItems.filter(item => !item.commercialPlanId) || [];
+      return {
+        kind: 'follow_up',
+        assistantText: currentAnnualPlan
+          ? [
+            `This work should be created from a monthly initiative in the ${currentAnnualPlan.year} annual plan.`,
+            availableItems.length
+              ? `Choose one of these unplanned initiatives: ${availableItems.slice(0, 6).map(item => `${monthName(item.month)} - ${item.title}`).join('; ')}.`
+              : 'There are no monthly initiatives available for a new execution plan. Add one in Annual Planning first.',
+            'If this is genuinely unplanned work, explicitly ask for a standalone exception and explain why it cannot belong to the annual calendar.',
+          ].join('\n')
+          : [
+            'Create the annual plan and its monthly initiative first, then I can prepare the execution plan with inherited budget, revenue, event, and learning context.',
+            'If this is genuinely unplanned work, explicitly ask for a standalone exception and explain why it cannot belong to an annual month.',
+            'No plan has been created.',
+          ].join('\n'),
+      };
+    }
     const extractedPlan = extractCommercialPlanFields(content, context);
     const missing = requiredCommercialPlanFields(extractedPlan);
     if (missing.length > 0) {
@@ -1352,6 +1515,7 @@ async function deriveCommercialCenterActionProposalV2(
             systemOfRecord: 'tanaghum',
           },
           plan: {
+            standaloneReason: cleanText(content),
             linkedEventId: extractedPlan.linkedEventId ?? undefined,
             horizon: inferCommercialHorizon(lower),
             stage,
@@ -1394,6 +1558,7 @@ async function deriveCommercialCenterActionProposalV2(
     return {
       actionType: 'create_commercial_plan',
       inputPayload: {
+        standaloneReason: cleanText(content),
         revenueLineId,
         linkedEventId: extractedPlan.linkedEventId ?? undefined,
         horizon: inferCommercialHorizon(lower),
@@ -1903,6 +2068,10 @@ function isCommercialCenterRequest(lower: string, metadata?: Record<string, unkn
     return true;
   }
   return /(commercial|three-year|quarterly|department)/i.test(lower) && /(plan|strategy|target|budget|revenue|launch|pipeline|forecast|report|dashboard|assessment|signal|risk|gap)/i.test(lower);
+}
+
+function isStandaloneExceptionRequest(lower: string): boolean {
+  return /(standalone|stand-alone|ad hoc|ad-hoc|one-off|unplanned exception|outside (?:the )?annual|not part of (?:the )?annual)/i.test(lower);
 }
 
 function resolveRevenueLine(
