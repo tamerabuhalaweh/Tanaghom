@@ -364,6 +364,7 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await expect(page.getByRole('heading', { name: /Tell Stitchi what work you want done/i })).toBeVisible();
     await page.getByPlaceholder(/What should I focus/i).fill([
       'Stitchi, create an Online Courses plan for a leadership course launch.',
+      'Create it as a standalone exception because this urgent partner launch was approved outside the normal annual planning cycle.',
       'Objective: sell to entrepreneurs.',
       'Audience: warm followers and previous buyers.',
       'Budget target: 5000.',
@@ -375,7 +376,8 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await expect(page.getByText(/I prepared this for review/i)).toBeVisible();
     await expect(page.getByText('Online Courses').last()).toBeVisible();
     await expect(page.getByText('Leadership Course Launch').last()).toBeVisible();
-    await expect(page.getByText(/gemma4-26b-a4b-canary/i).last()).toBeVisible();
+    await expect(page.getByText(/^AI assisted$/i).last()).toBeVisible();
+    await expect(page.getByText(/plan details were enriched by your connected AI model/i).last()).toBeVisible();
     await expect(page.getByText(/authority content/i).last()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Approve & Save' })).toHaveCount(0);
     await expect(page.getByText(/Executive approval required.*Admin or CCO/i).first()).toBeVisible();
