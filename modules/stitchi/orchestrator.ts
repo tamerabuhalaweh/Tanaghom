@@ -590,7 +590,6 @@ async function deriveHistoricalAssessmentActionProposal(
   if (!preview.evidence.length) {
     return {
       kind: 'follow_up',
-      providerType: 'none',
       assistantText: [
         `I found no usable historical evidence for ${formatDateRange(dateRange.dateFrom, dateRange.dateTo)}${revenueLine ? ` in ${revenueLine.name}` : ''}.`,
         ...(preview.missingData.length ? preview.missingData.map(item => `- ${item}`) : ['- No completed commercial evidence matched this scope.']),
