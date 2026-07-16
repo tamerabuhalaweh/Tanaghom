@@ -169,7 +169,7 @@ function buildEffectiveFollowUpRequest(
   const assistantIndex = findLastIndex(beforeCurrent, message => message.role === 'assistant');
   if (assistantIndex < 0) return currentContent;
   const assistant = beforeCurrent[assistantIndex];
-  if (!/(still need|need the|tell me|provide|which period|which month|select the|choose the|what is the|what are the|missing)/i.test(assistant.content)) {
+  if (!/(still need|need the|tell me|provide|which (?:historical )?period|which month|select the|choose the|what is the|what are the|missing)/i.test(assistant.content)) {
     return currentContent;
   }
   const priorUser = [...beforeCurrent.slice(0, assistantIndex)].reverse().find(message => message.role === 'user');
