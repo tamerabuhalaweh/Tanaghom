@@ -1040,6 +1040,7 @@ function deriveCommercialHierarchyActionProposal(
   metadata?: Record<string, unknown>,
 ): CommercialDerivation {
   const lower = content.toLowerCase();
+  if (isStandaloneExceptionRequest(lower)) return null;
   if (!/(connect|link|assign|attach|use approved learning)/i.test(lower)) return null;
 
   const commercialPlanId = extractUuidAfter(lower, 'commercial plan')
@@ -1140,6 +1141,7 @@ async function deriveAnnualPlanActionProposal(
   context?: StitchiReadOnlyContext,
 ): Promise<ActionProposal | FollowUpResponse | null> {
   const lower = content.toLowerCase();
+  if (isStandaloneExceptionRequest(lower)) return null;
   if (!/(annual|yearly|year plan|12[- ]month|twelve[- ]month|next year)/i.test(lower)) return null;
   if (!/(prepare|create|build|draft|plan|strategy|portfolio|calendar|allocate)/i.test(lower)) return null;
 
@@ -1976,12 +1978,12 @@ function formatDateRange(dateFrom: Date, dateTo: Date): string {
 
 function inferAnnualPlanTransition(lower: string): 'pending_approval' | 'approved' | 'rejected' | 'active' | 'closed' | 'archived' | null {
   if (!/(annual plan|annual strategy|year plan)/i.test(lower)) return null;
-  if (/(submit|send).*?(approval|review)|pending approval/i.test(lower)) return 'pending_approval';
-  if (/(approve|accept).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(approve|accept)/i.test(lower)) return 'approved';
-  if (/(reject|decline).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(reject|decline)/i.test(lower)) return 'rejected';
-  if (/(activate|start).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(activate|start)/i.test(lower)) return 'active';
-  if (/(close|complete).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(close|complete)/i.test(lower)) return 'closed';
-  if (/(archive).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(archive)/i.test(lower)) return 'archived';
+  if (/\b(?:submit|send)\b.*?\b(?:approval|review)\b|\bpending approval\b/i.test(lower)) return 'pending_approval';
+  if (/\b(?:approve|accept)\b.*?\b(?:annual plan|annual strategy)\b|\b(?:annual plan|annual strategy)\b.*?\b(?:approve|accept)\b/i.test(lower)) return 'approved';
+  if (/\b(?:reject|decline)\b.*?\b(?:annual plan|annual strategy)\b|\b(?:annual plan|annual strategy)\b.*?\b(?:reject|decline)\b/i.test(lower)) return 'rejected';
+  if (/\b(?:activate|start)\b.*?\b(?:annual plan|annual strategy)\b|\b(?:annual plan|annual strategy)\b.*?\b(?:activate|start)\b/i.test(lower)) return 'active';
+  if (/\b(?:close|complete)\b.*?\b(?:annual plan|annual strategy)\b|\b(?:annual plan|annual strategy)\b.*?\b(?:close|complete)\b/i.test(lower)) return 'closed';
+  if (/\barchive\b.*?\b(?:annual plan|annual strategy)\b|\b(?:annual plan|annual strategy)\b.*?\barchive\b/i.test(lower)) return 'archived';
   return null;
 }
 
