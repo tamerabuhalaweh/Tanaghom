@@ -212,6 +212,20 @@ describe('Stitchi read-only context loader', () => {
   });
 
   it('loads summarized tenant-scoped event context without exposing secrets', async () => {
+    prismaMocks.commercialPlanHierarchyAssignment.findMany.mockResolvedValue([
+      {
+        commercial_plan_id: 'plan-1',
+        annual_plan_id: 'annual-plan-1',
+        monthly_portfolio_item_id: 'monthly-item-1',
+        commercial_plan: {
+          title: 'Course Launch Plan',
+          _count: { event_links: 1, campaign_links: 2 },
+        },
+        annual_plan: { title: '2027 Commercial Strategy', year: 2027 },
+        monthly_item: { title: 'Leadership Course Launch', month: 3 },
+      },
+    ]);
+
     const context = await loadReadOnlyContext('tenant-a', conversation, 'event-1', 'marketing_manager');
 
     expect(context.currentUser).toMatchObject({
@@ -267,6 +281,13 @@ describe('Stitchi read-only context loader', () => {
       type: 'online_course',
       name: 'Online Courses',
     });
+    expect(context.commercialHierarchy.linkedPlans[0]).toMatchObject({
+      commercialPlanId: 'plan-1',
+      annualPlanId: 'annual-plan-1',
+      monthlyPortfolioItemId: 'monthly-item-1',
+      linkedEvents: 1,
+      linkedCampaigns: 2,
+    });
     expect(context.commercialExecutive).toMatchObject({
       recentReports: 1,
       activeSchedules: 1,
@@ -278,6 +299,19 @@ describe('Stitchi read-only context loader', () => {
     expect(prismaMocks.commercialPlanHierarchyAssignment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { tenant_key: 'tenant-a', status: 'active' },
+        select: expect.objectContaining({
+          commercial_plan: {
+            select: {
+              title: true,
+              _count: {
+                select: {
+                  event_links: { where: { status: 'active' } },
+                  campaign_links: { where: { status: 'active' } },
+                },
+              },
+            },
+          },
+        }),
         orderBy: { created_at: 'desc' },
       }),
     );
