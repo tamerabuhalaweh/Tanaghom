@@ -268,7 +268,7 @@ async function createActionRunFromProposal(
     assistantText: [
       `I prepared this for review: ${proposal.reason}.`,
       'No data has been changed yet.',
-      'A manager must approve it before Tanaghum executes the internal update.',
+      'An Admin or CCO must approve it before Tanaghum executes the internal update.',
     ].join('\n'),
   };
 }

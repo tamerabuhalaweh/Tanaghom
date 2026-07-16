@@ -239,7 +239,7 @@ async function installCommercialMocks(page: Page) {
       await json(stitchiAsked ? [{
         id: 'message-assistant',
         role: 'assistant',
-        content: 'I prepared this for review: configure Online Courses and create a commercial plan.\nNo data has been changed yet.\nA manager must approve it before Tanaghum executes the internal update.',
+        content: 'I prepared this for review: configure Online Courses and create a commercial plan.\nNo data has been changed yet.\nAn Admin or CCO must approve it before Tanaghum executes the internal update.',
       }] : []);
       return;
     }
@@ -262,7 +262,7 @@ async function installCommercialMocks(page: Page) {
         assistantMessage: {
           id: 'message-assistant',
           role: 'assistant',
-          content: 'I prepared this for review: configure Online Courses and create a commercial plan.\nNo data has been changed yet.\nA manager must approve it before Tanaghum executes the internal update.',
+          content: 'I prepared this for review: configure Online Courses and create a commercial plan.\nNo data has been changed yet.\nAn Admin or CCO must approve it before Tanaghum executes the internal update.',
         },
         actionRun: stitchiAction(),
         safety: {
