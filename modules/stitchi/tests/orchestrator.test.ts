@@ -1099,6 +1099,45 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('continues the exact historical-period follow-up through the governed assessment path', async () => {
+    const priorRequest = 'Assess our previous commercial performance and tell me what we should learn.';
+    const currentAnswer = 'Assess the 2025 calendar year.';
+    vi.mocked(repo.listMessages).mockResolvedValue([
+      { id: 'm1', tenantKey: 'tenant-a', conversationId: 'conversation-1', role: 'user', content: priorRequest, metadata: {}, createdAt: new Date() },
+      { id: 'm2', tenantKey: 'tenant-a', conversationId: 'conversation-1', role: 'assistant', content: 'Which historical period should I assess?\nGive me a year or a start and end date.', metadata: {}, createdAt: new Date() },
+      { id: 'm3', tenantKey: 'tenant-a', conversationId: 'conversation-1', role: 'user', content: currentAnswer, metadata: {}, createdAt: new Date() },
+    ]);
+    historicalAssessmentMocks.previewAssessment.mockResolvedValueOnce({
+      scope: {},
+      summary: { evidenceCount: 0 },
+      missingData: ['No verified KPI records were found for the completed events.'],
+      evidence: [],
+    });
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: currentAnswer,
+    });
+
+    expect(result.status).toBe('answered');
+    expect(historicalAssessmentMocks.previewAssessment).toHaveBeenCalledWith(
+      'marketing_manager',
+      'tenant-a',
+      expect.objectContaining({
+        dateFrom: new Date('2025-01-01T00:00:00.000Z'),
+        dateTo: new Date('2025-12-31T23:59:59.999Z'),
+      }),
+    );
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('No verified KPI records'),
+      expect.any(Object),
+    );
+  });
+
   it('prepares an evidence-scoped historical assessment with a real AI provider', async () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: 'Assess our 2025 Online Courses historical performance and explain what worked and failed.',
