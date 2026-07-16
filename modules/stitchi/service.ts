@@ -548,12 +548,38 @@ export async function approveAndExecuteActionRun(
   actionRunId: string,
   input: ActionDecisionInput,
 ) {
+  checkStitchiPermission(role, 'stitchi:approve_action');
+  const existing = await repo.getActionRun(tenantKey, userId, role, actionRunId);
+  if (existing.status === 'completed') {
+    const payload = existing.resultPayload as {
+      objectType?: unknown;
+      objectId?: unknown;
+      result?: unknown;
+    } | null;
+    if (
+      payload &&
+      typeof payload.objectType === 'string' &&
+      typeof payload.objectId === 'string'
+    ) {
+      return {
+        approval: null,
+        actionRun: existing,
+        executed: {
+          objectType: payload.objectType,
+          objectId: payload.objectId,
+          result: payload.result,
+        },
+        idempotent: true,
+      };
+    }
+  }
   const approval = await approveActionRun(role, tenantKey, userId, actionRunId, input);
   const execution = await executeApprovedActionRun(role, tenantKey, userId, actionRunId);
   return {
     approval,
     actionRun: execution.actionRun,
     executed: execution.executed,
+    idempotent: false,
   };
 }
 

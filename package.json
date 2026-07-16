@@ -20,6 +20,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e:production": "playwright test e2e/production-acceptance.spec.ts --reporter=list --workers=1",
+    "acceptance:seed": "node dist/seed-production-acceptance.js",
+    "acceptance:cleanup": "node dist/seed-production-acceptance.js",
     "test:e2e": "playwright test",
     "test:e2e:acceptance": "playwright test e2e/sprint39-live-acceptance.spec.ts",
     "test:e2e:hybrid-live": "node scripts/run-hybrid-live-e2e.mjs",

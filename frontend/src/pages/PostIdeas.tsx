@@ -185,8 +185,16 @@ export default function PostIdeas() {
     let cancelled = false;
     async function load() {
       try {
-        const active = await aiProviderApi.active(token as string) as { apiKeyStatus?: string };
-        if (!cancelled) setProviderReady(active.apiKeyStatus === 'configured');
+        const status = await aiProviderApi.status(token as string) as {
+          activeProvider?: string;
+          providers?: Array<{ type?: string; configured?: boolean; apiKeyStatus?: string }>;
+        };
+        const active = (status.providers || []).find(
+          (provider) => provider.type === status.activeProvider,
+        );
+        if (!cancelled) {
+          setProviderReady(Boolean(active?.configured && active.apiKeyStatus === 'configured'));
+        }
       } catch {
         if (!cancelled) setProviderReady(false);
       }

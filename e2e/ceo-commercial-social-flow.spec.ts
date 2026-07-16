@@ -58,7 +58,7 @@ async function installApiMocks(page: Page) {
         activeProvider: 'openai',
         providers: [
           { type: 'mock', name: 'Mock Provider', model: 'mock', apiKeyStatus: 'missing' },
-          { type: 'openai', name: 'OpenAI', model: 'gpt-5.5', apiKeyStatus: 'configured' },
+          { type: 'openai', name: 'OpenAI', model: 'gpt-5.5', configured: true, apiKeyStatus: 'configured' },
         ],
         credentialStorage: { rawKeysReturned: false },
       });

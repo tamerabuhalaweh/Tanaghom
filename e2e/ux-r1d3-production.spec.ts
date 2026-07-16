@@ -56,7 +56,16 @@ async function installMocks(page: Page, role: Role) {
 
     if (path === '/auth/session') return json({ user: people[role], agentRep: { id: `profile-${role}`, name: people[role].name, status: 'active' } });
     if (path === '/auth/logout') return json({ ok: true });
-    if (path === '/ai-provider/active') return json({ apiKeyStatus: 'configured', provider: 'gemma', model: 'gemma4' });
+    if (path === '/ai-provider/status') return json({
+      activeProvider: 'gemma',
+      providers: [{
+        type: 'gemma',
+        name: 'Gemma',
+        model: 'gemma4',
+        configured: true,
+        apiKeyStatus: 'configured',
+      }],
+    });
     if (path === '/campaigns' && method === 'GET') return json([campaign]);
     if (path === `/campaigns/${campaign.id}` && method === 'GET') return json(campaign);
     if (path === '/ideas/generate' && method === 'POST') return json({ workflow: { threadId: 'idea-thread-1', status: 'waiting' }, ideas: [{ id: 'idea-1', title: 'Lead Before You Feel Ready', hook: 'Confidence often follows the first courageous decision.', platform: 'instagram', format: 'carousel', hashtags: ['leadership'], estimatedReach: 'high', rationale: 'Matches the requested audience and conversion goal.' }], provider: 'gemma', model: 'gemma4', apiKeyStatus: 'configured', generationMode: 'provider' });

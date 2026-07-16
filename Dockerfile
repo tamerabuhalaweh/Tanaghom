@@ -10,6 +10,7 @@ COPY prisma ./prisma/
 COPY src ./src/
 COPY modules ./modules/
 COPY shared ./shared/
+COPY scripts ./scripts/
 
 RUN npx prisma generate
 RUN npm run build

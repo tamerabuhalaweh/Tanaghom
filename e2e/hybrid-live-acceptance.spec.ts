@@ -131,7 +131,8 @@ test.describe('Hybrid live customer acceptance', () => {
     });
     await expect(page.getByText(/No data has been changed yet/i).first()).toBeVisible();
     await expect(page.getByText(/gemma4-26b-a4b-canary/i).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /Approve|Save/i }).first()).toBeVisible();
+    await expect(page.getByText(/Admin or CCO approval required/i).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Approve|Save/i })).toHaveCount(0);
     await expect(page.locator('main')).not.toContainText(customerVisibleInternalTextPattern);
     monitor.assertClean('Stitchi safe plan proposal');
   });

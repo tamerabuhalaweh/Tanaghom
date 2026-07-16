@@ -165,7 +165,16 @@ async function installMocks(page: Page, role: ProductRole) {
     if (path === '/auth/logout') return json({ ok: true });
     if (path === '/commercial-command-center/dashboard') return json(dashboard);
     if (path === '/commercial-command-center/revenue-lines/live_event/dashboard') return json(lineDashboard);
-    if (path === '/ai-provider/active') return json({ provider: 'gemma', model: 'gemma4-26b-a4b-canary', apiKeyStatus: 'configured' });
+    if (path === '/ai-provider/status') return json({
+      activeProvider: 'gemma',
+      providers: [{
+        type: 'gemma',
+        name: 'Gemma',
+        model: 'gemma4-26b-a4b-canary',
+        configured: true,
+        apiKeyStatus: 'configured',
+      }],
+    });
     if (path === '/campaigns' && method === 'GET') return json(campaignCreated ? [{
       id: 'campaign-leadership',
       topic: 'Leadership Course Launch',
@@ -273,10 +282,11 @@ test.describe('UX-R1B Hybrid customer shell', () => {
     await expectNoHorizontalOverflow(page);
 
     await page.getByRole('button', { name: 'Open workspace menu' }).click();
-    await expect(page.getByRole('dialog', { name: 'Workspace menu' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'AI Model' })).toBeVisible();
+    const workspaceMenu = page.getByRole('dialog', { name: 'Workspace menu' });
+    await expect(workspaceMenu).toBeVisible();
+    await expect(workspaceMenu.getByRole('link', { name: /^AI Model/ })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Users & Roles' })).toHaveCount(0);
-    await page.getByRole('dialog', { name: 'Workspace menu' }).getByRole('button', { name: 'Close workspace menu' }).click();
+    await workspaceMenu.getByRole('button', { name: 'Close workspace menu' }).click();
     await expect(page.getByRole('dialog', { name: 'Workspace menu' })).toHaveCount(0);
     await page.setViewportSize({ width: 768, height: 900 });
     await expect(page.getByRole('navigation', { name: 'Mobile product navigation' })).toBeVisible();
