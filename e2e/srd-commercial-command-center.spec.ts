@@ -328,7 +328,7 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
 
     await page.waitForURL(/\/command-center(?:$|[?#])/);
     await page.goto('/commercial-plans');
-    await expect(page.getByRole('heading', { name: 'Execution Plans' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Execution Plans', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Revenue lines' })).toBeVisible();
     await expect(page.getByRole('link', { name: /Users & Roles/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Tenant Admin/i })).toHaveCount(0);

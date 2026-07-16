@@ -299,6 +299,7 @@ test.describe('Hybrid production acceptance harness', () => {
           revenueLineId: fixtures.revenueLineId,
           horizon: 'product_or_event',
           title: 'Unauthorized viewer plan',
+          standaloneReason: 'Unauthorized viewer attempt outside the approved annual calendar.',
         },
       }),
       403,
