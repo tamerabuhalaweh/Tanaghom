@@ -763,7 +763,7 @@ function ActionPreview({ action }: { action: ActionRun }) {
     ['Current status', preview.currentStatus],
     ['Target status', preview.targetStatus],
     ['Title', preview.title || preview.name],
-    ['AI assisted', preview.aiAssisted ? `${preview.aiProvider || 'AI'}${preview.aiModel ? ` / ${preview.aiModel}` : ''}` : undefined],
+    ['AI assisted', preview.aiAssisted ? 'Yes - plan details were enriched by your connected AI model.' : undefined],
     ['Objective', preview.objective],
     ['Audience', preview.audience],
     ['Budget target', preview.budgetTarget],

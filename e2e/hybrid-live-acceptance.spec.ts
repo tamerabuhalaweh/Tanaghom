@@ -113,6 +113,7 @@ test.describe('Hybrid live customer acceptance', () => {
       .fill(
         [
           'Stitchi, create an Online Courses plan for a leadership course launch.',
+          'Create it as a standalone exception because this urgent partner launch was approved outside the normal annual planning cycle.',
           'Objective: sell to entrepreneurs.',
           'Audience: warm followers and previous buyers.',
           'Budget target: 5000.',
@@ -130,7 +131,12 @@ test.describe('Hybrid live customer acceptance', () => {
       timeout: 30000,
     });
     await expect(page.getByText(/No data has been changed yet/i).first()).toBeVisible();
-    await expect(page.getByText(/gemma4-26b-a4b-canary/i).first()).toBeVisible();
+    await expect(page.getByText(/^AI assisted$/i).last()).toBeVisible();
+    await expect(
+      page.getByText(/plan details were enriched by your connected AI model/i).last(),
+    ).toBeVisible();
+    await expect(page.getByText(/^Content pillars$/i).last()).toBeVisible();
+    await expect(page.getByText(/^Channel plan$/i).last()).toBeVisible();
     await expect(page.getByText(/Admin or CCO approval required/i).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Approve|Save/i })).toHaveCount(0);
     await expect(page.locator('main')).not.toContainText(customerVisibleInternalTextPattern);
