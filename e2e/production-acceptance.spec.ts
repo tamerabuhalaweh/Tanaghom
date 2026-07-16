@@ -236,7 +236,22 @@ test.describe('Hybrid production acceptance harness', () => {
     expect(learningSet).toBeTruthy();
     workflow.learningSetId = learningSet!.id;
 
-    const unavailableAssessment = await expectOk<{ id: string; status: string }>(
+    const providerStatus = await expectOk<{
+      activeProvider: string;
+      providers: Array<{ type: string; configured: boolean }>;
+    }>(
+      await request.get(`${apiBase}/ai-provider/status`, {
+        headers: auth(sessions.manager.token),
+      }),
+    );
+    const activeProvider = providerStatus.providers.find(
+      provider => provider.type === providerStatus.activeProvider,
+    );
+    const providerReady = Boolean(
+      activeProvider?.configured && activeProvider.type !== 'mock',
+    );
+
+    const providerAssessment = await expectOk<{ id: string; status: string }>(
       await request.post(`${apiBase}/commercial-assessments`, {
         headers: auth(sessions.manager.token),
         data: {
@@ -250,18 +265,25 @@ test.describe('Hybrid production acceptance harness', () => {
         },
       }),
     );
-    const unavailableGeneration = await request.post(
-      `${apiBase}/commercial-assessments/${unavailableAssessment.id}/generate`,
+    const providerGeneration = await request.post(
+      `${apiBase}/commercial-assessments/${providerAssessment.id}/generate`,
       { headers: auth(sessions.manager.token) },
     );
-    expect(unavailableGeneration.status(), await unavailableGeneration.text()).toBe(424);
-    const failedRun = await expectOk<{ status: string; findings: unknown[] }>(
-      await request.get(`${apiBase}/commercial-assessments/${unavailableAssessment.id}`, {
+    expect(providerGeneration.status(), await providerGeneration.text()).toBe(
+      providerReady ? 200 : 424,
+    );
+    const providerRun = await expectOk<{ status: string; findings: unknown[] }>(
+      await request.get(`${apiBase}/commercial-assessments/${providerAssessment.id}`, {
         headers: auth(sessions.manager.token),
       }),
     );
-    expect(failedRun.status).toBe('failed');
-    expect(failedRun.findings).toHaveLength(0);
+    if (providerReady) {
+      expect(providerRun.status).toBe('generated');
+      expect(providerRun.findings.length).toBeGreaterThan(0);
+    } else {
+      expect(providerRun.status).toBe('failed');
+      expect(providerRun.findings).toHaveLength(0);
+    }
 
     await expectStatus(
       await request.post(`${apiBase}/annual-commercial-plans`, {
