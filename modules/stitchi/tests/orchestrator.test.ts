@@ -458,7 +458,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Stitchi, create an Online Courses plan for a leadership course launch.',
-        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal annual planning cycle.',
         'Objective: sell to entrepreneurs.',
         'Audience: warm followers and previous buyers.',
         'Budget target: 5000.',
