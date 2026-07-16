@@ -583,9 +583,9 @@ test.describe('Hybrid production acceptance harness', () => {
         },
       }),
     );
-    expect(futureEvidence.evidence.map(row => row.sourceObjectId)).toEqual(
-      expect.arrayContaining([executionPlan.id, fixtures.campaignId]),
-    );
+    const futureEvidenceIds = futureEvidence.evidence.map(row => row.sourceObjectId);
+    expect(futureEvidenceIds).toContain(fixtures.campaignId);
+    expect(futureEvidenceIds).not.toContain(executionPlan.id);
 
     const usdAfter = await expectOk<Array<{ id: string; currency: string; budgetTarget: number }>>(
       await request.get(`${apiBase}/commercial-command-center/plans`, {
