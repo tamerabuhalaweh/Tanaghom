@@ -122,22 +122,65 @@ test.describe('Hybrid live customer acceptance', () => {
           'Link it to the next available live event if suitable.',
         ].join('\n'),
       );
+    const orchestrationResponsePromise = page.waitForResponse(response => (
+      response.request().method() === 'POST'
+      && /\/api\/stitchi\/conversations\/[^/]+\/orchestrate(?:\?|$)/.test(response.url())
+    ));
     await page
       .getByRole('button', { name: /Ask Stitchi|Ask$/i })
       .last()
       .click();
+    const orchestrationResponse = await orchestrationResponsePromise;
+    const orchestrationText = await orchestrationResponse.text();
+    expect(
+      orchestrationResponse.ok(),
+      `Stitchi orchestration failed: ${orchestrationText}`,
+    ).toBe(true);
+    const orchestration = JSON.parse(orchestrationText) as {
+      status?: string;
+      provider?: { status?: string; type?: string; model?: string | null };
+      actionRun?: {
+        status?: string;
+        previewPayload?: Record<string, unknown>;
+      } | null;
+      safety?: {
+        approvalRequired?: boolean;
+        writesExecuted?: boolean;
+        externalExecution?: string;
+      };
+    };
+    expect(orchestration).toMatchObject({
+      status: 'action_proposed',
+      provider: { status: 'used' },
+      actionRun: {
+        status: 'awaiting_approval',
+        previewPayload: {
+          aiAssisted: true,
+          approvalRequired: true,
+          externalExecution: 'blocked',
+        },
+      },
+      safety: {
+        approvalRequired: true,
+        writesExecuted: false,
+        externalExecution: 'blocked',
+      },
+    });
+    expect(orchestration.provider?.type).toBeTruthy();
+    expect(orchestration.provider?.type).not.toMatch(/^(?:mock|none)$/i);
+    expect(orchestration.provider?.model).toBeTruthy();
 
-    await expect(page.getByText(/I prepared this for review/i).first()).toBeVisible({
+    await expect(page.getByText(/I prepared this for review/i).last()).toBeVisible({
       timeout: 30000,
     });
-    await expect(page.getByText(/No data has been changed yet/i).first()).toBeVisible();
+    await expect(page.getByText(/No data has been changed yet/i).last()).toBeVisible();
     await expect(page.getByText(/^AI assisted$/i).last()).toBeVisible();
     await expect(
       page.getByText(/plan details were enriched by your connected AI model/i).last(),
     ).toBeVisible();
     await expect(page.getByText(/^Content pillars$/i).last()).toBeVisible();
     await expect(page.getByText(/^Channel plan$/i).last()).toBeVisible();
-    await expect(page.getByText(/Admin or CCO approval required/i).first()).toBeVisible();
+    await expect(page.getByText(/Executive approval required.*Admin or CCO/i).last()).toBeVisible();
     await expect(page.getByRole('button', { name: /Approve|Save/i })).toHaveCount(0);
     await expect(page.locator('main')).not.toContainText(customerVisibleInternalTextPattern);
     monitor.assertClean('Stitchi safe plan proposal');
