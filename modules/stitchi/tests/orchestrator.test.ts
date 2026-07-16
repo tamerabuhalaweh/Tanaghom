@@ -1088,6 +1088,7 @@ describe('Stitchi natural-language orchestration', () => {
     });
 
     expect(result.status).toBe('answered');
+    expect(result.provider).toMatchObject({ status: 'not_needed', type: 'none' });
     expect(repo.createActionRun).not.toHaveBeenCalled();
     expect(repo.createAssistantMessage).toHaveBeenCalledWith(
       'tenant-a',
