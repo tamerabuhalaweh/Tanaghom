@@ -198,7 +198,7 @@ export function CommercialTraceabilityPanel({
       {!linkedPlans.length ? (
         <OpsEmpty
           title="Connect an execution plan"
-          message="Edit a monthly initiative above and choose its detailed commercial plan. Tanaghum will preserve the annual and monthly parent automatically."
+          message="Create the execution plan from its monthly initiative above. Tanaghum will preserve the annual and monthly parent automatically."
         />
       ) : loading || !hierarchy ? (
         <div className="trace-loading"><OpsSkeleton /><OpsSkeleton /></div>

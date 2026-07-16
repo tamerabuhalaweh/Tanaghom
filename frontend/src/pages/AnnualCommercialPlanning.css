@@ -54,6 +54,8 @@
 .annual-direction-form textarea,
 .annual-item-form input,
 .annual-item-form select,
+.annual-execution-form input,
+.annual-execution-form textarea,
 .annual-status-buttons input {
   width: 100%;
   min-height: 44px;
@@ -63,6 +65,288 @@
   color: var(--ops-ink);
   background: var(--ops-surface);
   font: inherit;
+}
+
+.annual-month-tabs {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(62px, 1fr));
+  min-width: 0;
+  overflow-x: auto;
+  padding: 14px 18px;
+  border-top: 1px solid var(--ops-border);
+  border-bottom: 1px solid var(--ops-border);
+  scrollbar-width: thin;
+}
+
+.annual-month-tabs button {
+  display: grid;
+  min-width: 62px;
+  min-height: 52px;
+  place-items: center;
+  gap: 1px;
+  padding: 7px 5px;
+  border: 0;
+  border-right: 1px solid var(--ops-border);
+  color: var(--ops-ink-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.annual-month-tabs button:last-child {
+  border-right: 0;
+}
+
+.annual-month-tabs button.is-active {
+  color: var(--ops-surface);
+  background: var(--ops-ink);
+}
+
+.annual-month-tabs span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.annual-month-tabs small {
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.annual-month-workspace {
+  display: grid;
+  min-width: 0;
+}
+
+.annual-month-workspace > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.8fr);
+  align-items: center;
+  gap: 24px;
+  padding: 22px 24px;
+  background: var(--ops-surface-subtle);
+}
+
+.annual-month-workspace > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.annual-month-workspace > header span,
+.annual-execution-inheritance span {
+  color: var(--ops-ink-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.annual-month-workspace h3 {
+  margin: 0;
+  color: var(--ops-ink);
+  font-size: 24px;
+  line-height: 30px;
+}
+
+.annual-month-workspace p {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--ops-ink-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.annual-month-workspace dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  background: var(--ops-surface);
+}
+
+.annual-month-workspace dl div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 13px;
+  border-right: 1px solid var(--ops-border);
+}
+
+.annual-month-workspace dl div:last-child {
+  border-right: 0;
+}
+
+.annual-month-workspace dt {
+  color: var(--ops-ink-secondary);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.annual-month-workspace dd {
+  margin: 0;
+  color: var(--ops-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.annual-month-focus-list {
+  display: grid;
+  min-width: 0;
+}
+
+.annual-month-focus-list article {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.7fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 24px;
+  border-top: 1px solid var(--ops-border);
+}
+
+.annual-month-focus-main,
+.annual-month-focus-links,
+.annual-month-focus-actions {
+  display: flex;
+  min-width: 0;
+}
+
+.annual-month-focus-main {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.annual-month-focus-main > div {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.annual-month-focus-main span,
+.annual-month-focus-main small,
+.annual-month-focus-links span {
+  color: var(--ops-ink-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.annual-month-focus-main strong {
+  color: var(--ops-ink);
+  font-size: 15px;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+}
+
+.annual-month-focus-links {
+  display: grid;
+  gap: 6px;
+}
+
+.annual-month-focus-links span::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--ops-warning);
+}
+
+.annual-month-focus-links span.is-ready::before {
+  background: var(--ops-accent);
+}
+
+.annual-month-focus-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.annual-year-overview {
+  border-top: 1px solid var(--ops-border);
+}
+
+.annual-year-overview > summary {
+  padding: 14px 18px;
+  color: var(--ops-ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.annual-year-overview .annual-month {
+  display: flex;
+  width: 100%;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 13px;
+  border: 0;
+  border-top: 1px solid var(--ops-border);
+  color: var(--ops-ink);
+  background: var(--ops-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.annual-year-overview .annual-month.is-selected {
+  background: var(--ops-accent-soft);
+}
+
+.annual-year-overview .annual-month > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.annual-year-overview .annual-month small {
+  color: var(--ops-ink-secondary);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.annual-execution-inheritance {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--ops-border);
+  border-bottom: 1px solid var(--ops-border);
+  background: var(--ops-surface-subtle);
+}
+
+.annual-execution-inheritance > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 14px 18px;
+  border-right: 1px solid var(--ops-border);
+}
+
+.annual-execution-inheritance > div:last-child {
+  border-right: 0;
+}
+
+.annual-execution-inheritance strong {
+  color: var(--ops-ink);
+  font-size: 13px;
+  line-height: 19px;
+  overflow-wrap: anywhere;
+}
+
+.annual-execution-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+
+.annual-execution-form > :first-child,
+.annual-execution-form > :last-child {
+  grid-column: 1 / -1;
 }
 
 .annual-create-form {
@@ -641,6 +925,15 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .annual-month-workspace > header,
+  .annual-month-focus-list article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .annual-month-focus-actions {
+    justify-content: flex-start;
+  }
+
   .annual-learning-panel {
     padding: 18px 0 0;
     border-top: 1px solid var(--ops-border);
@@ -661,8 +954,51 @@
   .annual-loading,
   .annual-create-form,
   .annual-target-fields,
-  .annual-item-form {
+  .annual-item-form,
+  .annual-execution-form,
+  .annual-execution-inheritance {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .annual-month-workspace > header {
+    padding: 18px 14px;
+  }
+
+  .annual-month-workspace dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .annual-month-workspace dl div,
+  .annual-execution-inheritance > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--ops-border);
+  }
+
+  .annual-month-workspace dl div:last-child,
+  .annual-execution-inheritance > div:last-child {
+    border-bottom: 0;
+  }
+
+  .annual-month-focus-list article {
+    padding: 16px 14px;
+  }
+
+  .annual-month-focus-main {
+    align-items: flex-start;
+  }
+
+  .annual-month-focus-actions,
+  .annual-month-focus-actions .ops-button {
+    width: 100%;
+  }
+
+  .annual-month-focus-actions .ops-button {
+    justify-content: center;
+  }
+
+  .annual-execution-form > :first-child,
+  .annual-execution-form > :last-child {
+    grid-column: auto;
   }
 
   .annual-summary-band {

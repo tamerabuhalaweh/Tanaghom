@@ -105,6 +105,16 @@ export const archivePortfolioItemSchema = z.object({
   expectedRevision: z.coerce.number().int().min(1),
 });
 
+export const createExecutionPlanForPortfolioItemSchema = z.object({
+  expectedRevision: z.coerce.number().int().min(1),
+  title: z.string().trim().min(3).max(260),
+  objective: z.string().trim().max(5000).nullable().optional(),
+  audience: z.string().trim().max(5000).nullable().optional(),
+  strategySummary: z.string().trim().max(8000).nullable().optional(),
+  actionPlan: z.string().trim().max(8000).nullable().optional(),
+  ownerUserId: optionalNullableUuid,
+});
+
 function validateDateOrder(
   value: { plannedStartDate?: Date | null; plannedEndDate?: Date | null },
   ctx: z.RefinementCtx,
@@ -135,6 +145,9 @@ export type LinkLearningSetsInput = z.infer<typeof linkLearningSetsSchema>;
 export type CreatePortfolioItemInput = z.infer<typeof createPortfolioItemSchema>;
 export type UpdatePortfolioItemInput = z.infer<typeof updatePortfolioItemSchema>;
 export type ArchivePortfolioItemInput = z.infer<typeof archivePortfolioItemSchema>;
+export type CreateExecutionPlanForPortfolioItemInput = z.infer<
+  typeof createExecutionPlanForPortfolioItemSchema
+>;
 
 export type CurrencyRollup = {
   currency: CommercialCurrency;

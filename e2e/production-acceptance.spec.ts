@@ -299,6 +299,7 @@ test.describe('Hybrid production acceptance harness', () => {
           revenueLineId: fixtures.revenueLineId,
           horizon: 'product_or_event',
           title: 'Unauthorized viewer plan',
+          standaloneReason: 'Unauthorized viewer attempt outside the approved annual calendar.',
         },
       }),
       403,
@@ -382,6 +383,44 @@ test.describe('Hybrid production acceptance harness', () => {
       400,
     );
 
+    const executionPlanResult = await expectOk<{
+      annualPlan: AnnualPlan;
+      executionPlan: { id: string; title: string; origin: string };
+    }>(
+      await request.post(
+        `${apiBase}/annual-commercial-plans/${annualPlan.id}/items/${workflow.monthlyItemId}/execution-plan`,
+        {
+          headers: auth(sessions.manager.token),
+          data: {
+            expectedRevision: annualPlan.revision,
+            title: `March Leadership Course Execution ${suffix}`,
+            objective: 'Convert warm audiences into paid leadership course buyers.',
+            audience: 'Warm followers and previous buyers in the UAE.',
+            strategySummary: 'Apply approved learning before paid amplification.',
+            actionPlan: 'Content, retargeting, CRM follow-up, and WhatsApp reminders.',
+            ownerUserId: sessions.manager.user.id,
+          },
+        },
+      ),
+    );
+    annualPlan = executionPlanResult.annualPlan;
+    const executionPlan = executionPlanResult.executionPlan;
+    workflow.executionPlanId = executionPlan.id;
+    expect(executionPlan.origin).toBe('annual_month');
+    await expectStatus(
+      await request.post(
+        `${apiBase}/annual-commercial-plans/${annualPlan.id}/items/${workflow.monthlyItemId}/execution-plan`,
+        {
+          headers: auth(sessions.manager.token),
+          data: {
+            expectedRevision: annualPlan.revision,
+            title: `Duplicate March Leadership Course Execution ${suffix}`,
+          },
+        },
+      ),
+      409,
+    );
+
     annualPlan = await expectOk<AnnualPlan>(
       await request.post(`${apiBase}/annual-commercial-plans/${annualPlan.id}/submit`, {
         headers: auth(sessions.manager.token),
@@ -414,57 +453,10 @@ test.describe('Hybrid production acceptance harness', () => {
     expect(approvedBudget.allocations).toContainEqual(
       expect.objectContaining({ id: rootAllocation.id, status: 'approved' }),
     );
-
-    const executionPlan = await expectOk<{ id: string; title: string; currency: string }>(
-      await request.post(`${apiBase}/commercial-command-center/plans`, {
-        headers: auth(sessions.manager.token),
-        data: {
-          revenueLineId: fixtures.revenueLineId,
-          linkedEventId: fixtures.futureEventId,
-          horizon: 'product_or_event',
-          stage: 'implementation_engagement',
-          title: `March Leadership Course Execution ${suffix}`,
-          objective: 'Convert warm audiences into paid leadership course buyers.',
-          audience: 'Warm followers and previous buyers in the UAE.',
-          currency: 'AED',
-          budgetTarget: 40000,
-          revenueTarget: 250000,
-          strategySummary: 'Apply approved learning before paid amplification.',
-          actionPlan: 'Content, retargeting, CRM follow-up, and WhatsApp reminders.',
-          status: 'active',
-          ownerUserId: sessions.manager.user.id,
-        },
-      }),
-    );
-    workflow.executionPlanId = executionPlan.id;
-    expect(executionPlan.currency).toBe('AED');
-
-    await expectOk(
-      await request.put(`${apiBase}/commercial-hierarchy/plans/${executionPlan.id}/parent`, {
-        headers: auth(sessions.manager.token),
-        data: { annualPlanId: annualPlan.id, monthlyPortfolioItemId: workflow.monthlyItemId },
-      }),
-    );
-    await expectOk(
-      await request.post(`${apiBase}/commercial-hierarchy/plans/${executionPlan.id}/events`, {
-        headers: auth(sessions.manager.token),
-        data: { eventId: fixtures.futureEventId, primary: true },
-      }),
-    );
     await expectOk(
       await request.post(`${apiBase}/commercial-hierarchy/plans/${executionPlan.id}/campaigns`, {
         headers: auth(sessions.manager.token),
         data: { campaignId: fixtures.campaignId },
-      }),
-    );
-    await expectOk(
-      await request.post(`${apiBase}/commercial-hierarchy/plans/${executionPlan.id}/learning`, {
-        headers: auth(sessions.manager.token),
-        data: {
-          learningSetId: workflow.learningSetId,
-          findingIds: [fixtures.approvedFindingId],
-          rationale: 'The annual and execution plan reuse the approved warm-audience learning.',
-        },
       }),
     );
     const hierarchy = await expectOk<{
@@ -591,9 +583,9 @@ test.describe('Hybrid production acceptance harness', () => {
         },
       }),
     );
-    expect(futureEvidence.evidence.map(row => row.sourceObjectId)).toEqual(
-      expect.arrayContaining([executionPlan.id, fixtures.campaignId]),
-    );
+    const futureEvidenceIds = futureEvidence.evidence.map(row => row.sourceObjectId);
+    expect(futureEvidenceIds).toContain(fixtures.campaignId);
+    expect(futureEvidenceIds).not.toContain(executionPlan.id);
 
     const usdAfter = await expectOk<Array<{ id: string; currency: string; budgetTarget: number }>>(
       await request.get(`${apiBase}/commercial-command-center/plans`, {

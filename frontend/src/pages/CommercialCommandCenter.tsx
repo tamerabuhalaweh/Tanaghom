@@ -10,7 +10,6 @@ import {
   GraduationCap,
   HeartHandshake,
   Network,
-  Plus,
   Search,
   ShoppingBag,
   Sparkles,
@@ -54,6 +53,11 @@ const REVENUE_ICONS = {
 const PLAN_CURRENCIES = [
   { code: 'AED', label: 'AED - UAE Dirham' },
   { code: 'USD', label: 'USD - US Dollar' },
+] as const;
+
+const MONTH_LABELS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
 function list(value: unknown): RecordMap[] {
@@ -153,6 +157,7 @@ function makePlanDraft(lineId = '', defaultCurrency = 'AED') {
     revenueTarget: '',
     strategySummary: '',
     actionPlan: '',
+    standaloneReason: '',
   };
 }
 
@@ -163,6 +168,7 @@ function planDraftFrom(plan: RecordMap, defaultCurrency = 'AED') {
     status: text(plan.status, 'draft'), currency: text(plan.currency, defaultCurrency), objective: text(plan.objective),
     audience: text(plan.audience), budgetTarget: nullableNumber(plan.budgetTarget)?.toString() || '',
     revenueTarget: nullableNumber(plan.revenueTarget)?.toString() || '', strategySummary: text(plan.strategySummary), actionPlan: text(plan.actionPlan),
+    standaloneReason: text(plan.standaloneReason),
   };
 }
 
@@ -188,6 +194,7 @@ export default function CommercialCommandCenter() {
   const [loading, setLoading] = useState(Boolean(token));
   const [saving, setSaving] = useState(false);
   const [planDraft, setPlanDraft] = useState(makePlanDraft());
+  const [showStandaloneForm, setShowStandaloneForm] = useState(false);
 
   const revenueLines = useMemo(() => list(dashboard?.revenueLines), [dashboard]);
   const configuredRevenueLines = revenueLines.filter(line => Boolean(line.configured) && text(line.status) !== 'archived');
@@ -226,6 +233,7 @@ export default function CommercialCommandCenter() {
     setPlanDraft(requestedPlan
       ? planDraftFrom(requestedPlan, text(main.defaultCurrency, 'AED'))
       : makePlanDraft(text(object(detail.revenueLine).id), text(main.defaultCurrency, 'AED')));
+    setShowStandaloneForm(Boolean(requestedPlan));
     setLoading(false);
   }, [requestedPlanId, selectedType, token]);
 
@@ -236,13 +244,14 @@ export default function CommercialCommandCenter() {
     const detail = await commercialCommandCenterApi.revenueLineDashboard(revenueLineType, token) as RecordMap;
     setLineDashboard(detail);
     setPlanDraft(makePlanDraft(text(object(detail.revenueLine).id), text(detail.defaultCurrency, 'AED')));
+    setShowStandaloneForm(false);
   }, [token]);
 
   useEffect(() => {
     if (!token) return;
     const loadTimer = window.setTimeout(() => {
       load().catch(err => {
-        setMessage(err instanceof Error ? err.message : 'Could not load commercial plans.');
+        setMessage(err instanceof Error ? err.message : 'Could not load execution plans.');
         setLoading(false);
       });
     }, 0);
@@ -252,7 +261,7 @@ export default function CommercialCommandCenter() {
   useEffect(() => {
     if (!token) return;
     const refresh = () => {
-      load().catch(err => setMessage(err instanceof Error ? err.message : 'Could not refresh commercial plans.'));
+      load().catch(err => setMessage(err instanceof Error ? err.message : 'Could not refresh execution plans.'));
     };
     window.addEventListener('tanaghum:commercial-data-changed', refresh);
     return () => window.removeEventListener('tanaghum:commercial-data-changed', refresh);
@@ -297,6 +306,7 @@ export default function CommercialCommandCenter() {
   function editPlan(plan: RecordMap) {
     if (!canManagePlans) return;
     setPlanDraft(planDraftFrom(plan, defaultCurrency));
+    setShowStandaloneForm(true);
     document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -309,6 +319,10 @@ export default function CommercialCommandCenter() {
     setMessage('');
     if (!planDraft.revenueLineId || !planDraft.title.trim()) {
       setMessage('Choose a revenue line and enter a clear plan title.');
+      return;
+    }
+    if (!planDraft.id && planDraft.standaloneReason.trim().length < 10) {
+      setMessage('Explain why this execution plan must exist outside the annual monthly portfolio.');
       return;
     }
     setSaving(true);
@@ -326,19 +340,21 @@ export default function CommercialCommandCenter() {
       revenueTarget: planDraft.revenueTarget ? Number(planDraft.revenueTarget) : null,
       strategySummary: planDraft.strategySummary || null,
       actionPlan: planDraft.actionPlan || null,
+      ...(!planDraft.id ? { standaloneReason: planDraft.standaloneReason.trim() } : {}),
     };
     try {
       if (planDraft.id) {
         await commercialCommandCenterApi.updatePlan(planDraft.id, payload, token);
         await loadLine(selectedType);
-        setMessage('Commercial plan updated.');
+        setMessage('Execution plan updated.');
       } else {
         await commercialCommandCenterApi.createPlan(payload, token);
         await loadLine(selectedType);
-        setMessage('Commercial plan created.');
+        setShowStandaloneForm(false);
+        setMessage('Standalone execution plan created with its exception reason recorded.');
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not save commercial plan.');
+      setMessage(err instanceof Error ? err.message : 'Could not save execution plan.');
     } finally {
       setSaving(false);
     }
@@ -359,15 +375,12 @@ export default function CommercialCommandCenter() {
     <OpsPage className="commercial-r1d-page commercial-plans-page">
       <OpsPageHeader
         eyebrow="Strategy & Planning"
-        title="Commercial Plans"
-        subtitle="Turn leadership priorities into approved plans for each active product and revenue line."
+        title="Execution Plans"
+        subtitle="Run the detailed product, event, campaign, and sales work created from the annual monthly portfolio."
         actions={(
           <>
             <button className="ops-button is-secondary" type="button" onClick={() => navigate(stitchiPath())}><Sparkles size={17} aria-hidden="true" />Ask Stitchi</button>
-            <button className="ops-button is-primary" type="button" onClick={() => {
-              setPlanDraft(makePlanDraft(text(selectedLine.id), defaultCurrency));
-              document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}><Plus size={17} aria-hidden="true" />Create plan</button>
+            <button className="ops-button is-primary" type="button" onClick={() => navigate('/commercial-planning')}><CalendarDays size={17} aria-hidden="true" />Create from Annual Plan</button>
           </>
         )}
       />
@@ -431,7 +444,7 @@ export default function CommercialCommandCenter() {
 
               <div className="commercial-next-decision">
                 <span><Target size={20} aria-hidden="true" /></span>
-                <div><small>Next required action</small><strong>{text(nextAction.label, plans.length ? 'Review the current commercial plan' : 'Create the first commercial plan')}</strong><p>{text(nextAction.description, 'Confirm the objective, audience, budget, revenue target, and owner before implementation begins.')}</p></div>
+                <div><small>Next required action</small><strong>{text(nextAction.label, plans.length ? 'Review the current execution plan' : 'Create the first execution plan from Annual Planning')}</strong><p>{text(nextAction.description, 'Confirm the objective, audience, budget, revenue target, and owner before implementation begins.')}</p></div>
                 <button className="ops-button is-primary" type="button" onClick={() => navigate(text(nextAction.path, stitchiPath()))}>Take action</button>
               </div>
             </OpsSection>
@@ -439,7 +452,7 @@ export default function CommercialCommandCenter() {
 
           <section className="commercial-event-boundary">
             <span><CalendarDays size={21} aria-hidden="true" /></span>
-            <div><strong>Continue in Event Operations</strong><p>Commercial Plans sets targets and direction. Event Operations manages logistics, event KPIs, leads, risks, and closeout in its own workspace.</p></div>
+            <div><strong>Continue in Event Operations</strong><p>Execution Plans carry approved monthly targets into detailed work. Event Operations manages logistics, event KPIs, leads, risks, and closeout in its own workspace.</p></div>
             <button className="ops-button is-secondary" type="button" onClick={() => navigate('/events')}>Open Event Operations <ArrowRight size={16} aria-hidden="true" /></button>
           </section>
 
@@ -452,47 +465,66 @@ export default function CommercialCommandCenter() {
 
           <div className="commercial-plan-workspace" id="commercial-plan-editor">
             <OpsSection
-              title={canManagePlans ? (planDraft.id ? 'Edit commercial plan' : 'Create commercial plan') : 'Prepare a plan request'}
-              subtitle={canManagePlans ? 'Capture the information the team needs to run this plan.' : 'Ask Stitchi to prepare a governed proposal for leadership approval.'}
-              action={canManagePlans && planDraft.id ? <button className="ops-button is-secondary" type="button" onClick={() => setPlanDraft(makePlanDraft(text(selectedLine.id), defaultCurrency))}>New plan</button> : undefined}
+              title={canManagePlans ? (planDraft.id ? 'Edit execution plan' : 'Create execution plan') : 'Prepare an execution plan request'}
+              subtitle={canManagePlans ? 'Annual and monthly planning is the normal starting point. Standalone plans are governed exceptions.' : 'Ask Stitchi to prepare a governed proposal for leadership approval.'}
+              action={canManagePlans && (planDraft.id || showStandaloneForm) ? <button className="ops-button is-secondary" type="button" onClick={() => { setPlanDraft(makePlanDraft(text(selectedLine.id), defaultCurrency)); setShowStandaloneForm(false); }}>Close editor</button> : undefined}
             >
               {canManagePlans ? (
-                <div className="commercial-form">
-                  <div className="commercial-form-grid">
-                    <Field label="Revenue line"><select value={planDraft.revenueLineId || text(selectedLine.id)} onChange={event => setPlanDraft(current => ({ ...current, revenueLineId: event.target.value }))}><option value="">Choose configured line</option>{configuredRevenueLines.map(line => <option key={text(line.id)} value={text(line.id)}>{text(line.name)}</option>)}</select></Field>
-                    <Field label="Plan title"><input value={planDraft.title} onChange={event => setPlanDraft(current => ({ ...current, title: event.target.value }))} placeholder="Example: Q3 book launch plan" /></Field>
-                    <Field label="Linked event"><select value={planDraft.linkedEventId} onChange={event => setPlanDraft(current => ({ ...current, linkedEventId: event.target.value }))}><option value="">No event linked</option>{eventChoices.map(event => <option key={text(event.id)} value={text(event.id)}>{customerLabel(event.name)} - {titleCase(text(event.status, 'draft'))}</option>)}</select><p>Use this only when the commercial plan supports a live event. Event execution stays in Event Operations.</p></Field>
-                    <Field label="Stage"><select value={planDraft.stage} onChange={event => setPlanDraft(current => ({ ...current, stage: event.target.value }))}><option value="strategy_planning">Strategy & Planning</option><option value="implementation_engagement">Implementation & Engagement</option></select></Field>
-                    <Field label="Horizon"><select value={planDraft.horizon} onChange={event => setPlanDraft(current => ({ ...current, horizon: event.target.value }))}><option value="quarterly">Quarterly</option><option value="product_or_event">Product or event</option><option value="one_year">One year</option><option value="three_year">Three year</option></select></Field>
-                    <Field label="Status"><select value={planDraft.status} onChange={event => setPlanDraft(current => ({ ...current, status: event.target.value }))}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></Field>
-                    <Field label="Currency"><select value={planDraft.currency} onChange={event => setPlanDraft(current => ({ ...current, currency: event.target.value }))}>{PLAN_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}</select></Field>
-                    <Field label="Budget target"><input value={planDraft.budgetTarget} onChange={event => setPlanDraft(current => ({ ...current, budgetTarget: event.target.value }))} type="number" min="0" placeholder="0" /></Field>
-                    <Field label="Revenue target"><input value={planDraft.revenueTarget} onChange={event => setPlanDraft(current => ({ ...current, revenueTarget: event.target.value }))} type="number" min="0" placeholder="0" /></Field>
+                planDraft.id || showStandaloneForm ? (
+                  <div className="commercial-form">
+                    {!planDraft.id ? (
+                      <OpsNotice tone="warning">
+                        This creates a standalone exception outside the annual monthly portfolio.
+                        Use it only for urgent or unplanned work and record the business reason.
+                      </OpsNotice>
+                    ) : null}
+                    <div className="commercial-form-grid">
+                      <Field label="Revenue line"><select value={planDraft.revenueLineId || text(selectedLine.id)} onChange={event => setPlanDraft(current => ({ ...current, revenueLineId: event.target.value }))}><option value="">Choose configured line</option>{configuredRevenueLines.map(line => <option key={text(line.id)} value={text(line.id)}>{text(line.name)}</option>)}</select></Field>
+                      <Field label="Plan title"><input value={planDraft.title} onChange={event => setPlanDraft(current => ({ ...current, title: event.target.value }))} placeholder="Example: Q3 book launch execution" /></Field>
+                      <Field label="Linked event"><select value={planDraft.linkedEventId} onChange={event => setPlanDraft(current => ({ ...current, linkedEventId: event.target.value }))}><option value="">No event linked</option>{eventChoices.map(event => <option key={text(event.id)} value={text(event.id)}>{customerLabel(event.name)} - {titleCase(text(event.status, 'draft'))}</option>)}</select><p>Use this only when the plan supports a live event. Event execution stays in Event Operations.</p></Field>
+                      <Field label="Stage"><select value={planDraft.stage} onChange={event => setPlanDraft(current => ({ ...current, stage: event.target.value }))}><option value="strategy_planning">Strategy & Planning</option><option value="implementation_engagement">Implementation & Engagement</option></select></Field>
+                      <Field label="Horizon"><select value={planDraft.horizon} onChange={event => setPlanDraft(current => ({ ...current, horizon: event.target.value }))}><option value="quarterly">Quarterly</option><option value="product_or_event">Product or event</option><option value="one_year">One year</option><option value="three_year">Three year</option></select></Field>
+                      <Field label="Status"><select value={planDraft.status} onChange={event => setPlanDraft(current => ({ ...current, status: event.target.value }))}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></Field>
+                      <Field label="Currency"><select value={planDraft.currency} onChange={event => setPlanDraft(current => ({ ...current, currency: event.target.value }))}>{PLAN_CURRENCIES.map(option => <option key={option.code} value={option.code}>{option.label}</option>)}</select></Field>
+                      <Field label="Budget target"><input value={planDraft.budgetTarget} onChange={event => setPlanDraft(current => ({ ...current, budgetTarget: event.target.value }))} type="number" min="0" placeholder="0" /></Field>
+                      <Field label="Revenue target"><input value={planDraft.revenueTarget} onChange={event => setPlanDraft(current => ({ ...current, revenueTarget: event.target.value }))} type="number" min="0" placeholder="0" /></Field>
+                    </div>
+                    {!planDraft.id ? <Field label="Standalone exception reason"><textarea value={planDraft.standaloneReason} onChange={event => setPlanDraft(current => ({ ...current, standaloneReason: event.target.value }))} placeholder="Why can this work not be planned under an annual month?" rows={2} /></Field> : null}
+                    <Field label="Objective"><textarea value={planDraft.objective} onChange={event => setPlanDraft(current => ({ ...current, objective: event.target.value }))} placeholder="What outcome should this plan create?" rows={3} /></Field>
+                    <Field label="Audience"><textarea value={planDraft.audience} onChange={event => setPlanDraft(current => ({ ...current, audience: event.target.value }))} placeholder="Who is this plan for?" rows={2} /></Field>
+                    <Field label="Strategy summary"><textarea value={planDraft.strategySummary} onChange={event => setPlanDraft(current => ({ ...current, strategySummary: event.target.value }))} placeholder="What strategic direction should guide the work?" rows={3} /></Field>
+                    <Field label="Action plan"><textarea value={planDraft.actionPlan} onChange={event => setPlanDraft(current => ({ ...current, actionPlan: event.target.value }))} placeholder="What will the team do next?" rows={3} /></Field>
+                    <div className="ops-inline-actions"><button className="ops-button is-primary" type="button" onClick={savePlan} disabled={saving || !text(selectedLine.id)}>{saving ? 'Saving...' : planDraft.id ? 'Save changes' : 'Create standalone exception'}</button><button className="ops-button is-secondary" type="button" onClick={() => navigate(stitchiPath(planDraft.id ? 'Prepare changes to this execution plan.' : 'Prepare a standalone execution plan exception and ask me for the business reason.'))}><Sparkles size={16} aria-hidden="true" />Ask Stitchi to prepare</button></div>
                   </div>
-                  <Field label="Objective"><textarea value={planDraft.objective} onChange={event => setPlanDraft(current => ({ ...current, objective: event.target.value }))} placeholder="What outcome should this plan create?" rows={3} /></Field>
-                  <Field label="Audience"><textarea value={planDraft.audience} onChange={event => setPlanDraft(current => ({ ...current, audience: event.target.value }))} placeholder="Who is this plan for?" rows={2} /></Field>
-                  <Field label="Strategy summary"><textarea value={planDraft.strategySummary} onChange={event => setPlanDraft(current => ({ ...current, strategySummary: event.target.value }))} placeholder="What strategic direction should guide the work?" rows={3} /></Field>
-                  <Field label="Action plan"><textarea value={planDraft.actionPlan} onChange={event => setPlanDraft(current => ({ ...current, actionPlan: event.target.value }))} placeholder="What will the team do next?" rows={3} /></Field>
-                  <div className="ops-inline-actions"><button className="ops-button is-primary" type="button" onClick={savePlan} disabled={saving || !text(selectedLine.id)}>{saving ? 'Saving...' : planDraft.id ? 'Save changes' : 'Create plan'}</button><button className="ops-button is-secondary" type="button" onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}><Sparkles size={16} aria-hidden="true" />Ask Stitchi to prepare</button></div>
-                </div>
+                ) : (
+                  <div className="execution-plan-default-path">
+                    <div><strong>Create from the annual plan</strong><p>Choose a month and initiative first. Tanaghum will inherit its revenue line, currency, budget, target, event, and approved learning.</p></div>
+                    <button className="ops-button is-primary" type="button" onClick={() => navigate('/commercial-planning')}>Open Annual Plan <ArrowRight size={16} aria-hidden="true" /></button>
+                    <details>
+                      <summary>Need an unplanned exception?</summary>
+                      <p>Standalone plans are for urgent work that genuinely cannot be placed in the approved annual monthly portfolio.</p>
+                      <button className="ops-button is-secondary" type="button" onClick={() => { setPlanDraft(makePlanDraft(text(selectedLine.id), defaultCurrency)); setShowStandaloneForm(true); }}>Create standalone exception</button>
+                    </details>
+                  </div>
+                )
               ) : (
-                <OpsEmpty title="Ask Stitchi to prepare the plan" message="Stitchi can collect the objective, audience, budget, revenue target, action plan, and event link, then prepare an approval card. Nothing is saved until a manager approves it." action={<button className="ops-button is-primary" type="button" onClick={() => navigate(stitchiPath('Prepare a commercial plan for this revenue line.'))}>Ask Stitchi</button>} />
+                <OpsEmpty title="Ask Stitchi to prepare the execution plan" message="Stitchi can collect the objective, audience, action plan, and annual monthly context, then prepare an approval card. Nothing is saved until a manager approves it." action={<button className="ops-button is-primary" type="button" onClick={() => navigate(stitchiPath('Prepare an execution plan from the annual monthly portfolio.'))}>Ask Stitchi</button>} />
               )}
             </OpsSection>
 
-            <OpsSection title="Planning records" subtitle={canManagePlans ? 'Choose a plan to review or edit it.' : 'Review active plans and ask Stitchi to prepare changes.'}>
+            <OpsSection title="Execution plan records" subtitle={canManagePlans ? 'Choose a plan to review its hierarchy or edit its operating details.' : 'Review active plans and ask Stitchi to prepare changes.'}>
               {plans.length ? (
                 <div className="commercial-plan-list">
                   {plans.map(plan => (
                     <button key={text(plan.id)} type="button" onClick={() => editPlan(plan)} disabled={!canManagePlans} className={text(plan.id) === planDraft.id ? 'is-selected' : ''}>
-                      <div><strong>{customerLabel(plan.title, 'Untitled plan')}</strong><small>{stageLabel(text(plan.stage))} / {titleCase(text(plan.horizon))}</small></div>
+                      <div><strong>{customerLabel(plan.title, 'Untitled plan')}</strong><small>{text(plan.annualPlanTitle) ? `${numberValue(plan.annualPlanYear)} Annual Plan / ${MONTH_LABELS[numberValue(plan.monthlyPortfolioMonth) - 1] || 'Monthly initiative'}` : text(plan.origin) === 'standalone_exception' ? 'Standalone exception' : 'Legacy record - parent not classified'}</small></div>
                       <OpsStatus tone={statusTone(text(plan.status))}>{titleCase(text(plan.status))}</OpsStatus>
                       <dl><div><dt>Budget</dt><dd>{formatMoney(plan.budgetTarget, text(plan.currency, defaultCurrency))}</dd></div><div><dt>Target</dt><dd>{formatMoney(plan.revenueTarget, text(plan.currency, defaultCurrency))}</dd></div></dl>
                       <p>{text(plan.linkedEventName) ? `Supports event: ${customerLabel(plan.linkedEventName)}` : 'No event linked'}</p>
                     </button>
                   ))}
                 </div>
-              ) : <OpsEmpty title="No plans yet" message="Create the first plan for this revenue line to connect objectives, budgets, audience, and operating work." />}
+              ) : <OpsEmpty title="No execution plans yet" message="Open the annual plan, choose a monthly initiative, and create its execution plan from there." />}
             </OpsSection>
           </div>
 

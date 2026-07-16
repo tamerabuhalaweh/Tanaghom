@@ -86,7 +86,7 @@ function rollup(items: Record<string, unknown>[]) {
   };
 }
 
-function makeItem() {
+function makeItem(linked = true) {
   return {
     id: itemId,
     month: 3,
@@ -105,12 +105,12 @@ function makeItem() {
       type: 'online_course',
       status: 'active',
     },
-    commercialPlan: {
+    commercialPlan: linked ? {
       id: detailedPlanId,
       title: detailedPlan.title,
       status: 'draft',
       horizon: 'product_or_event',
-    },
+    } : null,
     event: {
       id: eventId,
       name: linkedEvent.name,
@@ -231,7 +231,12 @@ function makeHierarchy(learningLinked = false) {
   };
 }
 
-async function installMocks(page: Page, seeded = false) {
+async function installMocks(page: Page, seeded = false, role = user.role) {
+  const sessionUser = {
+    ...user,
+    role,
+    name: role === 'specialist' ? 'Commercial Specialist' : user.name,
+  };
   let currentPlan: ReturnType<typeof makeAnnualPlan> | null = seeded
     ? makeAnnualPlan('draft', 2, [makeItem()])
     : null;
@@ -262,7 +267,10 @@ async function installMocks(page: Page, seeded = false) {
       route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
     if (path === '/auth/session')
-      return json({ user, agentRep: { id: 'profile-1', name: user.name, status: 'active' } });
+      return json({
+        user: sessionUser,
+        agentRep: { id: 'profile-1', name: sessionUser.name, status: 'active' },
+      });
     if (path === '/auth/logout') return json({ ok: true });
     if (path === '/annual-commercial-plans' && method === 'GET')
       return json(currentPlan ? [currentPlan] : []);
@@ -281,21 +289,44 @@ async function installMocks(page: Page, seeded = false) {
         expectedRevision: 1,
         month: 3,
         revenueLineId,
-        commercialPlanId: detailedPlanId,
         eventId,
         currency: 'AED',
         budgetAllocation: 50000,
         revenueTarget: 250000,
       });
-      currentPlan = makeAnnualPlan('draft', 2, [makeItem()]);
+      expect(payload).toHaveProperty('commercialPlanId', null);
+      currentPlan = makeAnnualPlan('draft', 2, [makeItem(false)]);
       return json(currentPlan);
     }
+    if (
+      path === `/annual-commercial-plans/${annualPlanId}/items/${itemId}/execution-plan` &&
+      method === 'POST'
+    ) {
+      const payload = request.postDataJSON() as Record<string, unknown>;
+      expect(payload).toMatchObject({
+        expectedRevision: 2,
+        title: 'Leadership Course Execution Plan',
+        objective: 'Convert warm followers into course buyers.',
+        audience: 'Entrepreneurs and previous buyers.',
+      });
+      currentPlan = makeAnnualPlan('draft', 3, [makeItem(true)]);
+      return json({
+        annualPlan: currentPlan,
+        executionPlan: {
+          id: detailedPlanId,
+          title: detailedPlan.title,
+          origin: 'annual_month',
+          annualPlanId,
+          monthlyPortfolioItemId: itemId,
+        },
+      }, 201);
+    }
     if (path === `/annual-commercial-plans/${annualPlanId}/submit` && method === 'POST') {
-      currentPlan = makeAnnualPlan('pending_approval', 3, [makeItem()]);
+      currentPlan = makeAnnualPlan('pending_approval', 4, [makeItem()]);
       return json(currentPlan);
     }
     if (path === `/annual-commercial-plans/${annualPlanId}/approve` && method === 'POST') {
-      currentPlan = makeAnnualPlan('approved', 4, [makeItem()]);
+      currentPlan = makeAnnualPlan('approved', 5, [makeItem()]);
       return json(currentPlan);
     }
     if (
@@ -453,10 +484,10 @@ test.describe('SRD-R14B annual commercial planning', () => {
     await expect(
       page.getByLabel('Annual plan totals').getByText('AED 500,000', { exact: true }).first(),
     ).toBeVisible();
-    await expect(page.getByText('Intentionally open').first()).toBeVisible();
+    await expect(page.getByText('Available for future months').first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Add initiative' }).first().click();
-    await page.getByLabel('Month').selectOption('3');
+    await page.locator('#portfolio-item-editor select').first().selectOption('3');
     await page.getByLabel('Revenue line').last().selectOption(revenueLineId);
     await page.getByLabel('Initiative title').fill('Ramadan Leadership Course');
     await page.getByLabel('Priority').selectOption('high');
@@ -464,13 +495,33 @@ test.describe('SRD-R14B annual commercial planning', () => {
     await page.getByLabel('Revenue target').last().fill('250000');
     await page.getByLabel('Start date').fill('2027-03-01');
     await page.getByLabel('End date').fill('2027-03-20');
-    await page.getByLabel('Detailed commercial plan').selectOption(detailedPlanId);
     await page.getByLabel('Event Operations link').selectOption(eventId);
     await page.getByRole('button', { name: 'Save initiative' }).click();
 
     await expect(page.getByText('Monthly initiative added to the annual portfolio.')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Ramadan Leadership Course/ })).toBeVisible();
+    await expect(page.getByText('Ramadan Leadership Course', { exact: true }).first()).toBeVisible();
     await expect(page.getByLabel('Annual plan totals').getByText(/450,000/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Create execution plan', exact: true }).click();
+    await page.getByLabel('Execution plan title').fill('Leadership Course Execution Plan');
+    await page.getByLabel('Objective').fill('Convert warm followers into course buyers.');
+    await page.getByLabel('Audience').fill('Entrepreneurs and previous buyers.');
+    await page
+      .locator('#execution-plan-editor textarea')
+      .nth(2)
+      .fill('Use approved historical learning and seasonal timing.');
+    await page
+      .locator('#execution-plan-editor textarea')
+      .nth(3)
+      .fill('Prepare content, acquisition, CRM follow-up, and buyer reminders.');
+    await page.getByRole('button', { name: 'Create and link execution plan' }).click();
+    await expect(
+      page.getByText(
+        'Execution plan created and linked to its annual plan, month, revenue line, targets, and event.',
+      ),
+    ).toBeVisible();
+    await expect(page.getByText('Leadership Course Execution Plan').first()).toBeVisible();
+
     await expect(page.getByRole('heading', { name: 'Strategy to results' })).toBeVisible();
     await expect(page.getByText('2027 / 2027 Commercial Growth Portfolio')).toBeVisible();
     await expect(page.getByText('12 leads / 3 purchases')).toBeVisible();
@@ -492,10 +543,9 @@ test.describe('SRD-R14B annual commercial planning', () => {
       'Ramadan Leadership Course',
     );
 
-    await page.locator('button.annual-initiative').filter({ hasText: 'Ramadan Leadership Course' }).click();
-    await page.getByRole('button', { name: /Open detailed plan/ }).click();
+    await page.getByRole('button', { name: /Open execution plan/ }).click();
     await expect(page).toHaveURL(new RegExp(`/commercial-plans\\?.*planId=${detailedPlanId}`));
-    await expect(page.getByRole('heading', { name: 'Commercial Plans' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Execution Plans' })).toBeVisible();
     await expect(page.getByLabel('Plan title')).toHaveValue('Leadership Course Execution Plan');
 
     await page.goBack();
@@ -518,8 +568,8 @@ test.describe('SRD-R14B annual commercial planning', () => {
 
     await expect(page.getByRole('heading', { name: 'Annual Commercial Plan' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Mobile product navigation' })).toBeVisible();
-    await expect(page.getByText('January', { exact: true })).toBeVisible();
-    await expect(page.getByText('December', { exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Jan/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Dec/ })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     if (process.env.UX_CAPTURE === '1')
       await page.screenshot({ path: 'tmp/codex-annual-planning-mobile.png', fullPage: true });
@@ -528,6 +578,22 @@ test.describe('SRD-R14B annual commercial planning', () => {
     await expectNoHorizontalOverflow(page);
     await page.setViewportSize({ width: 1024, height: 900 });
     await expect(page.getByRole('navigation', { name: 'Product navigation' })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    monitor.assertClean();
+  });
+
+  test('specialist can review annual context without manager controls or hidden failures', async ({
+    page,
+  }) => {
+    const monitor = await installMocks(page, true, 'specialist');
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto('/commercial-planning');
+
+    await expect(page.getByRole('heading', { name: 'Annual Commercial Plan' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Add initiative|Add to/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save direction' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Submit for approval' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Plan with Stitchi' })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     monitor.assertClean();
   });

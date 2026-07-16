@@ -648,6 +648,12 @@ export const annualCommercialPlanningApi = {
     apiFetch<unknown>(`/annual-commercial-plans/${id}/learning-sets`, { method: 'PUT', body: data, token }),
   createItem: (id: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/annual-commercial-plans/${id}/items`, { method: 'POST', body: data, token }),
+  createExecutionPlan: (id: string, itemId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/annual-commercial-plans/${id}/items/${itemId}/execution-plan`, {
+      method: 'POST',
+      body: data,
+      token,
+    }),
   updateItem: (id: string, itemId: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/annual-commercial-plans/${id}/items/${itemId}`, { method: 'PUT', body: data, token }),
   archiveItem: (id: string, itemId: string, data: unknown, token: string) =>

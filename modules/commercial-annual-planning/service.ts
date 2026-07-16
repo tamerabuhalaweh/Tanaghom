@@ -6,6 +6,7 @@ import type {
   AnnualPlanTransitionInput,
   ArchivePortfolioItemInput,
   CreateAnnualPlanInput,
+  CreateExecutionPlanForPortfolioItemInput,
   CreatePortfolioItemInput,
   LinkLearningSetsInput,
   ListAnnualPlansInput,
@@ -95,6 +96,31 @@ export async function createPortfolioItem(
 ) {
   checkAnnualPlanningPermission(role, 'annual-plan:update');
   return repo.createPortfolioItem(tenantKey, userId, annualPlanId, input);
+}
+
+export async function createExecutionPlanForPortfolioItem(
+  role: string,
+  tenantKey: string,
+  userId: string,
+  annualPlanId: string,
+  itemId: string,
+  input: CreateExecutionPlanForPortfolioItemInput,
+) {
+  checkAnnualPlanningPermission(role, 'annual-plan:update');
+  const result = await repo.createExecutionPlanForPortfolioItem(
+    tenantKey,
+    userId,
+    annualPlanId,
+    itemId,
+    input,
+  );
+  log(
+    userId,
+    'monthly_execution_plan_created',
+    result.executionPlan.id,
+    'Execution plan created from annual monthly initiative',
+  );
+  return result;
 }
 
 export async function updatePortfolioItem(

@@ -3712,6 +3712,12 @@ enum CommercialPlanStatus {
   archived
 }
 
+enum CommercialPlanOrigin {
+  annual_month
+  standalone_exception
+  legacy_unclassified
+}
+
 enum AnnualCommercialPlanStatus {
   draft
   pending_approval
@@ -3954,6 +3960,8 @@ model CommercialPlan {
   strategy_summary   String?                  @db.Text
   action_plan        String?                  @db.Text
   status             CommercialPlanStatus     @default(draft)
+  origin             CommercialPlanOrigin     @default(legacy_unclassified)
+  standalone_reason  String?                  @db.Text
   owner_user_id      String?                  @db.Uuid
   superseded_by_plan_id String?                  @db.Uuid
   superseded_at         DateTime?
@@ -3984,6 +3992,7 @@ model CommercialPlan {
   @@index([horizon])
   @@index([stage])
   @@index([status])
+  @@index([origin])
   @@index([owner_user_id])
   @@index([superseded_by_plan_id])
   @@map("commercial_plans")

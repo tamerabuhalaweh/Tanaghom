@@ -243,6 +243,8 @@ test.describe('Wave 1 historical assessment and AED default', () => {
     const monitor = await installMocks(page);
     await page.goto('/commercial-plans');
 
+    await page.getByText('Need an unplanned exception?', { exact: true }).click();
+    await page.getByRole('button', { name: 'Create standalone exception' }).click();
     await expect(page.getByLabel('Currency')).toHaveValue('AED');
     await expect(page.getByRole('button', { name: /Intentionally USD historical plan/ })).toContainText(/\$1,000|US\$1,000/);
     await expect(page.getByRole('heading', { name: 'Currency view' })).toBeVisible();

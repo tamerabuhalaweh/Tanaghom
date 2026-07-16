@@ -133,6 +133,17 @@ function emptyItemDraft(month: number, currency = 'AED') {
   };
 }
 
+function emptyExecutionPlanDraft(item: Data) {
+  return {
+    itemId: text(item.id),
+    title: text(item.title),
+    objective: '',
+    audience: '',
+    strategySummary: '',
+    actionPlan: '',
+  };
+}
+
 export default function AnnualCommercialPlanning() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
@@ -150,6 +161,10 @@ export default function AnnualCommercialPlanning() {
   const [annualDraft, setAnnualDraft] = useState(emptyAnnualDraft(CURRENT_YEAR + 1));
   const [itemDraft, setItemDraft] = useState(emptyItemDraft(1));
   const [showItemEditor, setShowItemEditor] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [executionPlanDraft, setExecutionPlanDraft] = useState<ReturnType<
+    typeof emptyExecutionPlanDraft
+  > | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
   const [loading, setLoading] = useState(Boolean(token));
   const [saving, setSaving] = useState(false);
@@ -355,6 +370,8 @@ export default function AnnualCommercialPlanning() {
   }
 
   function startNewItem(month: number) {
+    setSelectedMonth(month);
+    setExecutionPlanDraft(null);
     setItemDraft(emptyItemDraft(month, defaultCurrency));
     setShowItemEditor(true);
     window.setTimeout(
@@ -370,6 +387,8 @@ export default function AnnualCommercialPlanning() {
     const revenueLine = asData(item.revenueLine);
     const commercialPlan = asData(item.commercialPlan);
     const event = asData(item.event);
+    setSelectedMonth(numberValue(item.month));
+    setExecutionPlanDraft(null);
     setItemDraft({
       id: text(item.id),
       month: numberValue(item.month),
@@ -421,6 +440,7 @@ export default function AnnualCommercialPlanning() {
         ? await annualCommercialPlanningApi.updateItem(text(plan.id), itemDraft.id, payload, token)
         : await annualCommercialPlanningApi.createItem(text(plan.id), payload, token);
       updatePlanInState(updated);
+      setSelectedMonth(itemDraft.month);
       setShowItemEditor(false);
       setItemDraft(emptyItemDraft(itemDraft.month, defaultCurrency));
       setMessage(
@@ -457,11 +477,74 @@ export default function AnnualCommercialPlanning() {
     }
   }
 
+  function startExecutionPlan(item: Data) {
+    if (!editable || !text(item.id) || text(asData(item.commercialPlan).id)) return;
+    setSelectedMonth(numberValue(item.month));
+    setShowItemEditor(false);
+    setExecutionPlanDraft({
+      ...emptyExecutionPlanDraft(item),
+      strategySummary: annualDraft.strategy,
+    });
+    window.setTimeout(
+      () =>
+        document
+          .getElementById('execution-plan-editor')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      0,
+    );
+  }
+
+  async function createExecutionPlan() {
+    if (!token || !plan || !executionPlanDraft || !editable) return;
+    if (!executionPlanDraft.title.trim()) {
+      setMessage('Enter a clear execution plan title.');
+      return;
+    }
+    setSaving(true);
+    setMessage('');
+    try {
+      const result = asData(
+        await annualCommercialPlanningApi.createExecutionPlan(
+          text(plan.id),
+          executionPlanDraft.itemId,
+          {
+            expectedRevision: numberValue(plan.revision),
+            title: executionPlanDraft.title.trim(),
+            objective: executionPlanDraft.objective.trim() || null,
+            audience: executionPlanDraft.audience.trim() || null,
+            strategySummary: executionPlanDraft.strategySummary.trim() || null,
+            actionPlan: executionPlanDraft.actionPlan.trim() || null,
+          },
+          token,
+        ),
+      );
+      updatePlanInState(result.annualPlan);
+      setExecutionPlanDraft(null);
+      await load();
+      setMessage(
+        'Execution plan created and linked to its annual plan, month, revenue line, targets, and event.',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Execution plan could not be created.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function monthItems(month: number) {
     return items.filter((item) => numberValue(item.month) === month);
   }
 
-  const stitchiPrompt = `Help me prepare the ${year} annual commercial strategy. Review approved historical learning, annual AED budget and revenue targets, then propose the monthly product and event portfolio. Do not save or call external systems without approval.`;
+  const selectedMonthItems = monthItems(selectedMonth);
+  const selectedMonthBudget = selectedMonthItems.reduce(
+    (total, item) => total + numberValue(item.budgetAllocation),
+    0,
+  );
+  const selectedMonthRevenue = selectedMonthItems.reduce(
+    (total, item) => total + numberValue(item.revenueTarget),
+    0,
+  );
+  const stitchiPrompt = `Help me prepare the ${year} annual commercial strategy. Review approved historical learning, annual AED budget and revenue targets, then propose the monthly product and event portfolio. Create execution plans from their annual monthly initiatives, not as standalone records, unless I explicitly request and justify an exception. Do not save or call external systems without approval.`;
 
   return (
     <OpsPage className="annual-planning-page">
@@ -796,96 +879,135 @@ export default function AnnualCommercialPlanning() {
               </OpsSection>
 
               <OpsSection
-                title="Twelve-month portfolio"
-                subtitle="Place each product or event in its intended month. Empty months are valid planning decisions."
+                title="Monthly execution workspace"
+                subtitle="Choose a month, confirm its initiatives, then create each execution plan from that monthly decision."
                 action={
                   editable ? (
                     <button
                       className="ops-button is-primary"
                       type="button"
-                      onClick={() => startNewItem(1)}
+                      onClick={() => startNewItem(selectedMonth)}
                     >
                       <Plus size={16} aria-hidden="true" />
-                      Add initiative
+                      Add to {MONTHS[selectedMonth - 1]}
                     </button>
                   ) : undefined
                 }
               >
-                <div className="annual-quarter-grid">
-                  {QUARTERS.map((quarter) => (
-                    <section
-                      key={quarter.label}
-                      className="annual-quarter"
-                      aria-labelledby={`quarter-${quarter.label}`}
-                    >
-                      <header>
-                        <strong id={`quarter-${quarter.label}`}>{quarter.label}</strong>
-                        <span>
-                          {quarter.months.reduce(
-                            (total, month) => total + monthItems(month).length,
-                            0,
-                          )}{' '}
-                          planned
-                        </span>
-                      </header>
-                      {quarter.months.map((month) => {
-                        const records = monthItems(month);
+                <div className="annual-month-tabs" role="tablist" aria-label="Planning month">
+                  {MONTHS.map((monthName, index) => {
+                    const month = index + 1;
+                    const count = monthItems(month).length;
+                    return (
+                      <button
+                        key={monthName}
+                        type="button"
+                        role="tab"
+                        aria-selected={selectedMonth === month}
+                        className={selectedMonth === month ? 'is-active' : ''}
+                        onClick={() => setSelectedMonth(month)}
+                      >
+                        <span>{monthName.slice(0, 3)}</span>
+                        <small>{count || '-'}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="annual-month-workspace" role="tabpanel">
+                  <header>
+                    <div>
+                      <span>{year} portfolio month</span>
+                      <h3>{MONTHS[selectedMonth - 1]}</h3>
+                      <p>
+                        {selectedMonthItems.length
+                          ? `${selectedMonthItems.length} initiative${selectedMonthItems.length === 1 ? '' : 's'} ready for planning decisions.`
+                          : 'No initiative is planned yet. Add one only when it supports the annual strategy.'}
+                      </p>
+                    </div>
+                    <dl>
+                      <div><dt>Allocated budget</dt><dd>{money(selectedMonthBudget, defaultCurrency)}</dd></div>
+                      <div><dt>Revenue target</dt><dd>{money(selectedMonthRevenue, defaultCurrency)}</dd></div>
+                      <div><dt>Execution plans</dt><dd>{selectedMonthItems.filter((item) => text(asData(item.commercialPlan).id)).length} / {selectedMonthItems.length}</dd></div>
+                    </dl>
+                  </header>
+
+                  {selectedMonthItems.length ? (
+                    <div className="annual-month-focus-list">
+                      {selectedMonthItems.map((item) => {
+                        const line = asData(item.revenueLine);
+                        const childPlan = asData(item.commercialPlan);
+                        const linkedEvent = asData(item.event);
                         return (
-                          <div className="annual-month" key={month}>
-                            <div className="annual-month-heading">
+                          <article key={text(item.id)}>
+                            <div className="annual-month-focus-main">
                               <div>
-                                <strong>{MONTHS[month - 1]}</strong>
+                                <span>{text(line.name)} / {titleCase(text(item.priority, 'medium'))} priority</span>
+                                <strong>{text(item.title)}</strong>
                                 <small>
-                                  {records.length
-                                    ? `${records.length} initiative${records.length === 1 ? '' : 's'}`
-                                    : 'Intentionally open'}
+                                  {money(item.budgetAllocation, text(item.currency, defaultCurrency))} budget /{' '}
+                                  {money(item.revenueTarget, text(item.currency, defaultCurrency))} target
                                 </small>
                               </div>
-                              {editable ? (
+                              <OpsStatus tone={statusTone(text(item.readiness))}>
+                                {titleCase(text(item.readiness))}
+                              </OpsStatus>
+                            </div>
+                            <div className="annual-month-focus-links">
+                              <span className={text(childPlan.id) ? 'is-ready' : ''}>
+                                {text(childPlan.id) ? `Execution plan: ${text(childPlan.title)}` : 'Execution plan not created'}
+                              </span>
+                              <span className={text(linkedEvent.id) ? 'is-ready' : ''}>
+                                {text(linkedEvent.id) ? `Event: ${text(linkedEvent.name)}` : 'No event linked'}
+                              </span>
+                            </div>
+                            <div className="annual-month-focus-actions">
+                              <button className="ops-button is-secondary" type="button" onClick={() => editItem(item)}>
+                                Review initiative
+                              </button>
+                              {text(childPlan.id) ? (
                                 <button
+                                  className="ops-button is-primary"
                                   type="button"
-                                  aria-label={`Add initiative to ${MONTHS[month - 1]}`}
-                                  onClick={() => startNewItem(month)}
+                                  onClick={() => navigate(`/commercial-plans?revenueLineType=${encodeURIComponent(text(line.type))}&planId=${encodeURIComponent(text(childPlan.id))}`)}
                                 >
-                                  <Plus size={16} />
+                                  Open execution plan <ArrowRight size={15} aria-hidden="true" />
+                                </button>
+                              ) : editable ? (
+                                <button className="ops-button is-primary" type="button" onClick={() => startExecutionPlan(item)}>
+                                  Create execution plan <ArrowRight size={15} aria-hidden="true" />
                                 </button>
                               ) : null}
                             </div>
-                            <div className="annual-month-items">
-                              {records.map((item) => {
-                                const line = asData(item.revenueLine);
-                                return (
-                                  <button
-                                    key={text(item.id)}
-                                    type="button"
-                                    className="annual-initiative"
-                                    onClick={() => editItem(item)}
-                                  >
-                                    <span>
-                                      <strong>{text(item.title)}</strong>
-                                      <small>
-                                        {text(line.name)} /{' '}
-                                        {money(
-                                          item.budgetAllocation,
-                                          text(item.currency, defaultCurrency),
-                                        )}
-                                      </small>
-                                    </span>
-                                    <OpsStatus tone={statusTone(text(item.readiness))}>
-                                      {titleCase(text(item.readiness))}
-                                    </OpsStatus>
-                                    <ChevronRight size={16} aria-hidden="true" />
-                                  </button>
-                                );
-                              })}
-                              {!records.length ? <p>No product or event planned.</p> : null}
-                            </div>
-                          </div>
+                          </article>
                         );
                       })}
-                    </section>
-                  ))}
+                    </div>
+                  ) : (
+                    <OpsEmpty
+                      title={`Nothing planned for ${MONTHS[selectedMonth - 1]}`}
+                      message="An open month is valid. Add an initiative only after leadership confirms the product, event, budget, and expected revenue."
+                      action={editable ? <button className="ops-button is-primary" type="button" onClick={() => startNewItem(selectedMonth)}>Add initiative</button> : undefined}
+                    />
+                  )}
                 </div>
+
+                <details className="annual-year-overview">
+                  <summary>View all twelve months</summary>
+                  <div className="annual-quarter-grid">
+                    {QUARTERS.map((quarter) => (
+                      <section key={quarter.label} className="annual-quarter" aria-labelledby={`quarter-${quarter.label}`}>
+                        <header><strong id={`quarter-${quarter.label}`}>{quarter.label}</strong><span>{quarter.months.reduce((total, month) => total + monthItems(month).length, 0)} planned</span></header>
+                        {quarter.months.map((month) => (
+                          <button className={selectedMonth === month ? 'annual-month is-selected' : 'annual-month'} key={month} type="button" onClick={() => setSelectedMonth(month)}>
+                            <span><strong>{MONTHS[month - 1]}</strong><small>{monthItems(month).length ? `${monthItems(month).length} initiative${monthItems(month).length === 1 ? '' : 's'}` : 'Open'}</small></span>
+                            <ChevronRight size={16} aria-hidden="true" />
+                          </button>
+                        ))}
+                      </section>
+                    ))}
+                  </div>
+                </details>
               </OpsSection>
 
               <CommercialTraceabilityPanel
@@ -1071,7 +1193,7 @@ export default function AnnualCommercialPlanning() {
                           }
                         />
                       </Field>
-                      <Field label="Detailed commercial plan">
+                      <Field label="Existing execution plan">
                         <select
                           disabled={!editable}
                           value={itemDraft.commercialPlanId}
@@ -1082,13 +1204,17 @@ export default function AnnualCommercialPlanning() {
                             }))
                           }
                         >
-                          <option value="">Link later</option>
+                          <option value="">Create after saving (recommended)</option>
                           {compatibleExecutionPlans.map((candidate) => (
                             <option key={text(candidate.id)} value={text(candidate.id)}>
                               {text(candidate.title)}
                             </option>
                           ))}
                         </select>
+                        <p>
+                          Use an existing plan only for a deliberate legacy assignment. The normal
+                          path is to save this initiative, then create its execution plan here.
+                        </p>
                       </Field>
                       <Field label="Event Operations link">
                         <select
@@ -1158,6 +1284,80 @@ export default function AnnualCommercialPlanning() {
                           Open Event Operations <ArrowRight size={15} />
                         </button>
                       ) : null}
+                    </div>
+                  </OpsSection>
+                </div>
+              ) : null}
+
+              {executionPlanDraft ? (
+                <div id="execution-plan-editor">
+                  <OpsSection
+                    title={`Create ${MONTHS[selectedMonth - 1]} execution plan`}
+                    subtitle="This child plan will inherit its annual plan, month, revenue line, currency, budget, revenue target, event, and approved learning."
+                  >
+                    <div className="annual-execution-inheritance">
+                      <div><span>Annual plan</span><strong>{text(plan.title)}</strong></div>
+                      <div><span>Month</span><strong>{MONTHS[selectedMonth - 1]} {year}</strong></div>
+                      <div><span>Budget</span><strong>{money(selectedMonthItems.find((item) => text(item.id) === executionPlanDraft.itemId)?.budgetAllocation, defaultCurrency)}</strong></div>
+                      <div><span>Revenue target</span><strong>{money(selectedMonthItems.find((item) => text(item.id) === executionPlanDraft.itemId)?.revenueTarget, defaultCurrency)}</strong></div>
+                    </div>
+                    <div className="annual-execution-form">
+                      <Field label="Execution plan title">
+                        <input
+                          value={executionPlanDraft.title}
+                          onChange={(event) => setExecutionPlanDraft((current) => current ? ({ ...current, title: event.target.value }) : current)}
+                          placeholder="Example: March leadership course launch"
+                        />
+                      </Field>
+                      <Field label="Objective">
+                        <textarea
+                          rows={3}
+                          value={executionPlanDraft.objective}
+                          onChange={(event) => setExecutionPlanDraft((current) => current ? ({ ...current, objective: event.target.value }) : current)}
+                          placeholder="What measurable result should this initiative deliver?"
+                        />
+                      </Field>
+                      <Field label="Audience">
+                        <textarea
+                          rows={3}
+                          value={executionPlanDraft.audience}
+                          onChange={(event) => setExecutionPlanDraft((current) => current ? ({ ...current, audience: event.target.value }) : current)}
+                          placeholder="Who are we selling to, and why are they likely to buy?"
+                        />
+                      </Field>
+                      <Field label="Strategy">
+                        <textarea
+                          rows={4}
+                          value={executionPlanDraft.strategySummary}
+                          onChange={(event) => setExecutionPlanDraft((current) => current ? ({ ...current, strategySummary: event.target.value }) : current)}
+                          placeholder="How should approved historical learning shape this launch?"
+                        />
+                      </Field>
+                      <Field label="Action plan">
+                        <textarea
+                          rows={4}
+                          value={executionPlanDraft.actionPlan}
+                          onChange={(event) => setExecutionPlanDraft((current) => current ? ({ ...current, actionPlan: event.target.value }) : current)}
+                          placeholder="List the content, campaign, CRM follow-up, sales, and reporting work."
+                        />
+                      </Field>
+                    </div>
+                    <div className="annual-item-actions">
+                      <button className="ops-button is-primary" type="button" onClick={createExecutionPlan} disabled={saving}>
+                        <Save size={16} aria-hidden="true" />
+                        {saving ? 'Creating...' : 'Create and link execution plan'}
+                      </button>
+                      <button className="ops-button is-secondary" type="button" onClick={() => setExecutionPlanDraft(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        className="ops-button is-secondary"
+                        type="button"
+                        onClick={() => navigate(`/stitchi?mode=prepare&annualPlanId=${encodeURIComponent(text(plan.id))}&monthlyPortfolioItemId=${encodeURIComponent(executionPlanDraft.itemId)}&prompt=${encodeURIComponent(`Prepare an execution plan for the ${MONTHS[selectedMonth - 1]} monthly initiative. Inherit its approved annual strategy, targets, event, and learning. Ask for any missing objective or audience before proposing the governed save action.`)}`)}
+                      >
+                        <Sparkles size={16} aria-hidden="true" />
+                        Prepare with Stitchi
+                      </button>
                     </div>
                   </OpsSection>
                 </div>

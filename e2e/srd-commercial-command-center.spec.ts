@@ -328,7 +328,7 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
 
     await page.waitForURL(/\/command-center(?:$|[?#])/);
     await page.goto('/commercial-plans');
-    await expect(page.getByRole('heading', { name: 'Commercial Plans' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Execution Plans', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Revenue lines' })).toBeVisible();
     await expect(page.getByRole('link', { name: /Users & Roles/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Tenant Admin/i })).toHaveCount(0);
@@ -338,17 +338,24 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await expect(page.getByRole('heading', { name: 'Online Courses' })).toBeVisible();
     await expect(page.getByText('GHL lead sync')).toBeVisible();
 
+    await page.getByText('Need an unplanned exception?').click();
+    await page.getByRole('button', { name: 'Create standalone exception' }).click();
     await page.getByLabel('Plan title').fill('Q3 online course growth plan');
     await page.getByLabel('Linked event').selectOption(linkedEvent.id);
     await page.getByLabel('Status').selectOption('active');
     await page.getByLabel('Budget target').fill('25000');
     await page.getByLabel('Revenue target').fill('125000');
+    await page
+      .getByLabel('Standalone exception reason')
+      .fill('An urgent customer launch arrived outside the approved annual portfolio.');
     await page.getByLabel('Objective').fill('Grow course enrollment from warm followers.');
     await page.getByLabel('Audience').fill('Warm followers and existing customers.');
     await page.getByLabel('Action plan').fill('Prepare content, email follow-up, and CRM handoff.');
-    await page.getByRole('button', { name: 'Create plan' }).last().click();
+    await page.getByRole('button', { name: 'Create standalone exception' }).last().click();
 
-    await expect(page.getByText('Commercial plan created.')).toBeVisible();
+    await expect(
+      page.getByText('Standalone execution plan created with its exception reason recorded.'),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: /Q3 online course growth plan/i })).toBeVisible();
     await expect(page.getByText('Leadership Masterclass').last()).toBeVisible();
 

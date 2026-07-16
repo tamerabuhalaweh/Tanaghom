@@ -151,7 +151,7 @@ export default function CommercialToday() {
     if (!plans.length) {
       rows.push({
         id: 'first-plan',
-        title: 'Create the first commercial plan',
+        title: 'Create the first execution plan',
         context: 'Set the objective, audience, budget, and revenue target.',
         action: 'Create',
         path: '/commercial-plans',
@@ -181,7 +181,7 @@ export default function CommercialToday() {
         actions={(
           <>
             <Link className="ops-button is-secondary" to="/stitchi?mode=prepare&prompt=What%20should%20I%20focus%20on%20today%3F"><Sparkles size={17} aria-hidden="true" />Plan With Stitchi</Link>
-            <Link className="ops-button is-primary" to="/commercial-plans"><Plus size={17} aria-hidden="true" />Create Plan</Link>
+            <Link className="ops-button is-primary" to="/commercial-planning"><Plus size={17} aria-hidden="true" />Plan the Year</Link>
           </>
         )}
       />
@@ -213,7 +213,7 @@ export default function CommercialToday() {
                   ))}
                 </div>
               ) : (
-                <OpsEmpty title="No urgent actions" message="No open commercial signals or missing planning steps were returned by the backend." action={<Link className="ops-button is-secondary" to="/commercial-plans">Review Plans</Link>} />
+                <OpsEmpty title="No urgent actions" message="No open commercial signals or missing planning steps were returned by the backend." action={<Link className="ops-button is-secondary" to="/commercial-planning">Review Annual Plan</Link>} />
               )}
             </OpsSection>
 
@@ -226,7 +226,7 @@ export default function CommercialToday() {
                   </div>
                 ))}
               </div>
-              <Link className="ops-text-button commercial-pipeline-link" to="/commercial-plans">Open Commercial Plans <ArrowRight size={15} aria-hidden="true" /></Link>
+              <Link className="ops-text-button commercial-pipeline-link" to="/commercial-plans">Open Execution Plans <ArrowRight size={15} aria-hidden="true" /></Link>
             </OpsSection>
 
             <OpsSection
@@ -245,16 +245,16 @@ export default function CommercialToday() {
                   {revenueTarget > 0 ? (
                     <><div className="commercial-progress-copy"><span>{targetProgress}% of target</span><span>{money(revenueTarget - knownRevenue, currency)} remaining</span></div><div className="commercial-progress"><span style={{ width: `${targetProgress}%` }} /></div></>
                   ) : <p className="commercial-plan-missing">Add a revenue target to calculate progress.</p>}
-                  <Link className="ops-button is-secondary commercial-plan-open" to="/commercial-plans">Open Plan <ArrowRight size={16} aria-hidden="true" /></Link>
+                  <Link className="ops-button is-secondary commercial-plan-open" to="/commercial-plans">Open Execution Plan <ArrowRight size={16} aria-hidden="true" /></Link>
                 </div>
               ) : (
-                <OpsEmpty title="No plan selected" message="Create a commercial plan to connect objectives, budget, revenue, and operating work." action={<Link className="ops-button is-primary" to="/commercial-plans">Create Plan</Link>} />
+                <OpsEmpty title="No execution plan selected" message="Start in the annual plan, choose a monthly initiative, then create its execution plan." action={<Link className="ops-button is-primary" to="/commercial-planning">Open Annual Plan</Link>} />
               )}
             </OpsSection>
 
             <section className="commercial-decision">
               <span><CircleAlert size={20} aria-hidden="true" /></span>
-              <div><span>Next Decision</span><h2>{text(nextAction.label, signals.length ? text(signals[0].title) : 'Review the commercial plan')}</h2><p>{text(nextAction.description, signals.length ? text(signals[0].recommendedAction, text(signals[0].finding)) : 'Confirm priorities and assign the next valid action.')}</p></div>
+              <div><span>Next Decision</span><h2>{text(nextAction.label, signals.length ? text(signals[0].title) : 'Review the execution plan')}</h2><p>{text(nextAction.description, signals.length ? text(signals[0].recommendedAction, text(signals[0].finding)) : 'Confirm priorities and assign the next valid action.')}</p></div>
               <Link className="ops-button is-primary" to={text(nextAction.path, '/commercial-plans')}>Take Action</Link>
             </section>
           </div>

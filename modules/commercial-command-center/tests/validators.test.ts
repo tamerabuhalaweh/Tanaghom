@@ -29,6 +29,7 @@ describe('Commercial Command Center validators', () => {
   it('validates commercial plan creation with stage and horizon', () => {
     expect(validateCreateCommercialPlan({
       revenueLineId: '00000000-0000-0000-0000-000000000001',
+      standaloneReason: 'Urgent unplanned partner launch outside the approved annual calendar.',
       horizon: 'quarterly',
       stage: 'strategy_planning',
       title: 'Quarterly online course growth plan',
@@ -46,6 +47,7 @@ describe('Commercial Command Center validators', () => {
   it('rejects unsupported commercial plan currencies', () => {
     expect(() => validateCreateCommercialPlan({
       revenueLineId: '00000000-0000-0000-0000-000000000001',
+      standaloneReason: 'Urgent unplanned partner launch outside the approved annual calendar.',
       horizon: 'quarterly',
       title: 'Unsupported currency plan',
       currency: 'SAR',

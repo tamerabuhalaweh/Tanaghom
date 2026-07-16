@@ -458,6 +458,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
         'Objective: sell to entrepreneurs.',
         'Audience: warm followers and previous buyers.',
         'Budget target: 5000.',
@@ -508,6 +509,126 @@ describe('Stitchi natural-language orchestration', () => {
       type: 'gemma',
       model: 'gemma4-26b-a4b-canary',
     });
+  });
+
+  it('creates an AI-assisted execution plan under the selected annual month', async () => {
+    const itemId = '00000000-0000-0000-0000-000000000931';
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce(annualOperatorContext([{
+      id: itemId,
+      month: 3,
+      title: 'Leadership course launch',
+      revenueLineId: '00000000-0000-0000-0000-000000000040',
+      revenueLineName: 'Online Courses',
+      commercialPlanId: null,
+      eventId: null,
+      currency: 'AED',
+      budgetAllocation: 50000,
+      revenueTarget: 300000,
+      priority: 'high',
+      readiness: 'planned',
+      plannedStartDate: null,
+      plannedEndDate: null,
+    }]));
+
+    const result = await orchestrateStitchiMessage('department_head', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Prepare the execution plan for this monthly initiative.',
+        'Objective: sell the leadership course to entrepreneurs.',
+        'Audience: warm followers and previous buyers.',
+        'Action plan: authority content, warm ads, GHL follow-up, and WhatsApp reminder preparation.',
+      ].join('\n'),
+      metadata: {
+        annualPlanId: '00000000-0000-0000-0000-000000000930',
+        monthlyPortfolioItemId: itemId,
+      },
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_execution_plan_for_monthly_item',
+        inputPayload: expect.objectContaining({
+          annualPlanId: '00000000-0000-0000-0000-000000000930',
+          itemId,
+          executionPlan: expect.objectContaining({
+            expectedRevision: 4,
+            objective: 'Sell the leadership course to entrepreneurs using warm trust segments.',
+            audience: 'Warm followers and previous buyers.',
+          }),
+        }),
+        previewPayload: expect.objectContaining({
+          year: 2027,
+          month: 'March',
+          monthlyInitiative: 'Leadership course launch',
+          currency: 'AED',
+          budgetTarget: 50000,
+          revenueTarget: 300000,
+          aiAssisted: true,
+          approvalRequired: true,
+        }),
+      }),
+    );
+  });
+
+  it('asks for missing execution detail before using AI or creating monthly work', async () => {
+    const itemId = '00000000-0000-0000-0000-000000000931';
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce(annualOperatorContext([{
+      id: itemId,
+      month: 3,
+      title: 'Leadership course launch',
+      revenueLineId: '00000000-0000-0000-0000-000000000040',
+      revenueLineName: 'Online Courses',
+      commercialPlanId: null,
+      eventId: null,
+      currency: 'AED',
+      budgetAllocation: 50000,
+      revenueTarget: 300000,
+      priority: 'high',
+      readiness: 'planned',
+      plannedStartDate: null,
+      plannedEndDate: null,
+    }]));
+
+    const result = await orchestrateStitchiMessage('department_head', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Prepare the execution plan for this monthly initiative.',
+      metadata: {
+        annualPlanId: '00000000-0000-0000-0000-000000000930',
+        monthlyPortfolioItemId: itemId,
+      },
+    });
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(providerMocks.generate).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.stringContaining('objective, audience, action plan'),
+      expect.objectContaining({ writesExecuted: false }),
+    );
+  });
+
+  it('directs ordinary plan creation to the annual calendar by default', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Create an Online Courses execution plan for our next leadership launch.',
+    });
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('annual plan and its monthly initiative first'),
+      expect.objectContaining({ writesExecuted: false, externalExecution: 'blocked' }),
+    );
   });
 
   it('asks for missing annual targets before asking the AI provider to prepare a yearly plan', async () => {
@@ -637,6 +758,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
         'Objective: sell to entrepreneurs.',
         'Audience: warm followers and previous buyers.',
         'Budget target: 5000.',
@@ -733,6 +855,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
         'Objective: sell to entrepreneurs.',
         'Audience: warm followers and previous buyers.',
         'Budget target: 5000.',
@@ -778,6 +901,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Create an Online Courses plan for a leadership course launch.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
         'Objective: sell to entrepreneurs.',
         'Audience: warm followers and previous buyers.',
         'Revenue target: 30000.',
@@ -843,6 +967,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Create a Books plan for a leadership book launch.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
         'Objective: sell the new book to warm followers.',
         'Audience: readers, previous buyers, and entrepreneurs.',
         'Budget target: 5000 AED.',
@@ -914,6 +1039,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
         'Objective: sell to entrepreneurs.',
         'Audience: warm followers and previous buyers.',
         'Budget target: 5000.',
@@ -974,6 +1100,7 @@ describe('Stitchi natural-language orchestration', () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: [
         'Stitchi, create an Online Courses plan for a leadership course launch.',
+        'Create it as a standalone exception because this urgent partner launch was approved outside the normal planning cycle.',
         'Objective: sell to entrepreneurs.',
         'Audience: warm followers and previous buyers.',
         'Budget target: 5000.',

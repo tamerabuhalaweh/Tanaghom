@@ -26,7 +26,8 @@ const tx = vi.hoisted(() => ({
   commercialPlanEventLink: { count: vi.fn(), updateMany: vi.fn(), upsert: vi.fn() },
   commercialPlanCampaignLink: { count: vi.fn() },
   commercialRevenueLine: { findFirst: vi.fn() },
-  commercialPlan: { findFirst: vi.fn() },
+  commercialPlan: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  commercialPlanLearningInfluence: { createMany: vi.fn() },
   commercialEvent: { findFirst: vi.fn() },
   commercialLearningSet: { findMany: vi.fn() },
   tenant: { findUnique: vi.fn() },
@@ -40,7 +41,13 @@ const prismaMocks = vi.hoisted(() => ({
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
 
-import { createAnnualPlan, createPortfolioItem, updateAnnualPlan, updatePortfolioItem } from '../repository';
+import {
+  createAnnualPlan,
+  createExecutionPlanForPortfolioItem,
+  createPortfolioItem,
+  updateAnnualPlan,
+  updatePortfolioItem,
+} from '../repository';
 
 function planRecord(overrides: Record<string, unknown> = {}) {
   const now = new Date('2027-01-01T00:00:00.000Z');
@@ -226,5 +233,101 @@ describe('annual commercial planning repository governance', () => {
       }),
     });
     expect(result).toMatchObject({ revision: 3, title: 'Updated 2027 Commercial Plan' });
+  });
+
+  it('creates an execution plan from a monthly initiative with inherited targets and learning', async () => {
+    const itemId = '00000000-0000-0000-0000-000000000401';
+    const executionPlanId = '00000000-0000-0000-0000-000000000301';
+    const learningSetId = '00000000-0000-0000-0000-000000000501';
+    const findingId = '00000000-0000-0000-0000-000000000502';
+    const annual = planRecord({
+      learning_links: [{
+        learning_set: {
+          id: learningSetId,
+          findings: [{ id: findingId, title: 'Warm buyers converted best' }],
+        },
+      }],
+    });
+    tx.annualCommercialPlan.findFirst
+      .mockResolvedValueOnce(annual)
+      .mockResolvedValueOnce(planRecord({ revision: 3, items: [] }));
+    tx.monthlyPortfolioItem.findFirst.mockResolvedValue({
+      id: itemId,
+      month: 3,
+      revenue_line_id: '00000000-0000-0000-0000-000000000200',
+      commercial_plan_id: null,
+      event_id: null,
+      currency: 'AED',
+      budget_allocation: new Prisma.Decimal(50000),
+      revenue_target: new Prisma.Decimal(300000),
+      owner_user_id: null,
+    });
+    tx.commercialPlan.create.mockResolvedValue({
+      id: executionPlanId,
+      title: 'Leadership launch execution plan',
+      origin: 'annual_month',
+    });
+    tx.commercialPlanHierarchyAssignment.findFirst.mockResolvedValue(null);
+    tx.commercialPlanHierarchyAssignment.findUnique.mockResolvedValue(null);
+    tx.commercialPlanHierarchyAssignment.upsert.mockResolvedValue({ id: 'assignment-1' });
+    tx.commercialPlanLearningInfluence.createMany.mockResolvedValue({ count: 1 });
+
+    const result = await createExecutionPlanForPortfolioItem(
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000100',
+      itemId,
+      {
+        expectedRevision: 2,
+        title: 'Leadership launch execution plan',
+        objective: 'Sell the leadership course to entrepreneurs.',
+        audience: 'Warm followers and previous buyers.',
+      },
+    );
+
+    expect(tx.commercialPlan.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        revenue_line_id: '00000000-0000-0000-0000-000000000200',
+        currency: 'AED',
+        budget_target: new Prisma.Decimal(50000),
+        revenue_target: new Prisma.Decimal(300000),
+        origin: 'annual_month',
+        standalone_reason: null,
+      }),
+    });
+    expect(tx.monthlyPortfolioItem.update).toHaveBeenCalledWith({
+      where: { id: itemId },
+      data: { commercial_plan_id: executionPlanId },
+    });
+    expect(tx.commercialPlanHierarchyAssignment.upsert).toHaveBeenCalled();
+    expect(tx.commercialPlanLearningInfluence.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ learning_set_id: learningSetId, finding_id: findingId })],
+      skipDuplicates: true,
+    });
+    expect(tx.auditRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'monthly_execution_plan_created',
+        target_object_id: executionPlanId,
+      }),
+    });
+    expect(result.executionPlan).toMatchObject({ id: executionPlanId, origin: 'annual_month' });
+  });
+
+  it('rejects a second execution plan for the same monthly initiative', async () => {
+    tx.annualCommercialPlan.findFirst.mockResolvedValue(planRecord());
+    tx.monthlyPortfolioItem.findFirst.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000401',
+      commercial_plan_id: '00000000-0000-0000-0000-000000000301',
+    });
+
+    await expect(createExecutionPlanForPortfolioItem(
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000100',
+      '00000000-0000-0000-0000-000000000401',
+      { expectedRevision: 2, title: 'Duplicate execution plan' },
+    )).rejects.toThrow(ConflictError);
+
+    expect(tx.commercialPlan.create).not.toHaveBeenCalled();
   });
 });

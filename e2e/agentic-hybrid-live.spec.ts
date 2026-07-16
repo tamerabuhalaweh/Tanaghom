@@ -21,7 +21,7 @@ test.describe('QA-A1 Hybrid multi-role customer acceptance', () => {
     });
     await agent.login();
     await agent.visit('/command-center', /Today'?s Commercial Priorities/i);
-    await agent.visit('/commercial-plans', /^Commercial Plans$/i);
+    await agent.visit('/commercial-plans', /^Execution Plans$/i);
     await agent.visit('/events', /^Event Operations$/i);
     await agent.visit('/analytics', /^Sales & Leads$/i);
     await agent.visit('/stitchi', /Tell Stitchi what work you want done/i);
