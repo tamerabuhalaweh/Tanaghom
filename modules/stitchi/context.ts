@@ -483,7 +483,7 @@ export async function loadReadOnlyContext(
           },
         },
       },
-      orderBy: { linked_at: 'desc' },
+      orderBy: { created_at: 'desc' },
       take: 20,
     }) ?? Promise.resolve([]),
   ]);

@@ -38,6 +38,9 @@ const prismaMocks = vi.hoisted(() => ({
   commercialExecutiveReportSchedule: {
     findMany: vi.fn(),
   },
+  commercialPlanHierarchyAssignment: {
+    findMany: vi.fn(),
+  },
 }));
 
 const ghlSyncMocks = vi.hoisted(() => ({
@@ -205,6 +208,7 @@ describe('Stitchi read-only context loader', () => {
     prismaMocks.commercialExecutiveReportSchedule.findMany.mockResolvedValue([
       { id: 'schedule-1' },
     ]);
+    prismaMocks.commercialPlanHierarchyAssignment.findMany.mockResolvedValue([]);
   });
 
   it('loads summarized tenant-scoped event context without exposing secrets', async () => {
@@ -271,6 +275,12 @@ describe('Stitchi read-only context loader', () => {
       latestReportConfidence: 'medium',
       requiredActions: [],
     });
+    expect(prismaMocks.commercialPlanHierarchyAssignment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenant_key: 'tenant-a', status: 'active' },
+        orderBy: { created_at: 'desc' },
+      }),
+    );
     expect(context.guardrails).toEqual({
       mode: 'read_only',
       writesExecuted: false,
