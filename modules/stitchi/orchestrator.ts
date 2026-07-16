@@ -6,6 +6,8 @@ import { auditLog } from '@shared/logging';
 import { AppError } from '@shared/errors';
 import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
 import type { CommercialCurrency, CommercialRevenueLineType } from '@modules/commercial-command-center/types';
+import * as historicalAssessmentService from '@modules/commercial-historical-assessment/service';
+import { assessmentScopeSchema } from '@modules/commercial-historical-assessment/types';
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext, type StitchiReadOnlyContext } from './context';
 import { checkStitchiPermission } from './policy';
 import * as repo from './repository';
@@ -92,6 +94,7 @@ const orchestrationState = Annotation.Root({
   userId: Annotation<string>,
   conversationId: Annotation<string>,
   content: Annotation<string>,
+  effectiveContent: Annotation<string | undefined>,
   eventId: Annotation<string | undefined>,
   metadata: Annotation<Record<string, unknown> | undefined>,
   context: Annotation<StitchiReadOnlyContext | undefined>,
@@ -106,15 +109,20 @@ const orchestrationState = Annotation.Root({
 
 async function loadContextNode(state: typeof orchestrationState.State) {
   const conversation = await repo.getConversation(state.tenantKey, state.userId, state.role, state.conversationId);
-  const context = await loadReadOnlyContext(state.tenantKey, conversation, state.eventId, state.role);
+  const [context, messages] = await Promise.all([
+    loadReadOnlyContext(state.tenantKey, conversation, state.eventId, state.role),
+    repo.listMessages(state.tenantKey, state.userId, state.role, state.conversationId),
+  ]);
   return {
     context,
+    effectiveContent: buildEffectiveFollowUpRequest(state.content, messages),
     eventId: state.eventId || conversation.eventId || context.selectedEvent?.id || undefined,
   };
 }
 
 async function classifyNode(state: typeof orchestrationState.State): Promise<Partial<typeof orchestrationState.State>> {
-  if (isExternalExecutionRequest(state.content)) {
+  const effectiveContent = state.effectiveContent || state.content;
+  if (isExternalExecutionRequest(effectiveContent)) {
     return {
       status: 'blocked' as const,
       assistantText: [
@@ -124,7 +132,15 @@ async function classifyNode(state: typeof orchestrationState.State): Promise<Par
       ].join('\n'),
     };
   }
-  const proposal = await deriveActionProposal(state.content, state.userId, state.eventId, state.context, state.metadata);
+  const proposal = await deriveActionProposal(
+    effectiveContent,
+    state.userId,
+    state.role,
+    state.tenantKey,
+    state.eventId,
+    state.context,
+    state.metadata,
+  );
   if (isFollowUpResponse(proposal)) {
     return {
       status: 'answered' as const,
@@ -140,6 +156,32 @@ async function classifyNode(state: typeof orchestrationState.State): Promise<Par
 
 function isFollowUpResponse(value: unknown): value is FollowUpResponse {
   return Boolean(value && typeof value === 'object' && 'kind' in value && value.kind === 'follow_up');
+}
+
+function buildEffectiveFollowUpRequest(
+  currentContent: string,
+  messages: StitchiMessageSummary[] | undefined,
+): string {
+  if (!messages?.length || currentContent.trim().length > 320) return currentContent;
+  const recent = messages.slice(-8);
+  const currentIndex = findLastIndex(recent, message => message.role === 'user' && message.content.trim() === currentContent.trim());
+  const beforeCurrent = recent.slice(0, currentIndex >= 0 ? currentIndex : recent.length);
+  const assistantIndex = findLastIndex(beforeCurrent, message => message.role === 'assistant');
+  if (assistantIndex < 0) return currentContent;
+  const assistant = beforeCurrent[assistantIndex];
+  if (!/(still need|need the|tell me|provide|which period|which month|select the|choose the|what is the|what are the|missing)/i.test(assistant.content)) {
+    return currentContent;
+  }
+  const priorUser = [...beforeCurrent.slice(0, assistantIndex)].reverse().find(message => message.role === 'user');
+  if (!priorUser || priorUser.content.trim() === currentContent.trim()) return currentContent;
+  return `${priorUser.content.trim()}\nFollow-up answer: ${currentContent.trim()}`;
+}
+
+function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index])) return index;
+  }
+  return -1;
 }
 
 async function respondNode(state: typeof orchestrationState.State) {
@@ -277,7 +319,17 @@ export async function orchestrateStitchiMessage(
     const conversation = await repo.getConversation(tenantKey, userId, role, conversationId);
     const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
     const fallbackEventId = input.eventId || conversation.eventId || context.selectedEvent?.id || undefined;
-    const fallbackProposal = await deriveActionProposal(input.content, userId, fallbackEventId, context, input.metadata);
+    const messages = await repo.listMessages(tenantKey, userId, role, conversationId);
+    const fallbackContent = buildEffectiveFollowUpRequest(input.content, messages);
+    const fallbackProposal = await deriveActionProposal(
+      fallbackContent,
+      userId,
+      role,
+      tenantKey,
+      fallbackEventId,
+      context,
+      input.metadata,
+    );
     if (isFollowUpResponse(fallbackProposal)) {
       result = {
         ...result,
@@ -376,12 +428,25 @@ export async function orchestrateStitchiMessage(
 async function deriveActionProposal(
   content: string,
   userId: string,
+  role: string,
+  tenantKey: string,
   eventId?: string,
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
   const executiveReportProposal = deriveExecutiveReportActionProposal(content);
   if (executiveReportProposal) return executiveReportProposal;
+  const historicalAssessmentProposal = await deriveHistoricalAssessmentActionProposal(
+    content,
+    userId,
+    role,
+    tenantKey,
+    context,
+    metadata,
+  );
+  if (historicalAssessmentProposal) return historicalAssessmentProposal;
+  const annualPortfolioProposal = deriveAnnualPortfolioActionProposal(content, context, metadata);
+  if (annualPortfolioProposal) return annualPortfolioProposal;
   const budgetProposal = deriveCommercialBudgetActionProposal(content, context, metadata);
   if (budgetProposal) return budgetProposal;
   const hierarchyProposal = deriveCommercialHierarchyActionProposal(content, eventId, context, metadata);
@@ -448,6 +513,274 @@ async function deriveActionProposal(
   }
 
   return null;
+}
+
+async function deriveHistoricalAssessmentActionProposal(
+  content: string,
+  userId: string,
+  role: string,
+  tenantKey: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): Promise<CommercialDerivation> {
+  const lower = content.toLowerCase();
+  const decisionMatch = /\b(approve|accept|reject|decline)\b/i.exec(lower);
+  if (decisionMatch && /(assessment finding|historical finding|learning finding|finding)/i.test(lower)) {
+    const decision = /reject|decline/i.test(decisionMatch[1]) ? 'rejected' : 'approved';
+    const findingId = textMetadata(metadata, 'findingId')
+      || extractUuidAfter(lower, 'finding')
+      || (context?.historicalAssessment.pendingFindings.length === 1
+        ? context.historicalAssessment.pendingFindings[0].id
+        : '');
+    if (!findingId) {
+      const options = context?.historicalAssessment.pendingFindings.map(finding => finding.title) || [];
+      return {
+        kind: 'follow_up',
+        assistantText: options.length
+          ? `Choose the assessment finding to ${decision === 'approved' ? 'approve' : 'reject'}: ${options.join('; ')}. No decision has been recorded.`
+          : 'There is no pending historical assessment finding to review. Generate an evidence-backed assessment first.',
+      };
+    }
+    return {
+      actionType: 'decide_historical_assessment_finding',
+      inputPayload: {
+        findingId,
+        decision: { decision, reason: cleanText(content) },
+      },
+      previewPayload: {
+        findingId,
+        decision,
+        findingTitle: context?.historicalAssessment.pendingFindings.find(finding => finding.id === findingId)?.title,
+        executiveApprovalRequired: true,
+        externalSystemsCalled: false,
+      },
+      riskLevel: 'high',
+      reason: `${decision === 'approved' ? 'approve' : 'reject'} the selected evidence-backed historical finding`,
+    };
+  }
+
+  if (!/(historical|previous|past|prior|last year|last quarter|what worked|what failed)/i.test(lower)) return null;
+  if (!/(assess|assessment|analy[sz]e|analysis|what worked|what failed|review (?:our )?(?:historical|previous|past|prior)|learn from (?:historical|previous|past|prior))/i.test(lower)) return null;
+
+  const dateRange = extractAssessmentDateRange(content, metadata);
+  if (!dateRange) {
+    return {
+      kind: 'follow_up',
+      assistantText: [
+        'Which historical period should I assess?',
+        'Give me a year (for example, 2025) or a start and end date. You may also name a revenue line, event, campaign, audience, or channel.',
+        'No assessment has been created.',
+      ].join('\n'),
+    };
+  }
+
+  const revenueLine = resolveRevenueLine(content, context, metadata);
+  const allowedChannels = new Set(['meta', 'instagram', 'youtube', 'whatsapp', 'email', 'organic', 'dark_ad', 'referral', 'manual']);
+  const channels = inferChannels(lower).filter(channel => allowedChannels.has(channel));
+  const scope = assessmentScopeSchema.parse({
+    revenueLineId: revenueLine?.id || null,
+    eventIds: stringArrayMetadata(metadata, 'eventIds'),
+    campaignIds: stringArrayMetadata(metadata, 'campaignIds'),
+    audienceQuery: extractLabelValue(content, ['audience', 'audience segment']) || null,
+    channels,
+    dateFrom: dateRange.dateFrom,
+    dateTo: dateRange.dateTo,
+  });
+  const preview = await historicalAssessmentService.previewAssessment(role, tenantKey, scope);
+  if (!preview.evidence.length) {
+    return {
+      kind: 'follow_up',
+      providerType: 'none',
+      assistantText: [
+        `I found no usable historical evidence for ${formatDateRange(dateRange.dateFrom, dateRange.dateTo)}${revenueLine ? ` in ${revenueLine.name}` : ''}.`,
+        ...(preview.missingData.length ? preview.missingData.map(item => `- ${item}`) : ['- No completed commercial evidence matched this scope.']),
+        'Connect or import the missing customer data, or choose a broader period. No assessment has been created.',
+      ].join('\n'),
+    };
+  }
+
+  let provider;
+  try {
+    provider = await resolveUserLLMProvider(userId);
+  } catch (error) {
+    if (isProviderRequiredError(error)) {
+      return {
+        kind: 'follow_up',
+        providerType: 'none',
+        providerStatus: 'required',
+        assistantText: 'Connect Gemma or another approved AI model before Stitchi analyzes the evidence. The evidence preview succeeded, but no assessment was created.',
+      };
+    }
+    throw error;
+  }
+  const providerStatus = provider.getStatus();
+  if (providerStatus.type === 'mock') {
+    return {
+      kind: 'follow_up',
+      providerType: 'none',
+      providerStatus: 'required',
+      assistantText: 'A real AI model is required for historical analysis. Mock output is not accepted for this production workflow.',
+    };
+  }
+
+  const title = `${revenueLine?.name || 'Commercial'} assessment - ${formatDateRange(dateRange.dateFrom, dateRange.dateTo)}`;
+  return {
+    actionType: 'prepare_historical_commercial_assessment',
+    inputPayload: {
+      ...scope,
+      dateFrom: dateRange.dateFrom.toISOString(),
+      dateTo: dateRange.dateTo.toISOString(),
+      title,
+    },
+    previewPayload: {
+      title,
+      revenueLineName: revenueLine?.name || 'All revenue lines',
+      dateFrom: dateRange.dateFrom.toISOString(),
+      dateTo: dateRange.dateTo.toISOString(),
+      channels,
+      evidenceCount: preview.evidence.length,
+      evidenceSummary: preview.summary,
+      missingData: preview.missingData,
+      aiProvider: providerStatus.type,
+      aiModel: providerStatus.model,
+      approvalRequired: true,
+      externalSystemsCalled: false,
+    },
+    riskLevel: 'high',
+    reason: `snapshot ${preview.evidence.length} evidence record(s) and ask Stitchi to prepare the historical assessment`,
+    providerType: providerStatus.type,
+    providerModel: providerStatus.model || undefined,
+  };
+}
+
+function deriveAnnualPortfolioActionProposal(
+  content: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): CommercialDerivation {
+  const lower = content.toLowerCase();
+  const currentPlan = context?.annualPlanning?.currentPlan;
+  const transitionTarget = inferAnnualPlanTransition(lower);
+  if (transitionTarget) {
+    if (!currentPlan) {
+      return { kind: 'follow_up', assistantText: 'Create or select an annual commercial plan first. No status has been changed.' };
+    }
+    const reason = cleanText(content);
+    if (transitionTarget === 'rejected' && reason.length < 3) {
+      return { kind: 'follow_up', assistantText: 'Tell me why the annual plan should be rejected. A reason is required for the audit record.' };
+    }
+    return {
+      actionType: 'transition_annual_commercial_plan',
+      inputPayload: {
+        annualPlanId: currentPlan.id,
+        target: transitionTarget,
+        decision: { expectedRevision: currentPlan.revision, reason },
+      },
+      previewPayload: {
+        annualPlanTitle: currentPlan.title,
+        currentStatus: currentPlan.status,
+        targetStatus: transitionTarget,
+        executiveApprovalRequired: ['approved', 'rejected'].includes(transitionTarget),
+        approvalRequired: true,
+      },
+      riskLevel: 'high',
+      reason: `move the ${currentPlan.year} annual plan to ${transitionTarget.replaceAll('_', ' ')}`,
+    };
+  }
+
+  if (!/(monthly|portfolio item|initiative|calendar|january|february|march|april|may|june|july|august|september|october|november|december)/i.test(lower)) {
+    return null;
+  }
+  if (!/(add|create|schedule|plan|move|reschedule|update|change)/i.test(lower)) return null;
+  if (!currentPlan) {
+    return { kind: 'follow_up', assistantText: 'Create or select the annual commercial plan first. I need its approved year, currency, and revision before changing the monthly calendar.' };
+  }
+
+  const month = inferMonthNumber(content);
+  if (!month) {
+    return { kind: 'follow_up', assistantText: 'Which month should this product, event, or initiative appear in? No calendar item has been changed.' };
+  }
+  const isUpdate = /(move|reschedule|update|change)/i.test(lower);
+  if (isUpdate) {
+    const itemId = textMetadata(metadata, 'monthlyPortfolioItemId')
+      || resolveMonthlyItem(content, currentPlan.monthlyItems)?.id;
+    if (!itemId) {
+      const options = currentPlan.monthlyItems.map(item => `${monthName(item.month)}: ${item.title}`);
+      return {
+        kind: 'follow_up',
+        assistantText: options.length
+          ? `Which monthly initiative should I change? Current items: ${options.join('; ')}. No item has been changed.`
+          : 'There are no monthly initiatives to update. Ask me to add the first one instead.',
+      };
+    }
+    const budget = extractMoneyValue(content, ['budget allocation', 'budget']);
+    const revenue = extractMoneyValue(content, ['revenue target', 'revenue']);
+    const changes: Record<string, unknown> = { expectedRevision: currentPlan.revision, month };
+    if (budget != null) changes.budgetAllocation = budget;
+    if (revenue != null) changes.revenueTarget = revenue;
+    const revenueLine = resolveRevenueLine(content, context, metadata);
+    if (revenueLine?.id) changes.revenueLineId = revenueLine.id;
+    return {
+      actionType: 'update_monthly_portfolio_item',
+      inputPayload: { annualPlanId: currentPlan.id, itemId, changes },
+      previewPayload: {
+        annualPlanTitle: currentPlan.title,
+        itemTitle: currentPlan.monthlyItems.find(item => item.id === itemId)?.title,
+        moveToMonth: monthName(month),
+        budgetAllocation: budget,
+        revenueTarget: revenue,
+        currency: currentPlan.currency,
+        approvalRequired: true,
+      },
+      riskLevel: 'high',
+      reason: `update the selected monthly initiative in ${monthName(month)}`,
+    };
+  }
+
+  const revenueLine = resolveRevenueLine(content, context, metadata);
+  if (!revenueLine?.id) {
+    return { kind: 'follow_up', assistantText: 'Which revenue line owns this monthly initiative? Choose Live Events, Online Courses, Books, or another configured business line.' };
+  }
+  const budget = extractMoneyValue(content, ['budget allocation', 'budget']);
+  const revenue = extractMoneyValue(content, ['revenue target', 'revenue']);
+  const missing = [budget == null ? 'budget allocation' : null, revenue == null ? 'revenue target' : null].filter(Boolean);
+  if (missing.length) {
+    return {
+      kind: 'follow_up',
+      assistantText: `I still need the ${missing.join(' and ')} for the ${monthName(month)} initiative. The annual plan currency is ${currentPlan.currency}. No item has been created.`,
+    };
+  }
+  const title = extractPortfolioItemTitle(content, revenueLine.name, month);
+  return {
+    actionType: 'create_monthly_portfolio_item',
+    inputPayload: {
+      annualPlanId: currentPlan.id,
+      item: {
+        expectedRevision: currentPlan.revision,
+        month,
+        revenueLineId: revenueLine.id,
+        title,
+        currency: extractCommercialCurrency(content, currentPlan.currency === 'USD' ? 'USD' : 'AED'),
+        budgetAllocation: budget,
+        revenueTarget: revenue,
+        priority: inferPortfolioPriority(lower),
+        readiness: 'planned',
+      },
+    },
+    previewPayload: {
+      annualPlanTitle: currentPlan.title,
+      month: monthName(month),
+      title,
+      revenueLineName: revenueLine.name,
+      budgetAllocation: budget,
+      revenueTarget: revenue,
+      currency: currentPlan.currency,
+      approvalRequired: true,
+      externalSystemsCalled: false,
+    },
+    riskLevel: 'high',
+    reason: `add ${title} to the ${monthName(month)} annual portfolio`,
+  };
 }
 
 function deriveCommercialBudgetActionProposal(
@@ -569,13 +902,15 @@ function deriveCommercialHierarchyActionProposal(
   if (!/(connect|link|assign|attach|use approved learning)/i.test(lower)) return null;
 
   const commercialPlanId = extractUuidAfter(lower, 'commercial plan')
-    || textMetadata(metadata, 'commercialPlanId');
+    || textMetadata(metadata, 'commercialPlanId')
+    || (context?.commercialCenter.recentPlans.length === 1 ? context.commercialCenter.recentPlans[0].id : '');
   const annualPlanId = extractUuidAfter(lower, 'annual plan')
     || textMetadata(metadata, 'annualPlanId')
     || context?.annualPlanning?.currentPlan?.id;
   const monthlyPortfolioItemId = extractUuidAfter(lower, 'monthly item')
     || extractUuidAfter(lower, 'monthly initiative')
-    || textMetadata(metadata, 'monthlyPortfolioItemId');
+    || textMetadata(metadata, 'monthlyPortfolioItemId')
+    || resolveMonthlyItem(content, context?.annualPlanning?.currentPlan?.monthlyItems || [])?.id;
 
   if (/(annual plan|annual strategy|monthly item|monthly initiative|annual parent)/i.test(lower)) {
     const missing = [
@@ -743,7 +1078,7 @@ async function deriveAnnualPlanActionProposal(
     throw error;
   }
 
-  const learningSetIds = context?.annualPlanning.approvedLearningSets.map(set => set.id) || [];
+  const learningSetIds = context?.annualPlanning?.approvedLearningSets.map(set => set.id) || [];
   const strategy = [
     enrichment.strategy,
     `Portfolio priorities:\n${enrichment.portfolioPriorities.map(value => `- ${value}`).join('\n')}`,
@@ -1420,6 +1755,122 @@ function numberMetadata(metadata: Record<string, unknown> | undefined, key: stri
   const value = metadata?.[key];
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function stringArrayMetadata(metadata: Record<string, unknown> | undefined, key: string): string[] {
+  const value = metadata?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function extractAssessmentDateRange(
+  content: string,
+  metadata?: Record<string, unknown>,
+): { dateFrom: Date; dateTo: Date } | null {
+  const metadataFrom = textMetadata(metadata, 'dateFrom');
+  const metadataTo = textMetadata(metadata, 'dateTo');
+  if (metadataFrom && metadataTo) {
+    const dateFrom = new Date(metadataFrom);
+    const dateTo = new Date(metadataTo);
+    if (!Number.isNaN(dateFrom.getTime()) && !Number.isNaN(dateTo.getTime()) && dateFrom <= dateTo) {
+      return { dateFrom, dateTo };
+    }
+  }
+  const isoDates = [...content.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map(match => match[1]);
+  if (isoDates.length >= 2) {
+    const dateFrom = new Date(`${isoDates[0]}T00:00:00.000Z`);
+    const dateTo = new Date(`${isoDates[1]}T23:59:59.999Z`);
+    if (dateFrom <= dateTo) return { dateFrom, dateTo };
+  }
+  const now = new Date();
+  const explicitYear = /\b(20\d{2})\b/.exec(content);
+  const year = explicitYear
+    ? Number(explicitYear[1])
+    : /last year|previous year|prior year/i.test(content)
+      ? now.getUTCFullYear() - 1
+      : null;
+  if (year) {
+    return {
+      dateFrom: new Date(Date.UTC(year, 0, 1)),
+      dateTo: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)),
+    };
+  }
+  if (/last quarter|previous quarter/i.test(content)) {
+    const currentQuarterStartMonth = Math.floor(now.getUTCMonth() / 3) * 3;
+    const currentQuarterStart = new Date(Date.UTC(now.getUTCFullYear(), currentQuarterStartMonth, 1));
+    const dateTo = new Date(currentQuarterStart.getTime() - 1);
+    const dateFrom = new Date(Date.UTC(dateTo.getUTCFullYear(), Math.floor(dateTo.getUTCMonth() / 3) * 3, 1));
+    return { dateFrom, dateTo };
+  }
+  return null;
+}
+
+function formatDateRange(dateFrom: Date, dateTo: Date): string {
+  return `${dateFrom.toISOString().slice(0, 10)} to ${dateTo.toISOString().slice(0, 10)}`;
+}
+
+function inferAnnualPlanTransition(lower: string): 'pending_approval' | 'approved' | 'rejected' | 'active' | 'closed' | 'archived' | null {
+  if (!/(annual plan|annual strategy|year plan)/i.test(lower)) return null;
+  if (/(submit|send).*?(approval|review)|pending approval/i.test(lower)) return 'pending_approval';
+  if (/(approve|accept).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(approve|accept)/i.test(lower)) return 'approved';
+  if (/(reject|decline).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(reject|decline)/i.test(lower)) return 'rejected';
+  if (/(activate|start).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(activate|start)/i.test(lower)) return 'active';
+  if (/(close|complete).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(close|complete)/i.test(lower)) return 'closed';
+  if (/(archive).*?(annual plan|annual strategy)|(annual plan|annual strategy).*?(archive)/i.test(lower)) return 'archived';
+  return null;
+}
+
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+] as const;
+
+function inferMonthNumber(content: string): number | null {
+  const lower = content.toLowerCase();
+  const targeted = new RegExp(`(?:to|into|in|for)\\s+(${MONTH_NAMES.join('|')})\\b`, 'gi');
+  const targetedMatches = [...lower.matchAll(targeted)];
+  const name = targetedMatches.at(-1)?.[1]
+    || [...lower.matchAll(new RegExp(`\\b(${MONTH_NAMES.join('|')})\\b`, 'gi'))].at(-1)?.[1];
+  if (name) return MONTH_NAMES.indexOf(name.toLowerCase() as (typeof MONTH_NAMES)[number]) + 1;
+  const numeric = /\bmonth\s*(1[0-2]|[1-9])\b/i.exec(content);
+  return numeric ? Number(numeric[1]) : null;
+}
+
+function monthName(month: number): string {
+  return MONTH_NAMES[month - 1]
+    ? `${MONTH_NAMES[month - 1][0].toUpperCase()}${MONTH_NAMES[month - 1].slice(1)}`
+    : `Month ${month}`;
+}
+
+function resolveMonthlyItem(
+  content: string,
+  items: NonNullable<StitchiReadOnlyContext['annualPlanning']['currentPlan']>['monthlyItems'],
+) {
+  const lower = normalizeForMatch(content);
+  const byTitle = items.find(item => lower.includes(normalizeForMatch(item.title)));
+  if (byTitle) return byTitle;
+  const sourceMonth = new RegExp(`(?:from|currently in)\\s+(${MONTH_NAMES.join('|')})\\b`, 'i').exec(content)?.[1];
+  if (sourceMonth) {
+    const month = MONTH_NAMES.indexOf(sourceMonth.toLowerCase() as (typeof MONTH_NAMES)[number]) + 1;
+    const candidates = items.filter(item => item.month === month);
+    if (candidates.length === 1) return candidates[0];
+  }
+  return items.length === 1 ? items[0] : undefined;
+}
+
+function extractPortfolioItemTitle(content: string, revenueLineName: string, month: number): string {
+  const explicit = extractLabelValue(content, ['title', 'initiative', 'product', 'event']);
+  if (explicit) return explicit.slice(0, 220);
+  const match = /(?:add|create|schedule|plan)\s+(?:a|an|the)?\s*([^.:\n]{2,160}?)(?:\s+(?:in|for)\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)|[.:\n]|$)/i.exec(content);
+  return cleanText(match?.[1] || `${revenueLineName} initiative - ${monthName(month)}`).slice(0, 220);
+}
+
+function inferPortfolioPriority(lower: string): 'low' | 'medium' | 'high' | 'critical' {
+  if (/critical|urgent|must win/i.test(lower)) return 'critical';
+  if (/high priority|priority high|important/i.test(lower)) return 'high';
+  if (/low priority|optional/i.test(lower)) return 'low';
+  return 'medium';
 }
 
 type ResolvedRevenueLine = {

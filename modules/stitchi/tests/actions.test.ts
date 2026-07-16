@@ -25,6 +25,14 @@ const commercialExecutiveMocks = vi.hoisted(() => ({
 }));
 const annualPlanningMocks = vi.hoisted(() => ({
   createAnnualPlan: vi.fn(),
+  createPortfolioItem: vi.fn(),
+  updatePortfolioItem: vi.fn(),
+  transitionAnnualPlan: vi.fn(),
+}));
+const historicalAssessmentMocks = vi.hoisted(() => ({
+  createAssessment: vi.fn(),
+  generateAssessment: vi.fn(),
+  decideFinding: vi.fn(),
 }));
 const commercialHierarchyMocks = vi.hoisted(() => ({
   assignPlan: vi.fn(),
@@ -47,6 +55,7 @@ vi.mock('@modules/commercial-command-center/service', () => commercialCenterMock
 vi.mock('@modules/commercial-disciplines/service', () => commercialDisciplineMocks);
 vi.mock('@modules/commercial-executive-reporting/service', () => commercialExecutiveMocks);
 vi.mock('@modules/commercial-annual-planning/service', () => annualPlanningMocks);
+vi.mock('@modules/commercial-historical-assessment/service', () => historicalAssessmentMocks);
 vi.mock('@modules/commercial-plan-hierarchy/service', () => commercialHierarchyMocks);
 vi.mock('@modules/commercial-budget-reconciliation/service', () => commercialBudgetMocks);
 
@@ -72,6 +81,12 @@ describe('Stitchi action registry', () => {
     commercialDisciplineMocks.createRecord.mockResolvedValue({ id: 'discipline-record-1' });
     commercialExecutiveMocks.createSchedule.mockResolvedValue({ id: 'executive-report-schedule-1' });
     annualPlanningMocks.createAnnualPlan.mockResolvedValue({ id: 'annual-plan-1', year: 2027 });
+    annualPlanningMocks.createPortfolioItem.mockResolvedValue({ id: 'annual-plan-1', revision: 2 });
+    annualPlanningMocks.updatePortfolioItem.mockResolvedValue({ id: 'annual-plan-1', revision: 3 });
+    annualPlanningMocks.transitionAnnualPlan.mockResolvedValue({ id: 'annual-plan-1', status: 'approved' });
+    historicalAssessmentMocks.createAssessment.mockResolvedValue({ id: '00000000-0000-0000-0000-000000000920' });
+    historicalAssessmentMocks.generateAssessment.mockResolvedValue({ id: '00000000-0000-0000-0000-000000000920', status: 'generated' });
+    historicalAssessmentMocks.decideFinding.mockResolvedValue({ id: '00000000-0000-0000-0000-000000000921', decision: 'approved' });
     commercialHierarchyMocks.assignPlan.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialHierarchyMocks.linkEvent.mockResolvedValue({ id: 'commercial-plan-1' });
     commercialHierarchyMocks.linkCampaign.mockResolvedValue({ id: 'commercial-plan-1' });
@@ -108,7 +123,12 @@ describe('Stitchi action registry', () => {
       'create_commercial_assessment_signal',
       'create_commercial_discipline_record',
       'create_executive_report_schedule',
+      'prepare_historical_commercial_assessment',
+      'decide_historical_assessment_finding',
       'create_annual_commercial_plan',
+      'create_monthly_portfolio_item',
+      'update_monthly_portfolio_item',
+      'transition_annual_commercial_plan',
       'assign_commercial_plan_hierarchy',
       'link_commercial_plan_event',
       'link_commercial_plan_campaign',
@@ -120,6 +140,161 @@ describe('Stitchi action registry', () => {
       'archive_commercial_budget',
       'review_commercial_spend_evidence',
     ]);
+  });
+
+  it('creates and generates a historical assessment using the original requester provider identity', async () => {
+    const result = await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      requestingUserId: '00000000-0000-0000-0000-000000000002',
+      actionType: 'prepare_historical_commercial_assessment',
+      inputPayload: {
+        title: '2025 commercial assessment',
+        dateFrom: '2025-01-01',
+        dateTo: '2025-12-31',
+        eventIds: [],
+        campaignIds: [],
+        channels: [],
+      },
+    });
+
+    expect(historicalAssessmentMocks.createAssessment).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000002',
+      expect.objectContaining({ title: '2025 commercial assessment' }),
+    );
+    expect(historicalAssessmentMocks.generateAssessment).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000920',
+    );
+    expect(result.objectType).toBe('commercial_historical_assessment_run');
+  });
+
+  it('routes monthly portfolio creation through the annual planning state machine', async () => {
+    await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'create_monthly_portfolio_item',
+      inputPayload: {
+        annualPlanId: '00000000-0000-0000-0000-000000000930',
+        item: {
+          expectedRevision: 4,
+          month: 3,
+          revenueLineId: '00000000-0000-0000-0000-000000000040',
+          title: 'Leadership course launch',
+          currency: 'AED',
+          budgetAllocation: 50000,
+          revenueTarget: 300000,
+        },
+      },
+    });
+
+    expect(annualPlanningMocks.createPortfolioItem).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000930',
+      expect.objectContaining({ month: 3, expectedRevision: 4, currency: 'AED' }),
+    );
+  });
+
+  it('uses the executing user as the assessment requester when no original requester is supplied', async () => {
+    await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'prepare_historical_commercial_assessment',
+      inputPayload: {
+        title: '2025 commercial assessment',
+        dateFrom: '2025-01-01',
+        dateTo: '2025-12-31',
+      },
+    });
+
+    expect(historicalAssessmentMocks.generateAssessment).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000920',
+    );
+  });
+
+  it('routes historical finding decisions through the governed assessment service', async () => {
+    const findingId = '00000000-0000-0000-0000-000000000921';
+    const result = await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'decide_historical_assessment_finding',
+      inputPayload: {
+        findingId,
+        decision: { decision: 'approved', reason: 'Supported by verified conversion evidence.' },
+      },
+    });
+
+    expect(historicalAssessmentMocks.decideFinding).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      findingId,
+      expect.objectContaining({ decision: 'approved' }),
+    );
+    expect(result).toMatchObject({ objectType: 'commercial_assessment_finding', objectId: findingId });
+  });
+
+  it('routes monthly portfolio updates through the annual planning state machine', async () => {
+    await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'update_monthly_portfolio_item',
+      inputPayload: {
+        annualPlanId: '00000000-0000-0000-0000-000000000930',
+        itemId: '00000000-0000-0000-0000-000000000931',
+        changes: { expectedRevision: 4, month: 4, budgetAllocation: 60000 },
+      },
+    });
+
+    expect(annualPlanningMocks.updatePortfolioItem).toHaveBeenCalledWith(
+      'cco',
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000930',
+      '00000000-0000-0000-0000-000000000931',
+      expect.objectContaining({ expectedRevision: 4, month: 4, budgetAllocation: 60000 }),
+    );
+  });
+
+  it('validates approved and rejected annual-plan transitions before domain execution', async () => {
+    const annualPlanId = '00000000-0000-0000-0000-000000000930';
+    await executeStitchiAction({
+      role: 'cco', tenantKey: 'tenant-a', userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'transition_annual_commercial_plan',
+      inputPayload: { annualPlanId, target: 'approved', decision: { expectedRevision: 4 } },
+    });
+    await executeStitchiAction({
+      role: 'cco', tenantKey: 'tenant-a', userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'transition_annual_commercial_plan',
+      inputPayload: {
+        annualPlanId,
+        target: 'rejected',
+        decision: { expectedRevision: 5, reason: 'Revenue assumptions require revision.' },
+      },
+    });
+
+    expect(annualPlanningMocks.transitionAnnualPlan).toHaveBeenNthCalledWith(
+      1, 'cco', 'tenant-a', '00000000-0000-0000-0000-000000000001', annualPlanId,
+      'approved', expect.objectContaining({ expectedRevision: 4 }),
+    );
+    expect(annualPlanningMocks.transitionAnnualPlan).toHaveBeenNthCalledWith(
+      2, 'cco', 'tenant-a', '00000000-0000-0000-0000-000000000001', annualPlanId,
+      'rejected', expect.objectContaining({ expectedRevision: 5, reason: 'Revenue assumptions require revision.' }),
+    );
   });
 
   it('routes verified spend review through the governed budget service', async () => {

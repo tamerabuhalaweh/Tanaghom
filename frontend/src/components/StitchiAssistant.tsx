@@ -45,13 +45,13 @@ interface ActionRun {
 
 const STARTER_PROMPTS = [
   'What should I focus on today?',
+  'Assess our 2025 historical commercial performance and explain what worked, what failed, and what evidence is missing.',
+  'Add an Online Courses initiative to March in the current annual plan. Budget allocation: 50000. Revenue target: 300000.',
   'Create an Online Courses plan for a leadership course launch. Objective: sell to entrepreneurs. Audience: warm followers and previous buyers. Budget target: 5000. Revenue target: 30000. Action plan: content, ads, GHL follow-up, WhatsApp reminders. Link it to the next available live event if suitable.',
-  'Prepare the event marketing and sales plan.',
   'Record this blocker: WhatsApp follow-up is taking too long.',
-  'Check whether CRM and social data are ready.',
 ];
 
-const APPROVER_ROLES = ['admin', 'cco', 'department_head', 'marketing_manager'];
+const APPROVER_ROLES = ['admin', 'cco'];
 
 function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
@@ -141,7 +141,12 @@ function actionTitle(actionType: string): string {
     create_commercial_plan_with_revenue_line: 'Set up revenue line and create plan',
     update_commercial_plan: 'Update commercial plan',
     create_commercial_assessment_signal: 'Record commercial signal',
+    prepare_historical_commercial_assessment: 'Prepare historical assessment',
+    decide_historical_assessment_finding: 'Review historical finding',
     create_annual_commercial_plan: 'Create annual commercial plan',
+    create_monthly_portfolio_item: 'Add monthly initiative',
+    update_monthly_portfolio_item: 'Update monthly initiative',
+    transition_annual_commercial_plan: 'Update annual plan status',
     assign_commercial_plan_hierarchy: 'Connect plan to annual strategy',
     link_commercial_plan_event: 'Connect event to execution plan',
     link_commercial_plan_campaign: 'Connect campaign to execution plan',
@@ -189,6 +194,12 @@ function actionResultLink(action: ActionRun): { to: string; label: string } | nu
   if (!result) return null;
   if (result.objectType === 'commercial_plan' || result.objectType === 'commercial_revenue_line') {
     return { to: '/command-center', label: 'Open Commercial Command Center' };
+  }
+  if (result.objectType === 'commercial_historical_assessment_run' || result.objectType === 'commercial_assessment_finding') {
+    return { to: '/commercial-assessment', label: 'Open Assessment' };
+  }
+  if (result.objectType === 'annual_commercial_plan' || result.objectType === 'commercial_budget_allocation') {
+    return { to: '/commercial-planning', label: 'Open Annual Planning' };
   }
   if (result.objectType === 'event_problem' || result.objectType === 'commercial_event') {
     return { to: '/events', label: 'Open Events' };
@@ -712,7 +723,7 @@ function ActionControls({
         </>
       )}
       {action.status === 'awaiting_approval' && !canApprove && (
-        <span className="text-xs leading-6 text-white/45">Manager approval required.</span>
+        <span className="text-xs leading-6 text-white/55">Executive approval required. Your prepared work is waiting for an Admin or CCO.</span>
       )}
       {action.status === 'approved' && (
         <button
@@ -743,12 +754,21 @@ function ActionPreview({ action }: { action: ActionRun }) {
   const preview = action.previewPayload as RecordMap;
   const rawRows: Array<[string, unknown]> = [
     ['Revenue line', preview.revenueLineName],
+    ['Assessment period', preview.dateFrom && preview.dateTo ? `${customerLabel(preview.dateFrom)} to ${customerLabel(preview.dateTo)}` : undefined],
+    ['Evidence records', preview.evidenceCount],
+    ['Missing evidence', preview.missingData],
+    ['Annual plan', preview.annualPlanTitle],
+    ['Month', preview.month || preview.moveToMonth],
+    ['Current status', preview.currentStatus],
+    ['Target status', preview.targetStatus],
     ['Title', preview.title || preview.name],
     ['AI assisted', preview.aiAssisted ? `${preview.aiProvider || 'AI'}${preview.aiModel ? ` / ${preview.aiModel}` : ''}` : undefined],
     ['Objective', preview.objective],
     ['Audience', preview.audience],
     ['Budget target', preview.budgetTarget],
+    ['Budget allocation', preview.budgetAllocation],
     ['Revenue target', preview.revenueTarget],
+    ['Decision', preview.decision],
     ['Linked event', preview.linkedEventName],
     ['AI plan', preview.aiSummary],
     ['Content pillars', preview.contentPillars],
