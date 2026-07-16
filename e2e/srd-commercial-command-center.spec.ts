@@ -370,12 +370,8 @@ test.describe('SRD Commercial Command Center closure workflow', () => {
     await expect(page.getByText('Leadership Course Launch').last()).toBeVisible();
     await expect(page.getByText(/gemma4-26b-a4b-canary/i).last()).toBeVisible();
     await expect(page.getByText(/authority content/i).last()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Approve & Save' }).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Approve & Save' }).first().click();
-    await expect(page.getByText('Saved to Tanaghum. The workspace has been refreshed.')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Commercial Command Center' }).first()).toBeVisible();
-    await page.getByRole('link', { name: 'Open Commercial Command Center' }).first().click();
-    await expect(page).toHaveURL(/\/command-center(?:$|[?#])/);
+    await expect(page.getByRole('button', { name: 'Approve & Save' })).toHaveCount(0);
+    await expect(page.getByText(/Executive approval required.*Admin or CCO/i).first()).toBeVisible();
     await page.goto('/commercial-plans');
     await page.getByRole('button', { name: /Online Courses/i }).click();
     await expect(page.getByRole('button', { name: /Q3 online course growth plan/i })).toBeVisible();

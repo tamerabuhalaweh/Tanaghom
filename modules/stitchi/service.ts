@@ -518,6 +518,7 @@ export async function executeApprovedActionRun(
       role,
       tenantKey,
       userId,
+      requestingUserId: run.userId,
       actionType: run.actionType,
       inputPayload: run.inputPayload,
     });

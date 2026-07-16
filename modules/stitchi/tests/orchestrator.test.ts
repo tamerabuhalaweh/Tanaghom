@@ -20,6 +20,12 @@ vi.mock('@modules/ai-provider/controller', () => ({
   resolveUserLLMProvider: providerMocks.resolveUserLLMProvider,
 }));
 
+const historicalAssessmentMocks = vi.hoisted(() => ({
+  previewAssessment: vi.fn(),
+}));
+
+vi.mock('@modules/commercial-historical-assessment/service', () => historicalAssessmentMocks);
+
 vi.mock('../context', () => ({
   loadReadOnlyContext: vi.fn().mockResolvedValue({
     currentUser: {
@@ -48,6 +54,7 @@ vi.mock('../context', () => ({
     riskSummary: { open: 0 },
     connectorSummary: { configuredCredentials: 1, connectorJobs: 0 },
     commercialCenter: {
+      defaultCurrency: 'AED',
       configuredRevenueLines: 1,
       activePlans: 0,
       openAssessmentSignals: 0,
@@ -74,6 +81,19 @@ vi.mock('../context', () => ({
       ],
       requiredActions: ['Create the next annual commercial plan.'],
     },
+    historicalAssessment: {
+      recentRuns: 0,
+      latestRunId: null,
+      latestRunStatus: null,
+      latestRunTitle: null,
+      latestDateFrom: null,
+      latestDateTo: null,
+      latestEvidenceCount: 0,
+      latestMissingData: [],
+      pendingFindings: [],
+      approvedLearning: [],
+      requiredActions: ['Create a historical assessment.'],
+    },
     guardrails: {
       mode: 'read_only',
       writesExecuted: false,
@@ -94,6 +114,7 @@ vi.mock('../workflow', () => ({
 
 vi.mock('../repository', () => ({
   getConversation: vi.fn(),
+  listMessages: vi.fn(),
   createMessage: vi.fn(),
   createAssistantMessage: vi.fn(),
   createActionRun: vi.fn(),
@@ -137,6 +158,27 @@ describe('Stitchi natural-language orchestration', () => {
       generate: providerMocks.generate,
       getStatus: providerMocks.getStatus,
     });
+    historicalAssessmentMocks.previewAssessment.mockResolvedValue({
+      scope: {
+        revenueLineId: '00000000-0000-0000-0000-000000000040',
+        revenueLineName: 'Online Courses',
+        eventIds: [],
+        campaignIds: [],
+        audienceQuery: null,
+        channels: [],
+        dateFrom: new Date('2025-01-01T00:00:00.000Z'),
+        dateTo: new Date('2025-12-31T23:59:59.999Z'),
+        defaultCurrency: 'AED',
+      },
+      summary: { evidenceCount: 4, completedEvents: 2 },
+      missingData: [],
+      evidence: [
+        { id: '00000000-0000-0000-0000-000000000941' },
+        { id: '00000000-0000-0000-0000-000000000942' },
+        { id: '00000000-0000-0000-0000-000000000943' },
+        { id: '00000000-0000-0000-0000-000000000944' },
+      ],
+    });
     vi.mocked(repo.getConversation).mockResolvedValue({
       id: 'conversation-1',
       tenantKey: 'tenant-a',
@@ -147,6 +189,7 @@ describe('Stitchi natural-language orchestration', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    vi.mocked(repo.listMessages).mockResolvedValue([]);
     vi.mocked(repo.createMessage).mockResolvedValue({
       id: 'user-message-1',
       tenantKey: 'tenant-a',
@@ -975,6 +1018,252 @@ describe('Stitchi natural-language orchestration', () => {
             currency: 'AED',
             amount: 25000,
           }),
+        }),
+      }),
+    );
+  });
+
+  it('asks for a historical period before reading evidence or creating an assessment', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Assess our previous Online Courses performance and tell me what worked.',
+    });
+
+    expect(result.status).toBe('answered');
+    expect(historicalAssessmentMocks.previewAssessment).not.toHaveBeenCalled();
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('Which historical period'),
+      expect.objectContaining({ writesExecuted: false, externalExecution: 'blocked' }),
+    );
+  });
+
+  it('reports missing historical evidence honestly and creates no action', async () => {
+    historicalAssessmentMocks.previewAssessment.mockResolvedValueOnce({
+      scope: {},
+      summary: { evidenceCount: 0 },
+      missingData: ['No verified KPI records were found for the completed events.'],
+      evidence: [],
+    });
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Assess our 2025 Online Courses performance and explain what failed.',
+    });
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('No verified KPI records'),
+      expect.any(Object),
+    );
+  });
+
+  it('prepares an evidence-scoped historical assessment with a real AI provider', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Assess our 2025 Online Courses historical performance and explain what worked and failed.',
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(historicalAssessmentMocks.previewAssessment).toHaveBeenCalledWith(
+      'marketing_manager',
+      'tenant-a',
+      expect.objectContaining({
+        revenueLineId: '00000000-0000-0000-0000-000000000040',
+        dateFrom: new Date('2025-01-01T00:00:00.000Z'),
+      }),
+    );
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'prepare_historical_commercial_assessment',
+        riskLevel: 'high',
+        inputPayload: expect.objectContaining({
+          dateFrom: '2025-01-01T00:00:00.000Z',
+          dateTo: '2025-12-31T23:59:59.999Z',
+        }),
+        previewPayload: expect.objectContaining({ evidenceCount: 4, aiProvider: 'gemma' }),
+      }),
+    );
+  });
+
+  it('adds a monthly initiative to the current annual plan with AED targets', async () => {
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce({
+      currentUser: { id: 'user-1', name: 'Manager', email: 'manager@example.com', role: 'department_head', departmentName: 'Commercial' },
+      selectedEvent: null,
+      recentEvents: [],
+      commercialCenter: {
+        defaultCurrency: 'AED',
+        configuredRevenueLines: 1,
+        activePlans: 0,
+        openAssessmentSignals: 0,
+        revenueLines: [{ id: '00000000-0000-0000-0000-000000000040', type: 'online_course', name: 'Online Courses', status: 'active', planCount: 0, openSignals: 0 }],
+        recentPlans: [],
+      },
+      annualPlanning: {
+        currentPlan: {
+          id: '00000000-0000-0000-0000-000000000930', revision: 4, year: 2027,
+          title: '2027 Commercial Plan', status: 'draft', currency: 'AED', budgetTarget: 1000000,
+          revenueTarget: 5000000, itemCount: 0, allocatedBudget: 0, monthlyItems: [],
+        },
+        approvedLearningSets: [],
+        requiredActions: [],
+      },
+      guardrails: { mode: 'read_only', writesExecuted: false, externalExecution: 'blocked', secretsReturned: false },
+    } as never);
+
+    const result = await orchestrateStitchiMessage('department_head', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Add an Online Courses leadership launch in March. Budget allocation: 50000. Revenue target: 300000.',
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_monthly_portfolio_item',
+        inputPayload: expect.objectContaining({
+          annualPlanId: '00000000-0000-0000-0000-000000000930',
+          item: expect.objectContaining({ month: 3, expectedRevision: 4, currency: 'AED', budgetAllocation: 50000, revenueTarget: 300000 }),
+        }),
+      }),
+    );
+  });
+
+  it('continues a focused annual-plan follow-up without losing the original request', async () => {
+    const priorRequest = 'Prepare the 2027 annual commercial plan using approved historical learning.';
+    const currentAnswer = 'Annual budget target: 500000 AED. Annual revenue target: 2000000 AED.';
+    vi.mocked(repo.listMessages).mockResolvedValue([
+      { id: 'm1', tenantKey: 'tenant-a', conversationId: 'conversation-1', role: 'user', content: priorRequest, metadata: {}, createdAt: new Date() },
+      { id: 'm2', tenantKey: 'tenant-a', conversationId: 'conversation-1', role: 'assistant', content: 'I still need the annual budget target and annual revenue target.', metadata: {}, createdAt: new Date() },
+      { id: 'm3', tenantKey: 'tenant-a', conversationId: 'conversation-1', role: 'user', content: currentAnswer, metadata: {}, createdAt: new Date() },
+    ]);
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        title: '2027 Evidence-Led Commercial Plan',
+        strategy: 'Use approved historical learning to prioritize profitable launches and evidence-backed monthly investments.',
+        portfolioPriorities: ['Profitable course launches', 'Evidence-led event portfolio'],
+        seasonalityNotes: ['Review Ramadan and year-end demand'],
+        assumptions: ['Customer connectors will provide live performance evidence'],
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage('department_head', 'tenant-a', 'user-1', 'conversation-1', {
+      content: currentAnswer,
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'department_head',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_annual_commercial_plan',
+        inputPayload: expect.objectContaining({ year: 2027, currency: 'AED', budgetTarget: 500000, revenueTarget: 2000000 }),
+      }),
+    );
+  });
+
+  it('prepares an executive-gated decision for the latest pending historical finding', async () => {
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce({
+      currentUser: { id: 'user-1', name: 'Manager', email: 'manager@example.com', role: 'marketing_manager', departmentName: 'Commercial' },
+      selectedEvent: null,
+      recentEvents: [],
+      commercialCenter: { defaultCurrency: 'AED', configuredRevenueLines: 0, activePlans: 0, openAssessmentSignals: 0, revenueLines: [], recentPlans: [] },
+      annualPlanning: { currentPlan: null, approvedLearningSets: [], requiredActions: [] },
+      historicalAssessment: {
+        recentRuns: 1,
+        latestRunId: '00000000-0000-0000-0000-000000000950',
+        latestRunStatus: 'generated',
+        latestRunTitle: '2025 assessment',
+        latestDateFrom: new Date('2025-01-01'),
+        latestDateTo: new Date('2025-12-31'),
+        latestEvidenceCount: 8,
+        latestMissingData: [],
+        pendingFindings: [{
+          id: '00000000-0000-0000-0000-000000000951',
+          type: 'repeat',
+          title: 'Warm buyer retargeting converted strongly',
+          summary: 'Prior buyers converted above the portfolio baseline.',
+          recommendation: 'Repeat this segment strategy.',
+          confidence: 0.9,
+          evidenceIds: ['00000000-0000-0000-0000-000000000952'],
+        }],
+        approvedLearning: [],
+        requiredActions: [],
+      },
+      guardrails: { mode: 'read_only', writesExecuted: false, externalExecution: 'blocked', secretsReturned: false },
+    } as never);
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Approve the latest historical assessment finding for future planning.',
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'decide_historical_assessment_finding',
+        inputPayload: expect.objectContaining({
+          findingId: '00000000-0000-0000-0000-000000000951',
+          decision: expect.objectContaining({ decision: 'approved' }),
+        }),
+      }),
+    );
+  });
+
+  it('prepares an annual-plan status transition using the current revision', async () => {
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce({
+      currentUser: { id: 'user-1', name: 'CCO', email: 'cco@example.com', role: 'cco', departmentName: 'Commercial' },
+      selectedEvent: null,
+      recentEvents: [],
+      commercialCenter: { defaultCurrency: 'AED', configuredRevenueLines: 0, activePlans: 0, openAssessmentSignals: 0, revenueLines: [], recentPlans: [] },
+      annualPlanning: {
+        currentPlan: {
+          id: '00000000-0000-0000-0000-000000000960', revision: 7, year: 2027,
+          title: '2027 Commercial Plan', status: 'pending_approval', currency: 'AED', budgetTarget: 1000000,
+          revenueTarget: 5000000, itemCount: 0, allocatedBudget: 0, monthlyItems: [],
+        },
+        approvedLearningSets: [],
+        requiredActions: [],
+      },
+      historicalAssessment: { recentRuns: 0, latestRunId: null, latestRunStatus: null, latestRunTitle: null, latestDateFrom: null, latestDateTo: null, latestEvidenceCount: 0, latestMissingData: [], pendingFindings: [], approvedLearning: [], requiredActions: [] },
+      guardrails: { mode: 'read_only', writesExecuted: false, externalExecution: 'blocked', secretsReturned: false },
+    } as never);
+
+    const result = await orchestrateStitchiMessage('cco', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Approve the annual plan after reviewing its evidence and budget.',
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'cco',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'transition_annual_commercial_plan',
+        inputPayload: expect.objectContaining({
+          annualPlanId: '00000000-0000-0000-0000-000000000960',
+          target: 'approved',
+          decision: expect.objectContaining({ expectedRevision: 7 }),
         }),
       }),
     );

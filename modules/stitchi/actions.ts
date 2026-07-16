@@ -26,7 +26,18 @@ import { createDisciplineRecordSchema } from '@modules/commercial-disciplines/ty
 import * as commercialExecutiveService from '@modules/commercial-executive-reporting/service';
 import { createExecutiveReportScheduleSchema } from '@modules/commercial-executive-reporting/types';
 import * as annualPlanningService from '@modules/commercial-annual-planning/service';
-import { createAnnualPlanSchema } from '@modules/commercial-annual-planning/types';
+import {
+  annualPlanTransitionSchema,
+  createAnnualPlanSchema,
+  createPortfolioItemSchema,
+  rejectAnnualPlanSchema,
+  updatePortfolioItemSchema,
+} from '@modules/commercial-annual-planning/types';
+import * as historicalAssessmentService from '@modules/commercial-historical-assessment/service';
+import {
+  createAssessmentRunSchema,
+  decideAssessmentFindingSchema,
+} from '@modules/commercial-historical-assessment/types';
 import * as commercialHierarchyService from '@modules/commercial-plan-hierarchy/service';
 import {
   assignPlanSchema,
@@ -60,7 +71,12 @@ const SUPPORTED_ACTIONS = [
   'create_commercial_assessment_signal',
   'create_commercial_discipline_record',
   'create_executive_report_schedule',
+  'prepare_historical_commercial_assessment',
+  'decide_historical_assessment_finding',
   'create_annual_commercial_plan',
+  'create_monthly_portfolio_item',
+  'update_monthly_portfolio_item',
+  'transition_annual_commercial_plan',
   'assign_commercial_plan_hierarchy',
   'link_commercial_plan_event',
   'link_commercial_plan_campaign',
@@ -141,6 +157,28 @@ const reviewCommercialSpendEvidenceActionSchema = z.object({
   review: verifyKpiEvidenceSchema,
 });
 
+const decideHistoricalAssessmentFindingActionSchema = z.object({
+  findingId: z.string().uuid(),
+  decision: decideAssessmentFindingSchema,
+});
+
+const createMonthlyPortfolioItemActionSchema = z.object({
+  annualPlanId: z.string().uuid(),
+  item: createPortfolioItemSchema,
+});
+
+const updateMonthlyPortfolioItemActionSchema = z.object({
+  annualPlanId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  changes: updatePortfolioItemSchema,
+});
+
+const transitionAnnualCommercialPlanActionSchema = z.object({
+  annualPlanId: z.string().uuid(),
+  target: z.enum(['pending_approval', 'approved', 'rejected', 'active', 'closed', 'archived']),
+  decision: z.union([annualPlanTransitionSchema, rejectAnnualPlanSchema]),
+});
+
 export function isExecutableStitchiAction(actionType: string): actionType is StitchiExecutableActionType {
   return SUPPORTED_ACTIONS.includes(actionType as StitchiExecutableActionType);
 }
@@ -160,6 +198,7 @@ export async function executeStitchiAction(input: {
   role: string;
   tenantKey: string;
   userId: string;
+  requestingUserId?: string;
   actionType: string;
   inputPayload: unknown;
 }): Promise<{ objectType: string; objectId: string; result: unknown }> {
@@ -264,10 +303,76 @@ export async function executeStitchiAction(input: {
       const result = await commercialExecutiveService.createSchedule(input.role, input.tenantKey, input.userId, payload);
       return { objectType: 'commercial_executive_report_schedule', objectId: result.id, result };
     }
+    case 'prepare_historical_commercial_assessment': {
+      const payload = createAssessmentRunSchema.parse(input.inputPayload);
+      const requestingUserId = input.requestingUserId || input.userId;
+      const created = await historicalAssessmentService.createAssessment(
+        input.role,
+        input.tenantKey,
+        requestingUserId,
+        payload,
+      );
+      const result = await historicalAssessmentService.generateAssessment(
+        input.role,
+        input.tenantKey,
+        requestingUserId,
+        created.id,
+      );
+      return { objectType: 'commercial_historical_assessment_run', objectId: created.id, result };
+    }
+    case 'decide_historical_assessment_finding': {
+      const payload = decideHistoricalAssessmentFindingActionSchema.parse(input.inputPayload);
+      const result = await historicalAssessmentService.decideFinding(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.findingId,
+        payload.decision,
+      );
+      return { objectType: 'commercial_assessment_finding', objectId: payload.findingId, result };
+    }
     case 'create_annual_commercial_plan': {
       const payload = createAnnualPlanSchema.parse(input.inputPayload);
       const result = await annualPlanningService.createAnnualPlan(input.role, input.tenantKey, input.userId, payload);
       return { objectType: 'annual_commercial_plan', objectId: result.id, result };
+    }
+    case 'create_monthly_portfolio_item': {
+      const payload = createMonthlyPortfolioItemActionSchema.parse(input.inputPayload);
+      const result = await annualPlanningService.createPortfolioItem(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.annualPlanId,
+        payload.item,
+      );
+      return { objectType: 'annual_commercial_plan', objectId: payload.annualPlanId, result };
+    }
+    case 'update_monthly_portfolio_item': {
+      const payload = updateMonthlyPortfolioItemActionSchema.parse(input.inputPayload);
+      const result = await annualPlanningService.updatePortfolioItem(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.annualPlanId,
+        payload.itemId,
+        payload.changes,
+      );
+      return { objectType: 'annual_commercial_plan', objectId: payload.annualPlanId, result };
+    }
+    case 'transition_annual_commercial_plan': {
+      const payload = transitionAnnualCommercialPlanActionSchema.parse(input.inputPayload);
+      const decision = payload.target === 'rejected'
+        ? rejectAnnualPlanSchema.parse(payload.decision)
+        : annualPlanTransitionSchema.parse(payload.decision);
+      const result = await annualPlanningService.transitionAnnualPlan(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.annualPlanId,
+        payload.target,
+        decision,
+      );
+      return { objectType: 'annual_commercial_plan', objectId: payload.annualPlanId, result };
     }
     case 'assign_commercial_plan_hierarchy': {
       const payload = assignCommercialPlanHierarchyActionSchema.parse(input.inputPayload);

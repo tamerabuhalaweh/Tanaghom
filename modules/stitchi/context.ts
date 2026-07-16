@@ -114,6 +114,7 @@ export interface StitchiReadOnlyContext {
   annualPlanning: {
     currentPlan: {
       id: string;
+      revision: number;
       year: number;
       title: string;
       status: string;
@@ -122,6 +123,22 @@ export interface StitchiReadOnlyContext {
       revenueTarget: number;
       itemCount: number;
       allocatedBudget: number;
+      monthlyItems: Array<{
+        id: string;
+        month: number;
+        title: string;
+        revenueLineId: string;
+        revenueLineName: string;
+        commercialPlanId: string | null;
+        eventId: string | null;
+        currency: string;
+        budgetAllocation: number;
+        revenueTarget: number;
+        priority: string;
+        readiness: string;
+        plannedStartDate: Date | null;
+        plannedEndDate: Date | null;
+      }>;
     } | null;
     approvedLearningSets: Array<{ id: string; title: string; findingCount: number }>;
     requiredActions: string[];
@@ -152,9 +169,25 @@ export interface StitchiReadOnlyContext {
   };
   historicalAssessment: {
     recentRuns: number;
+    latestRunId: string | null;
     latestRunStatus: string | null;
     latestRunTitle: string | null;
+    latestDateFrom: Date | null;
+    latestDateTo: Date | null;
+    latestEvidenceCount: number;
+    latestMissingData: unknown;
+    pendingFindings: Array<{
+      id: string;
+      type: string;
+      title: string;
+      summary: string;
+      recommendation: string;
+      confidence: number;
+      evidenceIds: string[];
+    }>;
     approvedLearning: Array<{
+      id: string;
+      learningSetId: string;
       type: string;
       title: string;
       recommendation: string;
@@ -253,17 +286,37 @@ export async function loadReadOnlyContext(
       findMany(args: unknown): Promise<Array<{ id: string }>>;
     };
     commercialHistoricalAssessmentRun?: {
-      findMany(args: unknown): Promise<Array<{ title: string; status: unknown; created_at: Date }>>;
+      findMany(args: unknown): Promise<Array<{
+        id: string;
+        title: string;
+        status: unknown;
+        date_from: Date;
+        date_to: Date;
+        missing_data: unknown;
+        created_at: Date;
+        _count?: { evidence?: number };
+        findings: Array<{
+          id: string;
+          finding_type: unknown;
+          title: string;
+          summary: string;
+          recommendation: string;
+          confidence: unknown;
+          evidence_ids: string[];
+        }>;
+      }>>;
     };
     commercialLearningSet?: {
       findMany(args: unknown): Promise<Array<{
         id: string;
         title: string;
         findings: Array<{
+          id: string;
           finding_type: unknown;
           title: string;
           recommendation: string;
           confidence: unknown;
+          evidence_ids: string[];
         }>;
       }>>;
     };
@@ -272,11 +325,27 @@ export async function loadReadOnlyContext(
         id: string;
         year: number;
         title: string;
+        revision: number;
         status: unknown;
         currency: unknown;
         budget_target: unknown;
         revenue_target: unknown;
-        items: Array<{ budget_allocation: unknown; currency: unknown }>;
+        items: Array<{
+          id: string;
+          month: number;
+          title: string;
+          revenue_line_id: string;
+          commercial_plan_id: string | null;
+          event_id: string | null;
+          currency: unknown;
+          budget_allocation: unknown;
+          revenue_target: unknown;
+          priority: unknown;
+          readiness: unknown;
+          planned_start_date: Date | null;
+          planned_end_date: Date | null;
+          revenue_line: { name: string };
+        }>;
       }>>;
     };
   };
@@ -461,7 +530,29 @@ export async function loadReadOnlyContext(
     }) ?? Promise.resolve([]),
     commercialClients.commercialHistoricalAssessmentRun?.findMany({
       where: { tenant_key: tenantKey },
-      select: { title: true, status: true, created_at: true },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        date_from: true,
+        date_to: true,
+        missing_data: true,
+        created_at: true,
+        _count: { select: { evidence: true } },
+        findings: {
+          where: { decision: 'pending' },
+          select: {
+            id: true,
+            finding_type: true,
+            title: true,
+            summary: true,
+            recommendation: true,
+            confidence: true,
+            evidence_ids: true,
+          },
+          take: 12,
+        },
+      },
       orderBy: { created_at: 'desc' },
       take: 3,
     }) ?? Promise.resolve([]),
@@ -472,7 +563,7 @@ export async function loadReadOnlyContext(
         title: true,
         findings: {
           where: { decision: 'approved' },
-          select: { finding_type: true, title: true, recommendation: true, confidence: true },
+          select: { id: true, finding_type: true, title: true, recommendation: true, confidence: true, evidence_ids: true },
           take: 12,
         },
       },
@@ -483,13 +574,33 @@ export async function loadReadOnlyContext(
       where: { tenant_key: tenantKey, status: { not: 'archived' } },
       select: {
         id: true,
+        revision: true,
         year: true,
         title: true,
         status: true,
         currency: true,
         budget_target: true,
         revenue_target: true,
-        items: { where: { archived_at: null }, select: { budget_allocation: true, currency: true } },
+        items: {
+          where: { archived_at: null },
+          select: {
+            id: true,
+            month: true,
+            title: true,
+            revenue_line_id: true,
+            commercial_plan_id: true,
+            event_id: true,
+            currency: true,
+            budget_allocation: true,
+            revenue_target: true,
+            priority: true,
+            readiness: true,
+            planned_start_date: true,
+            planned_end_date: true,
+            revenue_line: { select: { name: true } },
+          },
+          orderBy: [{ month: 'asc' }, { sort_order: 'asc' }],
+        },
       },
       orderBy: [{ year: 'desc' }, { scenario_version: 'desc' }],
       take: 3,
@@ -548,9 +659,25 @@ export async function loadReadOnlyContext(
     commercialExecutive: summarizeExecutiveReporting(executiveReports, executiveSchedules),
     historicalAssessment: {
       recentRuns: historicalAssessmentRuns.length,
+      latestRunId: historicalAssessmentRuns[0]?.id || null,
       latestRunStatus: historicalAssessmentRuns[0] ? String(historicalAssessmentRuns[0].status) : null,
       latestRunTitle: historicalAssessmentRuns[0]?.title || null,
+      latestDateFrom: historicalAssessmentRuns[0]?.date_from || null,
+      latestDateTo: historicalAssessmentRuns[0]?.date_to || null,
+      latestEvidenceCount: historicalAssessmentRuns[0]?._count?.evidence || 0,
+      latestMissingData: historicalAssessmentRuns[0]?.missing_data || [],
+      pendingFindings: (historicalAssessmentRuns[0]?.findings || []).map(finding => ({
+        id: finding.id,
+        type: String(finding.finding_type),
+        title: finding.title,
+        summary: finding.summary,
+        recommendation: finding.recommendation,
+        confidence: decimalToNumber(finding.confidence) || 0,
+        evidenceIds: finding.evidence_ids,
+      })),
       approvedLearning: learningSets.flatMap(set => set.findings).slice(0, 12).map(finding => ({
+        id: finding.id,
+        learningSetId: learningSets.find(set => set.findings.some(candidate => candidate.id === finding.id))?.id || '',
         type: String(finding.finding_type),
         title: finding.title,
         recommendation: finding.recommendation,
@@ -572,13 +699,29 @@ export async function loadReadOnlyContext(
 function summarizeAnnualPlanning(
   plans: Array<{
     id: string;
+    revision: number;
     year: number;
     title: string;
     status: unknown;
     currency: unknown;
     budget_target: unknown;
     revenue_target: unknown;
-    items: Array<{ budget_allocation: unknown; currency: unknown }>;
+    items: Array<{
+      id: string;
+      month: number;
+      title: string;
+      revenue_line_id: string;
+      commercial_plan_id: string | null;
+      event_id: string | null;
+      currency: unknown;
+      budget_allocation: unknown;
+      revenue_target: unknown;
+      priority: unknown;
+      readiness: unknown;
+      planned_start_date: Date | null;
+      planned_end_date: Date | null;
+      revenue_line: { name: string };
+    }>;
   }>,
   learningSets: Array<{ id: string; title: string; findings: unknown[] }>,
 ): StitchiReadOnlyContext['annualPlanning'] {
@@ -586,6 +729,7 @@ function summarizeAnnualPlanning(
   const currentCurrency = current ? String(current.currency) : 'AED';
   const currentPlan = current ? {
     id: current.id,
+    revision: current.revision,
     year: current.year,
     title: current.title,
     status: String(current.status),
@@ -596,6 +740,22 @@ function summarizeAnnualPlanning(
     allocatedBudget: current.items
       .filter(item => String(item.currency) === currentCurrency)
       .reduce((sum, item) => sum + (decimalToNumber(item.budget_allocation) || 0), 0),
+    monthlyItems: current.items.map(item => ({
+      id: item.id,
+      month: item.month,
+      title: item.title,
+      revenueLineId: item.revenue_line_id,
+      revenueLineName: item.revenue_line.name,
+      commercialPlanId: item.commercial_plan_id,
+      eventId: item.event_id,
+      currency: String(item.currency),
+      budgetAllocation: decimalToNumber(item.budget_allocation) || 0,
+      revenueTarget: decimalToNumber(item.revenue_target) || 0,
+      priority: String(item.priority),
+      readiness: String(item.readiness),
+      plannedStartDate: item.planned_start_date,
+      plannedEndDate: item.planned_end_date,
+    })),
   } : null;
   const requiredActions: string[] = [];
   if (!currentPlan) requiredActions.push('Prepare the next annual commercial strategy and total budget for approval.');
