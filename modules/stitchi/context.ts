@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
 import { getGhlSyncStatus } from '../ghl-sync/repository';
 import type { StitchiConversationSummary } from './types';
@@ -229,10 +230,12 @@ export async function loadReadOnlyContext(
         commercial_plan_id: string;
         annual_plan_id: string;
         monthly_portfolio_item_id: string;
-        commercial_plan: { title: string };
+        commercial_plan: {
+          title: string;
+          _count?: { event_links?: number; campaign_links?: number };
+        };
         annual_plan: { title: string; year: number };
         monthly_item: { title: string; month: number };
-        _count?: { event_links?: number; campaign_links?: number };
       }>>;
     };
     commercialAssessmentSignal?: {
@@ -277,6 +280,30 @@ export async function loadReadOnlyContext(
       }>>;
     };
   };
+
+  const hierarchyAssignmentQuery = {
+    where: { tenant_key: tenantKey, status: 'active' as const },
+    select: {
+      commercial_plan_id: true,
+      annual_plan_id: true,
+      monthly_portfolio_item_id: true,
+      commercial_plan: {
+        select: {
+          title: true,
+          _count: {
+            select: {
+              event_links: { where: { status: 'active' as const } },
+              campaign_links: { where: { status: 'active' as const } },
+            },
+          },
+        },
+      },
+      annual_plan: { select: { title: true, year: true } },
+      monthly_item: { select: { title: true, month: true } },
+    },
+    orderBy: { created_at: 'desc' as const },
+    take: 20,
+  } satisfies Prisma.CommercialPlanHierarchyAssignmentFindManyArgs;
 
   const [
     tenantSettings,
@@ -467,25 +494,7 @@ export async function loadReadOnlyContext(
       orderBy: [{ year: 'desc' }, { scenario_version: 'desc' }],
       take: 3,
     }) ?? Promise.resolve([]),
-    commercialClients.commercialPlanHierarchyAssignment?.findMany({
-      where: { tenant_key: tenantKey, status: 'active' },
-      select: {
-        commercial_plan_id: true,
-        annual_plan_id: true,
-        monthly_portfolio_item_id: true,
-        commercial_plan: { select: { title: true } },
-        annual_plan: { select: { title: true, year: true } },
-        monthly_item: { select: { title: true, month: true } },
-        _count: {
-          select: {
-            event_links: { where: { status: 'active' } },
-            campaign_links: { where: { status: 'active' } },
-          },
-        },
-      },
-      orderBy: { created_at: 'desc' },
-      take: 20,
-    }) ?? Promise.resolve([]),
+    commercialClients.commercialPlanHierarchyAssignment?.findMany(hierarchyAssignmentQuery) ?? Promise.resolve([]),
   ]);
 
   return {
@@ -610,10 +619,12 @@ function summarizeCommercialHierarchy(
     commercial_plan_id: string;
     annual_plan_id: string;
     monthly_portfolio_item_id: string;
-    commercial_plan: { title: string };
+    commercial_plan: {
+      title: string;
+      _count?: { event_links?: number; campaign_links?: number };
+    };
     annual_plan: { title: string; year: number };
     monthly_item: { title: string; month: number };
-    _count?: { event_links?: number; campaign_links?: number };
   }>,
 ): StitchiReadOnlyContext['commercialHierarchy'] {
   const linkedPlanIds = new Set(assignments.map(assignment => assignment.commercial_plan_id));
@@ -630,8 +641,8 @@ function summarizeCommercialHierarchy(
     monthlyPortfolioItemId: assignment.monthly_portfolio_item_id,
     monthlyTitle: assignment.monthly_item.title,
     month: assignment.monthly_item.month,
-    linkedEvents: assignment._count?.event_links || 0,
-    linkedCampaigns: assignment._count?.campaign_links || 0,
+    linkedEvents: assignment.commercial_plan._count?.event_links || 0,
+    linkedCampaigns: assignment.commercial_plan._count?.campaign_links || 0,
   }));
   const requiredActions: string[] = [];
   if (orphanPlans.length) {
