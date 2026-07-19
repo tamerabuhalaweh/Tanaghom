@@ -1,6 +1,6 @@
 # Tanaghum Project Handover For GPT 5.6 Sol
 
-Last updated: 2026-07-15
+Last updated: 2026-07-19
 
 Repository: `tamerabuhalaweh/Tanaghom`
 
@@ -8,13 +8,13 @@ Local path: `C:\Users\tamer\Desktop\New\tanaghum-platform`
 
 Current branch: `main`
 
-Current head at handover: `e2ce0fa SRD-R14B: Annual Commercial Plan and Monthly Portfolio Calendar (#189)`
+Current head at handover: `6553960 Merge pull request #207 from tamerabuhalaweh/test/hybrid-live-stitchi-response`
 
 Primary active deployment: Hybrid
 
 Hybrid URL: `https://tanaghum-hybrid.163-123-180-104.sslip.io`
 
-Current product work is the SRD-R14 historical-learning and hierarchical-planning wave tracked by epic `#180`. Annual planning issue `#182` is complete; the next recommended implementation issue is `#183`. Production-operations closure remains tracked by `#171`.
+The SRD-R14 historical-learning and hierarchical-planning wave is implemented through the governed annual -> monthly initiative -> execution plan path. The latest product closure was `#201 / UX-R1G`; follow-up bug `#204` and live acceptance issue `#206` are closed. The next recommended product issue is `#208 / UX-R1H: Weekly operating cadence below execution plans`. Production-operations closure remains tracked by `#171`.
 
 AB reference URL: `https://tanaghum-ab.163-123-180-104.sslip.io`
 
@@ -77,14 +77,14 @@ git branch --show-current
 # main
 
 git log -5 --oneline
-# e2ce0fa SRD-R14B: Annual Commercial Plan and Monthly Portfolio Calendar (#189)
-# d0999a2 Wave 1: Historical Assessment and AED Planning Default (#188)
-# 4fe8b9c Fix Stitchi provider failure recovery (#178)
-# 814524e QA-A1: add multi-role Hybrid acceptance agents (#176)
-# 7d130e3 P1: Split Hybrid routes and enforce quality budgets (#174)
+# 6553960 Merge pull request #207 from tamerabuhalaweh/test/hybrid-live-stitchi-response
+# 728ef25 Harden live Stitchi acceptance
+# 265e0ed Merge pull request #205 from tamerabuhalaweh/hotfix/stitchi-annual-intent-boundary
+# a10ed18 Fix Stitchi standalone intent routing
+# bb826e8 Merge pull request #203 from tamerabuhalaweh/hotfix/hybrid-live-ai-evidence
 ```
 
-`tmp/` may contain local screenshots from live QA. Do not commit `tmp/` unless explicitly needed.
+`tmp/` and `.playwright-mcp/` may contain local screenshots and browser snapshots from live QA. They are ignored and must not be committed. Durable evidence belongs under `docs/evidence/` with a matching acceptance note.
 
 Remote:
 
@@ -94,38 +94,32 @@ origin https://github.com/tamerabuhalaweh/Tanaghom.git
 
 ## 5. Last Completed Job
 
-Last job completed: `#182 / SRD-R14B: Annual Commercial Plan And Monthly Portfolio Calendar`
+Last product job completed: `#201 / UX-R1G: Annual Plan To Monthly Initiative To Execution Plan Product Closure`
 
-Commit: `e2ce0fa SRD-R14B: Annual Commercial Plan and Monthly Portfolio Calendar (#189)`
+Latest QA closure: `#206 / Make live Stitchi acceptance verify the current orchestration response`
+
+Current recovery commit: `6553960`
 
 Deployment: Hybrid VPS deployed successfully.
 
-Latest migration applied on VPS:
+What is now implemented:
 
-```text
-20260715_z_annual_commercial_portfolio
-```
-
-What was added:
-
-- Tenant-scoped annual plan, monthly portfolio item, and approved-learning link models.
-- Governed annual lifecycle: draft, pending approval, approved/rejected, active, closed, archived.
-- Revision-conflict handling, RBAC, tenant-link validation, and persistent audit records.
-- Hybrid `/commercial-planning` workspace with year/version selection, annual AED targets, allocations, unallocated budget, twelve months, and child-plan/Event Operations drill-down.
-- Stitchi annual-plan preparation using a configured real AI provider, deterministic backend validation, and human approval before save.
-- Customer navigation now separates Assessment, Annual Plan, Execution Plans, Discipline Workspaces, and Event Operations.
+- Tenant-scoped historical assessment with frozen evidence, AI findings, executive approval, and reusable approved learning.
+- Governed annual lifecycle: draft, pending approval, approved/rejected, active, closed, and archived.
+- Twelve-month portfolio with AED default, monthly initiatives, budget/revenue allocation, readiness, event links, and approved learning.
+- Default execution-plan creation from a monthly initiative, inheriting annual plan, month, revenue line, currency, targets, event, and learning.
+- Standalone execution plans remain an explicit governed exception requiring a reason.
+- Stitchi can read planning context, ask for missing information, prepare internal actions, wait for human approval, and save through backend policy/audit paths.
+- Hybrid navigation separates Assessment, Annual Plan, Execution Plans, Discipline Workspaces, and Event Operations.
+- Live acceptance verifies the current Stitchi orchestration response and guards the annual-intent/standalone-exception boundary.
 
 Verification:
 
-- Full backend suite passed: 153 files, 2,036 tests.
-- Focused annual-planning and Stitchi suite passed: 60 tests.
-- Backend/frontend lint, typecheck, builds, and frontend bundle budget passed.
-- Fresh PostgreSQL rehearsal applied all 37 migrations in order.
-- GitHub CI passed backend, frontend, frontend E2E, production acceptance, Docker, security, static analysis, production operations, and CodeQL.
-- Live CCO browser QA passed desktop and mobile with no API failures, console errors, or horizontal overflow.
-- Pre-deploy PostgreSQL backup, checksum, and manifest were created.
-
-GitHub issue #182 is closed with completion evidence. The live tenant intentionally has no annual plan or approved learning yet; no customer data was fabricated during QA.
+- GitHub CI for `6553960` passed on 2026-07-16.
+- CI covered backend, frontend, frontend E2E, Docker, production acceptance, security/static analysis, production operations, and CodeQL according to the merged PR checks.
+- Hybrid external uptime checks for `6553960` are passing on 2026-07-19.
+- Live Hybrid acceptance passed the planning/Stitchi path without external writes.
+- Customer-owned integrations remain honestly blocked until credentials, mappings, provider access, and customer authorization are supplied.
 
 ## 6. Product Context
 
@@ -179,33 +173,41 @@ gh issue list --repo tamerabuhalaweh/Tanaghom --state open --limit 100
 
 ## 8. Current Open GitHub Issues
 
-Snapshot from 2026-07-15. Always refresh before work.
+Snapshot from 2026-07-19: 18 open issues. Always refresh before work.
 
-| Issue | Title | Current truth |
-| --- | --- | --- |
-| #187 | SRD-R14G: Role-Based E2E, Browser, And Live Hybrid Acceptance | Open. Expand annual-planning and historical-assessment acceptance across approved product roles. |
-| #186 | SRD-R14F: Stitchi Historical Assessment And Annual Planning Operator | Partially delivered by #181/#182. Keep open until the full multi-turn annual operator definition is proven. |
-| #184 | SRD-R14D: Hierarchical Budget Allocation, Actual Spend, And Reconciliation | Open P0. Annual targets/allocations exist; actual-spend ingestion and hierarchy reconciliation remain. |
-| #183 | SRD-R14C: Annual-To-Execution Planning Hierarchy And Traceability | Recommended next sprint. Strengthen annual -> initiative -> execution plan/event lineage and progress rollups. |
-| #180 | SRD-R14 Epic: Historical Assessment, AI Learning, And Hierarchical Commercial Planning | Open parent epic. #181, #182, and #185 are complete; #183/#184/#186/#187 remain. |
-| #143 | SRD-R13: Data Retention, Export/Delete, And UAE PDPL Legal Review | Backend/UI implemented and deployed. Keep open until customer/legal decisions are confirmed. |
-| #142 | SRD-R12: Forms Intake Strategy - Tanaghum Forms Builder Versus Zapier/GHL | Open. Needs product decision and likely implementation. |
-| #141 | SRD-R11: Executive Reporting Workflow Builder And Daily Delivery Policy | Implemented foundation, but keep open until customer confirms KPI thresholds, recipients, cadence, and delivery policy. |
-| #140 | SRD-R10: Role Access And Approval Policy Refinement From Customer Response | Implemented foundation, but customer role/approval acceptance still needs final confirmation. |
-| #138 | SRD-R6A: Customer Definitions For Discipline Workspace Closure | Open/customer-decision. Requires exact discipline definitions from customer. |
-| #135 | SRD-R8: Customer-Facing Social And Voice AI Agent Safety Layer | Open P0. Recommended next non-credential implementation candidate. |
-| #132 | SRD-R5: SmartLabs Voice And Inbound Lead Handling | Open, blocked by customer SmartLabs tenant key/test approval. |
-| #131 | SRD-R4: WhatsApp Through GHL And Conversion Workflow Readiness | Open, blocked by customer GHL/WhatsApp configuration and policy. |
-| #130 | SRD-R3: Meta YouTube And Formaloo Acquisition Data Ingestion | Open, blocked by customer provider/API credentials and app access. |
-| #129 | SRD-R2: Kajabi Online Courses Revenue And Enrollment Sync | Open, requires Kajabi discovery/access. |
-| #128 | SRD-R1: GoHighLevel Production Read-Sync And CRM Source Of Truth | Open, blocked by customer GHL credentials/mappings for live acceptance. |
-| #126 | SRD v4.3 Master Epic: Production Completion Roadmap To 85% | Open umbrella epic. Do not close until the SRD roadmap is truly at target readiness. |
-| #124 | Unified Commercial Data Layer Sprint Epic | Open umbrella for GHL/Kajabi/Meta/YouTube/Formaloo data truth. |
-| #73 | Sprint 64: Postiz Event Scheduling Channel Selection | Open, blocked by customer Postiz channel/integration validation. |
+| Issue | Current truth |
+| --- | --- |
+| #208 UX-R1H: Weekly operating cadence | Recommended next product sprint. Weekly work must remain below the execution plan and inherit the approved hierarchy. |
+| #172 Hybrid test coverage and bundle budgets | Open P1 quality improvement. |
+| #171 Production operations, DR, security closure | Open P0. External alert routing, off-server backup, incident ownership/RPO/RTO, MFA coverage, and independent penetration testing remain. |
+| #145 Hybrid workflow/design-system rebuild | Parent UX issue remains open for customer acceptance and remaining UX work. |
+| #143 Data retention/export/delete and UAE PDPL | Implemented foundation; customer/legal decisions remain. |
+| #142 Forms intake strategy | Customer/product decision remains between Tanaghum forms and governed GHL/Zapier intake. |
+| #141 Executive reporting workflow | Foundation exists; customer recipients, KPI thresholds, cadence, and real delivery channel remain. |
+| #140 Role access and approval policy | Foundation exists; final customer role/approval acceptance remains. |
+| #138 Discipline definitions | Customer confirmation of final discipline responsibilities and records remains. |
+| #135 Social and voice AI safety layer | Open P0 implementation/acceptance work. |
+| #132 SmartLabs voice/inbound leads | Blocked on customer tenant key, agent configuration, and approved live test. |
+| #131 WhatsApp through GHL | Blocked on customer GHL/WhatsApp configuration, mappings, and live authorization. |
+| #130 Meta, YouTube, Formaloo ingestion | Blocked on customer provider credentials/app access and live data validation. |
+| #129 Kajabi revenue/enrollment sync | Requires customer Kajabi access and contract discovery/live acceptance. |
+| #128 GHL production read sync | Adapter/readiness exists; live acceptance is blocked on customer credentials and mappings. |
+| #126 SRD v4.3 completion epic | Remains open until the production-readiness target and child closures are honest. |
+| #124 Unified commercial data layer epic | Remains open for live GHL/Kajabi/Meta/YouTube/Formaloo data truth. |
+| #73 Postiz channel selection/scheduling | Blocked on customer Postiz channel/integration validation and authorized live execution. |
 
 ## 9. Recently Closed Issues To Know
 
 Recent closure history:
+
+- #206 QA: verify the current live Stitchi orchestration response.
+- #204 Bug: prevent annual-planning language from misrouting explicit standalone exceptions.
+- #201 UX-R1G: close annual plan -> monthly initiative -> execution plan hierarchy.
+- #187 SRD-R14G: role-based E2E/browser/live Hybrid acceptance.
+- #186 SRD-R14F: Stitchi historical-assessment and annual-planning operator.
+- #184 SRD-R14D: hierarchical budget allocation and reconciliation foundation.
+- #183 SRD-R14C: annual-to-execution hierarchy and traceability.
+- #180 SRD-R14 parent epic for the completed wave.
 
 - #144 QA: Separate Live Hybrid Playwright Acceptance From Local Mocked Specs.
 - #139 SRD-R9: Revenue Lines, Currency, Books/Merchandise, And Product-Based Reporting Configuration.
@@ -220,16 +222,11 @@ Important: some closed issues are foundation-complete, not necessarily "every SR
 
 ## 10. Best Next Move
 
-The best next sprint is:
+The best next product sprint is `#208 / UX-R1H: Weekly operating cadence below execution plans`.
 
-1. `#183 / SRD-R14C: Annual-To-Execution Planning Hierarchy And Traceability`
-   - Reason: #182 now provides the annual parent and monthly portfolio. The next gap is durable lineage and progress rollup from annual initiative to detailed commercial plan and Event Operations.
-   - Goal: make ownership, status, budget/revenue lineage, execution progress, and drill-down traceable without duplicating event execution data.
+The weekly layer must inherit annual plan, month, monthly initiative, execution plan, revenue line, currency, targets, and event context. It must not become a second independent planning system. Stitchi should prepare weekly work, ask for missing owner/due date/outcome, and use approval-gated internal actions. External execution remains separately authorized.
 
-Then:
-
-2. `#184 / SRD-R14D: Hierarchical Budget Allocation, Actual Spend, And Reconciliation`
-   - Reason: annual planned allocations exist, but actual spend and variance must be reconciled from customer-owned source systems before executive reporting is complete.
+Before or alongside product work, continue `#171` production-operations closure where external destinations and customer decisions are available. Do not claim `#128`-`#132`, `#130`, or `#73` live-complete without customer-owned credentials and acceptance evidence.
 
 Do not start `#128` live GHL acceptance until customer-owned GHL credentials and mapping data are available.
 
@@ -575,9 +572,9 @@ Do not tell the customer:
 ## 24. Suggested Immediate Plan For GPT 5.6 Sol
 
 1. Refresh GitHub open issues.
-2. Read #135, #142, #143, #141, #140, #128, #124.
+2. Read #208, #171, #172, #145, #126, and the credential-blocked connector issues.
 3. Confirm with the user which next issue to execute.
-4. If no new direction, recommend #135 as the next non-credential sprint.
+4. If no new direction, recommend #208 as the next customer-workflow sprint.
 5. Keep Hybrid only.
 6. Run tests locally before pushing.
 7. Deploy Hybrid when the user asks or when the sprint requires live validation.
@@ -597,4 +594,4 @@ If context is lost:
 
 ## 26. Current Truth In One Paragraph
 
-Tanaghum Hybrid is the active customer-facing product lane. It combines a cleaner UX direction with the stronger Tanaghum backend: tenant isolation, RBAC, audit, approvals, commercial planning, event operations, Stitchi, connector readiness, executive reporting, and privacy governance. The last completed work was #143 privacy/retention/export-delete governance, pushed and deployed at `4defe17`. The main remaining work is not "one missing feature"; it is a set of SRD-tracked production closures: social/voice AI safety, forms strategy, customer credential integrations, live GHL/Kajabi/Meta/YouTube/Formaloo data, SmartLabs validation, and customer legal/privacy decisions. Keep the truth clean, keep GitHub updated, and do not overclaim.
+Tanaghum Hybrid is the active customer-facing product lane at GitHub recovery commit `6553960`. Historical assessment, approved learning, annual planning, monthly initiatives, execution-plan hierarchy, budget governance, Event Operations, Discipline Workspaces, and approval-gated Stitchi planning are implemented. The latest closures are #201, #204, and #206; the recommended next product issue is #208 for weekly operating work below execution plans. Eighteen issues remain open, including production operations, customer/legal decisions, UX acceptance, and customer-credential connector validation. GitHub `main` is the code recovery point; this file plus current GitHub issues are the onboarding source of truth. Do not claim external integrations live until customer-owned credentials and acceptance evidence exist.
