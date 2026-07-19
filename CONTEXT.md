@@ -16,12 +16,14 @@ gh issue list --repo tamerabuhalaweh/Tanaghom --state open --limit 100
 
 ```text
 Branch: main
-Commit: 6553960de8024116193e791723682777c49dab74
+Product baseline: 6553960de8024116193e791723682777c49dab74
+Canonical recovery tag: hybrid-recovery-2026-07-19
+Source-of-truth PR: #209
 Repository: https://github.com/tamerabuhalaweh/Tanaghom
 Active deployment: https://tanaghum-hybrid.163-123-180-104.sslip.io
 ```
 
-Local `main` and `origin/main` were verified synchronized on 2026-07-19. GitHub CI for `6553960` passed, and Hybrid external uptime checks are passing.
+Local `main` and `origin/main` were verified synchronized on 2026-07-19. GitHub CI for product baseline `6553960` and source-of-truth PR `#209` passed, and Hybrid external uptime checks are passing.
 
 ## Active Product Direction
 
