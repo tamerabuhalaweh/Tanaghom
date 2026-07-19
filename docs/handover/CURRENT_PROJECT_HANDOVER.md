@@ -8,7 +8,11 @@ Local path: `C:\Users\tamer\Desktop\New\tanaghum-platform`
 
 Current branch: `main`
 
-Current head at handover: `6553960 Merge pull request #207 from tamerabuhalaweh/test/hybrid-live-stitchi-response`
+Current product baseline: `6553960 Merge pull request #207 from tamerabuhalaweh/test/hybrid-live-stitchi-response`
+
+Canonical recovery tag: `hybrid-recovery-2026-07-19`
+
+Source-of-truth documentation checkpoint: PR `#209`
 
 Primary active deployment: Hybrid
 
@@ -98,7 +102,9 @@ Last product job completed: `#201 / UX-R1G: Annual Plan To Monthly Initiative To
 
 Latest QA closure: `#206 / Make live Stitchi acceptance verify the current orchestration response`
 
-Current recovery commit: `6553960`
+Current product baseline commit: `6553960`
+
+Canonical recovery point: Git tag `hybrid-recovery-2026-07-19`
 
 Deployment: Hybrid VPS deployed successfully.
 
@@ -115,7 +121,8 @@ What is now implemented:
 
 Verification:
 
-- GitHub CI for `6553960` passed on 2026-07-16.
+- GitHub CI for product baseline `6553960` passed on 2026-07-16.
+- GitHub CI for source-of-truth PR `#209` passed on 2026-07-19.
 - CI covered backend, frontend, frontend E2E, Docker, production acceptance, security/static analysis, production operations, and CodeQL according to the merged PR checks.
 - Hybrid external uptime checks for `6553960` are passing on 2026-07-19.
 - Live Hybrid acceptance passed the planning/Stitchi path without external writes.
@@ -594,4 +601,4 @@ If context is lost:
 
 ## 26. Current Truth In One Paragraph
 
-Tanaghum Hybrid is the active customer-facing product lane at GitHub recovery commit `6553960`. Historical assessment, approved learning, annual planning, monthly initiatives, execution-plan hierarchy, budget governance, Event Operations, Discipline Workspaces, and approval-gated Stitchi planning are implemented. The latest closures are #201, #204, and #206; the recommended next product issue is #208 for weekly operating work below execution plans. Eighteen issues remain open, including production operations, customer/legal decisions, UX acceptance, and customer-credential connector validation. GitHub `main` is the code recovery point; this file plus current GitHub issues are the onboarding source of truth. Do not claim external integrations live until customer-owned credentials and acceptance evidence exist.
+Tanaghum Hybrid is the active customer-facing product lane at product baseline `6553960`, with canonical repository recovery tag `hybrid-recovery-2026-07-19`. Historical assessment, approved learning, annual planning, monthly initiatives, execution-plan hierarchy, budget governance, Event Operations, Discipline Workspaces, and approval-gated Stitchi planning are implemented. The latest closures are #201, #204, and #206; the recommended next product issue is #208 for weekly operating work below execution plans. Eighteen issues remain open, including production operations, customer/legal decisions, UX acceptance, and customer-credential connector validation. GitHub `main` and the recovery tag are the code recovery points; this file plus current GitHub issues are the onboarding source of truth. Do not claim external integrations live until customer-owned credentials and acceptance evidence exist.
