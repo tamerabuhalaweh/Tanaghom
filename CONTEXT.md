@@ -1,6 +1,6 @@
 # CONTEXT.md - Current Active Context
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Single Source Of Truth
 
@@ -21,9 +21,12 @@ Canonical recovery tag: hybrid-recovery-2026-07-19
 Source-of-truth PR: #209
 Repository: https://github.com/tamerabuhalaweh/Tanaghom
 Active deployment: https://tanaghum-hybrid.163-123-180-104.sslip.io
+Backup standby: https://tanaghum-backup.155-117-45-45.sslip.io
 ```
 
 Local `main` and `origin/main` were verified synchronized on 2026-07-19. GitHub CI for product baseline `6553960` and source-of-truth PR `#209` passed, and Hybrid external uptime checks are passing.
+
+The backup standby was deployed from the canonical recovery tag at commit `a1a7ede`, passed the complete five-scenario live Hybrid acceptance gate, and passed an isolated PostgreSQL restore/application-login drill. It is a warm code standby with isolated seed data, not a live replica of primary customer data. See [`docs/deployment/BACKUP_HYBRID_STANDBY.md`](docs/deployment/BACKUP_HYBRID_STANDBY.md).
 
 ## Active Product Direction
 
