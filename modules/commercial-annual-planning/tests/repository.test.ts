@@ -282,6 +282,47 @@ describe('annual commercial planning repository governance', () => {
     expect(tx.auditRecord.create).not.toHaveBeenCalled();
   });
 
+  it('archives a draft only after explicit confirmation and records the decision', async () => {
+    const draft = planRecord({ status: 'draft', revision: 2 });
+    const archived = planRecord({
+      status: 'archived',
+      revision: 3,
+      archived_at: new Date('2027-12-31T00:00:00.000Z'),
+    });
+    tx.annualCommercialPlan.findFirst
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(archived);
+
+    const result = await transitionAnnualPlan(
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      draft.id,
+      'archived',
+      {
+        expectedRevision: 2,
+        reason: 'Annual planning is complete and final results are recorded',
+        confirmation: 'ARCHIVE',
+      },
+    );
+
+    expect(tx.annualCommercialPlan.updateMany).toHaveBeenCalledWith({
+      where: { id: draft.id, tenant_key: 'tenant-a', revision: 2 },
+      data: expect.objectContaining({
+        status: 'archived',
+        revision: { increment: 1 },
+        archived_at: expect.any(Date),
+      }),
+    });
+    expect(tx.auditRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'annual_commercial_plan_archived',
+        target_object_id: draft.id,
+        reason: 'Annual planning is complete and final results are recorded',
+      }),
+    });
+    expect(result).toMatchObject({ status: 'archived', revision: 3 });
+  });
+
   it('detects a concurrent update when the atomic revision write matches no row', async () => {
     tx.annualCommercialPlan.findFirst.mockResolvedValue(planRecord());
     tx.annualCommercialPlan.updateMany.mockResolvedValue({ count: 0 });
