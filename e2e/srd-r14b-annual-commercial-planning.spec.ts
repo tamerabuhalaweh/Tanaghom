@@ -9,6 +9,7 @@ const user = {
 };
 
 const annualPlanId = '22222222-2222-4222-8222-222222222222';
+const recoveredAnnualPlanId = '22222222-2222-4222-8222-222222222223';
 const learningSetId = '33333333-3333-4333-8333-333333333333';
 const revenueLineId = '44444444-4444-4444-8444-444444444444';
 const detailedPlanId = '55555555-5555-4555-8555-555555555555';
@@ -231,14 +232,20 @@ function makeHierarchy(learningLinked = false) {
   };
 }
 
-async function installMocks(page: Page, seeded = false, role = user.role) {
+async function installMocks(
+  page: Page,
+  seeded = false,
+  role = user.role,
+  initialStatus = 'draft',
+  includeSeededItem = true,
+) {
   const sessionUser = {
     ...user,
     role,
     name: role === 'specialist' ? 'Commercial Specialist' : user.name,
   };
   let currentPlan: ReturnType<typeof makeAnnualPlan> | null = seeded
-    ? makeAnnualPlan('draft', 2, [makeItem()])
+    ? makeAnnualPlan(initialStatus, 2, includeSeededItem ? [makeItem()] : [])
     : null;
   let learningLinked = false;
   let budgetAllocation: Record<string, unknown> | null = null;
@@ -282,6 +289,41 @@ async function installMocks(page: Page, seeded = false, role = user.role) {
         learningSets: makeAnnualPlan().learningSets,
       };
       return json(currentPlan, 201);
+    }
+    if (
+      currentPlan &&
+      path === `/annual-commercial-plans/${currentPlan.id}/duplicate-as-draft` &&
+      method === 'POST'
+    ) {
+      const payload = request.postDataJSON() as Record<string, unknown>;
+      expect(payload).toMatchObject({
+        expectedRevision: 2,
+        reason: 'Continue customer UAT monthly planning',
+      });
+      currentPlan = {
+        ...makeAnnualPlan('draft', 1, []),
+        id: recoveredAnnualPlanId,
+        scenarioVersion: 2,
+      };
+      return json(currentPlan, 201);
+    }
+    if (
+      currentPlan &&
+      path === `/annual-commercial-plans/${currentPlan.id}/archive` &&
+      method === 'POST'
+    ) {
+      const payload = request.postDataJSON() as Record<string, unknown>;
+      expect(payload).toMatchObject({
+        expectedRevision: 2,
+        reason: 'Annual planning is complete',
+        confirmation: 'ARCHIVE',
+      });
+      currentPlan = {
+        ...currentPlan,
+        status: 'archived',
+        revision: 3,
+      };
+      return json(currentPlan);
     }
     if (path === `/annual-commercial-plans/${annualPlanId}/items` && method === 'POST') {
       const payload = request.postDataJSON() as Record<string, unknown>;
@@ -330,7 +372,8 @@ async function installMocks(page: Page, seeded = false, role = user.role) {
       return json(currentPlan);
     }
     if (
-      path === `/commercial-budget-reconciliation/annual-plans/${annualPlanId}` &&
+      currentPlan &&
+      path === `/commercial-budget-reconciliation/annual-plans/${currentPlan.id}` &&
       method === 'GET'
     ) {
       return json(makeBudgetSummary(currentPlan || makeAnnualPlan(), budgetAllocation));
@@ -594,6 +637,57 @@ test.describe('SRD-R14B annual commercial planning', () => {
     await expect(page.getByRole('button', { name: 'Save direction' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Submit for approval' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Plan with Stitchi' })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    monitor.assertClean();
+  });
+
+  test('archived scenario explains the lock and recovers as a new editable draft', async ({
+    page,
+  }) => {
+    const monitor = await installMocks(page, true, 'department_head', 'archived', false);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/commercial-planning');
+
+    await expect(page.getByText('This annual plan is archived and read-only')).toBeVisible();
+    await page.getByRole('tab', { name: /^Aug/ }).click();
+    await expect(page.getByRole('button', { name: 'Add to August' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Add initiative' }).last()).toBeDisabled();
+    if (process.env.UX_CAPTURE === '1')
+      await page.screenshot({ path: 'tmp/annual-planning-archived-recovery.png', fullPage: true });
+
+    await page.getByRole('button', { name: 'Create new draft scenario' }).click();
+    await expect(page.getByRole('dialog', { name: 'Create a new draft scenario?' })).toBeVisible();
+    await page
+      .getByLabel('Reason for the new scenario')
+      .fill('Continue customer UAT monthly planning');
+    await page.getByRole('button', { name: 'Create draft scenario' }).click();
+
+    await expect(page.getByText(/Draft scenario 2 created/)).toBeVisible();
+    await expect(page.getByText('This annual plan is archived and read-only')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add to August' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Add to August' }).click();
+    await expect(page.getByRole('heading', { name: 'Add initiative to August' })).toBeVisible();
+    if (process.env.UX_CAPTURE === '1')
+      await page.screenshot({ path: 'tmp/annual-planning-recovered-august.png', fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    monitor.assertClean();
+  });
+
+  test('archiving requires a reasoned confirmation before the plan becomes read-only', async ({
+    page,
+  }) => {
+    const monitor = await installMocks(page, true, 'department_head', 'draft', false);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto('/commercial-planning');
+
+    await page.getByRole('button', { name: 'Archive', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Archive this annual plan?' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Confirm archive' })).toBeDisabled();
+    await page.getByLabel('Reason for archiving').fill('Annual planning is complete');
+    await page.getByRole('button', { name: 'Confirm archive' }).click();
+
+    await expect(page.getByText(/Annual plan archived/)).toBeVisible();
+    await expect(page.getByText('This annual plan is archived and read-only')).toBeVisible();
     await expectNoHorizontalOverflow(page);
     monitor.assertClean();
   });

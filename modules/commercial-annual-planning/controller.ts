@@ -4,10 +4,12 @@ import { UnauthorizedError } from '@shared/errors';
 import * as service from './service';
 import {
   validateAnnualPlanTransition,
+  validateArchiveAnnualPlan,
   validateArchivePortfolioItem,
   validateCreateAnnualPlan,
   validateCreateExecutionPlanForPortfolioItem,
   validateCreatePortfolioItem,
+  validateDuplicateAnnualPlan,
   validateLinkLearningSets,
   validateListAnnualPlans,
   validateRejectAnnualPlan,
@@ -97,7 +99,23 @@ commercialAnnualPlanningRouter.post(
 );
 commercialAnnualPlanningRouter.post(
   '/:id/archive',
-  transition('archived', validateAnnualPlanTransition),
+  transition('archived', validateArchiveAnnualPlan),
+);
+
+commercialAnnualPlanningRouter.post(
+  '/:id/duplicate-as-draft',
+  route(async (req, res) => {
+    const auth = context(req);
+    res.status(201).json(
+      await service.duplicateAnnualPlanAsDraft(
+        auth.role,
+        auth.tenantKey,
+        auth.userId,
+        String(req.params.id),
+        validateDuplicateAnnualPlan(req.body),
+      ),
+    );
+  }),
 );
 
 commercialAnnualPlanningRouter.put(

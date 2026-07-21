@@ -29,6 +29,58 @@
   background: var(--ops-surface);
 }
 
+.annual-readonly-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--ops-warning);
+  border-radius: 10px;
+  color: var(--ops-ink);
+  background: var(--ops-warning-soft);
+}
+
+.annual-readonly-banner > svg { color: var(--ops-warning); }
+.annual-readonly-banner > div { display: grid; min-width: 0; gap: 3px; }
+.annual-readonly-banner strong { font-size: 14px; line-height: 20px; }
+.annual-readonly-banner p { max-width: 76ch; margin: 0; color: var(--ops-ink-secondary); font-size: 12px; line-height: 18px; }
+
+.annual-dialog-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(7 8 17 / 72%);
+}
+
+.annual-lifecycle-dialog {
+  display: grid;
+  width: min(540px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--ops-border);
+  border-radius: 10px;
+  background: var(--ops-surface);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 28%);
+}
+
+.annual-lifecycle-dialog > header,
+.annual-lifecycle-dialog > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.annual-lifecycle-dialog > header > div { display: grid; min-width: 0; gap: 3px; }
+.annual-lifecycle-dialog > header span { color: var(--ops-ink-secondary); font-size: 11px; line-height: 16px; }
+.annual-lifecycle-dialog h2,
+.annual-lifecycle-dialog p { margin: 0; }
+.annual-lifecycle-dialog h2 { color: var(--ops-ink); font-size: 20px; line-height: 27px; }
+.annual-lifecycle-dialog > p { color: var(--ops-ink-secondary); font-size: 13px; line-height: 20px; }
+.annual-lifecycle-dialog textarea { width: 100%; padding: 10px 11px; border: 1px solid var(--ops-border); border-radius: 8px; color: var(--ops-ink); background: var(--ops-surface); font: inherit; resize: vertical; }
+.annual-lifecycle-dialog > footer { justify-content: flex-end; }
+.annual-lifecycle-dialog .ops-button.is-danger { color: white; border-color: var(--ops-danger); background: var(--ops-danger); }
+
 .annual-year-toolbar label,
 .annual-current-state {
   display: grid;

@@ -4,10 +4,12 @@ import * as repo from './repository';
 import type {
   AnnualPlanStatus,
   AnnualPlanTransitionInput,
+  ArchiveAnnualPlanInput,
   ArchivePortfolioItemInput,
   CreateAnnualPlanInput,
   CreateExecutionPlanForPortfolioItemInput,
   CreatePortfolioItemInput,
+  DuplicateAnnualPlanInput,
   LinkLearningSetsInput,
   ListAnnualPlansInput,
   RejectAnnualPlanInput,
@@ -65,7 +67,7 @@ export async function transitionAnnualPlan(
   userId: string,
   id: string,
   target: AnnualPlanStatus,
-  input: AnnualPlanTransitionInput | RejectAnnualPlanInput,
+  input: AnnualPlanTransitionInput | RejectAnnualPlanInput | ArchiveAnnualPlanInput,
 ) {
   checkAnnualPlanningPermission(
     role,
@@ -73,6 +75,24 @@ export async function transitionAnnualPlan(
   );
   const result = await repo.transitionAnnualPlan(tenantKey, userId, id, target, input);
   log(userId, `annual_commercial_plan_${target}`, id, `Annual plan moved to ${target}`);
+  return result;
+}
+
+export async function duplicateAnnualPlanAsDraft(
+  role: string,
+  tenantKey: string,
+  userId: string,
+  id: string,
+  input: DuplicateAnnualPlanInput,
+) {
+  checkAnnualPlanningPermission(role, 'annual-plan:create');
+  const result = await repo.duplicateAnnualPlanAsDraft(tenantKey, userId, id, input);
+  log(
+    userId,
+    'annual_commercial_plan_duplicated_as_draft',
+    result.id,
+    `Draft scenario ${result.scenarioVersion} created from archived annual plan`,
+  );
   return result;
 }
 

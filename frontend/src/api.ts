@@ -644,6 +644,8 @@ export const annualCommercialPlanningApi = {
   update: (id: string, data: unknown, token: string) => apiFetch<unknown>(`/annual-commercial-plans/${id}`, { method: 'PUT', body: data, token }),
   transition: (id: string, transition: 'submit' | 'approve' | 'reject' | 'activate' | 'close' | 'archive', data: unknown, token: string) =>
     apiFetch<unknown>(`/annual-commercial-plans/${id}/${transition}`, { method: 'POST', body: data, token }),
+  duplicateAsDraft: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/annual-commercial-plans/${id}/duplicate-as-draft`, { method: 'POST', body: data, token }),
   updateLearningSets: (id: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/annual-commercial-plans/${id}/learning-sets`, { method: 'PUT', body: data, token }),
   createItem: (id: string, data: unknown, token: string) =>

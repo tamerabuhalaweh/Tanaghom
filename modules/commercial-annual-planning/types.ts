@@ -59,6 +59,17 @@ export const annualPlanTransitionSchema = z.object({
   reason: z.string().trim().min(3).max(1000).optional(),
 });
 
+export const archiveAnnualPlanSchema = z.object({
+  expectedRevision: z.coerce.number().int().min(1),
+  reason: z.string().trim().min(3).max(1000),
+  confirmation: z.literal('ARCHIVE'),
+});
+
+export const duplicateAnnualPlanSchema = z.object({
+  expectedRevision: z.coerce.number().int().min(1),
+  reason: z.string().trim().min(3).max(1000),
+});
+
 export const rejectAnnualPlanSchema = annualPlanTransitionSchema.extend({
   reason: z.string().trim().min(3).max(1000),
 });
@@ -140,6 +151,8 @@ export type ListAnnualPlansInput = z.infer<typeof listAnnualPlansSchema>;
 export type CreateAnnualPlanInput = z.infer<typeof createAnnualPlanSchema>;
 export type UpdateAnnualPlanInput = z.infer<typeof updateAnnualPlanSchema>;
 export type AnnualPlanTransitionInput = z.infer<typeof annualPlanTransitionSchema>;
+export type ArchiveAnnualPlanInput = z.infer<typeof archiveAnnualPlanSchema>;
+export type DuplicateAnnualPlanInput = z.infer<typeof duplicateAnnualPlanSchema>;
 export type RejectAnnualPlanInput = z.infer<typeof rejectAnnualPlanSchema>;
 export type LinkLearningSetsInput = z.infer<typeof linkLearningSetsSchema>;
 export type CreatePortfolioItemInput = z.infer<typeof createPortfolioItemSchema>;

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  validateArchiveAnnualPlan,
   validateCreateAnnualPlan,
   validateCreatePortfolioItem,
+  validateDuplicateAnnualPlan,
   validateUpdateAnnualPlan,
   validateUpdatePortfolioItem,
 } from '../validators';
@@ -24,6 +26,26 @@ describe('annual planning validators', () => {
     expect(() =>
       validateCreateAnnualPlan({ year: 2027, title: 'Plan', budgetTarget: -1 }),
     ).toThrow();
+  });
+
+  it('requires deliberate archive confirmation and a recovery reason', () => {
+    expect(() =>
+      validateArchiveAnnualPlan({ expectedRevision: 2, reason: 'Year complete' }),
+    ).toThrow();
+    expect(
+      validateArchiveAnnualPlan({
+        expectedRevision: 2,
+        reason: 'Year complete and final results recorded',
+        confirmation: 'ARCHIVE',
+      }),
+    ).toMatchObject({ confirmation: 'ARCHIVE' });
+    expect(() => validateDuplicateAnnualPlan({ expectedRevision: 2, reason: '' })).toThrow();
+    expect(
+      validateDuplicateAnnualPlan({
+        expectedRevision: 2,
+        reason: 'Continue monthly planning in a new governed scenario',
+      }),
+    ).toMatchObject({ expectedRevision: 2 });
   });
 
   it('validates a complete monthly initiative and defaults readiness', () => {
