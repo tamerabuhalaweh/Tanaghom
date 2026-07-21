@@ -45,6 +45,8 @@ import {
   createAnnualPlan,
   createExecutionPlanForPortfolioItem,
   createPortfolioItem,
+  duplicateAnnualPlanAsDraft,
+  transitionAnnualPlan,
   updateAnnualPlan,
   updatePortfolioItem,
 } from '../repository';
@@ -152,6 +154,173 @@ describe('annual commercial planning repository governance', () => {
     ).rejects.toThrow(ConflictError);
 
     expect(tx.annualCommercialPlan.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('recovers an archived plan as the next draft scenario without reusing execution links', async () => {
+    const learningSetId = '00000000-0000-0000-0000-000000000501';
+    const source = planRecord({
+      status: 'archived',
+      revision: 4,
+      archived_at: new Date('2027-12-31T00:00:00.000Z'),
+      items: [
+        {
+          id: '00000000-0000-0000-0000-000000000401',
+          commercial_plan_id: '00000000-0000-0000-0000-000000000301',
+        },
+      ],
+      learning_links: [
+        {
+          learning_set: {
+            id: learningSetId,
+            title: 'Approved 2026 learning',
+            status: 'active',
+            approved_at: new Date('2026-12-20T00:00:00.000Z'),
+            assessment_run: {
+              id: '00000000-0000-0000-0000-000000000503',
+              title: '2026 historical assessment',
+              date_from: new Date('2026-01-01T00:00:00.000Z'),
+              date_to: new Date('2026-12-01T00:00:00.000Z'),
+              revenue_line_id: null,
+            },
+            findings: [],
+          },
+        },
+      ],
+    });
+    const recovered = planRecord({
+      id: '00000000-0000-0000-0000-000000000101',
+      scenario_version: 2,
+      revision: 1,
+      status: 'draft',
+      archived_at: null,
+      items: [],
+      learning_links: source.learning_links,
+    });
+    tx.annualCommercialPlan.findFirst
+      .mockResolvedValueOnce(source)
+      .mockResolvedValueOnce({ scenario_version: 1 })
+      .mockResolvedValueOnce(recovered);
+    tx.annualCommercialPlan.create.mockResolvedValue({ id: recovered.id });
+    tx.commercialLearningSet.findMany.mockResolvedValue([{ id: learningSetId }]);
+    tx.annualCommercialPlanLearningSet.createMany.mockResolvedValue({ count: 1 });
+
+    const result = await duplicateAnnualPlanAsDraft(
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      source.id,
+      {
+        expectedRevision: 4,
+        reason: 'Continue monthly planning after the previous scenario was archived',
+      },
+    );
+
+    expect(tx.annualCommercialPlan.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenant_key: 'tenant-a',
+        year: 2027,
+        scenario_version: 2,
+        status: 'draft',
+        title: source.title,
+        strategy: source.strategy,
+        currency: 'AED',
+      }),
+    });
+    expect(tx.annualCommercialPlanLearningSet.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          tenant_key: 'tenant-a',
+          annual_plan_id: recovered.id,
+          learning_set_id: learningSetId,
+        },
+      ],
+    });
+    expect(tx.monthlyPortfolioItem.create).not.toHaveBeenCalled();
+    expect(tx.auditRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'annual_commercial_plan_duplicated_as_draft',
+        target_object_id: recovered.id,
+        reason: 'Continue monthly planning after the previous scenario was archived',
+      }),
+    });
+    expect(result).toMatchObject({
+      id: recovered.id,
+      scenarioVersion: 2,
+      status: 'draft',
+      items: [],
+    });
+  });
+
+  it('does not duplicate an annual plan unless the source is archived', async () => {
+    tx.annualCommercialPlan.findFirst.mockResolvedValue(planRecord({ status: 'draft' }));
+
+    await expect(
+      duplicateAnnualPlanAsDraft(
+        'tenant-a',
+        '00000000-0000-0000-0000-000000000001',
+        '00000000-0000-0000-0000-000000000100',
+        { expectedRevision: 2, reason: 'Unnecessary duplicate' },
+      ),
+    ).rejects.toThrow(ValidationError);
+
+    expect(tx.annualCommercialPlan.create).not.toHaveBeenCalled();
+  });
+
+  it('enforces archive confirmation inside the repository boundary', async () => {
+    tx.annualCommercialPlan.findFirst.mockResolvedValue(planRecord({ status: 'draft' }));
+
+    await expect(
+      transitionAnnualPlan(
+        'tenant-a',
+        '00000000-0000-0000-0000-000000000001',
+        '00000000-0000-0000-0000-000000000100',
+        'archived',
+        { expectedRevision: 2, reason: 'Annual planning is complete' },
+      ),
+    ).rejects.toThrow(ValidationError);
+
+    expect(tx.annualCommercialPlan.updateMany).not.toHaveBeenCalled();
+    expect(tx.auditRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('archives a draft only after explicit confirmation and records the decision', async () => {
+    const draft = planRecord({ status: 'draft', revision: 2 });
+    const archived = planRecord({
+      status: 'archived',
+      revision: 3,
+      archived_at: new Date('2027-12-31T00:00:00.000Z'),
+    });
+    tx.annualCommercialPlan.findFirst
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(archived);
+
+    const result = await transitionAnnualPlan(
+      'tenant-a',
+      '00000000-0000-0000-0000-000000000001',
+      draft.id,
+      'archived',
+      {
+        expectedRevision: 2,
+        reason: 'Annual planning is complete and final results are recorded',
+        confirmation: 'ARCHIVE',
+      },
+    );
+
+    expect(tx.annualCommercialPlan.updateMany).toHaveBeenCalledWith({
+      where: { id: draft.id, tenant_key: 'tenant-a', revision: 2 },
+      data: expect.objectContaining({
+        status: 'archived',
+        revision: { increment: 1 },
+        archived_at: expect.any(Date),
+      }),
+    });
+    expect(tx.auditRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'annual_commercial_plan_archived',
+        target_object_id: draft.id,
+        reason: 'Annual planning is complete and final results are recorded',
+      }),
+    });
+    expect(result).toMatchObject({ status: 'archived', revision: 3 });
   });
 
   it('detects a concurrent update when the atomic revision write matches no row', async () => {

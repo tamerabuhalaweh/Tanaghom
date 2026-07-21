@@ -10,11 +10,13 @@ import type {
   AnnualPlanRollup,
   AnnualPlanStatus,
   AnnualPlanTransitionInput,
+  ArchiveAnnualPlanInput,
   ArchivePortfolioItemInput,
   CommercialCurrency,
   CreateAnnualPlanInput,
   CreateExecutionPlanForPortfolioItemInput,
   CreatePortfolioItemInput,
+  DuplicateAnnualPlanInput,
   LinkLearningSetsInput,
   ListAnnualPlansInput,
   PortfolioReadiness,
@@ -199,11 +201,17 @@ export async function transitionAnnualPlan(
   userId: string,
   id: string,
   target: AnnualPlanStatus,
-  input: AnnualPlanTransitionInput | RejectAnnualPlanInput,
+  input: AnnualPlanTransitionInput | RejectAnnualPlanInput | ArchiveAnnualPlanInput,
 ) {
   return prisma.$transaction(async (tx) => {
     const existing = await fetchPlan(tx, tenantKey, id);
     assertRevision(existing.revision, input.expectedRevision);
+    if (
+      target === 'archived' &&
+      (!('confirmation' in input) || input.confirmation !== 'ARCHIVE' || !input.reason?.trim())
+    ) {
+      throw new ValidationError('Archiving requires explicit confirmation and a reason');
+    }
     assertAnnualPlanTransition(existing.status, target);
     if (target === 'approved' || target === 'active') {
       const current = await tx.annualCommercialPlan.findFirst({
@@ -251,6 +259,70 @@ export async function transitionAnnualPlan(
       afterState: { from: existing.status, to: target, revision: input.expectedRevision + 1 },
     });
     return mapAnnualPlan(await fetchPlan(tx, tenantKey, id));
+  });
+}
+
+export async function duplicateAnnualPlanAsDraft(
+  tenantKey: string,
+  userId: string,
+  id: string,
+  input: DuplicateAnnualPlanInput,
+) {
+  return prisma.$transaction(async (tx) => {
+    const source = await fetchPlan(tx, tenantKey, id);
+    assertRevision(source.revision, input.expectedRevision);
+    if (source.status !== 'archived') {
+      throw new ValidationError('Only an archived annual plan can be recovered as a new draft scenario');
+    }
+    if (source.owner_user_id) await assertUserInTenant(tx, tenantKey, source.owner_user_id);
+
+    const lastVersion = await tx.annualCommercialPlan.findFirst({
+      where: { tenant_key: tenantKey, year: source.year },
+      select: { scenario_version: true },
+      orderBy: { scenario_version: 'desc' },
+    });
+    const scenarioVersion = (lastVersion?.scenario_version || 0) + 1;
+    const draft = await tx.annualCommercialPlan.create({
+      data: {
+        tenant_key: tenantKey,
+        year: source.year,
+        scenario_version: scenarioVersion,
+        title: source.title,
+        strategy: source.strategy,
+        currency: source.currency,
+        budget_target: source.budget_target,
+        revenue_target: source.revenue_target,
+        status: 'draft',
+        owner_user_id: source.owner_user_id,
+        created_by_user_id: userId,
+      },
+    });
+    const learningSetIds = source.learning_links.map((link) => link.learning_set.id);
+    await assertLearningSetsInTenant(tx, tenantKey, learningSetIds);
+    if (learningSetIds.length) {
+      await tx.annualCommercialPlanLearningSet.createMany({
+        data: learningSetIds.map((learningSetId) => ({
+          tenant_key: tenantKey,
+          annual_plan_id: draft.id,
+          learning_set_id: learningSetId,
+        })),
+      });
+    }
+    await createAudit(tx, {
+      action: 'annual_commercial_plan_duplicated_as_draft',
+      userId,
+      targetObjectType: 'annual_commercial_plan',
+      targetObjectId: draft.id,
+      reason: input.reason,
+      afterState: {
+        sourceAnnualPlanId: source.id,
+        year: source.year,
+        scenarioVersion,
+        learningSetCount: learningSetIds.length,
+        monthlyItemsCopied: 0,
+      },
+    });
+    return mapAnnualPlan(await fetchPlan(tx, tenantKey, draft.id));
   });
 }
 

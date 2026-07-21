@@ -2,10 +2,12 @@ import { ValidationError } from '@shared/errors';
 import { type ZodTypeAny, type output } from 'zod';
 import {
   annualPlanTransitionSchema,
+  archiveAnnualPlanSchema,
   archivePortfolioItemSchema,
   createAnnualPlanSchema,
   createExecutionPlanForPortfolioItemSchema,
   createPortfolioItemSchema,
+  duplicateAnnualPlanSchema,
   linkLearningSetsSchema,
   listAnnualPlansSchema,
   rejectAnnualPlanSchema,
@@ -30,6 +32,9 @@ export const validateCreateAnnualPlan = (value: unknown) => parse(createAnnualPl
 export const validateUpdateAnnualPlan = (value: unknown) => parse(updateAnnualPlanSchema, value);
 export const validateAnnualPlanTransition = (value: unknown) =>
   parse(annualPlanTransitionSchema, value);
+export const validateArchiveAnnualPlan = (value: unknown) => parse(archiveAnnualPlanSchema, value);
+export const validateDuplicateAnnualPlan = (value: unknown) =>
+  parse(duplicateAnnualPlanSchema, value);
 export const validateRejectAnnualPlan = (value: unknown) => parse(rejectAnnualPlanSchema, value);
 export const validateLinkLearningSets = (value: unknown) => parse(linkLearningSetsSchema, value);
 export const validateCreatePortfolioItem = (value: unknown) =>

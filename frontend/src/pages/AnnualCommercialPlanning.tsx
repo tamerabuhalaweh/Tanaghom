@@ -12,6 +12,7 @@ import {
   Save,
   Sparkles,
   Target,
+  X,
 } from 'lucide-react';
 import {
   annualCommercialPlanningApi,
@@ -166,6 +167,8 @@ export default function AnnualCommercialPlanning() {
     typeof emptyExecutionPlanDraft
   > | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
+  const [lifecycleDialog, setLifecycleDialog] = useState<'archive' | 'duplicate' | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState('');
   const [loading, setLoading] = useState(Boolean(token));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -224,7 +227,7 @@ export default function AnnualCommercialPlanning() {
       setEvents(asList(eventRecords));
       setLearningSets(asList(learningRecords));
       const preferred =
-        annualList.find((candidate) => ['active', 'approved'].includes(text(candidate.status))) ||
+        annualList.find((candidate) => text(candidate.status) !== 'archived') ||
         annualList[0] ||
         null;
       applyPlan(preferred);
@@ -332,7 +335,7 @@ export default function AnnualCommercialPlanning() {
   }
 
   async function transition(
-    action: 'submit' | 'approve' | 'reject' | 'activate' | 'close' | 'archive',
+    action: 'submit' | 'approve' | 'reject' | 'activate' | 'close',
   ) {
     if (!token || !plan) return;
     if (action === 'reject' && decisionReason.trim().length < 3)
@@ -357,12 +360,65 @@ export default function AnnualCommercialPlanning() {
         reject: 'returned for changes',
         activate: 'activated',
         close: 'closed',
-        archive: 'archived',
       };
       setMessage(`Annual plan ${resultLabels[action]}.`);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Annual plan status could not be changed.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openLifecycleDialog(action: 'archive' | 'duplicate') {
+    setLifecycleReason('');
+    setLifecycleDialog(action);
+  }
+
+  async function confirmLifecycleAction() {
+    if (!token || !plan || !lifecycleDialog || lifecycleReason.trim().length < 3) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      if (lifecycleDialog === 'archive') {
+        const updated = await annualCommercialPlanningApi.transition(
+          text(plan.id),
+          'archive',
+          {
+            expectedRevision: numberValue(plan.revision),
+            reason: lifecycleReason.trim(),
+            confirmation: 'ARCHIVE',
+          },
+          token,
+        );
+        updatePlanInState(updated);
+        setMessage(
+          'Annual plan archived. It is preserved as read-only evidence; create a new draft scenario to continue planning.',
+        );
+      } else {
+        const created = await annualCommercialPlanningApi.duplicateAsDraft(
+          text(plan.id),
+          {
+            expectedRevision: numberValue(plan.revision),
+            reason: lifecycleReason.trim(),
+          },
+          token,
+        );
+        const next = asData(created);
+        setPlans((current) => [next, ...current]);
+        applyPlan(next);
+        setShowItemEditor(false);
+        setMessage(
+          `Draft scenario ${numberValue(next.scenarioVersion)} created. Annual direction and approved learning were copied; monthly execution starts clean.`,
+        );
+      }
+      setLifecycleDialog(null);
+      setLifecycleReason('');
+      window.dispatchEvent(new Event('tanaghum:commercial-data-changed'));
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'The annual plan lifecycle action could not be completed.',
       );
     } finally {
       setSaving(false);
@@ -607,9 +663,9 @@ export default function AnnualCommercialPlanning() {
                 ))}
               </select>
             </label>
-            {plans.length > 1 ? (
+            {plans.length ? (
               <label>
-                <span>Plan version</span>
+                <span>Scenario version</span>
                 <select
                   value={text(plan?.id)}
                   onChange={(event) =>
@@ -634,6 +690,29 @@ export default function AnnualCommercialPlanning() {
               </div>
             ) : null}
           </div>
+
+          {planStatus === 'archived' ? (
+            <div className="annual-readonly-banner" id="annual-plan-read-only" role="status">
+              <Archive size={20} aria-hidden="true" />
+              <div>
+                <strong>This annual plan is archived and read-only</strong>
+                <p>
+                  Its direction, learning, and history are preserved. Monthly initiatives cannot be
+                  added to an archived scenario.
+                </p>
+              </div>
+              {canManage ? (
+                <button
+                  className="ops-button is-primary"
+                  type="button"
+                  onClick={() => openLifecycleDialog('duplicate')}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  Create new draft scenario
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           {!plan ? (
             <OpsSection
@@ -875,6 +954,7 @@ export default function AnnualCommercialPlanning() {
                   reason={decisionReason}
                   setReason={setDecisionReason}
                   onTransition={transition}
+                  onArchiveRequest={() => openLifecycleDialog('archive')}
                 />
               </OpsSection>
 
@@ -887,6 +967,17 @@ export default function AnnualCommercialPlanning() {
                       className="ops-button is-primary"
                       type="button"
                       onClick={() => startNewItem(selectedMonth)}
+                    >
+                      <Plus size={16} aria-hidden="true" />
+                      Add to {MONTHS[selectedMonth - 1]}
+                    </button>
+                  ) : canManage && planStatus === 'archived' ? (
+                    <button
+                      className="ops-button is-primary"
+                      type="button"
+                      disabled
+                      aria-describedby="annual-plan-read-only"
+                      title="Create a new draft scenario before adding monthly initiatives"
                     >
                       <Plus size={16} aria-hidden="true" />
                       Add to {MONTHS[selectedMonth - 1]}
@@ -987,7 +1078,7 @@ export default function AnnualCommercialPlanning() {
                     <OpsEmpty
                       title={`Nothing planned for ${MONTHS[selectedMonth - 1]}`}
                       message="An open month is valid. Add an initiative only after leadership confirms the product, event, budget, and expected revenue."
-                      action={editable ? <button className="ops-button is-primary" type="button" onClick={() => startNewItem(selectedMonth)}>Add initiative</button> : undefined}
+                      action={editable ? <button className="ops-button is-primary" type="button" onClick={() => startNewItem(selectedMonth)}>Add initiative</button> : canManage && planStatus === 'archived' ? <button className="ops-button is-primary" type="button" disabled aria-describedby="annual-plan-read-only">Add initiative</button> : undefined}
                     />
                   )}
                 </div>
@@ -1369,6 +1460,79 @@ export default function AnnualCommercialPlanning() {
                   separate rollup and does not convert or combine them.
                 </OpsNotice>
               ) : null}
+
+              {lifecycleDialog ? (
+                <div className="annual-dialog-backdrop" role="presentation">
+                  <section
+                    className="annual-lifecycle-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="annual-lifecycle-dialog-title"
+                  >
+                    <header>
+                      <div>
+                        <span>{lifecycleDialog === 'archive' ? 'Lifecycle control' : 'Scenario recovery'}</span>
+                        <h2 id="annual-lifecycle-dialog-title">
+                          {lifecycleDialog === 'archive'
+                            ? 'Archive this annual plan?'
+                            : 'Create a new draft scenario?'}
+                        </h2>
+                      </div>
+                      <button
+                        className="ops-icon-button"
+                        type="button"
+                        aria-label="Close dialog"
+                        onClick={() => setLifecycleDialog(null)}
+                        disabled={saving}
+                      >
+                        <X size={18} aria-hidden="true" />
+                      </button>
+                    </header>
+                    <p>
+                      {lifecycleDialog === 'archive'
+                        ? 'Archiving makes this scenario permanently read-only. Monthly initiatives can no longer be added or edited. The record remains available for audit and comparison.'
+                        : 'Tanaghum will preserve this archived scenario and create the next version as a draft. Annual direction and approved learning will be copied; historical monthly execution links will not be reused.'}
+                    </p>
+                    <Field
+                      label={lifecycleDialog === 'archive' ? 'Reason for archiving' : 'Reason for the new scenario'}
+                    >
+                      <textarea
+                        autoFocus
+                        rows={3}
+                        value={lifecycleReason}
+                        onChange={(event) => setLifecycleReason(event.target.value)}
+                        placeholder={
+                          lifecycleDialog === 'archive'
+                            ? 'Example: Year closed and final results recorded.'
+                            : 'Example: Continue monthly planning after the previous scenario was archived.'
+                        }
+                      />
+                    </Field>
+                    <footer>
+                      <button
+                        className="ops-button is-secondary"
+                        type="button"
+                        onClick={() => setLifecycleDialog(null)}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className={lifecycleDialog === 'archive' ? 'ops-button is-danger' : 'ops-button is-primary'}
+                        type="button"
+                        onClick={confirmLifecycleAction}
+                        disabled={saving || lifecycleReason.trim().length < 3}
+                      >
+                        {saving
+                          ? 'Saving...'
+                          : lifecycleDialog === 'archive'
+                            ? 'Confirm archive'
+                            : 'Create draft scenario'}
+                      </button>
+                    </footer>
+                  </section>
+                </div>
+              ) : null}
             </>
           )}
         </>
@@ -1454,6 +1618,7 @@ function AnnualStatusActions({
   reason,
   setReason,
   onTransition,
+  onArchiveRequest,
 }: {
   status: string;
   canManage: boolean;
@@ -1462,8 +1627,9 @@ function AnnualStatusActions({
   reason: string;
   setReason: (value: string) => void;
   onTransition: (
-    action: 'submit' | 'approve' | 'reject' | 'activate' | 'close' | 'archive',
+    action: 'submit' | 'approve' | 'reject' | 'activate' | 'close',
   ) => void;
+  onArchiveRequest: () => void;
 }) {
   return (
     <div className="annual-status-actions">
@@ -1542,7 +1708,7 @@ function AnnualStatusActions({
             className="ops-text-button"
             type="button"
             disabled={saving}
-            onClick={() => onTransition('archive')}
+            onClick={onArchiveRequest}
           >
             <Archive size={15} />
             Archive
