@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { thresholdConfigurationError } from './evaluation';
 
 export const KPI_SCOPES = [
   'annual_strategy',
@@ -150,6 +151,19 @@ function validateTarget(input: z.infer<typeof kpiTargetFieldsSchema>, ctx: z.Ref
       code: z.ZodIssueCode.custom,
       path: ['upperBound'],
       message: 'A target range requires a valid lower and upper bound',
+    });
+  }
+  const thresholdError = thresholdConfigurationError(
+    input.direction,
+    input.targetValue,
+    input.warningValue,
+    input.criticalValue,
+  );
+  if (thresholdError) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['criticalValue'],
+      message: thresholdError,
     });
   }
 }

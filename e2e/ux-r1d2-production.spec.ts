@@ -123,7 +123,41 @@ async function installMocks(page: Page, role: Role) {
     if (path === '/ghl-sync/status') return json({ credentialStatus: 'configured', mappingStatus: 'ready', acceptance: { status: 'ready_for_read_sync', readyForReadSync: true } });
     if (path === `/closeout/events/${event.id}/report`) return json({ eventSummary: event, budget: { planned: 5000, actual: 2100 }, leadFunnel: { totalLeads: 3, meetingsBooked: 1, purchases: 0 }, channelPerformance: [], sourcePerformance: [], topBarriers: [] });
     if (path === `/learning-recommendations/events/${event.id}`) return json({ recommendations: [{ id: 'rec-1', title: 'Keep same-day follow-up', rationale: 'Hot leads converted faster when assigned on the same day.', priority: 'high' }] });
-    if (path === `/commercial-kpis/events/${event.id}/effective` && method === 'GET') return json(currentTargets);
+    if (path === `/commercial-kpis/events/${event.id}/effective` && method === 'GET') {
+      return json(currentTargets.filter(target => target.status === 'approved'));
+    }
+    if (path === '/commercial-kpis' && method === 'GET' && url.searchParams.get('eventId') === event.id) {
+      return json(currentTargets.filter(target => target.appliedAs === 'event_specific'));
+    }
+    if (path === `/commercial-kpis/events/${event.id}/evaluation` && method === 'GET') {
+      const evaluations = currentTargets.filter(target => target.status === 'approved').map(target => ({
+        targetId: target.id,
+        metricKey: target.metricKey,
+        label: target.label,
+        status: 'actual_unavailable',
+        actualValue: null,
+        targetValue: target.targetValue,
+        warningValue: null,
+        criticalValue: null,
+        unit: target.unit,
+        currency: target.currency || null,
+        reason: target.metricKey === 'ticket_sales'
+          ? 'Customer-approved GHL ticket-quantity mapping is required.'
+          : 'No verified event-evidence mapping is available.',
+      }));
+      return json({
+        eventId: event.id,
+        evaluations,
+        summary: {
+          total: evaluations.length,
+          onTrack: 0,
+          warning: 0,
+          critical: 0,
+          thresholdsMissing: 0,
+          actualUnavailable: evaluations.length,
+        },
+      });
+    }
     if (path === `/commercial-kpis/events/${event.id}/capacity` && method === 'GET') return json(currentCapacity);
     if (path === `/commercial-kpis/events/${event.id}/capacity` && method === 'PUT') {
       currentCapacity = { ...currentCapacity, ...(request.postDataJSON() as object) };
@@ -132,7 +166,7 @@ async function installMocks(page: Page, role: Role) {
     if (path === '/commercial-kpis' && method === 'POST') {
       const input = request.postDataJSON() as Record<string, unknown>;
       const created = {
-        id: 'target-event-ticket-sales',
+        id: `target-event-${String(input.metricKey)}`,
         ...input,
         status: 'draft',
         revision: 1,
@@ -201,6 +235,7 @@ test.describe('UX-R1D2 production workspaces', () => {
     await tabs.getByRole('button', { name: 'KPIs' }).click();
     await expect(page.getByText('CCO controls available')).toBeVisible();
     await expect(page.getByText('Annual revenue target')).toBeVisible();
+    await expect(page.getByLabel('Daily target monitoring')).toBeVisible();
 
     await page.getByLabel('Venue capacity').fill('500');
     await page.getByLabel('Sellable ticket capacity').fill('480');
@@ -216,6 +251,10 @@ test.describe('UX-R1D2 production workspaces', () => {
     await expect(page.getByRole('button', { name: 'Approve' })).toBeVisible();
     await page.getByRole('button', { name: 'Approve' }).click();
     await expect(page.getByText('KPI target approved.')).toBeVisible();
+
+    await page.getByLabel('KPI').selectOption('cost_per_lead');
+    await expect(page.getByLabel('Warning at or above')).toBeVisible();
+    await expect(page.getByLabel('Critical at or above')).toBeVisible();
     await expectNoOverflow(page);
     monitor.assertClean();
   });

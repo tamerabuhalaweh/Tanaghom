@@ -9,6 +9,11 @@ import type {
   TransitionKpiTargetInput,
   UpdateKpiTargetInput,
 } from './types';
+import {
+  evaluateGovernedEventKpis,
+  thresholdConfigurationError,
+  type GovernedKpiTargetSnapshot,
+} from './evaluation';
 
 type Tx = Prisma.TransactionClient;
 
@@ -88,6 +93,44 @@ export async function listEffectiveEventTargets(tenantKey: string, eventId: stri
   }));
 }
 
+export async function evaluateEventTargets(tenantKey: string, eventId: string) {
+  const [targets, records] = await Promise.all([
+    listEffectiveEventTargets(tenantKey, eventId),
+    prisma.eventKpiRecord.findMany({
+      where: {
+        tenant_key: tenantKey,
+        event_id: eventId,
+        verification_status: 'verified',
+      },
+      select: {
+        metric_date: true,
+        leads: true,
+        impressions: true,
+        interactions: true,
+        purchases: true,
+        spend: true,
+      },
+      orderBy: [{ metric_date: 'desc' }, { created_at: 'desc' }],
+    }),
+  ]);
+  const result = evaluateGovernedEventKpis(
+    targets as GovernedKpiTargetSnapshot[],
+    records.map((record) => ({
+      metricDate: record.metric_date,
+      leads: record.leads,
+      impressions: record.impressions,
+      interactions: record.interactions,
+      purchases: record.purchases,
+      spend: Number(record.spend),
+    })),
+  );
+  return {
+    eventId,
+    evaluatedAt: new Date(),
+    ...result,
+  };
+}
+
 export async function createTarget(
   tenantKey: string,
   userId: string,
@@ -111,6 +154,8 @@ export async function createTarget(
       scope: record.scope,
       controlMode: record.control_mode,
       targetValue: record.target_value.toString(),
+      warningValue: record.warning_value?.toString() ?? null,
+      criticalValue: record.critical_value?.toString() ?? null,
     });
     return serializeTarget(record);
   });
@@ -128,6 +173,12 @@ export async function updateTarget(
     if (existing.status !== 'draft') {
       throw new ConflictError('Only a draft KPI target can be edited; amend an approved target');
     }
+    assertValidThresholds(
+      input.direction ?? existing.direction,
+      input.targetValue ?? Number(existing.target_value),
+      input.warningValue === undefined ? decimalValue(existing.warning_value) : input.warningValue,
+      input.criticalValue === undefined ? decimalValue(existing.critical_value) : input.criticalValue,
+    );
     if (input.ownerUserId) await assertUserInTenant(tx, tenantKey, input.ownerUserId);
     const updated = await tx.commercialKpiTarget.update({
       where: { id },
@@ -244,6 +295,11 @@ export async function amendApprovedTarget(
     if (existing.status !== 'approved') {
       throw new ConflictError('Only an approved KPI target can be amended');
     }
+    const warningValue =
+      input.warningValue === undefined ? decimalValue(existing.warning_value) : input.warningValue;
+    const criticalValue =
+      input.criticalValue === undefined ? decimalValue(existing.critical_value) : input.criticalValue;
+    assertValidThresholds(existing.direction, input.targetValue, warningValue, criticalValue);
     const now = new Date();
     const replacement = await tx.commercialKpiTarget.create({
       data: {
@@ -258,12 +314,20 @@ export async function amendApprovedTarget(
         status: 'approved',
         currency: existing.currency,
         target_value: new Prisma.Decimal(input.targetValue),
-        warning_value:
-          input.warningValue == null ? null : new Prisma.Decimal(input.warningValue),
-        critical_value:
-          input.criticalValue == null ? null : new Prisma.Decimal(input.criticalValue),
-        lower_bound: input.lowerBound == null ? null : new Prisma.Decimal(input.lowerBound),
-        upper_bound: input.upperBound == null ? null : new Prisma.Decimal(input.upperBound),
+        warning_value: warningValue == null ? null : new Prisma.Decimal(warningValue),
+        critical_value: criticalValue == null ? null : new Prisma.Decimal(criticalValue),
+        lower_bound:
+          input.lowerBound === undefined
+            ? existing.lower_bound
+            : input.lowerBound == null
+              ? null
+              : new Prisma.Decimal(input.lowerBound),
+        upper_bound:
+          input.upperBound === undefined
+            ? existing.upper_bound
+            : input.upperBound == null
+              ? null
+              : new Prisma.Decimal(input.upperBound),
         annual_plan_id: existing.annual_plan_id,
         monthly_item_id: existing.monthly_item_id,
         commercial_plan_id: existing.commercial_plan_id,
@@ -290,6 +354,8 @@ export async function amendApprovedTarget(
       previousTargetId: id,
       reason: input.reason,
       targetValue: replacement.target_value.toString(),
+      warningValue: replacement.warning_value?.toString() ?? null,
+      criticalValue: replacement.critical_value?.toString() ?? null,
     });
     return serializeTarget(replacement);
   });
@@ -579,6 +645,25 @@ function camelCaseCapacity(record: Record<string, unknown>) {
     isAbsolute:
       record.venue_capacity != null && record.sellable_ticket_capacity != null,
   };
+}
+
+function assertValidThresholds(
+  direction: string,
+  targetValue: number,
+  warningValue: number | null | undefined,
+  criticalValue: number | null | undefined,
+): void {
+  const error = thresholdConfigurationError(
+    direction,
+    targetValue,
+    warningValue,
+    criticalValue,
+  );
+  if (error) throw new ValidationError(error);
+}
+
+function decimalValue(value: unknown): number | null {
+  return value == null ? null : Number((value as { toString(): string }).toString());
 }
 
 async function createAudit(
