@@ -309,6 +309,11 @@ test.describe('UX-R1D2 production workspaces', () => {
     await page.goto(`/events/${event.id}`);
     await expect(page.getByRole('heading', { name: 'Event Operations' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'What needs attention today' })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Event workspace views' }).getByRole('button', { name: 'KPIs' }).click();
+    await expect(page.getByRole('heading', { name: 'Performance targets' })).toBeVisible();
+    await expect(page.getByText('Read only')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save capacity' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Create draft target' })).toHaveCount(0);
     await expectNoOverflow(page);
     await expectControlsAreUsable(page);
     await capture(page, 'production-events-mobile', false);
