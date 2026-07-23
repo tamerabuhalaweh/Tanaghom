@@ -19,8 +19,8 @@ const READ_ROLES = [
   'viewer',
 ];
 const CREATE_ROLES = ['admin', 'cco', 'department_head'];
-// Customer policy issue #140 currently reserves final approval for executive authority.
-const APPROVE_ROLES = ['admin', 'cco'];
+// Customer decision, 2026-07-23: final strategy/KPI approval belongs to the CCO.
+const APPROVE_ROLES = ['cco'];
 
 export function checkAnnualPlanningPermission(
   role: string,

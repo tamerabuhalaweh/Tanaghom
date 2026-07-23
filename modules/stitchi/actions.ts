@@ -53,6 +53,11 @@ import {
   reallocateBudgetSchema,
   verifyKpiEvidenceSchema,
 } from '@modules/commercial-budget-reconciliation/types';
+import * as commercialKpiService from '@modules/commercial-kpi-governance/service';
+import {
+  createKpiTargetSchema,
+  eventCapacitySchema,
+} from '@modules/commercial-kpi-governance/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -89,6 +94,8 @@ const SUPPORTED_ACTIONS = [
   'commit_commercial_budget',
   'archive_commercial_budget',
   'review_commercial_spend_evidence',
+  'create_governed_event_kpi_target',
+  'set_event_capacity',
 ] as const;
 
 export type StitchiExecutableActionType = (typeof SUPPORTED_ACTIONS)[number];
@@ -101,6 +108,13 @@ const updateEventStrategyActionSchema = z.object({
 const createEventKpiActionSchema = z.object({
   eventId: z.string().uuid(),
   kpi: createKpiRecordSchema,
+});
+
+const createGovernedEventKpiTargetActionSchema = createKpiTargetSchema;
+
+const setEventCapacityActionSchema = z.object({
+  eventId: z.string().uuid(),
+  capacity: eventCapacitySchema,
 });
 
 const updateLeadStatusActionSchema = z.object({
@@ -227,6 +241,27 @@ export async function executeStitchiAction(input: {
       const payload = createEventKpiActionSchema.parse(input.inputPayload);
       const result = await eventService.createEventKpiRecord(input.role, input.tenantKey, input.userId, payload.eventId, payload.kpi);
       return { objectType: 'event_kpi_record', objectId: result.id, result };
+    }
+    case 'create_governed_event_kpi_target': {
+      const payload = createGovernedEventKpiTargetActionSchema.parse(input.inputPayload);
+      const result = await commercialKpiService.createTarget(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload,
+      );
+      return { objectType: 'commercial_kpi_target', objectId: String(result.id), result };
+    }
+    case 'set_event_capacity': {
+      const payload = setEventCapacityActionSchema.parse(input.inputPayload);
+      const result = await commercialKpiService.setEventCapacity(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.eventId,
+        payload.capacity,
+      );
+      return { objectType: 'commercial_event', objectId: payload.eventId, result };
     }
     case 'update_lead_status': {
       const payload = updateLeadStatusActionSchema.parse(input.inputPayload);

@@ -33,9 +33,10 @@ describe('annual commercial planning policy', () => {
   );
 
   it('reserves approval for current executive authority roles', () => {
-    expect(canApproveAnnualPlanning('admin')).toBe(true);
+    expect(canApproveAnnualPlanning('admin')).toBe(false);
     expect(canApproveAnnualPlanning('cco')).toBe(true);
     expect(canApproveAnnualPlanning('department_head')).toBe(false);
+    expect(() => checkAnnualPlanningPermission('admin', 'annual-plan:approve')).toThrow();
     expect(() => checkAnnualPlanningPermission('department_head', 'annual-plan:approve')).toThrow();
   });
 });

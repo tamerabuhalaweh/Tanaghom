@@ -466,6 +466,8 @@ async function deriveActionProposal(
   if (disciplineProposal) return disciplineProposal;
   if (!eventId) return null;
   const lower = content.toLowerCase();
+  const kpiGovernanceProposal = deriveKpiGovernanceActionProposal(content, lower, eventId);
+  if (kpiGovernanceProposal) return kpiGovernanceProposal;
   const plannerProposal = derivePlannerActionProposal(content, lower, eventId);
   if (plannerProposal) return plannerProposal;
   if (/(problem|risk|blocker|issue|objection|delay|no-show|noshow|مشكلة|تحدي|اعتراض|خطر)/i.test(lower)) {
@@ -520,6 +522,100 @@ async function deriveActionProposal(
   }
 
   return null;
+}
+
+function deriveKpiGovernanceActionProposal(
+  content: string,
+  lower: string,
+  eventId: string,
+): ActionProposal | FollowUpResponse | null {
+  if (/(venue|hall).{0,20}capacity|capacity.{0,20}(venue|hall)|sellable.{0,20}(ticket|capacity)/i.test(lower)) {
+    const venueCapacity = extractMoneyValue(content, ['venue capacity', 'hall capacity', 'capacity']);
+    const sellableTicketCapacity = extractMoneyValue(content, [
+      'sellable ticket capacity',
+      'sellable capacity',
+      'ticket capacity',
+    ]);
+    const source = extractLabelValue(content, ['capacity evidence', 'capacity source', 'source']);
+    const missing = [
+      venueCapacity == null ? 'venue capacity' : null,
+      sellableTicketCapacity == null ? 'sellable ticket capacity' : null,
+      !source ? 'capacity evidence, such as the signed hall agreement' : null,
+    ].filter(Boolean);
+    if (missing.length) {
+      return {
+        kind: 'follow_up',
+        assistantText: `I still need ${missing.join(' and ')}. No capacity value has been changed.`,
+      };
+    }
+    return {
+      actionType: 'set_event_capacity',
+      inputPayload: {
+        eventId,
+        capacity: { venueCapacity, sellableTicketCapacity, source },
+      },
+      previewPayload: {
+        eventId,
+        venueCapacity,
+        sellableTicketCapacity,
+        source,
+        absoluteLimit: true,
+        approvalRequired: true,
+      },
+      riskLevel: 'high',
+      reason: 'set the event venue and sellable ticket capacity',
+    };
+  }
+
+  if (!/(kpi target|performance target|target kpi|cost per lead target|interaction rate target|daily ad spend limit|ticket sales target)/i.test(lower)) {
+    return null;
+  }
+  const presets = [
+    { pattern: /ticket sales/i, metricKey: 'ticket_sales', label: 'Ticket sales target', unit: 'count', direction: 'target', labels: ['ticket sales target', 'ticket target', 'target'] },
+    { pattern: /cost per lead|\bcpl\b/i, metricKey: 'cost_per_lead', label: 'Maximum cost per lead', unit: 'currency', direction: 'maximum', labels: ['cost per lead target', 'cpl target', 'target'] },
+    { pattern: /interaction rate|engagement rate/i, metricKey: 'interaction_rate', label: 'Minimum interaction rate', unit: 'percentage', direction: 'minimum', labels: ['interaction rate target', 'engagement rate target', 'target'] },
+    { pattern: /daily ad spend|daily spend/i, metricKey: 'daily_ad_spend', label: 'Maximum daily ad spend', unit: 'currency', direction: 'maximum', labels: ['daily ad spend limit', 'daily spend target', 'target'] },
+    { pattern: /purchase conversion|conversion rate/i, metricKey: 'purchase_conversion_rate', label: 'Minimum purchase conversion rate', unit: 'percentage', direction: 'minimum', labels: ['purchase conversion rate', 'conversion rate target', 'target'] },
+  ] as const;
+  const preset = presets.find(item => item.pattern.test(lower));
+  if (!preset) {
+    return {
+      kind: 'follow_up',
+      assistantText: 'Which event KPI should I prepare: ticket sales, cost per lead, interaction rate, daily ad spend, or purchase conversion rate?',
+    };
+  }
+  const targetValue = extractMoneyValue(content, [...preset.labels]);
+  if (targetValue == null) {
+    return {
+      kind: 'follow_up',
+      assistantText: `What target value should I use for ${preset.label.toLowerCase()}? No target has been created.`,
+    };
+  }
+  return {
+    actionType: 'create_governed_event_kpi_target',
+    inputPayload: {
+      metricKey: preset.metricKey,
+      label: preset.label,
+      unit: preset.unit,
+      direction: preset.direction,
+      scope: 'event',
+      controlMode: 'adjustable',
+      targetValue,
+      eventId,
+      ...(preset.unit === 'currency' ? { currency: 'AED' } : {}),
+    },
+    previewPayload: {
+      eventId,
+      label: preset.label,
+      targetValue,
+      unit: preset.unit,
+      status: 'draft',
+      approvalRequired: true,
+      ccoControlled: true,
+    },
+    riskLevel: 'high',
+    reason: `create the governed ${preset.label.toLowerCase()} target for this event`,
+  };
 }
 
 async function deriveMonthlyExecutionPlanActionProposal(

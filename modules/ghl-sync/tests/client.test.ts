@@ -25,6 +25,10 @@ describe('LeadConnectorClient', () => {
           phone: '+971500000000',
           source: 'GHL Form',
           tags: ['Hot'],
+          customFields: [
+            { id: 'amount_paid', value: '500' },
+            { fieldKey: 'ticket_quantity', field_value: 2 },
+          ],
         }],
       }))
       .mockResolvedValueOnce(response({
@@ -61,6 +65,10 @@ describe('LeadConnectorClient', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://services.leadconnectorhq.com/opportunities/search?location_id=loc-1&limit=25', expect.objectContaining({ method: 'GET' }));
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://services.leadconnectorhq.com/contacts/contact-1/appointments', expect.objectContaining({ method: 'GET' }));
     expect(result.contacts).toHaveLength(1);
+    expect(result.contacts[0]?.customFields).toEqual({
+      amount_paid: '500',
+      ticket_quantity: 2,
+    });
     expect(result.opportunities).toHaveLength(1);
     expect(result.appointments).toHaveLength(1);
     expect(result.rawReturned).toBe(false);

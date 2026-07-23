@@ -28,6 +28,7 @@ export interface GhlContact {
   phone?: string | null;
   source?: string | null;
   tags: string[];
+  customFields?: Record<string, unknown>;
 }
 
 export interface GhlOpportunity {
@@ -80,6 +81,12 @@ export interface GhlMappedLead {
   stageId: string | null;
   tags: string[];
   purchaseAmount: number | null;
+  saleValue: number | null;
+  amountPaid: number | null;
+  outstandingBalance: number | null;
+  ticketQuantity: number | null;
+  paymentStatus: 'unknown' | 'partial' | 'paid_in_full' | 'refunded' | 'cancelled';
+  paymentSource: string | null;
   purchaseReference: string | null;
   meetingDate: Date | null;
   meetingType: string | null;
@@ -91,6 +98,7 @@ export interface GhlSyncRunSummary {
   id: string;
   tenantKey: string;
   eventId: string | null;
+  attributionMappingId: string | null;
   mode: GhlSyncMode;
   status: GhlSyncStatus;
   sourceOfTruth: 'gohighlevel';

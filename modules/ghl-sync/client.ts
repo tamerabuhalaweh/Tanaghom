@@ -121,6 +121,9 @@ function normalizeContact(input: unknown): GhlContact | null {
   const tags = asArray(record.tags)
     .map(tag => typeof tag === 'string' ? tag : firstString(asRecord(tag), ['name', 'id']))
     .filter((tag): tag is string => Boolean(tag));
+  const customFields = normalizeCustomFields(
+    record.customFields ?? record.custom_fields ?? record.customField,
+  );
   return {
     id,
     firstName: firstString(record, ['firstName', 'first_name']),
@@ -130,7 +133,33 @@ function normalizeContact(input: unknown): GhlContact | null {
     phone: firstString(record, ['phone']),
     source: firstString(record, ['source']),
     tags,
+    customFields,
   };
+}
+
+function normalizeCustomFields(input: unknown): Record<string, unknown> {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    return { ...(input as Record<string, unknown>) };
+  }
+  const result: Record<string, unknown> = {};
+  for (const item of asArray(input)) {
+    const field = asRecord(item);
+    const key = firstString(field, [
+      'id',
+      'key',
+      'fieldKey',
+      'field_key',
+      'fieldId',
+      'field_id',
+      'name',
+    ]);
+    if (!key) continue;
+    const valueKey = ['value', 'field_value', 'fieldValue'].find((candidate) =>
+      Object.prototype.hasOwnProperty.call(field, candidate),
+    );
+    result[key] = valueKey ? field[valueKey] : null;
+  }
+  return result;
 }
 
 function normalizeOpportunity(input: unknown): GhlOpportunity | null {

@@ -1332,6 +1332,93 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('prepares an approval-gated absolute venue capacity update with evidence', async () => {
+    const result = await orchestrateStitchiMessage(
+      'cco',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Set hall capacity: 500. Sellable ticket capacity: 480. Capacity source: signed Dubai venue agreement.',
+      },
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'cco',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'set_event_capacity',
+        inputPayload: expect.objectContaining({
+          eventId: '00000000-0000-0000-0000-000000000001',
+          capacity: {
+            venueCapacity: 500,
+            sellableTicketCapacity: 480,
+            source: 'signed Dubai venue agreement.',
+          },
+        }),
+        riskLevel: 'high',
+      }),
+    );
+  });
+
+  it('asks for capacity evidence before preparing a venue-capacity write', async () => {
+    const result = await orchestrateStitchiMessage(
+      'cco',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Set hall capacity: 500 and sellable ticket capacity: 480.',
+      },
+    );
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'cco',
+      'conversation-1',
+      expect.stringContaining('capacity evidence'),
+      expect.any(Object),
+    );
+  });
+
+  it('prepares a governed ticket-sales target below the separate capacity ceiling', async () => {
+    const result = await orchestrateStitchiMessage(
+      'cco',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Create ticket sales target: 400 for this event.',
+      },
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'cco',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_governed_event_kpi_target',
+        inputPayload: expect.objectContaining({
+          metricKey: 'ticket_sales',
+          label: 'Ticket sales target',
+          direction: 'target',
+          targetValue: 400,
+          controlMode: 'adjustable',
+        }),
+        riskLevel: 'high',
+      }),
+    );
+  });
+
   it('accepts an explicit date range and scoped evidence identifiers', async () => {
     const eventId = '00000000-0000-0000-0000-000000000941';
     const campaignId = '00000000-0000-0000-0000-000000000942';

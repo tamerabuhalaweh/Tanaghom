@@ -1,8 +1,10 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type GhlPlanAttributionMapping } from '@prisma/client';
 import { prisma } from '@shared/database';
 import { ExternalServiceError, NotFoundError } from '@shared/errors';
 import { getActiveIntegrationCredential } from '../integration-credentials/service';
 import { getGhlMappingReadiness } from '../ghl-setup/repository';
+import { getApprovedMappingForEvent } from '../ghl-plan-attribution/repository';
+import { evaluateGhlAttribution, readGhlCustomField } from '../ghl-plan-attribution/matcher';
 import { buildGhlMappingSet, countMappedStages, countMappedTags, mapGhlLead } from './mapper';
 import type { GhlClient } from './client';
 import type {
@@ -71,10 +73,11 @@ export async function resolveGhlSyncRuntimeConfig(tenantKey: string): Promise<Gh
 
 export async function getGhlSyncStatus(tenantKey: string, eventId?: string): Promise<GhlSyncStatusSummary> {
   if (eventId) await assertEventOwnedByTenant(tenantKey, eventId);
-  const [config, mappings, mappingReadiness, lastRun, ghlLeadCount] = await Promise.all([
+  const [config, mappings, mappingReadiness, attributionMapping, lastRun, ghlLeadCount] = await Promise.all([
     resolveGhlSyncRuntimeConfig(tenantKey),
     getMappingRecords(tenantKey),
     getGhlMappingReadiness(tenantKey),
+    eventId ? getApprovedMappingForEvent(tenantKey, eventId) : Promise.resolve(null),
     prisma.ghlLeadSyncRun.findFirst({
       where: { tenant_key: tenantKey, event_id: eventId || undefined },
       orderBy: { started_at: 'desc' },
@@ -89,6 +92,9 @@ export async function getGhlSyncStatus(tenantKey: string, eventId?: string): Pro
   ]);
 
   const mappingBlockers = productionMappingBlockers(mappingReadiness);
+  if (eventId && !attributionMapping) {
+    mappingBlockers.push('Approve a plan-specific GHL attribution mapping for this event.');
+  }
   const mappingStatus = summarizeProductionMappingStatus(mappings, mappingReadiness, mappingBlockers);
   const readSyncEnabled = process.env.GHL_READ_SYNC_ENABLED === 'true';
   const writeBackEnabled = process.env.GHL_WRITE_BACK_ENABLED === 'true';
@@ -208,7 +214,15 @@ export async function syncPull(
   const now = new Date();
   const upserted: GhlMappedLead[] = [];
   for (const mappedLead of result.contacts) {
-    await upsertGhlLeadMirror(tenantKey, userId, agentRepId, eventId, mappedLead, now);
+    await upsertGhlLeadMirror(
+      tenantKey,
+      userId,
+      agentRepId,
+      eventId,
+      result.attributionMapping,
+      mappedLead,
+      now,
+    );
     upserted.push(mappedLead);
   }
   const run = await prisma.ghlLeadSyncRun.update({
@@ -217,6 +231,8 @@ export async function syncPull(
       status: 'synced',
       leads_upserted: upserted.length,
       appointments_pulled: result.run.appointmentsPulled,
+      attribution_mapping_id: result.run.attributionMappingId,
+      warnings: result.run.warnings,
       completed_at: now,
     },
   });
@@ -230,17 +246,26 @@ async function pullInternal(
   limit: number,
   mode: Extract<GhlSyncMode, 'pull_preview' | 'pull_sync'>,
   clientFactory: (config: GhlRuntimeConfig) => GhlClient,
-): Promise<{ run: GhlSyncRunSummary; contacts: GhlMappedLead[]; pull: GhlPullResult }> {
+): Promise<{
+  run: GhlSyncRunSummary;
+  contacts: GhlMappedLead[];
+  pull: GhlPullResult;
+  attributionMapping: GhlPlanAttributionMapping | null;
+}> {
   if (eventId) await assertEventOwnedByTenant(tenantKey, eventId);
-  const config = await resolveGhlSyncRuntimeConfig(tenantKey);
-  const mappings = await getMappingRecords(tenantKey);
-  const mappingReadiness = await getGhlMappingReadiness(tenantKey);
+  const [config, mappings, mappingReadiness, attributionMapping] = await Promise.all([
+    resolveGhlSyncRuntimeConfig(tenantKey),
+    getMappingRecords(tenantKey),
+    getGhlMappingReadiness(tenantKey),
+    eventId ? getApprovedMappingForEvent(tenantKey, eventId) : Promise.resolve(null),
+  ]);
   const mappingSet = buildGhlMappingSet(mappings);
   const mappingBlockers = productionMappingBlockers(mappingReadiness);
   const startedAt = new Date();
   const baseRun = {
     tenant_key: tenantKey,
     event_id: eventId || null,
+    attribution_mapping_id: attributionMapping?.id || null,
     mode,
     source_of_truth: 'gohighlevel' as const,
     created_by_user_id: userId,
@@ -260,7 +285,12 @@ async function pullInternal(
         completed_at: completedAt,
       },
     });
-    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
+    return {
+      run: mapRun(run),
+      contacts: [],
+      pull: emptyPull(),
+      attributionMapping,
+    };
   }
 
   if (mappingBlockers.length > 0) {
@@ -274,7 +304,50 @@ async function pullInternal(
         completed_at: completedAt,
       },
     });
-    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
+    return {
+      run: mapRun(run),
+      contacts: [],
+      pull: emptyPull(),
+      attributionMapping,
+    };
+  }
+
+  if (eventId && !attributionMapping) {
+    const completedAt = new Date();
+    const run = await prisma.ghlLeadSyncRun.create({
+      data: {
+        ...baseRun,
+        status: 'mapping_required',
+        errors: ['Approve a plan-specific GHL attribution mapping for this event.'],
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: completedAt,
+      },
+    });
+    return {
+      run: mapRun(run),
+      contacts: [],
+      pull: emptyPull(),
+      attributionMapping: null,
+    };
+  }
+
+  if (attributionMapping && attributionMapping.location_id !== config.locationId) {
+    const completedAt = new Date();
+    const run = await prisma.ghlLeadSyncRun.create({
+      data: {
+        ...baseRun,
+        status: 'mapping_required',
+        errors: ['The approved plan attribution mapping belongs to a different GHL location.'],
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: completedAt,
+      },
+    });
+    return {
+      run: mapRun(run),
+      contacts: [],
+      pull: emptyPull(),
+      attributionMapping,
+    };
   }
 
   if (process.env.GHL_READ_SYNC_ENABLED !== 'true') {
@@ -288,20 +361,43 @@ async function pullInternal(
         completed_at: completedAt,
       },
     });
-    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
+    return {
+      run: mapRun(run),
+      contacts: [],
+      pull: emptyPull(),
+      attributionMapping,
+    };
   }
 
   try {
     const pull = await clientFactory(config).pull(limit);
-    const mapped = pull.contacts.map(contact => mapGhlLead(
-      contact,
-      pull.opportunities.filter(opportunity => opportunity.contactId === contact.id),
-      pull.appointments.filter(appointment => appointment.contactId === contact.id),
+    const attribution = filterPullByAttribution(pull, attributionMapping);
+    const mapped = attribution.contacts.map((contact) => {
+      const contactOpportunities = pull.opportunities.filter(
+        (opportunity) => opportunity.contactId === contact.id,
+      );
+      const mappedLead = mapGhlLead(
+        contact,
+        contactOpportunities,
+        pull.appointments.filter((appointment) => appointment.contactId === contact.id),
+        mappingSet,
+      );
+      return applyPaymentEvidence(mappedLead, contact.customFields ?? {}, attributionMapping);
+    });
+    const tagsMapped = attribution.contacts.reduce(
+      (total, contact) => total + countMappedTags(contact, mappingSet),
+      0,
+    );
+    const matchedContactIds = new Set(attribution.contacts.map((contact) => contact.id));
+    const stagesMapped = countMappedStages(
+      pull.opportunities.filter((opportunity) => matchedContactIds.has(opportunity.contactId)),
       mappingSet,
-    ));
-    const tagsMapped = pull.contacts.reduce((total, contact) => total + countMappedTags(contact, mappingSet), 0);
-    const stagesMapped = countMappedStages(pull.opportunities, mappingSet);
-    const warnings = [...pull.warnings];
+    );
+    const warnings = [
+      ...pull.warnings,
+      ...attribution.warnings,
+      ...unresolvedPaymentWarnings(attributionMapping),
+    ];
     const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
       data: {
@@ -317,7 +413,7 @@ async function pullInternal(
         completed_at: mode === 'pull_preview' ? completedAt : null,
       },
     });
-    return { run: mapRun(run), contacts: mapped, pull };
+    return { run: mapRun(run), contacts: mapped, pull, attributionMapping };
   } catch (err) {
     const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
@@ -329,7 +425,12 @@ async function pullInternal(
         completed_at: completedAt,
       },
     });
-    return { run: mapRun(run), contacts: [], pull: { contacts: [], opportunities: [], appointments: [], warnings: [], rawReturned: false } };
+    return {
+      run: mapRun(run),
+      contacts: [],
+      pull: emptyPull(),
+      attributionMapping,
+    };
   }
 }
 
@@ -451,6 +552,7 @@ async function upsertGhlLeadMirror(
   userId: string,
   agentRepId: string,
   eventId: string | undefined,
+  attributionMapping: GhlPlanAttributionMapping | null,
   mappedLead: GhlMappedLead,
   syncedAt: Date,
 ): Promise<void> {
@@ -475,6 +577,17 @@ async function upsertGhlLeadMirror(
     lead_email_placeholder: mappedLead.leadEmail,
     lead_phone_placeholder: mappedLead.leadPhone,
     purchase_amount: mappedLead.purchaseAmount == null ? null : new Prisma.Decimal(mappedLead.purchaseAmount),
+    payment_status: mappedLead.paymentStatus,
+    sale_value: mappedLead.saleValue == null ? null : new Prisma.Decimal(mappedLead.saleValue),
+    amount_paid: mappedLead.amountPaid == null ? null : new Prisma.Decimal(mappedLead.amountPaid),
+    outstanding_balance:
+      mappedLead.outstandingBalance == null
+        ? null
+        : new Prisma.Decimal(mappedLead.outstandingBalance),
+    ticket_quantity: mappedLead.ticketQuantity,
+    payment_source: mappedLead.paymentSource,
+    commercial_plan_id: attributionMapping?.commercial_plan_id || existing?.commercial_plan_id || null,
+    ghl_attribution_mapping_id: attributionMapping?.id || existing?.ghl_attribution_mapping_id || null,
     purchase_reference: mappedLead.purchaseReference,
     meeting_date: mappedLead.meetingDate,
     meeting_type: mappedLead.meetingType,
@@ -598,6 +711,130 @@ function durationMs(startedAt: Date, completedAt: Date): number {
   return Math.max(0, completedAt.getTime() - startedAt.getTime());
 }
 
+function emptyPull(): GhlPullResult {
+  return {
+    contacts: [],
+    opportunities: [],
+    appointments: [],
+    warnings: [],
+    rawReturned: false,
+  };
+}
+
+function filterPullByAttribution(
+  pull: GhlPullResult,
+  mapping: GhlPlanAttributionMapping | null,
+): { contacts: GhlPullResult['contacts']; warnings: string[] } {
+  if (!mapping) return { contacts: pull.contacts, warnings: [] };
+  const missingCustomFields = new Set<string>();
+  const contacts = pull.contacts.filter((contact) => {
+    const evaluation = evaluateGhlAttribution(mapping, {
+      pipelineIds: pull.opportunities
+        .filter((opportunity) => opportunity.contactId === contact.id)
+        .map((opportunity) => opportunity.pipelineId || '')
+        .filter(Boolean),
+      tags: contact.tags,
+      source: contact.source ?? null,
+      customFields: contact.customFields ?? {},
+    });
+    evaluation.missingCustomFields.forEach((field) => missingCustomFields.add(field));
+    return evaluation.matched;
+  });
+  const warnings: string[] = [];
+  const excluded = pull.contacts.length - contacts.length;
+  if (excluded > 0) {
+    warnings.push(
+      `${excluded} GHL contact(s) were excluded because they did not match the approved plan attribution rules.`,
+    );
+  }
+  if (missingCustomFields.size > 0) {
+    warnings.push(
+      `GHL did not return configured attribution field(s): ${Array.from(missingCustomFields).sort().join(', ')}.`,
+    );
+  }
+  return { contacts, warnings };
+}
+
+function applyPaymentEvidence(
+  mappedLead: GhlMappedLead,
+  customFields: Record<string, unknown>,
+  mapping: GhlPlanAttributionMapping | null,
+): GhlMappedLead {
+  if (!mapping) return mappedLead;
+  const configuredSaleValue = nonNegativeNumber(
+    readGhlCustomField(customFields, mapping.sale_value_field),
+  );
+  const amountPaid = nonNegativeNumber(
+    readGhlCustomField(customFields, mapping.payment_amount_field),
+  );
+  const ticketQuantity = positiveInteger(
+    readGhlCustomField(customFields, mapping.ticket_quantity_field),
+  );
+  const saleValue = configuredSaleValue ?? mappedLead.saleValue;
+  const explicitPaymentStatus = normalizePaymentStatus(
+    readGhlCustomField(customFields, mapping.payment_status_field),
+  );
+  const paymentStatus =
+    explicitPaymentStatus ??
+    (mappedLead.leadStatus === 'purchased' && amountPaid !== null
+      ? saleValue !== null && amountPaid >= saleValue
+        ? 'paid_in_full'
+        : amountPaid > 0
+          ? 'partial'
+          : 'unknown'
+      : 'unknown');
+  return {
+    ...mappedLead,
+    saleValue,
+    amountPaid,
+    outstandingBalance:
+      saleValue !== null && amountPaid !== null ? Math.max(0, saleValue - amountPaid) : null,
+    ticketQuantity,
+    paymentStatus,
+    paymentSource: mappedLead.leadStatus === 'purchased' ? 'gohighlevel' : null,
+  };
+}
+
+function nonNegativeNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function positiveInteger(value: unknown): number | null {
+  const parsed = nonNegativeNumber(value);
+  return parsed !== null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizePaymentStatus(
+  value: unknown,
+): GhlMappedLead['paymentStatus'] | null {
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (['partial', 'partially_paid', 'deposit_paid'].includes(normalized)) return 'partial';
+  if (['paid', 'paid_in_full', 'fully_paid', 'complete'].includes(normalized)) {
+    return 'paid_in_full';
+  }
+  if (['refunded', 'refund'].includes(normalized)) return 'refunded';
+  if (['cancelled', 'canceled'].includes(normalized)) return 'cancelled';
+  return null;
+}
+
+function unresolvedPaymentWarnings(mapping: GhlPlanAttributionMapping | null): string[] {
+  if (!mapping) return [];
+  const warnings: string[] = [];
+  if (!mapping.payment_amount_field) {
+    warnings.push(
+      'Customer payment amount field is not defined; amount paid and outstanding balance remain unknown.',
+    );
+  }
+  if (!mapping.ticket_quantity_field) {
+    warnings.push(
+      'Customer ticket quantity field is not defined; imported ticket quantity remains unknown.',
+    );
+  }
+  return warnings;
+}
+
 function outboundTagsForLead(status: string, temperature: string, mappings: Array<{ field_mappings: unknown; validation_status: string }>): string[] {
   const tags = new Set<string>();
   for (const mapping of mappings) {
@@ -617,6 +854,7 @@ function mapRun(run: {
   id: string;
   tenant_key: string;
   event_id: string | null;
+  attribution_mapping_id?: string | null;
   mode: GhlSyncMode;
   status: GhlSyncStatus;
   contacts_pulled: number;
@@ -638,6 +876,7 @@ function mapRun(run: {
     id: run.id,
     tenantKey: run.tenant_key,
     eventId: run.event_id,
+    attributionMappingId: run.attribution_mapping_id ?? null,
     mode: run.mode,
     status: run.status,
     sourceOfTruth: 'gohighlevel',
