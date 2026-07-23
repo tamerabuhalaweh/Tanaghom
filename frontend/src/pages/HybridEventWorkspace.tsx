@@ -994,6 +994,8 @@ export default function HybridEventWorkspace() {
         <>
           <EventContext events={events} selectedEventId={selectedEventId} event={event} sourceStatus={sourceStatus} ghlStatus={ghlStatus} onSelect={selectEvent} />
 
+          <div className="event-workspace-toolbar"><WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} /><button className="ops-text-button" type="button" onClick={() => navigate('/events/master')}>Open event portfolio</button></div>
+
           <section className="r1d2-summary-grid event-summary" aria-label="Event operating summary">
             <EventSummaryMetric label="Next action" value={text(nextActions[0]?.title, 'Review event plan')} detail={text(nextActions[0]?.priority, 'Normal priority')} icon={Target} tone={nextActions.length ? 'warning' : 'neutral'} />
             <EventSummaryMetric label="New leads" value={numberValue(kpis.newLeads || kpis.capturedLeads).toLocaleString()} detail={`${salesLeads.length} lead records`} icon={UsersRound} tone={numberValue(kpis.newLeads || kpis.capturedLeads) ? 'positive' : 'neutral'} />
@@ -1001,8 +1003,6 @@ export default function HybridEventWorkspace() {
             <EventSummaryMetric label="Purchases" value={numberValue(kpis.purchases).toLocaleString()} detail={`${percent(kpis.noShowRate)} no-show rate`} icon={CheckCircle2} tone={numberValue(kpis.purchases) ? 'positive' : 'neutral'} />
             <EventSummaryMetric label="Known spend" value={money(kpis.actualSpend)} detail={`${money(kpis.budgetVariance)} budget variance`} icon={BarChart3} />
           </section>
-
-          <div className="event-workspace-toolbar"><WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} /><button className="ops-text-button" type="button" onClick={() => navigate('/events/master')}>Open event portfolio</button></div>
 
           {activeTab === 'overview' ? <OverviewTab kpis={kpis} nextActions={nextActions} sourceStatus={sourceStatus} problemDashboard={problemDashboard} onNavigate={setActiveTab} /> : null}
           {activeTab === 'strategy' ? <StrategyTab event={event} emailPlans={emailPlans} whatsappPlans={whatsappPlans} upsellPlans={upsellPlans} contentRequirements={contentRequirements} salesTasks={salesTasks} navigate={navigate} /> : null}
