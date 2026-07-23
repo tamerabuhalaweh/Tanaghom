@@ -591,6 +591,20 @@ function deriveKpiGovernanceActionProposal(
       assistantText: `What target value should I use for ${preset.label.toLowerCase()}? No target has been created.`,
     };
   }
+  const usesThresholds = preset.direction === 'minimum' || preset.direction === 'maximum';
+  const warningValue = usesThresholds
+    ? extractMoneyValue(content, ['warning threshold', 'warning at', 'warning value'])
+    : null;
+  const criticalValue = usesThresholds
+    ? extractMoneyValue(content, ['critical threshold', 'critical at', 'critical value'])
+    : null;
+  if (usesThresholds && (warningValue == null || criticalValue == null)) {
+    const directionText = preset.direction === 'maximum' ? 'at or above' : 'at or below';
+    return {
+      kind: 'follow_up',
+      assistantText: `What warning and critical values should apply ${directionText} for ${preset.label.toLowerCase()}? Both thresholds require CCO approval, and I will not invent them.`,
+    };
+  }
   return {
     actionType: 'create_governed_event_kpi_target',
     inputPayload: {
@@ -601,6 +615,7 @@ function deriveKpiGovernanceActionProposal(
       scope: 'event',
       controlMode: 'adjustable',
       targetValue,
+      ...(usesThresholds ? { warningValue, criticalValue } : {}),
       eventId,
       ...(preset.unit === 'currency' ? { currency: 'AED' } : {}),
     },
@@ -608,6 +623,7 @@ function deriveKpiGovernanceActionProposal(
       eventId,
       label: preset.label,
       targetValue,
+      ...(usesThresholds ? { warningValue, criticalValue } : {}),
       unit: preset.unit,
       status: 'draft',
       approvalRequired: true,

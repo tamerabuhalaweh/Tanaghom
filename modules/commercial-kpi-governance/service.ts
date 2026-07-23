@@ -24,6 +24,15 @@ export async function listEffectiveEventTargets(
   return repo.listEffectiveEventTargets(tenantKey, eventId);
 }
 
+export async function evaluateEventTargets(
+  role: string,
+  tenantKey: string,
+  eventId: string,
+) {
+  checkKpiGovernancePermission(role, 'commercial-kpi:read');
+  return repo.evaluateEventTargets(tenantKey, eventId);
+}
+
 export async function createTarget(
   role: string,
   tenantKey: string,

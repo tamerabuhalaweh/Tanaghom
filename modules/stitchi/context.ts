@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
 import {
+  evaluateEventTargets,
   getEventCapacity,
   listEffectiveEventTargets,
 } from '../commercial-kpi-governance/repository';
@@ -67,6 +68,21 @@ export interface StitchiReadOnlyContext {
     }>;
     inheritedTargets: number;
     eventSpecificTargets: number;
+    dailyEvaluation: {
+      onTrack: number;
+      warning: number;
+      critical: number;
+      thresholdsMissing: number;
+      actualUnavailable: number;
+      latestEvidenceAt: Date | null;
+      targets: Array<{
+        label: string;
+        status: string;
+        actualValue: number | null;
+        targetValue: number;
+        reason: string;
+      }>;
+    };
     ghlAttribution: {
       mappingCount: number;
       approvedMappingId: string | null;
@@ -916,6 +932,15 @@ function emptyGovernedPerformanceContext(): StitchiReadOnlyContext['governedPerf
     effectiveTargets: [],
     inheritedTargets: 0,
     eventSpecificTargets: 0,
+    dailyEvaluation: {
+      onTrack: 0,
+      warning: 0,
+      critical: 0,
+      thresholdsMissing: 0,
+      actualUnavailable: 0,
+      latestEvidenceAt: null,
+      targets: [],
+    },
     ghlAttribution: {
       mappingCount: 0,
       approvedMappingId: null,
@@ -931,9 +956,10 @@ async function loadGovernedPerformanceContext(
   tenantKey: string,
   eventId: string,
 ): Promise<StitchiReadOnlyContext['governedPerformance']> {
-  const [capacity, targets, mappings] = await Promise.all([
+  const [capacity, targets, evaluation, mappings] = await Promise.all([
     getEventCapacity(tenantKey, eventId),
     listEffectiveEventTargets(tenantKey, eventId),
+    evaluateEventTargets(tenantKey, eventId),
     listGhlAttributionMappings(tenantKey, { eventId }),
   ]);
   const approvedMapping = mappings.find((mapping) => String(mapping.status) === 'approved') || null;
@@ -988,6 +1014,21 @@ async function loadGovernedPerformanceContext(
     eventSpecificTargets: effectiveTargets.filter(
       (target) => target.appliedAs === 'event_specific',
     ).length,
+    dailyEvaluation: {
+      onTrack: evaluation.summary.onTrack,
+      warning: evaluation.summary.warning,
+      critical: evaluation.summary.critical,
+      thresholdsMissing: evaluation.summary.thresholdsMissing,
+      actualUnavailable: evaluation.summary.actualUnavailable,
+      latestEvidenceAt: evaluation.latestEvidenceAt,
+      targets: evaluation.evaluations.map((item) => ({
+        label: item.label,
+        status: item.status,
+        actualValue: item.actualValue,
+        targetValue: item.targetValue,
+        reason: item.reason,
+      })),
+    },
     ghlAttribution: {
       mappingCount: mappings.length,
       approvedMappingId: approvedMapping ? String(approvedMapping.id) : null,

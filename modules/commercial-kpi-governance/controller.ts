@@ -36,6 +36,17 @@ commercialKpiGovernanceRouter.get('/events/:eventId/effective', route(async (req
   );
 }));
 
+commercialKpiGovernanceRouter.get('/events/:eventId/evaluation', route(async (req, res) => {
+  const auth = context(req);
+  res.json(
+    await service.evaluateEventTargets(
+      auth.role,
+      auth.tenantKey,
+      String(req.params.eventId),
+    ),
+  );
+}));
+
 commercialKpiGovernanceRouter.post('/', route(async (req, res) => {
   const auth = context(req);
   res.status(201).json(

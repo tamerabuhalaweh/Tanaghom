@@ -48,6 +48,7 @@ const ghlSyncMocks = vi.hoisted(() => ({
 }));
 
 const kpiGovernanceMocks = vi.hoisted(() => ({
+  evaluateEventTargets: vi.fn(),
   getEventCapacity: vi.fn(),
   listEffectiveEventTargets: vi.fn(),
 }));
@@ -222,6 +223,35 @@ describe('Stitchi read-only context loader', () => {
         appliedAs: 'event_specific',
       },
     ]);
+    kpiGovernanceMocks.evaluateEventTargets.mockResolvedValue({
+      eventId: 'event-1',
+      evaluatedAt: new Date('2026-07-08T12:00:00Z'),
+      latestEvidenceAt: new Date('2026-07-08T10:00:00Z'),
+      summary: {
+        total: 2,
+        onTrack: 0,
+        warning: 1,
+        critical: 0,
+        thresholdsMissing: 0,
+        actualUnavailable: 1,
+      },
+      evaluations: [
+        {
+          label: 'Maximum cost per lead',
+          status: 'warning',
+          actualValue: 52,
+          targetValue: 40,
+          reason: 'Actual performance reached the approved warning ceiling.',
+        },
+        {
+          label: 'Ticket sales target',
+          status: 'actual_unavailable',
+          actualValue: null,
+          targetValue: 400,
+          reason: 'Customer-approved GHL ticket-quantity mapping is required.',
+        },
+      ],
+    });
     ghlAttributionMocks.listMappings.mockResolvedValue([
       {
         id: 'mapping-1',
@@ -310,6 +340,11 @@ describe('Stitchi read-only context loader', () => {
         venueCapacity: 500,
         sellableTicketCapacity: 480,
         isAbsolute: true,
+      },
+      dailyEvaluation: {
+        warning: 1,
+        actualUnavailable: 1,
+        latestEvidenceAt: new Date('2026-07-08T10:00:00Z'),
       },
       ghlAttribution: {
         mappingCount: 1,

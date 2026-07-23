@@ -1419,6 +1419,58 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('asks for CCO warning and critical thresholds instead of inventing them', async () => {
+    const result = await orchestrateStitchiMessage(
+      'cco',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Create a cost per lead KPI. Cost per lead target: 40 AED.',
+      },
+    );
+
+    expect(result.status).toBe('answered');
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'cco',
+      'conversation-1',
+      expect.stringContaining('warning and critical values'),
+      expect.any(Object),
+    );
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+  });
+
+  it('prepares a threshold-complete KPI action for CCO approval', async () => {
+    const result = await orchestrateStitchiMessage(
+      'cco',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Create cost per lead target: 40. Warning at: 45. Critical at: 60.',
+      },
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'cco',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_governed_event_kpi_target',
+        inputPayload: expect.objectContaining({
+          metricKey: 'cost_per_lead',
+          targetValue: 40,
+          warningValue: 45,
+          criticalValue: 60,
+        }),
+      }),
+    );
+  });
+
   it('accepts an explicit date range and scoped evidence identifiers', async () => {
     const eventId = '00000000-0000-0000-0000-000000000941';
     const campaignId = '00000000-0000-0000-0000-000000000942';

@@ -220,6 +220,7 @@ function useEventWorkspaceData() {
   const [learningSummary, setLearningSummary] = useState<RecordMap | null>(null);
   const [governedTargets, setGovernedTargets] = useState<RecordMap[]>([]);
   const [eventCapacity, setEventCapacity] = useState<RecordMap | null>(null);
+  const [kpiEvaluation, setKpiEvaluation] = useState<RecordMap | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(Boolean(token));
 
@@ -250,6 +251,7 @@ function useEventWorkspaceData() {
         setLearningSummary(null);
         setGovernedTargets([]);
         setEventCapacity(null);
+        setKpiEvaluation(null);
         return;
       }
 
@@ -271,7 +273,9 @@ function useEventWorkspaceData() {
         closeoutData,
         learningData,
         governedTargetData,
+        directTargetData,
         eventCapacityData,
+        kpiEvaluationData,
       ] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
@@ -286,7 +290,9 @@ function useEventWorkspaceData() {
         eventCloseoutApi.report(nextEventId, token).catch(() => null),
         learningRecommendationsApi.forEvent(nextEventId, token).catch(() => null),
         commercialKpiApi.effectiveEventTargets(nextEventId, token).catch(() => []),
+        commercialKpiApi.list(token, { eventId: nextEventId }).catch(() => []),
         commercialKpiApi.eventCapacity(nextEventId, token).catch(() => null),
+        commercialKpiApi.eventEvaluation(nextEventId, token).catch(() => null),
       ]);
 
       setDashboard(dashboardData as RecordMap);
@@ -302,8 +308,16 @@ function useEventWorkspaceData() {
       setGhlStatus(ghlData as RecordMap);
       setCloseoutReport(closeoutData as RecordMap | null);
       setLearningSummary(learningData as RecordMap | null);
-      setGovernedTargets(list(governedTargetData));
+      const mergedTargets = new Map<string, RecordMap>();
+      for (const target of list(governedTargetData)) {
+        mergedTargets.set(String(target.id), target);
+      }
+      for (const target of list(directTargetData)) {
+        mergedTargets.set(String(target.id), { ...target, appliedAs: 'event_specific' });
+      }
+      setGovernedTargets([...mergedTargets.values()]);
       setEventCapacity(eventCapacityData as RecordMap | null);
+      setKpiEvaluation(kpiEvaluationData as RecordMap | null);
     } catch (error) {
       setMessage(`Workspace failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -339,6 +353,7 @@ function useEventWorkspaceData() {
     learningSummary,
     governedTargets,
     eventCapacity,
+    kpiEvaluation,
     message,
     loading,
     load,
@@ -487,6 +502,7 @@ function KpisTab({
   kpiRecords,
   governedTargets,
   eventCapacity,
+  kpiEvaluation,
   eventId,
   token,
   canManage,
@@ -499,6 +515,7 @@ function KpisTab({
   kpiRecords: RecordMap[];
   governedTargets: RecordMap[];
   eventCapacity: RecordMap | null;
+  kpiEvaluation: RecordMap | null;
   eventId: string;
   token: string | null;
   canManage: boolean;
@@ -507,6 +524,8 @@ function KpisTab({
 }) {
   const [targetPreset, setTargetPreset] = useState<string>(EVENT_KPI_PRESETS[0].metricKey);
   const [targetValue, setTargetValue] = useState('');
+  const [warningValue, setWarningValue] = useState('');
+  const [criticalValue, setCriticalValue] = useState('');
   const [venueCapacity, setVenueCapacity] = useState(
     eventCapacity?.venueCapacity == null ? '' : String(eventCapacity.venueCapacity),
   );
@@ -520,6 +539,11 @@ function KpisTab({
   const [feedback, setFeedback] = useState('');
   const inheritedTargets = governedTargets.filter(target => text(target.appliedAs, '') === 'inherited');
   const eventTargets = governedTargets.filter(target => text(target.appliedAs, '') === 'event_specific');
+  const evaluations = list(kpiEvaluation?.evaluations);
+  const evaluationByTarget = new Map(evaluations.map(item => [String(item.targetId), item]));
+  const evaluationSummary = (kpiEvaluation?.summary || {}) as RecordMap;
+  const selectedPreset = EVENT_KPI_PRESETS.find(item => item.metricKey === targetPreset);
+  const usesThresholds = selectedPreset?.direction === 'minimum' || selectedPreset?.direction === 'maximum';
 
   async function saveCapacity() {
     if (!token) return;
@@ -553,9 +577,17 @@ function KpisTab({
         controlMode: 'adjustable',
         targetValue: Number(targetValue),
         eventId,
+        ...(usesThresholds
+          ? {
+              warningValue: Number(warningValue),
+              criticalValue: Number(criticalValue),
+            }
+          : {}),
         ...(preset.unit === 'currency' ? { currency: 'AED' } : {}),
       }, token);
       setTargetValue('');
+      setWarningValue('');
+      setCriticalValue('');
       await onRefresh();
       setFeedback('Event KPI target created as a draft. Submit it for CCO approval when ready.');
     } catch (error) {
@@ -606,7 +638,11 @@ function KpisTab({
               <span>{inheritedTargets.length}</span>
             </div>
             {inheritedTargets.length ? inheritedTargets.map(target => (
-              <TargetRow key={String(target.id)} target={target} />
+              <TargetRow
+                key={String(target.id)}
+                target={target}
+                evaluation={evaluationByTarget.get(String(target.id))}
+              />
             )) : (
               <p className="event-kpi-empty">No approved annual strategy targets are linked to this event yet.</p>
             )}
@@ -621,6 +657,7 @@ function KpisTab({
               <TargetRow
                 key={String(target.id)}
                 target={target}
+                evaluation={evaluationByTarget.get(String(target.id))}
                 action={canManage && text(target.status) === 'draft'
                   ? <button type="button" onClick={() => void transitionTarget(target, 'submit')} disabled={saving === String(target.id)}>Submit</button>
                   : canManage && text(target.status) === 'pending_approval'
@@ -631,6 +668,19 @@ function KpisTab({
               <p className="event-kpi-empty">No approved event-specific target exists yet.</p>
             )}
           </div>
+        </div>
+
+        <div className="event-kpi-monitoring" aria-label="Daily target monitoring">
+          <div>
+            <strong>Daily monitoring</strong>
+            <span>Only verified event evidence is compared with CCO-approved thresholds.</span>
+          </div>
+          <dl>
+            <div><dt>On track</dt><dd>{numberValue(evaluationSummary.onTrack)}</dd></div>
+            <div><dt>Warning</dt><dd>{numberValue(evaluationSummary.warning)}</dd></div>
+            <div><dt>Critical</dt><dd>{numberValue(evaluationSummary.critical)}</dd></div>
+            <div><dt>Needs setup/data</dt><dd>{numberValue(evaluationSummary.thresholdsMissing) + numberValue(evaluationSummary.actualUnavailable)}</dd></div>
+          </dl>
         </div>
 
         {canManage ? (
@@ -648,6 +698,14 @@ function KpisTab({
               <p>Create an adjustable event control. It stays draft until approved.</p>
               <label>KPI<select value={targetPreset} onChange={event => setTargetPreset(event.target.value)}>{EVENT_KPI_PRESETS.map(item => <option key={item.metricKey} value={item.metricKey}>{item.label}</option>)}</select></label>
               <label>Target value<input type="number" min="0" step="0.01" required value={targetValue} onChange={event => setTargetValue(event.target.value)} /></label>
+              {usesThresholds ? (
+                <div className="event-kpi-threshold-fields">
+                  <label>{selectedPreset?.direction === 'maximum' ? 'Warning at or above' : 'Warning at or below'}<input type="number" min="0" step="0.01" required value={warningValue} onChange={event => setWarningValue(event.target.value)} /></label>
+                  <label>{selectedPreset?.direction === 'maximum' ? 'Critical at or above' : 'Critical at or below'}<input type="number" min="0" step="0.01" required value={criticalValue} onChange={event => setCriticalValue(event.target.value)} /></label>
+                </div>
+              ) : (
+                <p className="event-kpi-form-note">Ticket quantity will remain unevaluated until its customer-approved GHL mapping is configured.</p>
+              )}
               <button className="ops-button is-primary" type="submit" disabled={saving === 'target'}>{saving === 'target' ? 'Creating...' : 'Create draft target'}</button>
             </form>
           </div>
@@ -710,20 +768,53 @@ function KpisTab({
   );
 }
 
-function TargetRow({ target, action }: { target: RecordMap; action?: ReactNode }) {
+function TargetRow({ target, evaluation, action }: { target: RecordMap; evaluation?: RecordMap; action?: ReactNode }) {
   const unit = text(target.unit, '');
   const raw = numberValue(target.targetValue);
-  const value = unit === 'currency'
-    ? formatCurrency(raw, target.currency === 'USD' ? 'USD' : 'AED')
-    : unit === 'percentage'
-      ? `${raw}%`
-      : raw.toLocaleString();
+  const value = formatKpiValue(raw, unit, target.currency);
+  const actualValue = evaluation?.actualValue == null
+    ? 'Waiting for data'
+    : formatKpiValue(numberValue(evaluation.actualValue), unit, target.currency);
+  const evaluationStatus = text(evaluation?.status, 'actual_unavailable');
   return (
     <article className="event-kpi-target-row">
-      <div><strong>{text(target.label, 'KPI target')}</strong><span>{titleCase(target.scope)} / {titleCase(target.controlMode)}</span></div>
-      <div><b>{value}</b><ProductStatus tone={text(target.status) === 'approved' ? 'good' : 'warn'}>{titleCase(target.status)}</ProductStatus>{action}</div>
+      <div>
+        <strong>{text(target.label, 'KPI target')}</strong>
+        <span>{titleCase(target.scope)} / {titleCase(target.controlMode)}</span>
+        {evaluation ? <small>{text(evaluation.reason, 'Waiting for verified KPI evidence.')}</small> : null}
+      </div>
+      <div>
+        <span className="event-kpi-values"><small>Actual</small><b>{actualValue}</b><small>Target</small><b>{value}</b></span>
+        {evaluation ? <ProductStatus tone={evaluationTone(evaluationStatus)}>{evaluationLabel(evaluationStatus)}</ProductStatus> : null}
+        <ProductStatus tone={text(target.status) === 'approved' ? 'good' : 'warn'}>{titleCase(target.status)}</ProductStatus>
+        {action}
+      </div>
     </article>
   );
+}
+
+function formatKpiValue(value: number, unit: string, currency: unknown): string {
+  if (unit === 'currency') return formatCurrency(value, currency === 'USD' ? 'USD' : 'AED');
+  if (unit === 'percentage') return `${value.toLocaleString()}%`;
+  return value.toLocaleString();
+}
+
+function evaluationTone(status: string): 'good' | 'warn' | 'danger' | 'muted' {
+  if (status === 'on_track') return 'good';
+  if (status === 'warning' || status === 'thresholds_missing') return 'warn';
+  if (status === 'critical') return 'danger';
+  return 'muted';
+}
+
+function evaluationLabel(status: string): string {
+  const labels: Record<string, string> = {
+    on_track: 'On track',
+    warning: 'Needs attention',
+    critical: 'Critical',
+    thresholds_missing: 'Thresholds needed',
+    actual_unavailable: 'Waiting for verified data',
+  };
+  return labels[status] || 'Not evaluated';
 }
 
 function LeadsTab({
@@ -948,6 +1039,7 @@ export default function HybridEventWorkspace() {
     learningSummary,
     governedTargets,
     eventCapacity,
+    kpiEvaluation,
     message,
     loading,
     load,
@@ -1006,7 +1098,7 @@ export default function HybridEventWorkspace() {
 
           {activeTab === 'overview' ? <OverviewTab kpis={kpis} nextActions={nextActions} sourceStatus={sourceStatus} problemDashboard={problemDashboard} onNavigate={setActiveTab} /> : null}
           {activeTab === 'strategy' ? <StrategyTab event={event} emailPlans={emailPlans} whatsappPlans={whatsappPlans} upsellPlans={upsellPlans} contentRequirements={contentRequirements} salesTasks={salesTasks} navigate={navigate} /> : null}
-          {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} governedTargets={governedTargets} eventCapacity={eventCapacity} eventId={selectedEventId} token={token} canManage={role === 'cco'} onRefresh={() => load(selectedEventId, { background: true })} navigate={navigate} /> : null}
+          {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} governedTargets={governedTargets} eventCapacity={eventCapacity} kpiEvaluation={kpiEvaluation} eventId={selectedEventId} token={token} canManage={role === 'cco'} onRefresh={() => load(selectedEventId, { background: true })} navigate={navigate} /> : null}
           {activeTab === 'leads' ? <LeadsTab salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} navigate={navigate} /> : null}
           {activeTab === 'blockers' ? <BlockersTab problemDashboard={problemDashboard} eventProblems={eventProblems} /> : null}
           {activeTab === 'closeout' ? <CloseoutTab closeoutReport={closeoutReport} learningSummary={learningSummary} channelPerformance={closeoutChannels} sourcePerformance={closeoutSources} /> : null}

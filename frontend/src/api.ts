@@ -584,6 +584,8 @@ export const commercialKpiApi = {
     apiFetch<unknown>(`/commercial-kpis/events/${eventId}/capacity`, { token }),
   effectiveEventTargets: (eventId: string, token: string) =>
     apiFetch<unknown[]>(`/commercial-kpis/events/${eventId}/effective`, { token }),
+  eventEvaluation: (eventId: string, token: string) =>
+    apiFetch<unknown>(`/commercial-kpis/events/${eventId}/evaluation`, { token }),
   setEventCapacity: (eventId: string, data: unknown, token: string) =>
     apiFetch<unknown>(`/commercial-kpis/events/${eventId}/capacity`, {
       method: 'PUT',

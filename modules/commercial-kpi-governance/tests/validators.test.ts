@@ -95,6 +95,52 @@ describe('commercial KPI governance validation', () => {
     ).toThrow();
   });
 
+  it('accepts complete operating thresholds and rejects unsafe threshold order', () => {
+    expect(
+      createKpiTargetSchema.parse({
+        metricKey: 'cost_per_lead',
+        label: 'Maximum cost per lead',
+        unit: 'currency',
+        currency: 'AED',
+        direction: 'maximum',
+        scope: 'event',
+        controlMode: 'adjustable',
+        targetValue: 40,
+        warningValue: 45,
+        criticalValue: 60,
+        eventId,
+      }).criticalValue,
+    ).toBe(60);
+    expect(() =>
+      createKpiTargetSchema.parse({
+        metricKey: 'cost_per_lead',
+        label: 'Maximum cost per lead',
+        unit: 'currency',
+        currency: 'AED',
+        direction: 'maximum',
+        scope: 'event',
+        controlMode: 'adjustable',
+        targetValue: 40,
+        warningValue: 35,
+        criticalValue: 60,
+        eventId,
+      }),
+    ).toThrow(/warning threshold cannot be below/i);
+    expect(() =>
+      createKpiTargetSchema.parse({
+        metricKey: 'interaction_rate',
+        label: 'Minimum interaction rate',
+        unit: 'percentage',
+        direction: 'minimum',
+        scope: 'event',
+        controlMode: 'adjustable',
+        targetValue: 8,
+        warningValue: 7,
+        eventId,
+      }),
+    ).toThrow(/configured together/i);
+  });
+
   it('requires optimistic revision for state changes', () => {
     expect(
       transitionKpiTargetSchema.parse({ expectedRevision: 1, action: 'approve' }).action,
