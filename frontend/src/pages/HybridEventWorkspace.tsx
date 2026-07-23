@@ -223,10 +223,12 @@ function useEventWorkspaceData() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(Boolean(token));
 
-  async function load(preferredId?: string) {
+  async function load(preferredId?: string, options: { background?: boolean } = {}) {
     if (!token) return;
-    setLoading(true);
-    setMessage('');
+    if (!options.background) {
+      setLoading(true);
+      setMessage('');
+    }
     try {
       const eventList = list(await eventsApi.list(token));
       const nextEventId = firstAvailableId(eventList, preferredId || eventId);
@@ -305,7 +307,7 @@ function useEventWorkspaceData() {
     } catch (error) {
       setMessage(`Workspace failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setLoading(false);
+      if (!options.background) setLoading(false);
     }
   }
 
@@ -718,7 +720,7 @@ function TargetRow({ target, action }: { target: RecordMap; action?: ReactNode }
       : raw.toLocaleString();
   return (
     <article className="event-kpi-target-row">
-      <div><strong>{text(target.label, 'KPI target')}</strong><span>{titleCase(target.scope)} · {titleCase(target.controlMode)}</span></div>
+      <div><strong>{text(target.label, 'KPI target')}</strong><span>{titleCase(target.scope)} / {titleCase(target.controlMode)}</span></div>
       <div><b>{value}</b><ProductStatus tone={text(target.status) === 'approved' ? 'good' : 'warn'}>{titleCase(target.status)}</ProductStatus>{action}</div>
     </article>
   );
@@ -1004,7 +1006,7 @@ export default function HybridEventWorkspace() {
 
           {activeTab === 'overview' ? <OverviewTab kpis={kpis} nextActions={nextActions} sourceStatus={sourceStatus} problemDashboard={problemDashboard} onNavigate={setActiveTab} /> : null}
           {activeTab === 'strategy' ? <StrategyTab event={event} emailPlans={emailPlans} whatsappPlans={whatsappPlans} upsellPlans={upsellPlans} contentRequirements={contentRequirements} salesTasks={salesTasks} navigate={navigate} /> : null}
-          {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} governedTargets={governedTargets} eventCapacity={eventCapacity} eventId={selectedEventId} token={token} canManage={role === 'cco'} onRefresh={() => load(selectedEventId)} navigate={navigate} /> : null}
+          {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} governedTargets={governedTargets} eventCapacity={eventCapacity} eventId={selectedEventId} token={token} canManage={role === 'cco'} onRefresh={() => load(selectedEventId, { background: true })} navigate={navigate} /> : null}
           {activeTab === 'leads' ? <LeadsTab salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} navigate={navigate} /> : null}
           {activeTab === 'blockers' ? <BlockersTab problemDashboard={problemDashboard} eventProblems={eventProblems} /> : null}
           {activeTab === 'closeout' ? <CloseoutTab closeoutReport={closeoutReport} learningSummary={learningSummary} channelPerformance={closeoutChannels} sourcePerformance={closeoutSources} /> : null}

@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
-type Role = 'department_head' | 'viewer';
+type Role = 'cco' | 'department_head' | 'viewer';
 
 const people = {
+  cco: { id: 'cco-1', email: 'cco@tanaghum.com', name: 'Chief Commercial Officer', role: 'cco', tenantKey: 'default' },
   department_head: { id: 'manager-1', email: 'commercial.manager@tanaghum.com', name: 'Commercial Manager', role: 'department_head', tenantKey: 'default' },
   viewer: { id: 'viewer-1', email: 'growth.viewer@tanaghum.com', name: 'Growth Viewer', role: 'viewer', tenantKey: 'default' },
 };
@@ -54,6 +55,29 @@ function growthSummary() {
 
 async function installMocks(page: Page, role: Role) {
   let currentLeads = structuredClone(leads);
+  let currentCapacity = {
+    eventId: event.id,
+    venueCapacity: 400,
+    sellableTicketCapacity: 380,
+    source: 'Signed venue agreement',
+    confirmedAt: '2026-07-10T09:00:00.000Z',
+  };
+  let currentTargets = [
+    {
+      id: 'target-annual-revenue',
+      metricKey: 'annual_revenue_target',
+      label: 'Annual revenue target',
+      scope: 'annual_plan',
+      unit: 'currency',
+      currency: 'AED',
+      direction: 'target',
+      controlMode: 'locked',
+      status: 'approved',
+      targetValue: 3600000,
+      revision: 1,
+      appliedAs: 'inherited',
+    },
+  ];
   const unexpected: string[] = [];
   const failed: string[] = [];
   const browserProblems: string[] = [];
@@ -70,7 +94,7 @@ async function installMocks(page: Page, role: Role) {
     const path = url.pathname;
     const method = request.method();
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    const knownPrefix = ['/auth/', '/events', '/leads', '/event-problems', '/planner/', '/ghl-sync/', '/closeout/', '/learning-recommendations/', '/analytics/', '/social-growth/', '/ghl/', '/smartlabs/'];
+    const knownPrefix = ['/auth/', '/events', '/leads', '/event-problems', '/planner/', '/ghl-sync/', '/closeout/', '/learning-recommendations/', '/analytics/', '/social-growth/', '/ghl/', '/smartlabs/', '/commercial-kpis'];
     if (!knownPrefix.some(prefix => path === prefix || path.startsWith(prefix))) return route.continue();
 
     if (path === '/auth/session') return json({ user: people[role], agentRep: { id: `profile-${role}`, name: people[role].name, status: 'active' } });
@@ -99,6 +123,36 @@ async function installMocks(page: Page, role: Role) {
     if (path === '/ghl-sync/status') return json({ credentialStatus: 'configured', mappingStatus: 'ready', acceptance: { status: 'ready_for_read_sync', readyForReadSync: true } });
     if (path === `/closeout/events/${event.id}/report`) return json({ eventSummary: event, budget: { planned: 5000, actual: 2100 }, leadFunnel: { totalLeads: 3, meetingsBooked: 1, purchases: 0 }, channelPerformance: [], sourcePerformance: [], topBarriers: [] });
     if (path === `/learning-recommendations/events/${event.id}`) return json({ recommendations: [{ id: 'rec-1', title: 'Keep same-day follow-up', rationale: 'Hot leads converted faster when assigned on the same day.', priority: 'high' }] });
+    if (path === `/commercial-kpis/events/${event.id}/effective` && method === 'GET') return json(currentTargets);
+    if (path === `/commercial-kpis/events/${event.id}/capacity` && method === 'GET') return json(currentCapacity);
+    if (path === `/commercial-kpis/events/${event.id}/capacity` && method === 'PUT') {
+      currentCapacity = { ...currentCapacity, ...(request.postDataJSON() as object) };
+      return json(currentCapacity);
+    }
+    if (path === '/commercial-kpis' && method === 'POST') {
+      const input = request.postDataJSON() as Record<string, unknown>;
+      const created = {
+        id: 'target-event-ticket-sales',
+        ...input,
+        status: 'draft',
+        revision: 1,
+        appliedAs: 'event_specific',
+      };
+      currentTargets = [...currentTargets, created];
+      return json(created, 201);
+    }
+    if (/^\/commercial-kpis\/[^/]+\/transition$/.test(path) && method === 'POST') {
+      const id = path.split('/')[2];
+      const input = request.postDataJSON() as { action?: string };
+      currentTargets = currentTargets.map(target => target.id === id
+        ? {
+          ...target,
+          status: input.action === 'approve' ? 'approved' : 'pending_approval',
+          revision: Number(target.revision) + 1,
+        }
+        : target);
+      return json(currentTargets.find(target => target.id === id));
+    }
     if (path === '/analytics/sources') return json([{ id: 'source-1', name: 'Instagram Analytics', status: 'active', sourceType: 'connector' }]);
     if (path === '/analytics/snapshots') return json([{ id: 'snapshot-1', normalizedMetrics: { reach: 12400, impressions: 20800, engagement: 920 } }]);
     if (path === '/analytics/reports') return json([{ id: 'report-1', summary: 'Weekly campaign report', reportStatus: 'generated' }]);
@@ -138,6 +192,34 @@ async function capture(page: Page, name: string, fullPage = true) {
 }
 
 test.describe('UX-R1D2 production workspaces', () => {
+  test('CCO governs event capacity and KPI approval without hidden failures', async ({ page }) => {
+    const monitor = await installMocks(page, 'cco');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`/events/${event.id}`);
+
+    const tabs = page.getByRole('navigation', { name: 'Event workspace views' });
+    await tabs.getByRole('button', { name: 'KPIs' }).click();
+    await expect(page.getByText('CCO controls available')).toBeVisible();
+    await expect(page.getByText('Annual revenue target')).toBeVisible();
+
+    await page.getByLabel('Venue capacity').fill('500');
+    await page.getByLabel('Sellable ticket capacity').fill('480');
+    await page.getByLabel('Capacity evidence').fill('Signed hall agreement');
+    await page.getByRole('button', { name: 'Save capacity' }).click();
+    await expect(page.getByText('Venue capacity saved. Ticket targets cannot exceed this absolute limit.')).toBeVisible();
+
+    await page.getByLabel('KPI').selectOption('ticket_sales');
+    await page.getByLabel('Target value').fill('450');
+    await page.getByRole('button', { name: 'Create draft target' }).click();
+    await expect(page.locator('.event-kpi-target-row').getByText('Ticket sales target', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Submit' }).click();
+    await expect(page.getByRole('button', { name: 'Approve' })).toBeVisible();
+    await page.getByRole('button', { name: 'Approve' }).click();
+    await expect(page.getByText('KPI target approved.')).toBeVisible();
+    await expectNoOverflow(page);
+    monitor.assertClean();
+  });
+
   test('manager operates the event workspace without repeated orientation or hidden failures', async ({ page }) => {
     const monitor = await installMocks(page, 'department_head');
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -158,6 +240,8 @@ test.describe('UX-R1D2 production workspaces', () => {
     await tabs.getByRole('button', { name: 'Plan' }).click();
     await expect(page.getByRole('heading', { name: 'Event Strategy' })).toBeVisible();
     await tabs.getByRole('button', { name: 'KPIs' }).click();
+    await expect(page.getByText('Read only')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save capacity' })).toHaveCount(0);
     await expect(page.getByRole('cell', { name: 'Instagram' })).toBeVisible();
     await tabs.getByRole('button', { name: 'Leads' }).click();
     await expect(page.getByText('Nadia Hassan')).toBeVisible();
