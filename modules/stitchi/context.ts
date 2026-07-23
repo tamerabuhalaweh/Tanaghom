@@ -1,6 +1,11 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
+import {
+  getEventCapacity,
+  listEffectiveEventTargets,
+} from '../commercial-kpi-governance/repository';
 import { getGhlSyncStatus } from '../ghl-sync/repository';
+import { listMappings as listGhlAttributionMappings } from '../ghl-plan-attribution/repository';
 import type { StitchiConversationSummary } from './types';
 
 export interface StitchiReadOnlyContext {
@@ -38,6 +43,36 @@ export interface StitchiReadOnlyContext {
     purchases: number;
     noShows: number;
     spend: number;
+  };
+  governedPerformance: {
+    eventCapacity: {
+      venueCapacity: number | null;
+      sellableTicketCapacity: number | null;
+      source: string | null;
+      confirmedAt: Date | null;
+      isAbsolute: boolean;
+    } | null;
+    effectiveTargets: Array<{
+      id: string;
+      metricKey: string;
+      label: string;
+      unit: string;
+      direction: string;
+      controlMode: string;
+      targetValue: number;
+      warningValue: number | null;
+      criticalValue: number | null;
+      currency: string | null;
+      appliedAs: string;
+    }>;
+    inheritedTargets: number;
+    eventSpecificTargets: number;
+    ghlAttribution: {
+      mappingCount: number;
+      approvedMappingId: string | null;
+      readyForMatching: boolean;
+      missingCustomerDefinitions: string[];
+    };
   };
   riskSummary: {
     open: number;
@@ -607,6 +642,10 @@ export async function loadReadOnlyContext(
     }) ?? Promise.resolve([]),
     commercialClients.commercialPlanHierarchyAssignment?.findMany(hierarchyAssignmentQuery) ?? Promise.resolve([]),
   ]);
+  const governedPerformance =
+    eventId && selectedEvent
+      ? await loadGovernedPerformanceContext(tenantKey, eventId)
+      : emptyGovernedPerformanceContext();
 
   return {
     currentUser: {
@@ -625,6 +664,7 @@ export async function loadReadOnlyContext(
     recentEvents: recentEvents.filter(event => isCustomerVisibleRecordName(event.name)).map(mapEvent),
     leadSummary: summarizeLeads(leads),
     kpiSummary: summarizeKpis(kpis),
+    governedPerformance,
     riskSummary: summarizeProblems(openProblems),
     connectorSummary: summarizeConnectors(credentials.length, connectorJobs),
     unifiedDataLayer: summarizeUnifiedDataLayer(credentials, connectorJobs),
@@ -868,6 +908,93 @@ async function loadGhlCrmSummary(tenantKey: string, eventId?: string) {
       rawSecretsReturned: false as const,
     };
   }
+}
+
+function emptyGovernedPerformanceContext(): StitchiReadOnlyContext['governedPerformance'] {
+  return {
+    eventCapacity: null,
+    effectiveTargets: [],
+    inheritedTargets: 0,
+    eventSpecificTargets: 0,
+    ghlAttribution: {
+      mappingCount: 0,
+      approvedMappingId: null,
+      readyForMatching: false,
+      missingCustomerDefinitions: [
+        'Define and approve the event or product attribution rules in GoHighLevel.',
+      ],
+    },
+  };
+}
+
+async function loadGovernedPerformanceContext(
+  tenantKey: string,
+  eventId: string,
+): Promise<StitchiReadOnlyContext['governedPerformance']> {
+  const [capacity, targets, mappings] = await Promise.all([
+    getEventCapacity(tenantKey, eventId),
+    listEffectiveEventTargets(tenantKey, eventId),
+    listGhlAttributionMappings(tenantKey, { eventId }),
+  ]);
+  const approvedMapping = mappings.find((mapping) => String(mapping.status) === 'approved') || null;
+  const missingCustomerDefinitions: string[] = [];
+  if (!approvedMapping) {
+    missingCustomerDefinitions.push(
+      'Define and approve the event or product attribution rules in GoHighLevel.',
+    );
+  } else {
+    if (!approvedMapping.paymentAmountField) {
+      missingCustomerDefinitions.push('Confirm the GoHighLevel field that stores amount paid.');
+    }
+    if (!approvedMapping.saleValueField) {
+      missingCustomerDefinitions.push(
+        'Confirm the GoHighLevel field that stores total sale value or supports outstanding-balance calculation.',
+      );
+    }
+    if (!approvedMapping.ticketQuantityField) {
+      missingCustomerDefinitions.push(
+        'Confirm the GoHighLevel field that stores purchased ticket quantity.',
+      );
+    }
+  }
+
+  const effectiveTargets = targets.map((target) => ({
+    id: String(target.id),
+    metricKey: String(target.metricKey),
+    label: String(target.label),
+    unit: String(target.unit),
+    direction: String(target.direction),
+    controlMode: String(target.controlMode),
+    targetValue: Number(target.targetValue || 0),
+    warningValue: target.warningValue == null ? null : Number(target.warningValue),
+    criticalValue: target.criticalValue == null ? null : Number(target.criticalValue),
+    currency: target.currency == null ? null : String(target.currency),
+    appliedAs: String(target.appliedAs),
+  }));
+
+  return {
+    eventCapacity: {
+      venueCapacity: capacity.venueCapacity == null ? null : Number(capacity.venueCapacity),
+      sellableTicketCapacity:
+        capacity.sellableTicketCapacity == null
+          ? null
+          : Number(capacity.sellableTicketCapacity),
+      source: capacity.source == null ? null : String(capacity.source),
+      confirmedAt: capacity.confirmedAt instanceof Date ? capacity.confirmedAt : null,
+      isAbsolute: Boolean(capacity.isAbsolute),
+    },
+    effectiveTargets,
+    inheritedTargets: effectiveTargets.filter((target) => target.appliedAs === 'inherited').length,
+    eventSpecificTargets: effectiveTargets.filter(
+      (target) => target.appliedAs === 'event_specific',
+    ).length,
+    ghlAttribution: {
+      mappingCount: mappings.length,
+      approvedMappingId: approvedMapping ? String(approvedMapping.id) : null,
+      readyForMatching: Boolean(approvedMapping),
+      missingCustomerDefinitions,
+    },
+  };
 }
 
 export function formatReadOnlyContextForPrompt(context: StitchiReadOnlyContext): string {

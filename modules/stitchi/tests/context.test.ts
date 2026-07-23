@@ -47,8 +47,19 @@ const ghlSyncMocks = vi.hoisted(() => ({
   getGhlSyncStatus: vi.fn(),
 }));
 
+const kpiGovernanceMocks = vi.hoisted(() => ({
+  getEventCapacity: vi.fn(),
+  listEffectiveEventTargets: vi.fn(),
+}));
+
+const ghlAttributionMocks = vi.hoisted(() => ({
+  listMappings: vi.fn(),
+}));
+
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
 vi.mock('../../ghl-sync/repository', () => ghlSyncMocks);
+vi.mock('../../commercial-kpi-governance/repository', () => kpiGovernanceMocks);
+vi.mock('../../ghl-plan-attribution/repository', () => ghlAttributionMocks);
 
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext } from '../context';
 
@@ -175,6 +186,51 @@ describe('Stitchi read-only context loader', () => {
       lastRun: null,
       requiredActions: ['Map a GoHighLevel pipeline stage for Purchased.'],
     });
+    kpiGovernanceMocks.getEventCapacity.mockResolvedValue({
+      eventId: 'event-1',
+      venueCapacity: 500,
+      sellableTicketCapacity: 480,
+      source: 'Signed venue contract',
+      confirmedAt: new Date('2026-07-08T08:00:00Z'),
+      isAbsolute: true,
+    });
+    kpiGovernanceMocks.listEffectiveEventTargets.mockResolvedValue([
+      {
+        id: 'target-1',
+        metricKey: 'annual_revenue_target',
+        label: 'Annual revenue target',
+        unit: 'currency',
+        direction: 'target',
+        controlMode: 'locked',
+        targetValue: 3600000,
+        warningValue: null,
+        criticalValue: null,
+        currency: 'AED',
+        appliedAs: 'inherited',
+      },
+      {
+        id: 'target-2',
+        metricKey: 'ticket_sales',
+        label: 'Ticket sales target',
+        unit: 'count',
+        direction: 'target',
+        controlMode: 'adjustable',
+        targetValue: 400,
+        warningValue: 300,
+        criticalValue: 200,
+        currency: null,
+        appliedAs: 'event_specific',
+      },
+    ]);
+    ghlAttributionMocks.listMappings.mockResolvedValue([
+      {
+        id: 'mapping-1',
+        status: 'approved',
+        paymentAmountField: null,
+        saleValueField: null,
+        ticketQuantityField: null,
+      },
+    ]);
     prismaMocks.commercialRevenueLine.findMany.mockResolvedValue([
       {
         id: 'revenue-line-1',
@@ -247,6 +303,21 @@ describe('Stitchi read-only context loader', () => {
     expect(context.leadSummary.knownRevenue).toBe(2500);
     expect(context.kpiSummary.reach).toBe(1000);
     expect(context.kpiSummary.spend).toBe(250);
+    expect(context.governedPerformance).toMatchObject({
+      inheritedTargets: 1,
+      eventSpecificTargets: 1,
+      eventCapacity: {
+        venueCapacity: 500,
+        sellableTicketCapacity: 480,
+        isAbsolute: true,
+      },
+      ghlAttribution: {
+        mappingCount: 1,
+        approvedMappingId: 'mapping-1',
+        readyForMatching: true,
+      },
+    });
+    expect(context.governedPerformance.ghlAttribution.missingCustomerDefinitions).toHaveLength(3);
     expect(context.riskSummary.critical).toBe(1);
     expect(context.connectorSummary.readyForSync).toBe(1);
     expect(context.unifiedDataLayer.kajabi).toMatchObject({

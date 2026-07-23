@@ -134,6 +134,8 @@ function actionTitle(actionType: string): string {
     create_event_problem: 'Record event blocker',
     update_event_strategy: 'Update event plan',
     create_event_kpi_record: 'Save KPI record',
+    create_governed_event_kpi_target: 'Create event KPI target',
+    set_event_capacity: 'Set venue capacity',
     update_lead_status: 'Update lead status',
     set_lead_temperature: 'Update lead temperature',
     create_commercial_revenue_line: 'Set up revenue line',

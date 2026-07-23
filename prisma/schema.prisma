@@ -147,6 +147,8 @@ model Tenant {
   commercial_discipline_records CommercialDisciplineRecord[]
   commercial_executive_reports CommercialExecutiveReport[]
   commercial_executive_report_schedules CommercialExecutiveReportSchedule[]
+  commercial_kpi_targets                    CommercialKpiTarget[]
+  ghl_plan_attribution_mappings             GhlPlanAttributionMapping[]
   subscriptions TenantSubscription[]
   subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[]
@@ -338,14 +340,21 @@ model User {
   commercial_discipline_records_created CommercialDisciplineRecord[] @relation("CommercialDisciplineRecordCreatedBy")
   commercial_executive_reports_generated CommercialExecutiveReport[] @relation("CommercialExecutiveReportGeneratedBy")
   commercial_executive_report_schedules_created CommercialExecutiveReportSchedule[] @relation("CommercialExecutiveReportScheduleCreatedBy")
+  commercial_kpi_targets_owned                      CommercialKpiTarget[]                   @relation("CommercialKpiTargetOwner")
+  commercial_kpi_targets_created                    CommercialKpiTarget[]                   @relation("CommercialKpiTargetCreatedBy")
+  commercial_kpi_targets_submitted                  CommercialKpiTarget[]                   @relation("CommercialKpiTargetSubmittedBy")
+  commercial_kpi_targets_approved                   CommercialKpiTarget[]                   @relation("CommercialKpiTargetApprovedBy")
+  ghl_attribution_mappings_created                  GhlPlanAttributionMapping[]             @relation("GhlPlanAttributionMappingCreatedBy")
+  ghl_attribution_mappings_approved                 GhlPlanAttributionMapping[]             @relation("GhlPlanAttributionMappingApprovedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[] @relation("StitchiConversationUser")
   stitchi_action_runs StitchiActionRun[] @relation("StitchiActionRunUser")
   stitchi_action_approvals StitchiActionApproval[] @relation("StitchiActionApprovalUser")
 
   tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
-  @@map("users")
+
   @@index([tenant_key])
+  @@map("users")
 }
 
 enum OnboardingTokenPurpose {
@@ -807,6 +816,7 @@ model ContentRequest {
   commercial_plan_links    CommercialPlanCampaignLink[]
   budget_allocations       CommercialBudgetAllocation[]
   kpi_records              EventKpiRecord[]             @relation("CampaignKpiRecords")
+  commercial_kpi_targets   CommercialKpiTarget[]
 
   @@index([tenant_key])
   @@index([event_id])
@@ -2963,8 +2973,8 @@ model PlatformMetricMapping {
   created_at           DateTime @default(now())
   updated_at           DateTime @updatedAt
 
-  @@index([platform])
   @@unique([platform, source_metric_name])
+  @@index([platform])
   @@map("platform_metric_mappings")
 }
 
@@ -3168,6 +3178,14 @@ enum LeadSourceOfTruth {
   gohighlevel
 }
 
+enum LeadPaymentStatus {
+  unknown
+  partial
+  paid_in_full
+  refunded
+  cancelled
+}
+
 enum GhlLeadSyncMode {
   pull_preview
   pull_sync
@@ -3250,6 +3268,12 @@ model LeadCaptureRecord {
   purchase_date                DateTime?
   purchase_amount              Decimal?     @db.Decimal(12, 2)
   purchase_reference           String?
+  payment_status      LeadPaymentStatus @default(unknown)
+  sale_value          Decimal?          @db.Decimal(12, 2)
+  amount_paid         Decimal?          @db.Decimal(12, 2)
+  outstanding_balance Decimal?          @db.Decimal(12, 2)
+  ticket_quantity     Int?
+  payment_source      String?
 
   source_of_truth              LeadSourceOfTruth @default(tanaghum)
   external_source_provider     String?
@@ -3260,6 +3284,8 @@ model LeadCaptureRecord {
   external_tags                String[]     @default([])
   external_last_synced_at      DateTime?
   external_sync_fingerprint    String?
+  commercial_plan_id         String?           @db.Uuid
+  ghl_attribution_mapping_id String?           @db.Uuid
 
   created_by_user_id           String       @db.Uuid
   created_by_agent_rep_id      String       @db.Uuid
@@ -3268,6 +3294,8 @@ model LeadCaptureRecord {
 
   tenant           Tenant @relation(fields: [tenant_key], references: [tenant_key])
   event            CommercialEvent? @relation("EventLeads", fields: [event_id], references: [id])
+  commercial_plan         CommercialPlan?            @relation("GhlLeadCommercialPlan", fields: [commercial_plan_id], references: [id], onDelete: SetNull)
+  ghl_attribution_mapping GhlPlanAttributionMapping? @relation("GhlLeadAttributionMapping", fields: [ghl_attribution_mapping_id], references: [id], onDelete: SetNull)
   attributions     LeadSourceAttribution[]
   intents          ConversionIntent[]
   crm_handoffs     CrmHandoffRequest[]
@@ -3283,6 +3311,9 @@ model LeadCaptureRecord {
   @@index([external_source_id])
   @@index([external_opportunity_id])
   @@index([external_last_synced_at])
+  @@index([commercial_plan_id])
+  @@index([ghl_attribution_mapping_id])
+  @@index([payment_status])
   @@index([audience_source])
   @@index([channel_attribution])
   @@index([campaign_id])
@@ -3321,6 +3352,7 @@ model GhlLeadSyncRun {
   id                    String            @id @default(uuid()) @db.Uuid
   tenant_key            String
   event_id              String?           @db.Uuid
+  attribution_mapping_id String?           @db.Uuid
   mode                  GhlLeadSyncMode
   status                GhlLeadSyncStatus
   source_of_truth       LeadSourceOfTruth @default(gohighlevel)
@@ -3342,10 +3374,12 @@ model GhlLeadSyncRun {
 
   tenant     Tenant           @relation(fields: [tenant_key], references: [tenant_key])
   event      CommercialEvent? @relation(fields: [event_id], references: [id])
+  attribution_mapping GhlPlanAttributionMapping? @relation(fields: [attribution_mapping_id], references: [id], onDelete: SetNull)
   created_by User             @relation("GhlLeadSyncRunCreatedBy", fields: [created_by_user_id], references: [id])
 
   @@index([tenant_key])
   @@index([event_id])
+  @@index([attribution_mapping_id])
   @@index([mode])
   @@index([status])
   @@index([created_by_user_id])
@@ -3831,6 +3865,55 @@ enum CommercialLearningSetStatus {
   archived
 }
 
+enum CommercialKpiScope {
+  annual_strategy
+  monthly_portfolio
+  execution_plan
+  event
+  product_campaign
+}
+
+enum CommercialKpiUnit {
+  currency
+  percentage
+  count
+  ratio
+  duration_days
+}
+
+enum CommercialKpiDirection {
+  minimum
+  maximum
+  target
+  target_range
+}
+
+enum CommercialKpiControlMode {
+  locked
+  inherited
+  adjustable
+}
+
+enum CommercialKpiTargetStatus {
+  draft
+  pending_approval
+  approved
+  superseded
+  archived
+}
+
+enum GhlAttributionMappingStatus {
+  draft
+  approved
+  superseded
+  archived
+}
+
+enum GhlAttributionMatchMode {
+  any
+  all
+}
+
 enum CommercialDisciplineId {
   brand_positioning
   acquisition
@@ -3985,6 +4068,9 @@ model CommercialPlan {
   campaign_links          CommercialPlanCampaignLink[]
   learning_influences     CommercialPlanLearningInfluence[]
   budget_allocations      CommercialBudgetAllocation[]
+  governed_kpi_targets     CommercialKpiTarget[]
+  ghl_attribution_mappings GhlPlanAttributionMapping[]
+  ghl_leads                LeadCaptureRecord[]                @relation("GhlLeadCommercialPlan")
 
   @@index([tenant_key])
   @@index([revenue_line_id])
@@ -4183,6 +4269,7 @@ model AnnualCommercialPlan {
   learning_links AnnualCommercialPlanLearningSet[]
   execution_plan_assignments CommercialPlanHierarchyAssignment[]
   budget_allocations         CommercialBudgetAllocation[]
+  kpi_targets                CommercialKpiTarget[]
 
   @@unique([tenant_key, year, scenario_version])
   @@index([tenant_key])
@@ -4224,6 +4311,7 @@ model MonthlyPortfolioItem {
   created_by      User                  @relation("MonthlyPortfolioItemCreatedBy", fields: [created_by_user_id], references: [id])
   execution_plan_assignments CommercialPlanHierarchyAssignment[]
   budget_allocations         CommercialBudgetAllocation[]
+  kpi_targets                CommercialKpiTarget[]
 
   @@index([tenant_key])
   @@index([annual_plan_id, month, sort_order])
@@ -4550,6 +4638,10 @@ model CommercialEvent {
   campaign_start_date DateTime?
   campaign_end_date   DateTime?
   expected_attendance Int?
+  venue_capacity           Int?
+  sellable_ticket_capacity Int?
+  capacity_source          String?
+  capacity_confirmed_at    DateTime?
   revenue_target      Decimal?             @db.Decimal(12, 2)
   planned_budget      Decimal?             @db.Decimal(12, 2)
   owner_user_id       String               @db.Uuid
@@ -4588,6 +4680,8 @@ model CommercialEvent {
   monthly_portfolio_items MonthlyPortfolioItem[]
   commercial_plan_links    CommercialPlanEventLink[]
   budget_allocations       CommercialBudgetAllocation[]
+  governed_kpi_targets     CommercialKpiTarget[]
+  ghl_attribution_mappings GhlPlanAttributionMapping[]
 
   @@index([tenant_key])
   @@index([event_type])
@@ -4646,6 +4740,119 @@ model EventKpiRecord {
   @@index([connector_import_job_id])
   @@index([campaign_id])
   @@map("event_kpi_records")
+}
+
+model CommercialKpiTarget {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  tenant_key           String
+  metric_key           String
+  label                String
+  description          String?                   @db.Text
+  unit                 CommercialKpiUnit
+  direction            CommercialKpiDirection
+  scope                CommercialKpiScope
+  control_mode         CommercialKpiControlMode
+  status               CommercialKpiTargetStatus @default(draft)
+  currency             CommercialCurrency?
+  target_value         Decimal                   @db.Decimal(16, 4)
+  warning_value        Decimal?                  @db.Decimal(16, 4)
+  critical_value       Decimal?                  @db.Decimal(16, 4)
+  lower_bound          Decimal?                  @db.Decimal(16, 4)
+  upper_bound          Decimal?                  @db.Decimal(16, 4)
+  annual_plan_id       String?                   @db.Uuid
+  monthly_item_id      String?                   @db.Uuid
+  commercial_plan_id   String?                   @db.Uuid
+  event_id             String?                   @db.Uuid
+  campaign_id          String?                   @db.Uuid
+  parent_target_id     String?                   @db.Uuid
+  supersedes_target_id String?                   @db.Uuid
+  owner_user_id        String?                   @db.Uuid
+  submitted_by_user_id String?                   @db.Uuid
+  approved_by_user_id  String?                   @db.Uuid
+  created_by_user_id   String                    @db.Uuid
+  revision             Int                       @default(1)
+  effective_from       DateTime?
+  effective_to         DateTime?
+  submitted_at         DateTime?
+  approved_at          DateTime?
+  amendment_reason     String?                   @db.Text
+  superseded_at        DateTime?
+  archived_at          DateTime?
+  metadata             Json?
+  created_at           DateTime                  @default(now())
+  updated_at           DateTime                  @updatedAt
+
+  tenant            Tenant                @relation(fields: [tenant_key], references: [tenant_key])
+  annual_plan       AnnualCommercialPlan? @relation(fields: [annual_plan_id], references: [id], onDelete: Cascade)
+  monthly_item      MonthlyPortfolioItem? @relation(fields: [monthly_item_id], references: [id], onDelete: Cascade)
+  commercial_plan   CommercialPlan?       @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  event             CommercialEvent?      @relation(fields: [event_id], references: [id], onDelete: Cascade)
+  campaign          ContentRequest?       @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  parent_target     CommercialKpiTarget?  @relation("CommercialKpiTargetInheritance", fields: [parent_target_id], references: [id], onDelete: Restrict)
+  inherited_targets CommercialKpiTarget[] @relation("CommercialKpiTargetInheritance")
+  supersedes        CommercialKpiTarget?  @relation("CommercialKpiTargetSupersession", fields: [supersedes_target_id], references: [id], onDelete: Restrict)
+  superseded_by     CommercialKpiTarget[] @relation("CommercialKpiTargetSupersession")
+  owner             User?                 @relation("CommercialKpiTargetOwner", fields: [owner_user_id], references: [id])
+  submitted_by      User?                 @relation("CommercialKpiTargetSubmittedBy", fields: [submitted_by_user_id], references: [id])
+  approved_by       User?                 @relation("CommercialKpiTargetApprovedBy", fields: [approved_by_user_id], references: [id])
+  created_by        User                  @relation("CommercialKpiTargetCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@index([tenant_key])
+  @@index([scope])
+  @@index([status])
+  @@index([metric_key])
+  @@index([annual_plan_id])
+  @@index([monthly_item_id])
+  @@index([commercial_plan_id])
+  @@index([event_id])
+  @@index([campaign_id])
+  @@index([parent_target_id])
+  @@index([supersedes_target_id])
+  @@map("commercial_kpi_targets")
+}
+
+model GhlPlanAttributionMapping {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  tenant_key            String
+  commercial_plan_id    String                      @db.Uuid
+  event_id              String?                     @db.Uuid
+  mapping_version       Int                         @default(1)
+  status                GhlAttributionMappingStatus @default(draft)
+  location_id           String
+  pipeline_id           String?
+  identifying_tags      String[]                    @default([])
+  source_values         String[]                    @default([])
+  match_mode            GhlAttributionMatchMode     @default(any)
+  payment_amount_field  String?
+  sale_value_field      String?
+  ticket_quantity_field String?
+  payment_status_field  String?
+  custom_field_rules    Json?
+  effective_from        DateTime?
+  effective_to          DateTime?
+  created_by_user_id    String                      @db.Uuid
+  approved_by_user_id   String?                     @db.Uuid
+  approved_at           DateTime?
+  superseded_at         DateTime?
+  archived_at           DateTime?
+  revision              Int                         @default(1)
+  created_at            DateTime                    @default(now())
+  updated_at            DateTime                    @updatedAt
+
+  tenant          Tenant              @relation(fields: [tenant_key], references: [tenant_key])
+  commercial_plan CommercialPlan      @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  event           CommercialEvent?    @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  created_by      User                @relation("GhlPlanAttributionMappingCreatedBy", fields: [created_by_user_id], references: [id])
+  approved_by     User?               @relation("GhlPlanAttributionMappingApprovedBy", fields: [approved_by_user_id], references: [id])
+  sync_runs       GhlLeadSyncRun[]
+  leads           LeadCaptureRecord[] @relation("GhlLeadAttributionMapping")
+
+  @@unique([commercial_plan_id, mapping_version])
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([status])
+  @@index([pipeline_id])
+  @@map("ghl_plan_attribution_mappings")
 }
 
 // ============================================================

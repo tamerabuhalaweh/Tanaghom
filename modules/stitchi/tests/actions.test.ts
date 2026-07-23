@@ -47,6 +47,10 @@ const commercialBudgetMocks = vi.hoisted(() => ({
   transitionBudgetAllocation: vi.fn(),
   verifyKpiEvidence: vi.fn(),
 }));
+const commercialKpiMocks = vi.hoisted(() => ({
+  createTarget: vi.fn(),
+  setEventCapacity: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
@@ -59,6 +63,7 @@ vi.mock('@modules/commercial-annual-planning/service', () => annualPlanningMocks
 vi.mock('@modules/commercial-historical-assessment/service', () => historicalAssessmentMocks);
 vi.mock('@modules/commercial-plan-hierarchy/service', () => commercialHierarchyMocks);
 vi.mock('@modules/commercial-budget-reconciliation/service', () => commercialBudgetMocks);
+vi.mock('@modules/commercial-kpi-governance/service', () => commercialKpiMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -107,6 +112,15 @@ describe('Stitchi action registry', () => {
       verificationStatus: 'verified',
       revision: 2,
     });
+    commercialKpiMocks.createTarget.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000930',
+      status: 'draft',
+    });
+    commercialKpiMocks.setEventCapacity.mockResolvedValue({
+      eventId: '00000000-0000-0000-0000-000000000931',
+      venueCapacity: 500,
+      sellableTicketCapacity: 480,
+    });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -145,7 +159,49 @@ describe('Stitchi action registry', () => {
       'commit_commercial_budget',
       'archive_commercial_budget',
       'review_commercial_spend_evidence',
+      'create_governed_event_kpi_target',
+      'set_event_capacity',
     ]);
+  });
+
+  it('creates a governed event KPI target through the CCO policy service', async () => {
+    const result = await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'create_governed_event_kpi_target',
+      inputPayload: {
+        metricKey: 'ticket_sales',
+        label: 'Maximum ticket sales',
+        unit: 'count',
+        direction: 'maximum',
+        scope: 'event',
+        controlMode: 'adjustable',
+        targetValue: 480,
+        eventId: '00000000-0000-0000-0000-000000000931',
+      },
+    });
+    expect(result.objectType).toBe('commercial_kpi_target');
+    expect(commercialKpiMocks.createTarget).toHaveBeenCalledOnce();
+  });
+
+  it('sets absolute event capacity through the CCO policy service', async () => {
+    const result = await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      actionType: 'set_event_capacity',
+      inputPayload: {
+        eventId: '00000000-0000-0000-0000-000000000931',
+        capacity: {
+          venueCapacity: 500,
+          sellableTicketCapacity: 480,
+          source: 'Signed hall agreement',
+        },
+      },
+    });
+    expect(result.objectType).toBe('commercial_event');
+    expect(commercialKpiMocks.setEventCapacity).toHaveBeenCalledOnce();
   });
 
   it('creates and generates a historical assessment using the original requester provider identity', async () => {

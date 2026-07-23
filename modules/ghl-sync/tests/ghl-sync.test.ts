@@ -12,9 +12,14 @@ const credentialMocks = vi.hoisted(() => ({
   getActiveIntegrationCredential: vi.fn(),
 }));
 
+const attributionMocks = vi.hoisted(() => ({
+  getApprovedMappingForEvent: vi.fn(),
+}));
+
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
 vi.mock('@shared/logging', () => ({ auditLog: vi.fn() }));
 vi.mock('../../integration-credentials/service', () => credentialMocks);
+vi.mock('../../ghl-plan-attribution/repository', () => attributionMocks);
 
 import * as repo from '../repository';
 import * as service from '../service';
@@ -50,6 +55,37 @@ const mockClient: GhlClient = {
   upsertContact: vi.fn(),
 };
 
+function approvedAttributionMapping(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'attribution-1',
+    tenant_key: 'tenant-a',
+    commercial_plan_id: 'plan-1',
+    event_id: 'event-1',
+    mapping_version: 1,
+    status: 'approved',
+    location_id: 'loc-1',
+    pipeline_id: null,
+    identifying_tags: [],
+    source_values: ['GHL Form', 'GHL Calendar'],
+    match_mode: 'any',
+    payment_amount_field: null,
+    sale_value_field: null,
+    ticket_quantity_field: null,
+    payment_status_field: null,
+    custom_field_rules: [],
+    effective_from: new Date('2026-07-01T00:00:00.000Z'),
+    effective_to: null,
+    approved_by_user_id: 'cco-1',
+    approved_at: new Date('2026-07-01T00:00:00.000Z'),
+    superseded_at: null,
+    revision: 2,
+    created_by_user_id: 'cco-1',
+    created_at: new Date('2026-07-01T00:00:00.000Z'),
+    updated_at: new Date('2026-07-01T00:00:00.000Z'),
+    ...overrides,
+  };
+}
+
 function productionReadyMappings() {
   return [
     { validation_status: 'valid', field_mappings: { mappingType: 'tag', ghlTagId: 'hot-tag', ghlTagName: 'Hot', internalTag: 'hot', direction: 'bidirectional' } },
@@ -78,6 +114,9 @@ describe('GHL Sync', () => {
       id: 'cred-1',
       secrets: { apiKey: 'tenant-key', locationId: 'loc-1', baseUrl: 'https://services.leadconnectorhq.com' },
     });
+    attributionMocks.getApprovedMappingForEvent.mockResolvedValue(
+      approvedAttributionMapping(),
+    );
     prismaMocks.commercialEvent.findFirst.mockResolvedValue({ id: 'event-1' });
     prismaMocks.connectorFieldMapping.findMany.mockResolvedValue(productionReadyMappings());
     prismaMocks.connectorFieldMapping.findFirst.mockResolvedValue({
@@ -206,6 +245,47 @@ describe('GHL Sync', () => {
     expect(mockClient.pull).not.toHaveBeenCalled();
   });
 
+  it('blocks selected-event sync when no approved plan attribution mapping exists', async () => {
+    attributionMocks.getApprovedMappingForEvent.mockResolvedValueOnce(null);
+
+    const result = await repo.previewPull(
+      'tenant-a',
+      'user-1',
+      'event-1',
+      25,
+      () => mockClient,
+    );
+
+    expect(result.run.status).toBe('mapping_required');
+    expect(result.run.errors).toContain(
+      'Approve a plan-specific GHL attribution mapping for this event.',
+    );
+    expect(mockClient.pull).not.toHaveBeenCalled();
+  });
+
+  it('does not import GHL contacts that fail the approved plan attribution rules', async () => {
+    attributionMocks.getApprovedMappingForEvent.mockResolvedValueOnce(
+      approvedAttributionMapping({
+        source_values: ['Different Campaign'],
+      }),
+    );
+
+    const result = await repo.syncPull(
+      'tenant-a',
+      'user-1',
+      'agent-1',
+      'event-1',
+      50,
+      () => mockClient,
+    );
+
+    expect(result.upserted).toEqual([]);
+    expect(result.run.warnings).toContain(
+      '1 GHL contact(s) were excluded because they did not match the approved plan attribution rules.',
+    );
+    expect(prismaMocks.leadCaptureRecord.create).not.toHaveBeenCalled();
+  });
+
   it('reports synced acceptance when the latest GHL run completed', async () => {
     prismaMocks.ghlLeadSyncRun.findFirst.mockResolvedValueOnce(mockRun({ status: 'synced', mode: 'pull_sync', leads_upserted: 3 }));
 
@@ -247,6 +327,8 @@ describe('GHL Sync', () => {
         external_source_provider: 'gohighlevel',
         external_source_id: 'contact-1',
         external_opportunity_id: 'opp-1',
+        commercial_plan_id: 'plan-1',
+        ghl_attribution_mapping_id: 'attribution-1',
         lead_status: 'meeting_booked',
         lead_temperature: 'hot',
         meeting_date: new Date('2026-08-01T11:00:00.000Z'),
@@ -254,12 +336,120 @@ describe('GHL Sync', () => {
         created_by_agent_rep_id: 'agent-1',
       }),
     }));
+    expect(result.run.attributionMappingId).toBe('attribution-1');
     expect(prismaMocks.ghlLeadSyncRun.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         status: 'synced',
         leads_upserted: 1,
       }),
     }));
+  });
+
+  it('records known sale value but leaves payment completion and ticket count unknown until customer fields are defined', async () => {
+    vi.mocked(mockClient.pull).mockResolvedValueOnce({
+      contacts: [{
+        id: 'contact-3',
+        name: 'Ticket Buyer',
+        email: 'ticket@example.com',
+        source: 'GHL Form',
+        tags: ['Buyer'],
+        customFields: {},
+      }],
+      opportunities: [{
+        id: 'opp-3',
+        contactId: 'contact-3',
+        pipelineId: 'pipe-1',
+        stageId: 'stage-purchased',
+        status: 'won',
+        monetaryValue: 2400,
+      }],
+      appointments: [],
+      warnings: [],
+      rawReturned: false,
+    });
+
+    const result = await repo.syncPull(
+      'tenant-a',
+      'user-1',
+      'agent-1',
+      'event-1',
+      50,
+      () => mockClient,
+    );
+
+    expect(result.upserted[0]).toMatchObject({
+      leadStatus: 'purchased',
+      saleValue: 2400,
+      amountPaid: null,
+      outstandingBalance: null,
+      ticketQuantity: null,
+      paymentStatus: 'unknown',
+    });
+    expect(result.run.warnings).toContain(
+      'Customer payment amount field is not defined; amount paid and outstanding balance remain unknown.',
+    );
+    expect(prismaMocks.leadCaptureRecord.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          sale_value: expect.objectContaining({}),
+          amount_paid: null,
+          outstanding_balance: null,
+          ticket_quantity: null,
+          payment_status: 'unknown',
+          payment_source: 'gohighlevel',
+        }),
+      }),
+    );
+  });
+
+  it('persists configured partial-payment and ticket evidence from approved GHL fields', async () => {
+    attributionMocks.getApprovedMappingForEvent.mockResolvedValueOnce(
+      approvedAttributionMapping({
+        payment_amount_field: 'amount_paid',
+        ticket_quantity_field: 'ticket_qty',
+      }),
+    );
+    vi.mocked(mockClient.pull).mockResolvedValueOnce({
+      contacts: [{
+        id: 'contact-4',
+        name: 'Deposit Buyer',
+        email: 'deposit@example.com',
+        source: 'GHL Form',
+        tags: ['Buyer'],
+        customFields: {
+          amount_paid: '500',
+          ticket_qty: '2',
+        },
+      }],
+      opportunities: [{
+        id: 'opp-4',
+        contactId: 'contact-4',
+        pipelineId: 'pipe-1',
+        stageId: 'stage-purchased',
+        status: 'won',
+        monetaryValue: 2000,
+      }],
+      appointments: [],
+      warnings: [],
+      rawReturned: false,
+    });
+
+    const result = await repo.syncPull(
+      'tenant-a',
+      'user-1',
+      'agent-1',
+      'event-1',
+      50,
+      () => mockClient,
+    );
+
+    expect(result.upserted[0]).toMatchObject({
+      saleValue: 2000,
+      amountPaid: 500,
+      outstandingBalance: 1500,
+      ticketQuantity: 2,
+      paymentStatus: 'partial',
+    });
   });
 
   it('records appointment pull evidence and mirrors no-show meeting outcomes from GHL', async () => {

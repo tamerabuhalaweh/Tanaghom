@@ -24,6 +24,7 @@ import type {
   UpdateAnnualPlanInput,
   UpdatePortfolioItemInput,
 } from './types';
+import { syncApprovedAnnualStrategyTargets } from '../commercial-kpi-governance/repository';
 
 const annualPlanInclude = Prisma.validator<Prisma.AnnualCommercialPlanInclude>()({
   owner: { select: { id: true, name: true, role: true } },
@@ -250,6 +251,9 @@ export async function transitionAnnualPlan(
       ...(target === 'archived' ? { archived_at: now } : {}),
     };
     await bumpPlanRevision(tx, tenantKey, id, input.expectedRevision, data, false);
+    if (target === 'approved') {
+      await syncApprovedAnnualStrategyTargets(tx, tenantKey, userId, id);
+    }
     await createAudit(tx, {
       action: `annual_commercial_plan_${target}`,
       userId,

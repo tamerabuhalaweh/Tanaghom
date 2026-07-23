@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   BarChart3,
@@ -16,6 +16,7 @@ import {
   eventPlannerApi,
   eventProblemsApi,
   eventsApi,
+  commercialKpiApi,
   ghlSyncApi,
   leadsApi,
   learningRecommendationsApi,
@@ -48,6 +49,14 @@ const TABS: Array<{ id: WorkspaceTab; label: string; helper: string; action: str
   { id: 'blockers', label: 'Risks', helper: 'Issues slowing the event', action: 'Record and resolve blockers before they affect sales.' },
   { id: 'closeout', label: 'Learning', helper: 'Lessons for the next event', action: 'Use evidence to understand what worked and what to improve.' },
 ];
+
+const EVENT_KPI_PRESETS = [
+  { metricKey: 'ticket_sales', label: 'Ticket sales target', unit: 'count', direction: 'target' },
+  { metricKey: 'cost_per_lead', label: 'Maximum cost per lead', unit: 'currency', direction: 'maximum' },
+  { metricKey: 'interaction_rate', label: 'Minimum interaction rate', unit: 'percentage', direction: 'minimum' },
+  { metricKey: 'daily_ad_spend', label: 'Maximum daily ad spend', unit: 'currency', direction: 'maximum' },
+  { metricKey: 'purchase_conversion_rate', label: 'Minimum purchase conversion rate', unit: 'percentage', direction: 'minimum' },
+] as const;
 
 function list(value: unknown): RecordMap[] {
   return Array.isArray(value) ? value as RecordMap[] : [];
@@ -209,6 +218,8 @@ function useEventWorkspaceData() {
   const [ghlStatus, setGhlStatus] = useState<RecordMap | null>(null);
   const [closeoutReport, setCloseoutReport] = useState<RecordMap | null>(null);
   const [learningSummary, setLearningSummary] = useState<RecordMap | null>(null);
+  const [governedTargets, setGovernedTargets] = useState<RecordMap[]>([]);
+  const [eventCapacity, setEventCapacity] = useState<RecordMap | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(Boolean(token));
 
@@ -235,6 +246,8 @@ function useEventWorkspaceData() {
         setGhlStatus(null);
         setCloseoutReport(null);
         setLearningSummary(null);
+        setGovernedTargets([]);
+        setEventCapacity(null);
         return;
       }
 
@@ -255,6 +268,8 @@ function useEventWorkspaceData() {
         ghlData,
         closeoutData,
         learningData,
+        governedTargetData,
+        eventCapacityData,
       ] = await Promise.all([
         eventsApi.dashboard(nextEventId, token),
         leadsApi.list(token, { eventId: nextEventId }),
@@ -268,6 +283,8 @@ function useEventWorkspaceData() {
         ghlSyncApi.status(token, nextEventId).catch(() => ({})),
         eventCloseoutApi.report(nextEventId, token).catch(() => null),
         learningRecommendationsApi.forEvent(nextEventId, token).catch(() => null),
+        commercialKpiApi.effectiveEventTargets(nextEventId, token).catch(() => []),
+        commercialKpiApi.eventCapacity(nextEventId, token).catch(() => null),
       ]);
 
       setDashboard(dashboardData as RecordMap);
@@ -283,6 +300,8 @@ function useEventWorkspaceData() {
       setGhlStatus(ghlData as RecordMap);
       setCloseoutReport(closeoutData as RecordMap | null);
       setLearningSummary(learningData as RecordMap | null);
+      setGovernedTargets(list(governedTargetData));
+      setEventCapacity(eventCapacityData as RecordMap | null);
     } catch (error) {
       setMessage(`Workspace failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -301,6 +320,7 @@ function useEventWorkspaceData() {
 
   return {
     token,
+    role,
     events,
     selectedEventId,
     dashboard,
@@ -315,6 +335,8 @@ function useEventWorkspaceData() {
     ghlStatus,
     closeoutReport,
     learningSummary,
+    governedTargets,
+    eventCapacity,
     message,
     loading,
     load,
@@ -461,16 +483,178 @@ function KpisTab({
   sourceStatus,
   channelPerformance,
   kpiRecords,
+  governedTargets,
+  eventCapacity,
+  eventId,
+  token,
+  canManage,
+  onRefresh,
   navigate,
 }: {
   kpis: RecordMap;
   sourceStatus: RecordMap;
   channelPerformance: RecordMap[];
   kpiRecords: RecordMap[];
+  governedTargets: RecordMap[];
+  eventCapacity: RecordMap | null;
+  eventId: string;
+  token: string | null;
+  canManage: boolean;
+  onRefresh: () => Promise<void>;
   navigate: (path: string) => void;
 }) {
+  const [targetPreset, setTargetPreset] = useState<string>(EVENT_KPI_PRESETS[0].metricKey);
+  const [targetValue, setTargetValue] = useState('');
+  const [venueCapacity, setVenueCapacity] = useState(
+    eventCapacity?.venueCapacity == null ? '' : String(eventCapacity.venueCapacity),
+  );
+  const [sellableCapacity, setSellableCapacity] = useState(
+    eventCapacity?.sellableTicketCapacity == null
+      ? ''
+      : String(eventCapacity.sellableTicketCapacity),
+  );
+  const [capacitySource, setCapacitySource] = useState(text(eventCapacity?.source, ''));
+  const [saving, setSaving] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const inheritedTargets = governedTargets.filter(target => text(target.appliedAs, '') === 'inherited');
+  const eventTargets = governedTargets.filter(target => text(target.appliedAs, '') === 'event_specific');
+
+  async function saveCapacity() {
+    if (!token) return;
+    setSaving('capacity');
+    setFeedback('');
+    try {
+      await commercialKpiApi.setEventCapacity(eventId, {
+        venueCapacity: Number(venueCapacity),
+        sellableTicketCapacity: Number(sellableCapacity),
+        source: capacitySource,
+      }, token);
+      await onRefresh();
+      setFeedback('Venue capacity saved. Ticket targets cannot exceed this absolute limit.');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Capacity could not be saved.');
+    } finally {
+      setSaving('');
+    }
+  }
+
+  async function createTarget() {
+    if (!token) return;
+    const preset = EVENT_KPI_PRESETS.find(item => item.metricKey === targetPreset);
+    if (!preset) return;
+    setSaving('target');
+    setFeedback('');
+    try {
+      await commercialKpiApi.create({
+        ...preset,
+        scope: 'event',
+        controlMode: 'adjustable',
+        targetValue: Number(targetValue),
+        eventId,
+        ...(preset.unit === 'currency' ? { currency: 'AED' } : {}),
+      }, token);
+      setTargetValue('');
+      await onRefresh();
+      setFeedback('Event KPI target created as a draft. Submit it for CCO approval when ready.');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'KPI target could not be created.');
+    } finally {
+      setSaving('');
+    }
+  }
+
+  async function transitionTarget(target: RecordMap, action: 'submit' | 'approve') {
+    if (!token) return;
+    setSaving(String(target.id));
+    setFeedback('');
+    try {
+      await commercialKpiApi.transition(String(target.id), {
+        expectedRevision: numberValue(target.revision),
+        action,
+        reason: action === 'approve'
+          ? 'Approved by CCO for event execution'
+          : 'Submitted by CCO for governed approval',
+      }, token);
+      await onRefresh();
+      setFeedback(action === 'approve' ? 'KPI target approved.' : 'KPI target submitted.');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'KPI target status could not be changed.');
+    } finally {
+      setSaving('');
+    }
+  }
+
   return (
     <div className="space-y-5">
+      <section className="event-kpi-governance" aria-labelledby="event-kpi-targets-title">
+        <header>
+          <div>
+            <h2 id="event-kpi-targets-title">Performance targets</h2>
+            <p>Approved strategy targets are inherited. Event-specific controls can be adjusted only by the CCO and remain separate from actual results.</p>
+          </div>
+          <ProductStatus tone={canManage ? 'info' : 'muted'}>{canManage ? 'CCO controls available' : 'Read only'}</ProductStatus>
+        </header>
+
+        {feedback ? <Notice tone={feedback.toLowerCase().includes('could not') ? 'danger' : 'good'}>{feedback}</Notice> : null}
+
+        <div className="event-kpi-target-columns">
+          <div className="event-kpi-target-list">
+            <div className="event-kpi-target-heading">
+              <div><strong>Locked strategy targets</strong><span>Inherited from the approved annual plan</span></div>
+              <span>{inheritedTargets.length}</span>
+            </div>
+            {inheritedTargets.length ? inheritedTargets.map(target => (
+              <TargetRow key={String(target.id)} target={target} />
+            )) : (
+              <p className="event-kpi-empty">No approved annual strategy targets are linked to this event yet.</p>
+            )}
+          </div>
+
+          <div className="event-kpi-target-list">
+            <div className="event-kpi-target-heading">
+              <div><strong>Event controls</strong><span>Capacity, efficiency and campaign limits</span></div>
+              <span>{eventTargets.length}</span>
+            </div>
+            {eventTargets.length ? eventTargets.map(target => (
+              <TargetRow
+                key={String(target.id)}
+                target={target}
+                action={canManage && text(target.status) === 'draft'
+                  ? <button type="button" onClick={() => void transitionTarget(target, 'submit')} disabled={saving === String(target.id)}>Submit</button>
+                  : canManage && text(target.status) === 'pending_approval'
+                    ? <button type="button" onClick={() => void transitionTarget(target, 'approve')} disabled={saving === String(target.id)}>Approve</button>
+                    : null}
+              />
+            )) : (
+              <p className="event-kpi-empty">No approved event-specific target exists yet.</p>
+            )}
+          </div>
+        </div>
+
+        {canManage ? (
+          <div className="event-kpi-control-grid">
+            <form onSubmit={event => { event.preventDefault(); void saveCapacity(); }}>
+              <h3>Venue capacity</h3>
+              <p>For live on-stage events, this is an absolute ticket ceiling.</p>
+              <label>Venue capacity<input type="number" min="1" required value={venueCapacity} onChange={event => setVenueCapacity(event.target.value)} /></label>
+              <label>Sellable ticket capacity<input type="number" min="1" required value={sellableCapacity} onChange={event => setSellableCapacity(event.target.value)} /></label>
+              <label>Capacity evidence<input required value={capacitySource} onChange={event => setCapacitySource(event.target.value)} placeholder="Example: signed hall agreement" /></label>
+              <button className="ops-button is-secondary" type="submit" disabled={saving === 'capacity'}>{saving === 'capacity' ? 'Saving...' : 'Save capacity'}</button>
+            </form>
+            <form onSubmit={event => { event.preventDefault(); void createTarget(); }}>
+              <h3>Add event KPI target</h3>
+              <p>Create an adjustable event control. It stays draft until approved.</p>
+              <label>KPI<select value={targetPreset} onChange={event => setTargetPreset(event.target.value)}>{EVENT_KPI_PRESETS.map(item => <option key={item.metricKey} value={item.metricKey}>{item.label}</option>)}</select></label>
+              <label>Target value<input type="number" min="0" step="0.01" required value={targetValue} onChange={event => setTargetValue(event.target.value)} /></label>
+              <button className="ops-button is-primary" type="submit" disabled={saving === 'target'}>{saving === 'target' ? 'Creating...' : 'Create draft target'}</button>
+            </form>
+          </div>
+        ) : null}
+      </section>
+
+      <div className="event-results-heading">
+        <div><h2>Actual results</h2><p>Evidence received from connected sources, imports, or governed corrections.</p></div>
+      </div>
       <Notice tone={numberValue(sourceStatus.connectorRecords) ? 'good' : 'warn'}>
         KPI data source: {sourceLabel(sourceStatus.primarySource)}. Use Integrations to connect/import Meta, YouTube, Formaloo, GHL, Postiz, or CSV data for this event.
       </Notice>
@@ -521,6 +705,22 @@ function KpisTab({
         </ProductCard>
       </div>
     </div>
+  );
+}
+
+function TargetRow({ target, action }: { target: RecordMap; action?: ReactNode }) {
+  const unit = text(target.unit, '');
+  const raw = numberValue(target.targetValue);
+  const value = unit === 'currency'
+    ? formatCurrency(raw, target.currency === 'USD' ? 'USD' : 'AED')
+    : unit === 'percentage'
+      ? `${raw}%`
+      : raw.toLocaleString();
+  return (
+    <article className="event-kpi-target-row">
+      <div><strong>{text(target.label, 'KPI target')}</strong><span>{titleCase(target.scope)} · {titleCase(target.controlMode)}</span></div>
+      <div><b>{value}</b><ProductStatus tone={text(target.status) === 'approved' ? 'good' : 'warn'}>{titleCase(target.status)}</ProductStatus>{action}</div>
+    </article>
   );
 }
 
@@ -728,6 +928,8 @@ export default function HybridEventWorkspace() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
   const {
+    token,
+    role,
     events,
     selectedEventId,
     dashboard,
@@ -742,6 +944,8 @@ export default function HybridEventWorkspace() {
     ghlStatus,
     closeoutReport,
     learningSummary,
+    governedTargets,
+    eventCapacity,
     message,
     loading,
     load,
@@ -800,7 +1004,7 @@ export default function HybridEventWorkspace() {
 
           {activeTab === 'overview' ? <OverviewTab kpis={kpis} nextActions={nextActions} sourceStatus={sourceStatus} problemDashboard={problemDashboard} onNavigate={setActiveTab} /> : null}
           {activeTab === 'strategy' ? <StrategyTab event={event} emailPlans={emailPlans} whatsappPlans={whatsappPlans} upsellPlans={upsellPlans} contentRequirements={contentRequirements} salesTasks={salesTasks} navigate={navigate} /> : null}
-          {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} navigate={navigate} /> : null}
+          {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} governedTargets={governedTargets} eventCapacity={eventCapacity} eventId={selectedEventId} token={token} canManage={role === 'cco'} onRefresh={() => load(selectedEventId)} navigate={navigate} /> : null}
           {activeTab === 'leads' ? <LeadsTab salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} navigate={navigate} /> : null}
           {activeTab === 'blockers' ? <BlockersTab problemDashboard={problemDashboard} eventProblems={eventProblems} /> : null}
           {activeTab === 'closeout' ? <CloseoutTab closeoutReport={closeoutReport} learningSummary={learningSummary} channelPerformance={closeoutChannels} sourcePerformance={closeoutSources} /> : null}

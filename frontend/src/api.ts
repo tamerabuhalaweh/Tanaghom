@@ -548,6 +548,73 @@ export const eventsApi = {
     apiFetch<unknown>(`/events/${eventId}/kpis/${kpiId}`, { method: 'PUT', body: data, token }),
 };
 
+export const commercialKpiApi = {
+  list: (
+    token: string,
+    filters: {
+      annualPlanId?: string;
+      monthlyItemId?: string;
+      commercialPlanId?: string;
+      eventId?: string;
+      campaignId?: string;
+      scope?: string;
+      status?: string;
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    const query = params.toString();
+    return apiFetch<unknown[]>(`/commercial-kpis${query ? `?${query}` : ''}`, { token });
+  },
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/commercial-kpis', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-kpis/${id}`, { method: 'PUT', body: data, token }),
+  transition: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-kpis/${id}/transition`, {
+      method: 'POST',
+      body: data,
+      token,
+    }),
+  amend: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-kpis/${id}/amend`, { method: 'POST', body: data, token }),
+  eventCapacity: (eventId: string, token: string) =>
+    apiFetch<unknown>(`/commercial-kpis/events/${eventId}/capacity`, { token }),
+  effectiveEventTargets: (eventId: string, token: string) =>
+    apiFetch<unknown[]>(`/commercial-kpis/events/${eventId}/effective`, { token }),
+  setEventCapacity: (eventId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/commercial-kpis/events/${eventId}/capacity`, {
+      method: 'PUT',
+      body: data,
+      token,
+    }),
+};
+
+export const ghlAttributionApi = {
+  list: (token: string, filters: { commercialPlanId?: string; eventId?: string; status?: string } = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    const query = params.toString();
+    return apiFetch<unknown[]>(`/ghl-attribution${query ? `?${query}` : ''}`, { token });
+  },
+  create: (data: unknown, token: string) =>
+    apiFetch<unknown>('/ghl-attribution', { method: 'POST', body: data, token }),
+  update: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/ghl-attribution/${id}`, { method: 'PUT', body: data, token }),
+  approve: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/ghl-attribution/${id}/approve`, { method: 'POST', body: data, token }),
+  previewMatch: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/ghl-attribution/${id}/preview-match`, {
+      method: 'POST',
+      body: data,
+      token,
+    }),
+};
+
 export const connectorMappingsApi = {
   list: (token: string, connectorId?: string) => {
     const params = connectorId ? `?${new URLSearchParams({ connectorId }).toString()}` : '';
