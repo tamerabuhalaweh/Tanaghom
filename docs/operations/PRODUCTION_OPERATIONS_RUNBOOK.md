@@ -187,6 +187,11 @@ Minimum production policy:
 - checksum stored with the dump
 - restore drill before customer go-live
 - restore drill repeated monthly
+- 30-day retention with at least seven successful artifacts preserved
+
+The Docker backup script runs `scripts/prune-postgres-backups.sh` only after a
+successful dump and checksum. Override `BACKUP_RETENTION_DAYS` and
+`BACKUP_MIN_KEEP` only through an approved server-side operations policy.
 
 ## Off-Server Backup Sync
 
@@ -214,6 +219,20 @@ BACKUP_S3_URI=s3://company-backups/tanaghum \
 ```
 
 The script requires `BACKUP_ENCRYPTION_PASSPHRASE_FILE`, encrypts the dump with AES-256-CBC/PBKDF2 before transfer, and uploads only the encrypted artifact, encrypted checksum, and sanitized upload manifest. It writes `offserver-latest.json` without exposing the target URI. Raw PostgreSQL dumps must never be sent to the off-server destination.
+
+For SSH destinations, configure a dedicated restricted receiver identity and set
+`BACKUP_RSYNC_SSH_KEY_FILE` and `BACKUP_RSYNC_KNOWN_HOSTS_FILE`. Do not use a
+general administrator SSH key for scheduled backup transfer.
+
+The standby verifies and restores the transferred encrypted primary artifact with:
+
+```bash
+OFFSERVER_BACKUP_DIR=/srv/tanaghum-primary \
+BACKUP_ENCRYPTION_PASSPHRASE_FILE=/etc/tanaghum-primary/secrets/backup-encryption-passphrase \
+RESTORE_DRILL_LOGIN_EMAIL=approved-test-user@example.com \
+RESTORE_DRILL_LOGIN_PASSWORD_FILE=/etc/tanaghum-primary/secrets/restore-drill-password \
+scripts/run-latest-encrypted-restore-drill.sh
+```
 
 ## Restore Drill
 
@@ -296,6 +315,8 @@ Systemd unit templates are available in:
 - `ops/systemd/tanaghum-restore-drill.service`
 - `ops/systemd/tanaghum-restore-drill.timer`
 - `ops/systemd/tanaghum-operations-alert@.service`
+- `ops/systemd/tanaghum-primary-offserver-restore-drill.service`
+- `ops/systemd/tanaghum-primary-offserver-restore-drill.timer`
 
 Install on the VPS:
 
@@ -384,3 +405,5 @@ Minimum alerts:
 - Independent penetration/security review must still be performed, and no critical/high finding may remain unaccepted.
 
 The authoritative exit criteria are in `docs/operations/HYBRID_PRODUCTION_OPERATIONS_ACCEPTANCE.md`.
+The controlled recovery and promotion procedure is in
+`docs/operations/DISASTER_RECOVERY_RUNBOOK.md`.

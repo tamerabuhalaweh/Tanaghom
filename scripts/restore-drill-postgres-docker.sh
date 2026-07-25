@@ -34,7 +34,7 @@ backup_dir="$(dirname "$backup_file")"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 restore_db="tanaghum_restore_drill_$timestamp"
 drill_container="tanaghum-restore-drill-app-$timestamp"
-manifest="$backup_dir/restore-drill-latest.json"
+manifest="${RESTORE_DRILL_EVIDENCE_PATH:-$backup_dir/restore-drill-latest.json}"
 env_file="$(mktemp)"
 inspect_file="$(mktemp)"
 counts_file="$(mktemp)"
@@ -131,6 +131,9 @@ fi
 RESTORED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 BACKUP_FILE="$(basename "$backup_file")" \
 SOURCE_DATABASE="$POSTGRES_DB" \
+SOURCE_ARTIFACT="${RESTORE_DRILL_SOURCE_ARTIFACT:-$(basename "$backup_file")}" \
+SOURCE_ENCRYPTED="${RESTORE_DRILL_SOURCE_ENCRYPTED:-false}" \
+SOURCE_CHECKSUM_VERIFIED="${RESTORE_DRILL_SOURCE_CHECKSUM_VERIFIED:-false}" \
 TABLE_COUNT="$table_count" \
 COUNTS_FILE="$counts_file" \
 MANIFEST="$manifest" \
@@ -144,6 +147,9 @@ with open(os.environ['COUNTS_FILE']) as handle:
 manifest = {
     'restoredAt': os.environ['RESTORED_AT'],
     'backupFile': os.environ['BACKUP_FILE'],
+    'sourceArtifact': os.environ['SOURCE_ARTIFACT'],
+    'sourceEncrypted': os.environ['SOURCE_ENCRYPTED'].lower() == 'true',
+    'sourceChecksumVerified': os.environ['SOURCE_CHECKSUM_VERIFIED'].lower() == 'true',
     'sourceDatabase': os.environ['SOURCE_DATABASE'],
     'isolatedRestore': True,
     'tableCount': int(os.environ['TABLE_COUNT']),
@@ -153,6 +159,9 @@ manifest = {
     'rawCredentialsReturned': False,
     'status': 'passed',
 }
+manifest_dir = os.path.dirname(os.environ['MANIFEST'])
+if manifest_dir:
+    os.makedirs(manifest_dir, exist_ok=True)
 with open(os.environ['MANIFEST'], 'w') as handle:
     json.dump(manifest, handle, indent=2)
     handle.write('\n')

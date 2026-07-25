@@ -1,6 +1,6 @@
 # Hybrid Backup Standby
 
-Last verified: 2026-07-20
+Last verified: 2026-07-25
 
 ## Purpose
 
@@ -19,7 +19,11 @@ Server path: /opt/tanaghum-backup
 
 ## Recovery Posture
 
-The deployment is a **warm code standby with an isolated database**. It is not currently a live replica of the primary Hybrid database.
+The deployment is a **warm application standby with an isolated default
+database**. Primary customer data remains out of the standby application
+database until an incident promotion is authorized. The production backup path
+uses encrypted primary database artifacts and independent-host restore drills
+rather than continuous database replication.
 
 Verified capabilities:
 
@@ -34,10 +38,14 @@ Verified capabilities:
 - Weekly isolated restore drill that validates application health and login against the restored database.
 - Public application and health probes every five minutes.
 - Docker restart policies for application services.
+- Daily encrypted primary-database receipt over a dedicated restricted SSH identity.
+- Encrypted and decrypted checksum validation before any restore.
+- Weekly independent-host restore drill against the received primary backup.
+- Thirty-day retention with a minimum of seven local and received artifacts.
 
 Not implemented or claimed:
 
-- Continuous or scheduled replication of primary customer data.
+- Continuous database replication.
 - Automatic DNS failover from the primary Hybrid URL.
 - Off-server copy of this standby host's own backup files.
 - External alert delivery because no webhook/email destination is configured.
@@ -71,6 +79,8 @@ Evidence paths on the server:
 /var/backups/tanaghum-backup/postgres/latest.json
 /var/backups/tanaghum-backup/postgres/restore-drill-latest.json
 /var/lib/tanaghum-backup/uptime/latest.json
+/srv/tanaghum-primary/offserver-upload.json
+/var/lib/tanaghum-primary-dr/restore-drill-latest.json
 ```
 
 ## Scheduled Operations
@@ -102,6 +112,9 @@ curl -fsS https://tanaghum-backup.155-117-45-45.sslip.io/api/health
 7. Validate the restored data in isolation before directing customer traffic.
 8. Record the recovery decision, operator, source backup, checksum, validation results, and customer authorization.
 
+The full controlled promotion process is documented in
+`docs/operations/DISASTER_RECOVERY_RUNBOOK.md`.
+
 ## Security Rules
 
 - Never place VPS passwords, application passwords, API keys, database passwords, or provider tokens in this document or GitHub.
@@ -109,4 +122,3 @@ curl -fsS https://tanaghum-backup.155-117-45-45.sslip.io/api/health
 - Keep SSH key access available before considering password-login disablement.
 - Customer traffic must not be redirected to this host while it contains isolated seed data.
 - External execution flags remain disabled until credentials, mapping, approval, and acceptance evidence exist.
-
