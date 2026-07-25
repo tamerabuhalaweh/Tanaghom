@@ -317,6 +317,8 @@ Systemd unit templates are available in:
 - `ops/systemd/tanaghum-operations-alert@.service`
 - `ops/systemd/tanaghum-primary-offserver-restore-drill.service`
 - `ops/systemd/tanaghum-primary-offserver-restore-drill.timer`
+- `ops/systemd/tanaghum-primary-offserver-retention.service`
+- `ops/systemd/tanaghum-primary-offserver-retention.timer`
 
 Install on the VPS:
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=Prune retained encrypted Tanaghum primary backups on standby
+ConditionPathIsDirectory=/srv/tanaghum-primary
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tanaghum-backup
+Environment=DATABASE_BACKUP_DIR=/srv/tanaghum-primary
+Environment=BACKUP_FILE_PATTERN=tanaghum-postgres-*.dump.enc
+Environment=BACKUP_RETENTION_DAYS=30
+Environment=BACKUP_MIN_KEEP=7
+Environment=BACKUP_RETENTION_EVIDENCE_PATH=/var/lib/tanaghum-primary-dr/retention-latest.json
+ExecStart=/bin/bash /opt/tanaghum-backup/scripts/prune-postgres-backups.sh

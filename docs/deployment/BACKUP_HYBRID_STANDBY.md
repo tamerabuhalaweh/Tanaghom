@@ -89,6 +89,8 @@ Evidence paths on the server:
 tanaghum-backup-postgres.timer      daily at approximately 02:15 UTC
 tanaghum-backup-uptime.timer        every five minutes
 tanaghum-backup-restore-drill.timer weekly on Sunday at approximately 03:30 UTC
+tanaghum-primary-offserver-restore-drill.timer weekly on Sunday at approximately 04:30 UTC
+tanaghum-primary-offserver-retention.timer daily at approximately 05:00 UTC
 ```
 
 Inspect without exposing secrets:
