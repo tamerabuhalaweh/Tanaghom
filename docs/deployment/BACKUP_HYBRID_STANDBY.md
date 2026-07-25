@@ -4,7 +4,7 @@ Last verified: 2026-07-25
 
 ## Purpose
 
-This host is an independently deployed Hybrid application recovery target. It provides a second HTTPS endpoint built from the canonical recovery tag without changing the primary Hybrid or AB environments.
+This host is an independently deployed Hybrid application recovery target. It provides a second HTTPS endpoint built from the reviewed Hybrid `main` release without changing the primary Hybrid or AB environments.
 
 Backup URL: `https://tanaghum-backup.155-117-45-45.sslip.io`
 
@@ -12,8 +12,8 @@ Recovery source:
 
 ```text
 Repository: tamerabuhalaweh/Tanaghom
-Tag: hybrid-recovery-2026-07-19
-Commit: a1a7edeeb09eb2b83b979eefd509ef783ba8381b
+Release channel: main
+Deployment rule: primary and standby must use the same reviewed main commit
 Server path: /opt/tanaghum-backup
 ```
 
@@ -105,7 +105,7 @@ curl -fsS https://tanaghum-backup.155-117-45-45.sslip.io/api/health
 
 ## Recovery Procedure
 
-1. Verify the requested recovery release/tag and compare its commit SHA with GitHub.
+1. Verify the requested recovery release and compare its exact commit SHA with GitHub and the primary Hybrid release.
 2. Confirm `/opt/tanaghum-backup/.env.backup`, `docker-compose.backup.yml`, and `Caddyfile.backup` remain server-only and mode `600`.
 3. Start the stack from `/opt/tanaghum-backup` with its backup compose file and environment file.
 4. Confirm all five Tanaghum containers are running and the application, PostgreSQL, and Redis health checks are healthy.
