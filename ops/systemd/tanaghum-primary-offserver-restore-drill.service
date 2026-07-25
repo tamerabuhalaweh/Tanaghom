@@ -1,0 +1,18 @@
+[Unit]
+Description=Tanaghum restore drill from encrypted primary backup on standby host
+Wants=docker.service
+After=docker.service network-online.target
+ConditionPathExists=/etc/tanaghum-primary/restore-drill.env
+ConditionPathExists=/srv/tanaghum-primary/offserver-upload.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tanaghum-backup
+Environment=OFFSERVER_BACKUP_DIR=/srv/tanaghum-primary
+Environment=POSTGRES_CONTAINER=tanaghum-backup-postgres
+Environment=POSTGRES_USER=tanaghum_backup
+Environment=POSTGRES_DB=tanaghum_backup
+Environment=RESTORE_DRILL_APP_CONTAINER=tanaghum-backup-app
+Environment=RESTORE_DRILL_EVIDENCE_PATH=/var/lib/tanaghum-primary-dr/restore-drill-latest.json
+EnvironmentFile=/etc/tanaghum-primary/restore-drill.env
+ExecStart=/bin/bash /opt/tanaghum-backup/scripts/run-latest-encrypted-restore-drill.sh

@@ -38,3 +38,10 @@ JSON
 echo "Backup written: $output"
 echo "Checksum written: $checksum"
 echo "Manifest written: $manifest"
+
+if [[ "${BACKUP_PRUNE_AFTER_SUCCESS:-true}" == "true" ]]; then
+  DATABASE_BACKUP_DIR="$BACKUP_DIR" \
+  BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}" \
+  BACKUP_MIN_KEEP="${BACKUP_MIN_KEEP:-7}" \
+    /bin/bash "$(dirname "$0")/prune-postgres-backups.sh"
+fi

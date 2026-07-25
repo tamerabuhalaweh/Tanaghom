@@ -5,6 +5,8 @@ BACKUP_DIR="${DATABASE_BACKUP_DIR:-/var/backups/tanaghum/postgres}"
 RSYNC_TARGET="${BACKUP_RSYNC_TARGET:-}"
 S3_URI="${BACKUP_S3_URI:-}"
 PASSPHRASE_FILE="${BACKUP_ENCRYPTION_PASSPHRASE_FILE:-}"
+RSYNC_SSH_KEY_FILE="${BACKUP_RSYNC_SSH_KEY_FILE:-}"
+RSYNC_KNOWN_HOSTS_FILE="${BACKUP_RSYNC_KNOWN_HOSTS_FILE:-}"
 
 latest_manifest="$BACKUP_DIR/latest.json"
 offserver_manifest="$BACKUP_DIR/offserver-latest.json"
@@ -78,6 +80,26 @@ target_kind=""
 
 if [[ -n "$RSYNC_TARGET" ]]; then
   command -v rsync >/dev/null || { echo "rsync is required for BACKUP_RSYNC_TARGET" >&2; exit 2; }
+  if [[ "$RSYNC_TARGET" != *:* && "$RSYNC_TARGET" != rsync://* ]]; then
+    echo "BACKUP_RSYNC_TARGET must be a remote rsync or SSH destination" >&2
+    exit 2
+  fi
+  if [[ -n "$RSYNC_SSH_KEY_FILE" ]]; then
+    if [[ ! -f "$RSYNC_SSH_KEY_FILE" ]]; then
+      echo "BACKUP_RSYNC_SSH_KEY_FILE does not exist" >&2
+      exit 2
+    fi
+    key_permissions="$(stat -c '%a' "$RSYNC_SSH_KEY_FILE")"
+    if [[ "$key_permissions" != "400" && "$key_permissions" != "600" ]]; then
+      echo "Backup rsync SSH key must have mode 400 or 600" >&2
+      exit 2
+    fi
+    if [[ -z "$RSYNC_KNOWN_HOSTS_FILE" || ! -f "$RSYNC_KNOWN_HOSTS_FILE" ]]; then
+      echo "BACKUP_RSYNC_KNOWN_HOSTS_FILE is required with a dedicated SSH key" >&2
+      exit 2
+    fi
+    export RSYNC_RSH="ssh -i $RSYNC_SSH_KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RSYNC_KNOWN_HOSTS_FILE"
+  fi
   rsync -a --checksum "$encrypted_file" "$encrypted_checksum_file" "$upload_manifest" "$RSYNC_TARGET"
   provider="rsync"
   target_kind="rsync"

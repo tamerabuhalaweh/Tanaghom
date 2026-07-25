@@ -342,9 +342,8 @@ jobs:
       - name: Production dependency audit
         run: |
           npm ci
-          npm audit --omit=dev --audit-level=high
           npm --prefix frontend ci
-          npm --prefix frontend audit --omit=dev --audit-level=high
+          node scripts/verify-production-audit.mjs
 
       - name: Demo Safety Check
         run: |
@@ -380,13 +379,19 @@ jobs:
         run: |
           bash -n \
             scripts/backup-postgres-docker.sh \
+            scripts/prune-postgres-backups.sh \
             scripts/restore-drill-postgres-docker.sh \
             scripts/run-latest-restore-drill.sh \
+            scripts/run-latest-encrypted-restore-drill.sh \
             scripts/sync-latest-backup-offserver.sh \
+            scripts/test-backup-retention.sh \
             scripts/uptime-check.sh \
             scripts/verify-encrypted-postgres-backup-docker.sh
           node --check scripts/send-operations-alert.mjs
           node --check scripts/verify-security-headers.mjs
+
+      - name: Test backup retention behavior
+        run: bash scripts/test-backup-retention.sh
 
       - name: Validate systemd units
         run: systemd-analyze verify ops/systemd/*.service ops/systemd/*.timer
