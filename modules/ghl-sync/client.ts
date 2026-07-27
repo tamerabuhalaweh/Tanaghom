@@ -201,11 +201,7 @@ export class LeadConnectorClient implements GhlClient {
   async testConnection(): Promise<GhlConnectionTestResult> {
     const contactsBody = await this.request('/contacts/search', {
       method: 'POST',
-      body: JSON.stringify({
-        locationId: this.config.locationId,
-        skip: 0,
-        limit: 1,
-      }),
+      body: JSON.stringify(contactSearchPage(this.config.locationId, 1)),
     });
     return {
       checkedContacts: extractItems(contactsBody, ['contacts', 'items', 'results']).length,
@@ -217,11 +213,7 @@ export class LeadConnectorClient implements GhlClient {
     const warnings: string[] = [];
     const contactsResult = await this.readValidationEndpoint('/contacts/search', {
       method: 'POST',
-      body: JSON.stringify({
-        locationId: this.config.locationId,
-        skip: 0,
-        limit: 1,
-      }),
+      body: JSON.stringify(contactSearchPage(this.config.locationId, 1)),
     });
     const opportunitiesResult = await this.readValidationEndpoint(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=1`, {
       method: 'GET',
@@ -267,11 +259,7 @@ export class LeadConnectorClient implements GhlClient {
     const [contactsBody, opportunitiesBody] = await Promise.all([
       this.request('/contacts/search', {
         method: 'POST',
-        body: JSON.stringify({
-          locationId: this.config.locationId,
-          skip: 0,
-          limit,
-        }),
+        body: JSON.stringify(contactSearchPage(this.config.locationId, limit)),
       }),
       this.request(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=${limit}`, {
         method: 'GET',
@@ -350,4 +338,16 @@ export class LeadConnectorClient implements GhlClient {
       'Content-Type': 'application/json',
     };
   }
+}
+
+function contactSearchPage(locationId: string, pageLimit: number): {
+  locationId: string;
+  page: number;
+  pageLimit: number;
+} {
+  return {
+    locationId,
+    page: 1,
+    pageLimit,
+  };
 }
