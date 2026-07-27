@@ -65,9 +65,12 @@ function assertPrivilegedSessionFresh(payload: JwtPayload): void {
   }
 }
 
-export function verifyToken(token: string): JwtPayload {
+export function verifyToken(
+  token: string,
+  options: { allowMfaEnrollmentRequired?: boolean } = {},
+): JwtPayload {
   const payload = decodeToken(token);
-  if (payload.mfaEnrollmentRequired) {
+  if (payload.mfaEnrollmentRequired && !options.allowMfaEnrollmentRequired) {
     throw new AppError(
       'Complete authenticator enrollment before accessing this resource',
       403,
@@ -75,10 +78,6 @@ export function verifyToken(token: string): JwtPayload {
     );
   }
   return payload;
-}
-
-export function verifyTokenForMfaEnrollment(token: string): JwtPayload {
-  return decodeToken(token);
 }
 
 export function requireRole(...allowedRoles: string[]) {

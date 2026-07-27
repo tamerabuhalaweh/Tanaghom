@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { createOnboardingToken, acceptOnboardingToken, login, getSession, getOnboardingEmailStatus } from './service';
 import { validateLoginInput } from './validators';
-import { signToken, verifyToken, verifyTokenForMfaEnrollment } from '@shared/auth';
+import { signToken, verifyToken } from '@shared/auth';
 import { ForbiddenError, UnauthorizedError } from '@shared/errors';
 import { revokeToken } from '@shared/auth/token-revocation';
 import {
@@ -49,7 +49,7 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
       res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Bearer token required' } });
       return;
     }
-    const payload = verifyTokenForMfaEnrollment(authHeader.substring(7));
+    const payload = verifyToken(authHeader.substring(7), { allowMfaEnrollmentRequired: true });
     const revoked = await revokeToken(payload);
     res.json({
       status: 'logged_out',
@@ -242,5 +242,5 @@ function getAuthenticatedPayload(req: Request) {
   if (!authHeader?.startsWith('Bearer ')) {
     throw new UnauthorizedError('Bearer token required');
   }
-  return verifyTokenForMfaEnrollment(authHeader.substring(7));
+  return verifyToken(authHeader.substring(7), { allowMfaEnrollmentRequired: true });
 }

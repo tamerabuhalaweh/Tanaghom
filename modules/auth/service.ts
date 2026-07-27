@@ -1,5 +1,5 @@
 import { ForbiddenError, UnauthorizedError } from '@shared/errors';
-import { comparePassword, hashPassword, signToken, verifyTokenForMfaEnrollment, type JwtPayload } from '@shared/auth';
+import { comparePassword, hashPassword, signToken, verifyToken, type JwtPayload } from '@shared/auth';
 import { auditLog } from '@shared/logging';
 import { eventBus } from '@shared/events';
 import { randomBytes, createHash } from 'node:crypto';
@@ -77,7 +77,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 }
 
 export async function getSession(token: string): Promise<SessionUser> {
-  const payload = verifyTokenForMfaEnrollment(token);
+  const payload = verifyToken(token, { allowMfaEnrollmentRequired: true });
   const user = await findUserById(payload.sub);
 
   if (!user) {

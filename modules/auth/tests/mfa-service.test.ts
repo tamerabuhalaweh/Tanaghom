@@ -25,7 +25,7 @@ describe('auth/mfa-service recovery code helpers', () => {
   });
 
   it('requires privileged production roles to enroll when MFA is missing', () => {
-    const production = { NODE_ENV: 'production', MFA_ENFORCE_PRIVILEGED_ENROLLMENT: undefined };
+    const production = { NODE_ENV: 'production', MFA_ENFORCE_PRIVILEGED_ENROLLMENT: 'true' };
 
     expect(requiresPrivilegedMfaEnrollment('admin', false, production)).toBe(true);
     expect(requiresPrivilegedMfaEnrollment('cco', false, production)).toBe(true);

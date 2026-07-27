@@ -3,7 +3,6 @@ import { UnauthorizedError, ForbiddenError } from '@shared/errors';
 import {
   signToken,
   verifyToken,
-  verifyTokenForMfaEnrollment,
   hashPassword,
   comparePassword,
   requireRole,
@@ -35,7 +34,7 @@ describe('auth service logic', () => {
       const token = signToken({ ...testPayload, mfaEnrollmentRequired: true });
 
       expect(() => verifyToken(token)).toThrow(/Complete authenticator enrollment/);
-      expect(verifyTokenForMfaEnrollment(token).mfaEnrollmentRequired).toBe(true);
+      expect(verifyToken(token, { allowMfaEnrollmentRequired: true }).mfaEnrollmentRequired).toBe(true);
     });
 
     it('invalidates privileged sessions issued before the enforcement cutoff', () => {
@@ -44,7 +43,7 @@ describe('auth service logic', () => {
       process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH = String(Math.floor(Date.now() / 1000) + 60);
 
       try {
-        expect(() => verifyTokenForMfaEnrollment(token)).toThrow(/Invalid, expired, or superseded token/);
+        expect(() => verifyToken(token, { allowMfaEnrollmentRequired: true })).toThrow(/Invalid, expired, or superseded token/);
       } finally {
         if (previousCutoff === undefined) delete process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH;
         else process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH = previousCutoff;

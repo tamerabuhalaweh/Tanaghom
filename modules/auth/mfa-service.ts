@@ -26,8 +26,7 @@ export function requiresPrivilegedMfaEnrollment(
   mfaEnabled: boolean,
   environment: MfaEnrollmentEnvironment = process.env,
 ): boolean {
-  const enforcementEnabled = environment.MFA_ENFORCE_PRIVILEGED_ENROLLMENT === 'true'
-    || (environment.MFA_ENFORCE_PRIVILEGED_ENROLLMENT !== 'false' && environment.NODE_ENV === 'production');
+  const enforcementEnabled = environment.MFA_ENFORCE_PRIVILEGED_ENROLLMENT === 'true';
   return enforcementEnabled && PRIVILEGED_MFA_ROLES.has(role) && !mfaEnabled;
 }
 

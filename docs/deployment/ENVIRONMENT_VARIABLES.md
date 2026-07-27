@@ -31,7 +31,7 @@
 | `ALERT_WEBHOOK_URL` | unset | Operations alert webhook |
 | `OPERATIONS_ALERT_EMAIL` | unset | Operations alert email |
 | `OPERATIONS_GITHUB_ALERTS_ENABLED` | `false` | Marks the repository-owned GitHub external uptime incident route as enabled after its controlled delivery test passes |
-| `MFA_ENFORCE_PRIVILEGED_ENROLLMENT` | production default | Restricts admin, CCO, and department-head sessions to MFA enrollment until TOTP verification succeeds |
+| `MFA_ENFORCE_PRIVILEGED_ENROLLMENT` | `false` | Set explicitly to `true` in production to restrict admin, CCO, and department-head sessions to MFA enrollment until TOTP verification succeeds |
 | `MFA_ALLOW_PRIVILEGED_DISABLE` | `false` | Emergency-only override for controlled privileged MFA recovery |
 | `MFA_PRIVILEGED_ENFORCEMENT_EPOCH` | `0` | Unix timestamp; privileged JWTs issued before this rollout cutoff must sign in again |
 | `PUBLIC_HEALTH_URL` | unset | Public uptime-monitor URL for `/health` |
