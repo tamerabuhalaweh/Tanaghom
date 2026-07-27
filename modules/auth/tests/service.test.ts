@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { UnauthorizedError, ForbiddenError } from '@shared/errors';
-import { signToken, verifyToken, hashPassword, comparePassword, requireRole } from '@shared/auth';
+import {
+  signToken,
+  verifyToken,
+  verifyTokenForMfaEnrollment,
+  hashPassword,
+  comparePassword,
+  requireRole,
+} from '@shared/auth';
 import type { JwtPayload } from '@shared/auth';
 
 describe('auth service logic', () => {
@@ -22,6 +29,26 @@ describe('auth service logic', () => {
 
     it('rejects invalid token', () => {
       expect(() => verifyToken('invalid.token.here')).toThrow(UnauthorizedError);
+    });
+
+    it('restricts enrollment-only tokens from normal resource verification', () => {
+      const token = signToken({ ...testPayload, mfaEnrollmentRequired: true });
+
+      expect(() => verifyToken(token)).toThrow(/Complete authenticator enrollment/);
+      expect(verifyTokenForMfaEnrollment(token).mfaEnrollmentRequired).toBe(true);
+    });
+
+    it('invalidates privileged sessions issued before the enforcement cutoff', () => {
+      const previousCutoff = process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH;
+      const token = signToken({ ...testPayload, role: 'admin' });
+      process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH = String(Math.floor(Date.now() / 1000) + 60);
+
+      try {
+        expect(() => verifyTokenForMfaEnrollment(token)).toThrow(/Invalid, expired, or superseded token/);
+      } finally {
+        if (previousCutoff === undefined) delete process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH;
+        else process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH = previousCutoff;
+      }
     });
   });
 

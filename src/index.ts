@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { logger } from '@shared/logging';
 import { connectDatabase, disconnectDatabase } from '@shared/database';
 import { closeQueue, getRedisConnection } from '@shared/queue';
-import { verifyToken } from '@shared/auth';
+import { verifyToken, verifyTokenForMfaEnrollment } from '@shared/auth';
 import { resolveRateLimitCapacity, resolveRateLimitKey } from '@shared/auth/rate-limit-key';
 import { assertTokenNotRevoked } from '@shared/auth/token-revocation';
 import { validateEnvironment, isDemoMode, isLiveExecutionEnabled, assertDemoSafe } from './env-validation';
@@ -201,7 +201,12 @@ async function enforceTokenRevocation(req: express.Request, _res: express.Respon
     }
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
-      const payload = verifyToken(authHeader.substring(7));
+      const enrollmentRoute = req.path === '/auth/session'
+        || req.path === '/auth/logout'
+        || req.path.startsWith('/auth/mfa/');
+      const payload = enrollmentRoute
+        ? verifyTokenForMfaEnrollment(authHeader.substring(7))
+        : verifyToken(authHeader.substring(7));
       await assertTokenNotRevoked(payload);
     }
     next();

@@ -24,7 +24,7 @@ function numberValue(value: unknown): number {
 }
 
 export default function AccountSecurity() {
-  const { token } = useAuth();
+  const { token, completeMfaEnrollment, mfaEnrollmentRequired } = useAuth();
   const [status, setStatus] = useState<RecordMap | null>(null);
   const [setup, setSetup] = useState<RecordMap | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -80,6 +80,9 @@ export default function AccountSecurity() {
     setMessage('');
     try {
       const result = await authApi.mfaVerify({ factorId: setup.factorId, code: verifyCode }, token) as RecordMap;
+      if (typeof result.token === 'string' && result.token) {
+        completeMfaEnrollment(result.token);
+      }
       setRecoveryCodes(Array.isArray(result.recoveryCodes) ? result.recoveryCodes.filter((item): item is string => typeof item === 'string') : []);
       setSetup(null);
       setVerifyCode('');
@@ -138,6 +141,11 @@ export default function AccountSecurity() {
       action={<ProductStatus tone={enabled ? 'good' : 'warn'}>{enabled ? 'MFA Enabled' : 'MFA Required'}</ProductStatus>}
     >
       {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('invalid') ? 'danger' : 'info'}>{message}</Notice>}
+      {mfaEnrollmentRequired && !enabled && (
+        <Notice tone="warn">
+          Your account has privileged access. Complete authenticator setup before using the rest of the workspace.
+        </Notice>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <MetricCard label="MFA Status" value={enabled ? 'Enabled' : 'Off'} detail="Authenticator app protection" tone={enabled ? 'good' : 'warn'} />

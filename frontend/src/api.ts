@@ -121,7 +121,7 @@ function emitSseChunk(chunk: string, onEvent: (event: { event: string; data: unk
 
 export const authApi = {
   login: (email: string, password: string, mfaCode?: string) =>
-    apiFetch<{ token: string; user: unknown; agentRep: unknown }>('/auth/login', { method: 'POST', body: { email, password, ...(mfaCode ? { mfaCode } : {}) } }),
+    apiFetch<{ token: string; user: unknown; agentRep: unknown; mfaEnrollmentRequired: boolean }>('/auth/login', { method: 'POST', body: { email, password, ...(mfaCode ? { mfaCode } : {}) } }),
   session: (token: string) =>
     apiFetch<unknown>('/auth/session', { token }),
   logout: (token: string) =>

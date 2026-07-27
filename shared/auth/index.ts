@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
-import { UnauthorizedError, ForbiddenError } from '../errors';
+import { AppError, UnauthorizedError, ForbiddenError } from '../errors';
 
 const JWT_SECRET: string = process.env.JWT_SECRET || '';
 if (!JWT_SECRET) {
@@ -19,6 +19,7 @@ export interface JwtPayload {
   tenantKey?: string;
   departmentId?: string;
   agentRepId?: string;
+  mfaEnrollmentRequired?: boolean;
 }
 
 export interface SessionContext {
@@ -41,12 +42,43 @@ export function signToken(payload: JwtPayload): string {
   return jwt.sign({ ...payload, jti: payload.jti || randomUUID() } as object, JWT_SECRET, { expiresIn: 86400 });
 }
 
-export function verifyToken(token: string): JwtPayload {
+function decodeToken(token: string): JwtPayload {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    assertPrivilegedSessionFresh(payload);
+    return payload;
   } catch {
-    throw new UnauthorizedError('Invalid or expired token');
+    throw new UnauthorizedError('Invalid, expired, or superseded token');
   }
+}
+
+function assertPrivilegedSessionFresh(payload: JwtPayload): void {
+  const cutoff = Number(process.env.MFA_PRIVILEGED_ENFORCEMENT_EPOCH || 0);
+  if (!Number.isFinite(cutoff) || cutoff <= 0) return;
+  if (!['admin', 'cco', 'department_head'].includes(payload.role)) return;
+  if (!payload.iat || payload.iat < cutoff) {
+    throw new AppError(
+      'Sign in again to complete the privileged account security check',
+      401,
+      'PRIVILEGED_REAUTH_REQUIRED',
+    );
+  }
+}
+
+export function verifyToken(token: string): JwtPayload {
+  const payload = decodeToken(token);
+  if (payload.mfaEnrollmentRequired) {
+    throw new AppError(
+      'Complete authenticator enrollment before accessing this resource',
+      403,
+      'MFA_ENROLLMENT_REQUIRED',
+    );
+  }
+  return payload;
+}
+
+export function verifyTokenForMfaEnrollment(token: string): JwtPayload {
+  return decodeToken(token);
 }
 
 export function requireRole(...allowedRoles: string[]) {

@@ -2,11 +2,12 @@ name: Hybrid External Uptime
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: hybrid-external-uptime
@@ -39,6 +40,94 @@ jobs:
           ALERT_TITLE: Tanaghum Hybrid external uptime failure
           ALERT_MESSAGE: GitHub-hosted uptime or security-header verification failed. Review the workflow evidence and VPS status.
         run: node scripts/send-operations-alert.mjs github-hybrid-external-uptime
+      - name: Create or update external GitHub incident
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALERT_ASSIGNEE: tamerabuhalaweh
+          ALERT_TITLE: '[Operations Alert] Hybrid external uptime failure'
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          existing_number="$(
+            gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --search "$ALERT_TITLE in:title" \
+              --json number,title \
+              --jq ".[] | select(.title == env.ALERT_TITLE) | .number" \
+              | head -n 1
+          )"
+          incident_body="$(cat <<EOF
+          The external GitHub-hosted monitor could not reach the Hybrid application or its security-header checks failed.
+
+          - Detected at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          - Workflow evidence: $RUN_URL
+          - Target: Hybrid production
+          - Required action: inspect public health, VPS availability, application containers, database, Redis, and edge routing.
+
+          This issue contains no credentials or raw alert destination.
+          EOF
+          )"
+          if [[ -n "$existing_number" ]]; then
+            gh issue comment "$existing_number" --repo "$GITHUB_REPOSITORY" --body "$incident_body"
+            incident_number="$existing_number"
+            incident_action="updated"
+          else
+            incident_url="$(
+              gh issue create \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "$ALERT_TITLE" \
+                --body "$incident_body" \
+                --label "priority/p0" \
+                --label "area/devops" \
+                --assignee "$ALERT_ASSIGNEE"
+            )"
+            incident_number="${incident_url##*/}"
+            incident_action="created"
+          fi
+          mkdir -p ops/evidence
+          jq -n \
+            --arg attemptedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg action "$incident_action" \
+            --arg issueNumber "$incident_number" \
+            --arg runUrl "$RUN_URL" \
+            '{
+              attemptedAt: $attemptedAt,
+              source: "github-hybrid-external-uptime",
+              status: "delivered",
+              destination: "github_issue",
+              destinationRecipient: "repository_owner",
+              issueNumber: ($issueNumber | tonumber),
+              workflowEvidence: $runUrl,
+              rawDestinationReturned: false,
+              action: $action
+            }' > ops/evidence/github-incident-latest.json
+      - name: Resolve recovered external GitHub incident
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALERT_TITLE: '[Operations Alert] Hybrid external uptime failure'
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          existing_number="$(
+            gh issue list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --search "$ALERT_TITLE in:title" \
+              --json number,title \
+              --jq ".[] | select(.title == env.ALERT_TITLE) | .number" \
+              | head -n 1
+          )"
+          if [[ -n "$existing_number" ]]; then
+            gh issue comment "$existing_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "Hybrid recovered at $(date -u +%Y-%m-%dT%H:%M:%SZ). Passing workflow evidence: $RUN_URL"
+            gh issue close "$existing_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --reason completed
+          fi
       - name: Upload external uptime evidence
         if: always()
         uses: actions/upload-artifact@v4
