@@ -1,6 +1,6 @@
 # Tanaghum Project Handover For GPT 5.6 Sol
 
-Last updated: 2026-07-20
+Last updated: 2026-07-27
 
 Repository: `tamerabuhalaweh/Tanaghom`
 
@@ -8,7 +8,8 @@ Local path: `C:\Users\tamer\Desktop\New\tanaghum-platform`
 
 Current branch: `main`
 
-Current product baseline: `6553960 Merge pull request #207 from tamerabuhalaweh/test/hybrid-live-stitchi-response`
+Current product baseline:
+`8b035a17 Merge pull request #224 from tamerabuhalaweh/ops/temporary-production-promotion-20260727`
 
 Canonical recovery tag: `hybrid-recovery-2026-07-19`
 
@@ -22,11 +23,20 @@ Temporary production URL: `https://tanaghum-backup.155-117-45-45.sslip.io`
 
 Backup deployment runbook: [`docs/deployment/BACKUP_HYBRID_STANDBY.md`](../deployment/BACKUP_HYBRID_STANDBY.md)
 
-The recovery host is being promoted to temporary production during primary
-incident `#223`. Its source state, recovery artifact, monitoring target, backup
-ownership, and acceptance evidence must match the promotion record. After
-promotion, it is the source of truth for new writes until controlled failback.
-It must never be overwritten by an older primary snapshot.
+The recovery host was promoted to temporary production during primary incident
+`#223`. Its source state, recovery artifact, monitoring target, backup
+ownership, and acceptance evidence are recorded in
+`docs/evidence/TEMPORARY_PRODUCTION_PROMOTION_2026-07-27.md`. It is now the
+source of truth for new writes until controlled failback and must never be
+overwritten by an older primary snapshot.
+
+The temporary-production runtime, GitHub uptime check, post-deployment backup,
+isolated restore drill, security headers, and non-privileged browser routes
+have passed. Privileged MFA coverage is `0/5`; every real privileged owner must
+complete authenticator enrollment and retain recovery codes. Restored
+integration and AI credentials require re-entry because the primary vault key
+was not available on the recovery host. External webhook/email alert delivery
+is not configured because no destination has been supplied.
 
 The SRD-R14 historical-learning and hierarchical-planning wave is implemented through the governed annual -> monthly initiative -> execution plan path. The latest product closure was `#201 / UX-R1G`; follow-up bug `#204` and live acceptance issue `#206` are closed. The next recommended product issue is `#208 / UX-R1H: Weekly operating cadence below execution plans`. Production-operations closure remains tracked by `#171`.
 
