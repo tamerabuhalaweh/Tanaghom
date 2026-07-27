@@ -15,6 +15,7 @@ vi.mock('@shared/logging', () => ({ auditLog: vi.fn() }));
 
 import {
   getActiveIntegrationCredential,
+  hasActiveIntegrationCredential,
   listIntegrationCredentials,
   upsertIntegrationCredential,
 } from '../service';
@@ -116,6 +117,48 @@ describe('integration credential vault', () => {
         },
       },
     });
+  });
+
+  it('treats credentials encrypted by an unavailable recovery key as requiring re-entry', async () => {
+    process.env.SECRET_VAULT_ENCRYPTION_KEY = 'primary-vault-key-with-at-least-32-characters';
+    await upsertIntegrationCredential('admin', 'user-1', {
+      tenantKey: 'default',
+      provider: 'postiz',
+      credentialType: 'api_key',
+      displayName: 'Recovered Postiz',
+      secrets: { apiKey: 'primary-only-postiz-secret' },
+    });
+    const saved = prismaMocks.integrationCredential.upsert.mock.calls[0][0].create;
+    const recoveredCredential = {
+      id: 'cred-recovered',
+      tenant_key: 'default',
+      provider: 'postiz',
+      credential_type: 'api_key',
+      connection_key: 'default',
+      display_name: 'Recovered Postiz',
+      encrypted_payload: saved.encrypted_payload,
+      secret_fingerprints: saved.secret_fingerprints,
+      metadata: {},
+      created_by_user_id: 'user-1',
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+      last_validated_at: null,
+    };
+    process.env.SECRET_VAULT_ENCRYPTION_KEY = 'recovery-vault-key-with-at-least-32-characters';
+    prismaMocks.integrationCredential.findUnique.mockResolvedValue(recoveredCredential);
+    prismaMocks.integrationCredential.findMany.mockResolvedValue([recoveredCredential]);
+
+    await expect(getActiveIntegrationCredential('postiz', 'api_key')).resolves.toBeNull();
+    await expect(hasActiveIntegrationCredential('postiz', 'api_key')).resolves.toBe(false);
+    await expect(listIntegrationCredentials('admin')).resolves.toEqual([
+      expect.objectContaining({
+        id: 'cred-recovered',
+        isActive: true,
+        requiresReentry: true,
+        rawSecretsReturned: false,
+      }),
+    ]);
   });
 
   it('stores a selected Postiz channel ID encrypted and returns safe metadata only', async () => {

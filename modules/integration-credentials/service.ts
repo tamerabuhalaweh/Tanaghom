@@ -59,6 +59,7 @@ export interface SafeIntegrationCredential {
   secretFingerprints: Record<string, string>;
   metadata: unknown;
   isActive: boolean;
+  requiresReentry: boolean;
   createdByUserId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -184,6 +185,22 @@ export async function getActiveIntegrationCredential(
     },
   });
   if (!credential?.is_active) return null;
+  let secrets: Record<string, string>;
+  try {
+    secrets = decryptPayload(credential.encrypted_payload);
+  } catch {
+    auditLog(
+      {
+        actor: 'system:credential-vault',
+        action: 'integration_credential_decryption_failed',
+        object_type: 'integration_credential',
+        object_id: credential.id,
+        result: 'failure',
+      },
+      `Tenant integration credential requires re-entry for ${credential.provider}/${credential.credential_type}`,
+    );
+    return null;
+  }
   return {
     id: credential.id,
     tenantKey: credential.tenant_key,
@@ -191,7 +208,7 @@ export async function getActiveIntegrationCredential(
     credentialType: credential.credential_type,
     connectionKey: credential.connection_key,
     displayName: credential.display_name,
-    secrets: decryptPayload(credential.encrypted_payload),
+    secrets,
     metadata: normalizeMetadata(credential.metadata),
   };
 }
@@ -202,16 +219,7 @@ export async function hasActiveIntegrationCredential(
   tenantKey = 'default',
   connectionKey = 'default',
 ): Promise<boolean> {
-  const count = await prisma.integrationCredential.count({
-    where: {
-      tenant_key: tenantKey,
-      provider,
-      credential_type: credentialType,
-      connection_key: connectionKey,
-      is_active: true,
-    },
-  });
-  return count > 0;
+  return Boolean(await getActiveIntegrationCredential(provider, credentialType, tenantKey, connectionKey));
 }
 
 function encryptPayload(secrets: Record<string, string>): Record<string, string> {
@@ -224,6 +232,15 @@ function decryptPayload(payload: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(record).map(([key, value]) => [key, typeof value === 'string' ? decryptSecret(value) : '']),
   );
+}
+
+function canDecryptPayload(payload: unknown): boolean {
+  try {
+    decryptPayload(payload);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function fingerprintPayload(secrets: Record<string, string>): Record<string, string> {
@@ -257,6 +274,7 @@ function toSafeCredential(credential: {
   last_validated_at: Date | null;
 }): SafeIntegrationCredential {
   const encrypted = normalizeMetadata(credential.encrypted_payload);
+  const requiresReentry = credential.is_active && !canDecryptPayload(credential.encrypted_payload);
   return {
     id: credential.id,
     tenantKey: credential.tenant_key,
@@ -268,6 +286,7 @@ function toSafeCredential(credential: {
     secretFingerprints: normalizeMetadata(credential.secret_fingerprints) as Record<string, string>,
     metadata: credential.metadata,
     isActive: credential.is_active,
+    requiresReentry,
     createdByUserId: credential.created_by_user_id,
     createdAt: credential.created_at,
     updatedAt: credential.updated_at,

@@ -76,6 +76,62 @@ Only the named Incident Commander may authorize recovery promotion. Before promo
 
 The current `sslip.io` URLs encode their server IP addresses. They do not support transparent automatic failover. Customer traffic therefore requires a deliberate URL or future managed-DNS change.
 
+## Temporary Production Promotion
+
+When the primary host is unavailable and the recovery host is explicitly
+promoted, the following rules apply:
+
+1. Record the incident, authorizer, source artifact, source timestamp, measured
+   backup age, checksum result, and acceptance evidence.
+2. Take and verify a pre-promotion backup of the recovery host before replacing
+   its database.
+3. Restore only a previously verified primary artifact whose isolated restore,
+   application health, and login checks passed.
+4. Keep connector writes and external execution disabled until every connector
+   is separately reauthorized for the promoted host.
+5. Retarget external uptime and security-header monitoring to the promoted URL.
+   Use a distinct incident title so a successful promoted-host check cannot
+   close the original primary-host incident.
+6. Treat the promoted database as the source of truth for every write after the
+   promotion timestamp.
+7. Run local backups immediately after promotion and on the production
+   schedule. Configure a new off-host destination for these backups; do not
+   overwrite the preserved primary recovery artifact.
+8. Keep the original primary incident open until that host is recovered,
+   deployed from reviewed `main`, and ready for controlled failback.
+9. Restore the production `SECRET_VAULT_ENCRYPTION_KEY` from the approved
+   secret manager or offline escrow. A database backup without this key cannot
+   unlock tenant integration credentials, AI credentials, or MFA secrets.
+10. If the approved vault key is unavailable, preserve the ciphertext, mark
+    affected credentials as requiring secure re-entry, and require each owner
+    to reconnect through the product setup flow. Never guess or silently
+    replace the key.
+
+The preserved primary artifact is a recovery input, not a continuously updated
+replica. Its timestamp defines the recovery point and any possible data-loss
+window must be disclosed.
+
+## Controlled Failback
+
+Never direct customer traffic back to the recovered primary merely because it
+responds to health checks. Before failback:
+
+1. Freeze or queue writes on temporary production.
+2. Take and verify a final temporary-production backup.
+3. Copy that backup to the recovered primary through the approved encrypted
+   transfer path.
+4. Restore and validate it in isolation on the primary.
+5. Restore the same approved production vault key.
+6. Deploy the same reviewed application commit and run migrations.
+7. Run health, login, tenant-isolation, connector-readiness, and browser
+   acceptance checks.
+8. Record the final synchronization timestamp and obtain authorization.
+9. Redirect traffic deliberately.
+10. Keep the temporary host unchanged until post-failback observation passes.
+
+Restoring an older primary snapshot after temporary production has accepted
+writes would lose customer data and is prohibited.
+
 ## Recovery Validation
 
 Required checks after restoring:
@@ -109,4 +165,3 @@ The following cannot be completed by repository or VPS automation alone:
 - Approved human-facing alert destination and escalation recipients.
 - Independent penetration-test report and closure of critical/high findings.
 - A third storage location if policy requires backup copies beyond primary plus standby.
-
