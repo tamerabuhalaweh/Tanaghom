@@ -170,6 +170,44 @@ async function installRoleMocks(page: Page, user: typeof amroUser | typeof admin
 }
 
 test.describe('Sprint 66 role-specific workspace separation', () => {
+  test('privileged MFA enrollment shows only the required security path', async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem('token', 'mfa-enrollment-token'));
+    await page.route(/http:\/\/(127\.0\.0\.1|localhost):4000\/.*/, async (route) => {
+      const pathname = new URL(route.request().url()).pathname;
+      if (pathname === '/auth/session') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            user: adminUser,
+            agentRep: { ...amroAgentRep, name: 'Admin AgentRep', metadata: { role: 'admin' } },
+            mfaEnrollmentRequired: true,
+          }),
+        });
+        return;
+      }
+      if (pathname === '/auth/mfa/status') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ enabled: false, recoveryCodes: { unused: 0 } }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/command-center');
+    await expect(page).toHaveURL(/\/account-security$/);
+    await expect(page.getByRole('heading', { name: 'Account Security' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Finish Security Setup/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Set Up Authenticator' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Today$/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^Plans$/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Ask Stitchi/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Sign out' }).last()).toBeVisible();
+  });
+
   test('Amro manager workspace hides admin navigation and redirects admin URLs', async ({ page }) => {
     await installRoleMocks(page, amroUser);
 
