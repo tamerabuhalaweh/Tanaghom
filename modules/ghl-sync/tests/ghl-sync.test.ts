@@ -225,7 +225,7 @@ describe('GHL Sync', () => {
     expect(status.acceptance.systemAction).toContain('GHL_READ_SYNC_ENABLED=true');
   });
 
-  it('blocks GHL pull preview when required production mappings are incomplete', async () => {
+  it('allows a read-only GHL pull preview with warnings when production mappings are incomplete', async () => {
     const partialMappings = [
       { validation_status: 'valid', field_mappings: { mappingType: 'tag', ghlTagId: 'hot-tag', ghlTagName: 'Hot', internalTag: 'hot', direction: 'bidirectional' } },
       { validation_status: 'valid', field_mappings: { mappingType: 'pipeline', ghlStageId: 'stage-booked', ghlStageName: 'Booked', internalStage: 'meeting_booked' } },
@@ -238,11 +238,32 @@ describe('GHL Sync', () => {
       field_mappings: { ghlLocationId: 'loc-1', displayName: 'Main Sales Location' },
     });
 
-    const result = await repo.previewPull('tenant-a', 'user-1', 'event-1', 25, () => mockClient);
+    const result = await repo.previewPull('tenant-a', 'user-1', undefined, 25, () => mockClient);
+
+    expect(result.run.status).toBe('previewed');
+    expect(result.run.warnings).toContain('Preview only: Map a GoHighLevel pipeline stage for Purchased.');
+    expect(mockClient.pull).toHaveBeenCalledWith(25);
+  });
+
+  it('keeps incomplete production mappings as a hard blocker for GHL pull sync', async () => {
+    const partialMappings = [
+      { validation_status: 'valid', field_mappings: { mappingType: 'tag', ghlTagId: 'hot-tag', ghlTagName: 'Hot', internalTag: 'hot', direction: 'bidirectional' } },
+      { validation_status: 'valid', field_mappings: { mappingType: 'pipeline', ghlStageId: 'stage-booked', ghlStageName: 'Booked', internalStage: 'meeting_booked' } },
+    ];
+    prismaMocks.connectorFieldMapping.findMany
+      .mockResolvedValueOnce(partialMappings)
+      .mockResolvedValueOnce(partialMappings);
+    prismaMocks.connectorFieldMapping.findFirst.mockResolvedValueOnce({
+      validation_status: 'valid',
+      field_mappings: { ghlLocationId: 'loc-1', displayName: 'Main Sales Location' },
+    });
+
+    const result = await repo.syncPull('tenant-a', 'user-1', 'agent-1', undefined, 25, () => mockClient);
 
     expect(result.run.status).toBe('mapping_required');
     expect(result.run.errors).toContain('Map a GoHighLevel pipeline stage for Purchased.');
     expect(mockClient.pull).not.toHaveBeenCalled();
+    expect(prismaMocks.leadCaptureRecord.create).not.toHaveBeenCalled();
   });
 
   it('blocks selected-event sync when no approved plan attribution mapping exists', async () => {

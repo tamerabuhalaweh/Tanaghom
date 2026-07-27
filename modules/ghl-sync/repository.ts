@@ -211,6 +211,12 @@ export async function syncPull(
   clientFactory: (config: GhlRuntimeConfig) => GhlClient,
 ): Promise<{ run: GhlSyncRunSummary; upserted: GhlMappedLead[] }> {
   const result = await pullInternal(tenantKey, userId, eventId, limit, 'pull_sync', clientFactory);
+  if (result.run.status !== 'previewed') {
+    return {
+      run: result.run,
+      upserted: [],
+    };
+  }
   const now = new Date();
   const upserted: GhlMappedLead[] = [];
   for (const mappedLead of result.contacts) {
@@ -293,7 +299,7 @@ async function pullInternal(
     };
   }
 
-  if (mappingBlockers.length > 0) {
+  if (mode === 'pull_sync' && mappingBlockers.length > 0) {
     const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
       data: {
@@ -396,6 +402,7 @@ async function pullInternal(
     const warnings = [
       ...pull.warnings,
       ...attribution.warnings,
+      ...mappingBlockers.map(blocker => `Preview only: ${blocker}`),
       ...unresolvedPaymentWarnings(attributionMapping),
     ];
     const completedAt = new Date();
