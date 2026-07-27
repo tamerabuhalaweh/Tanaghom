@@ -1,4 +1,5 @@
 import express from 'express';
+import { rateLimit as expressRateLimit } from 'express-rate-limit';
 import cors from 'cors';
 import helmet from 'helmet';
 import { randomUUID } from 'node:crypto';
@@ -87,6 +88,7 @@ const RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_AU
 const allowedCorsOrigins = CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
 
 const app = express();
+app.set('trust proxy', 1);
 
 /* eslint-disable @typescript-eslint/no-namespace */
 declare global {
@@ -239,6 +241,17 @@ app.use(cors({
 }));
 app.use(enforceOrigin);
 app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+app.use(expressRateLimit({
+  windowMs: RATE_LIMIT_WINDOW_SECONDS * 1000,
+  limit: Math.max(RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS, RATE_LIMIT_MAX_REQUESTS),
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: req => req.path === '/health' || req.path === '/ops/prometheus',
+  message: {
+    error: 'Rate limit exceeded',
+    code: 'RATE_LIMITED',
+  },
+}));
 app.use(rateLimit);
 app.use(enforceTokenRevocation);
 

@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { rateLimit as expressRateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { createOnboardingToken, acceptOnboardingToken, login, getSession, getOnboardingEmailStatus } from './service';
 import { validateLoginInput } from './validators';
@@ -15,6 +16,16 @@ import {
 } from './mfa-service';
 
 export const authRouter = Router();
+authRouter.use(expressRateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    error: 'Too many authentication requests',
+    code: 'AUTH_RATE_LIMITED',
+  },
+}));
 
 authRouter.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
