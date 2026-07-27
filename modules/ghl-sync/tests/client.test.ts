@@ -61,7 +61,10 @@ describe('LeadConnectorClient', () => {
 
     const result = await client.pull(25);
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://services.leadconnectorhq.com/contacts/search', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://services.leadconnectorhq.com/contacts/search', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ locationId: 'loc-1', page: 1, pageLimit: 25 }),
+    }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://services.leadconnectorhq.com/opportunities/search?location_id=loc-1&limit=25', expect.objectContaining({ method: 'GET' }));
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://services.leadconnectorhq.com/contacts/contact-1/appointments', expect.objectContaining({ method: 'GET' }));
     expect(result.contacts).toHaveLength(1);
@@ -120,7 +123,10 @@ describe('LeadConnectorClient', () => {
 
     const result = await client.validateReadAccess();
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://services.leadconnectorhq.com/contacts/search', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://services.leadconnectorhq.com/contacts/search', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ locationId: 'loc-1', page: 1, pageLimit: 1 }),
+    }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://services.leadconnectorhq.com/opportunities/search?location_id=loc-1&limit=1', expect.objectContaining({ method: 'GET' }));
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://services.leadconnectorhq.com/locations/loc-1/tags', expect.objectContaining({ method: 'GET' }));
     expect(fetchMock).toHaveBeenNthCalledWith(4, 'https://services.leadconnectorhq.com/opportunities/pipelines?locationId=loc-1', expect.objectContaining({ method: 'GET' }));
@@ -159,5 +165,28 @@ describe('LeadConnectorClient', () => {
     expect(result.warnings).toContain('Opportunities read check failed with status 403.');
     expect(result.warnings).toContain('Pipeline read check failed with status 403.');
     expect(result.rawPayloadReturned).toBe(false);
+  });
+
+  it('uses HighLevel page and pageLimit fields for the connection acceptance search', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ contacts: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new LeadConnectorClient({
+      baseUrl: 'https://services.leadconnectorhq.com',
+      apiKey: 'tenant-owned-key',
+      locationId: 'loc-1',
+      version: '2021-07-28',
+    });
+
+    await client.testConnection();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://services.leadconnectorhq.com/contacts/search',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ locationId: 'loc-1', page: 1, pageLimit: 1 }),
+      }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.body).not.toContain('skip');
   });
 });
