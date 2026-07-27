@@ -1,13 +1,31 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { rateLimit as expressRateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { createOnboardingToken, acceptOnboardingToken, login, getSession, getOnboardingEmailStatus } from './service';
 import { validateLoginInput } from './validators';
-import { verifyToken } from '@shared/auth';
-import { UnauthorizedError } from '@shared/errors';
+import { signToken, verifyToken } from '@shared/auth';
+import { ForbiddenError, UnauthorizedError } from '@shared/errors';
 import { revokeToken } from '@shared/auth/token-revocation';
-import { disableTotpMfa, getMfaStatus, regenerateRecoveryCodes, startTotpSetup, verifyTotpSetup } from './mfa-service';
+import {
+  disableTotpMfa,
+  getMfaStatus,
+  privilegedMfaDisableAllowed,
+  regenerateRecoveryCodes,
+  startTotpSetup,
+  verifyTotpSetup,
+} from './mfa-service';
 
 export const authRouter = Router();
+authRouter.use(expressRateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    error: 'Too many authentication requests',
+    code: 'AUTH_RATE_LIMITED',
+  },
+}));
 
 authRouter.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -42,7 +60,7 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
       res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Bearer token required' } });
       return;
     }
-    const payload = verifyToken(authHeader.substring(7));
+    const payload = verifyToken(authHeader.substring(7), { allowMfaEnrollmentRequired: true });
     const revoked = await revokeToken(payload);
     res.json({
       status: 'logged_out',
@@ -167,10 +185,21 @@ authRouter.post('/mfa/verify', async (req: Request, res: Response, next: NextFun
       factorId: input.factorId,
       code: input.code,
     });
+    const replacementToken = signToken({
+      sub: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      tenantKey: payload.tenantKey,
+      departmentId: payload.departmentId,
+      agentRepId: payload.agentRepId,
+      mfaEnrollmentRequired: false,
+    });
+    await revokeToken(payload);
     res.json({
       ...result,
+      token: replacementToken,
       rawSecretsReturned: false,
-      _label: 'MFA enabled. Future sign-ins require an authenticator code.',
+      _label: 'MFA enabled. The enrollment-only session was replaced and future sign-ins require an authenticator code.',
     });
   } catch (err) {
     next(err);
@@ -180,6 +209,9 @@ authRouter.post('/mfa/verify', async (req: Request, res: Response, next: NextFun
 authRouter.post('/mfa/disable', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = getAuthenticatedPayload(req);
+    if (!privilegedMfaDisableAllowed(payload.role)) {
+      throw new ForbiddenError('Privileged MFA can only be disabled through the controlled account recovery procedure');
+    }
     const input = z.object({
       code: z.string().regex(/^\d{6}$/),
     }).parse(req.body);
@@ -221,5 +253,5 @@ function getAuthenticatedPayload(req: Request) {
   if (!authHeader?.startsWith('Bearer ')) {
     throw new UnauthorizedError('Bearer token required');
   }
-  return verifyToken(authHeader.substring(7));
+  return verifyToken(authHeader.substring(7), { allowMfaEnrollmentRequired: true });
 }

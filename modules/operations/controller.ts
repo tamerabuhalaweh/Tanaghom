@@ -35,6 +35,7 @@ operationsRouter.get('/readiness', async (req: Request, res: Response, next: Nex
     const mfaCoverage = await getTenantMfaCoverage(tenantKey);
     const backupStatus = getBackupStatus();
     const monitoringStatus = getMonitoringStatus();
+    const alertStatus = getAlertDestinationStatus();
     const checks = [
       check('database', databaseHealthy, 'Database connection is healthy.'),
       check('redis', redisHealthy, 'Redis connection is healthy for queues, rate limiting, and token revocation.'),
@@ -47,7 +48,13 @@ operationsRouter.get('/readiness', async (req: Request, res: Response, next: Nex
       check('backup_manifest', backupStatus.latestBackupCurrent, backupStatus.latestBackupCurrent ? 'Latest database backup is current.' : 'Local backup is missing or stale.'),
       check('backup_offserver_copy', backupStatus.offServerCopyCurrent, backupStatus.offServerCopyCurrent ? 'Latest encrypted off-server backup sync is current.' : 'Encrypted off-server backup evidence is missing or stale.'),
       check('backup_restore_drill', backupStatus.restoreDrillCurrent, backupStatus.restoreDrillCurrent ? 'Latest isolated restore drill is current.' : 'Restore drill evidence is missing or stale.'),
-      check('alert_webhook', Boolean(process.env.ALERT_WEBHOOK_URL || process.env.OPERATIONS_ALERT_EMAIL), 'Alert destination is configured.'),
+      check(
+        'external_alert_destination',
+        alertStatus.configured,
+        alertStatus.configured
+          ? `External alert destination is configured through ${alertStatus.providers.join(' and ')}.`
+          : 'External alert destination is missing.',
+      ),
       check('uptime_evidence', monitoringStatus.uptimeEvidenceCurrent, monitoringStatus.uptimeEvidenceCurrent ? 'Latest uptime check passed and is current.' : 'Uptime evidence is missing, stale, or failed.'),
       check('admin_mfa_coverage', mfaCoverage.coveragePct === 100, `Admin MFA coverage is ${mfaCoverage.coveragePct}%.`),
       check('ops_metrics_token', Boolean(process.env.OPERATIONS_METRICS_TOKEN && process.env.OPERATIONS_METRICS_TOKEN.length >= 24), 'Prometheus metrics scrape token is configured.'),
@@ -68,6 +75,7 @@ operationsRouter.get('/readiness', async (req: Request, res: Response, next: Nex
         mfaCoverage,
       },
       backup: backupStatus,
+      alerting: alertStatus,
       _label: 'Production operations readiness report',
     });
   } catch (err) {
@@ -121,11 +129,12 @@ operationsRouter.get('/monitoring/status', async (req: Request, res: Response, n
     const payload = getPayload(req);
     requireAdmin(payload.role);
     const hasMetricsToken = Boolean(process.env.OPERATIONS_METRICS_TOKEN && process.env.OPERATIONS_METRICS_TOKEN.length >= 24);
-    const hasAlertDestination = Boolean(process.env.ALERT_WEBHOOK_URL || process.env.OPERATIONS_ALERT_EMAIL);
+    const alertStatus = getAlertDestinationStatus();
     res.json({
       ...getMonitoringStatus(),
       prometheusMetrics: hasMetricsToken ? 'token_configured' : 'requires_token',
-      alertDestination: hasAlertDestination ? 'configured' : 'missing',
+      alertDestination: alertStatus.configured ? 'configured' : 'missing',
+      alertProviders: alertStatus.providers,
       expectedHealthPath: '/health',
       expectedReadinessPath: '/ops/readiness',
       expectedMetricsPath: '/ops/prometheus',
@@ -136,6 +145,25 @@ operationsRouter.get('/monitoring/status', async (req: Request, res: Response, n
     next(err);
   }
 });
+
+export function getAlertDestinationStatus(environment: NodeJS.ProcessEnv = process.env): {
+  configured: boolean;
+  providers: string[];
+  rawDestinationsReturned: false;
+} {
+  const providers: string[] = [];
+  if (environment.ALERT_WEBHOOK_URL || environment.OPERATIONS_ALERT_WEBHOOK_URL) {
+    providers.push('operations_webhook');
+  }
+  if (environment.OPERATIONS_GITHUB_ALERTS_ENABLED === 'true') {
+    providers.push('github_external_monitor');
+  }
+  return {
+    configured: providers.length > 0,
+    providers,
+    rawDestinationsReturned: false,
+  };
+}
 
 operationsRouter.get('/prometheus', async (req: Request, res: Response, next: NextFunction) => {
   try {

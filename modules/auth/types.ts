@@ -12,6 +12,7 @@ export type LoginInput = z.infer<typeof loginSchema>;
 
 export interface LoginResult {
   token: string;
+  mfaEnrollmentRequired: boolean;
   user: {
     id: string;
     email: string;
@@ -32,4 +33,5 @@ export interface SessionUser {
   departmentId: string | null;
   isActive: boolean;
   agentRepId: string | null;
+  mfaEnrollmentRequired?: boolean;
 }

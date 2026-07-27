@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthProvider'
 import { useAuth } from './contexts/useAuth'
 import Layout from './components/Layout'
@@ -79,11 +79,15 @@ function getUserRole(user: unknown): string {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { token, loading } = useAuth()
+  const { token, loading, mfaEnrollmentRequired } = useAuth()
+  const location = useLocation()
   if (loading) {
     return <LoadingWorkspace />
   }
   if (!token) return <Navigate to="/login" />
+  if (mfaEnrollmentRequired && location.pathname !== '/account-security') {
+    return <Navigate to="/account-security" replace />
+  }
   return <ErrorBoundary>{children}</ErrorBoundary>
 }
 

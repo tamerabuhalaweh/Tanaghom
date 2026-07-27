@@ -295,6 +295,10 @@ Prometheus alert rules are in:
 
 External alert routing requires the separate `docker-compose.alerting.yml` overlay and a server-only `monitoring/secrets/alert_webhook_url` file. See `monitoring/README.md`. Do not describe alerts as delivered until a controlled alert reaches the approved destination.
 
+The GitHub-hosted external uptime workflow also creates or updates one deduplicated P0 operations issue and assigns the repository owner when the public Hybrid check fails. This is the baseline external destination when no customer incident webhook has been supplied. The workflow closes the incident only after a later successful external check. Keep the webhook path for organization-specific Slack, Teams, PagerDuty, or incident-management routing.
+
+Privileged production roles (`admin`, `cco`, and `department_head`) receive an enrollment-only session until TOTP MFA is verified. That session can access only session, logout, and MFA enrollment endpoints. It cannot call business APIs. Every account owner must scan and verify their own authenticator secret and store the one-time recovery codes in an approved password manager. Privileged MFA cannot be disabled in production except through the controlled recovery procedure.
+
 Current rule coverage:
 
 - backend down

@@ -7,7 +7,7 @@ import { prisma } from '@shared/database';
 import { getEmailDeliveryStatus, sendOnboardingEmail } from '@shared/notifications/email';
 import { AUTH_EVENTS, type UserAuthenticatedEvent, type UserLoginFailedEvent } from './events';
 import { findUserByEmail, findUserById, findAgentRepByUserId } from './repository';
-import { assertMfaSatisfied } from './mfa-service';
+import { assertMfaSatisfied, getMfaStatus, requiresPrivilegedMfaEnrollment } from './mfa-service';
 import type { LoginInput, LoginResult, SessionUser } from './types';
 import { buildSubscriptionHealth } from '@modules/tenant-admin/subscription';
 
@@ -35,6 +35,8 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 
   const membership = await ensureActiveTenantMembership(user.id, user.tenant_key, user.role);
   await assertMfaSatisfied(user.id, input.mfaCode);
+  const mfaStatus = await getMfaStatus(user.id);
+  const mfaEnrollmentRequired = requiresPrivilegedMfaEnrollment(membership.role, mfaStatus.enabled);
 
   // Resolve AgentRep for session context
   const agentRep = await findAgentRepByUserId(user.id);
@@ -46,6 +48,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     tenantKey: user.tenant_key,
     departmentId: user.department_id || undefined,
     agentRepId: agentRep?.id,
+    mfaEnrollmentRequired,
   };
 
   const token = signToken(payload);
@@ -60,6 +63,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 
   return {
     token,
+    mfaEnrollmentRequired,
     user: {
       id: user.id,
       email: user.email,
@@ -73,7 +77,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 }
 
 export async function getSession(token: string): Promise<SessionUser> {
-  const payload = verifyToken(token);
+  const payload = verifyToken(token, { allowMfaEnrollmentRequired: true });
   const user = await findUserById(payload.sub);
 
   if (!user) {
@@ -84,7 +88,10 @@ export async function getSession(token: string): Promise<SessionUser> {
     throw new UnauthorizedError('Account is disabled');
   }
 
-  return user;
+  return {
+    ...user,
+    mfaEnrollmentRequired: payload.mfaEnrollmentRequired === true,
+  };
 }
 
 export async function createOnboardingToken(input: {

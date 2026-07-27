@@ -6,13 +6,19 @@ import { ApiError, authApi } from '../api';
 type SessionEnvelope = {
   user?: unknown;
   agentRep?: unknown;
+  mfaEnrollmentRequired?: boolean;
 };
 
 function normalizeSession(data: unknown): SessionEnvelope {
   if (data && typeof data === 'object' && 'user' in data) {
     return data as SessionEnvelope;
   }
-  return { user: data, agentRep: data && typeof data === 'object' && 'agentRepId' in data ? { id: (data as Record<string, unknown>).agentRepId } : null };
+  const record = data && typeof data === 'object' ? data as Record<string, unknown> : null;
+  return {
+    user: data,
+    agentRep: record && 'agentRepId' in record ? { id: record.agentRepId } : null,
+    mfaEnrollmentRequired: record?.mfaEnrollmentRequired === true,
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -23,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     agentRep: null as unknown | null,
     loading: Boolean(initialToken),
     error: null as string | null,
+    mfaEnrollmentRequired: false,
   });
 
   useEffect(() => {
@@ -31,7 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authApi.session(token)
         .then(data => {
           const session = normalizeSession(data);
-          setState(s => ({ ...s, user: session.user, agentRep: session.agentRep, loading: false }));
+          setState(s => ({
+            ...s,
+            user: session.user,
+            agentRep: session.agentRep,
+            loading: false,
+            mfaEnrollmentRequired: session.mfaEnrollmentRequired === true,
+          }));
         })
         .catch(() => { localStorage.removeItem('token'); setState(s => ({ ...s, token: null, loading: false })); });
     }
@@ -42,7 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await authApi.login(email, password, mfaCode);
       localStorage.setItem('token', data.token);
-      setState({ token: data.token, user: data.user, agentRep: data.agentRep, loading: false, error: null });
+      setState({
+        token: data.token,
+        user: data.user,
+        agentRep: data.agentRep,
+        loading: false,
+        error: null,
+        mfaEnrollmentRequired: data.mfaEnrollmentRequired === true,
+      });
       return true;
     } catch (err) {
       const message = err instanceof ApiError && err.code === 'MFA_REQUIRED'
@@ -57,8 +77,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('token');
     if (token) void authApi.logout(token).catch(() => undefined);
     localStorage.removeItem('token');
-    setState({ token: null, user: null, agentRep: null, loading: false, error: null });
+    setState({ token: null, user: null, agentRep: null, loading: false, error: null, mfaEnrollmentRequired: false });
   };
 
-  return <AuthContext.Provider value={{ ...state, login, logout }}>{children}</AuthContext.Provider>;
+  const completeMfaEnrollment = (replacementToken: string) => {
+    localStorage.setItem('token', replacementToken);
+    setState(s => ({
+      ...s,
+      token: replacementToken,
+      mfaEnrollmentRequired: false,
+      error: null,
+    }));
+  };
+
+  return <AuthContext.Provider value={{ ...state, login, logout, completeMfaEnrollment }}>{children}</AuthContext.Provider>;
 }

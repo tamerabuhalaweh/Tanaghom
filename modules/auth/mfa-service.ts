@@ -9,6 +9,35 @@ const MFA_ISSUER = process.env.MFA_ISSUER || 'Tanaghum';
 const RECOVERY_CODE_COUNT = 10;
 const RECOVERY_CODE_PARTS = 3;
 const RECOVERY_CODE_PART_BYTES = 2;
+const PRIVILEGED_MFA_ROLES = new Set(['admin', 'cco', 'department_head']);
+
+type MfaEnrollmentEnvironment = {
+  NODE_ENV?: string;
+  MFA_ENFORCE_PRIVILEGED_ENROLLMENT?: string;
+};
+
+type MfaDisableEnvironment = {
+  NODE_ENV?: string;
+  MFA_ALLOW_PRIVILEGED_DISABLE?: string;
+};
+
+export function requiresPrivilegedMfaEnrollment(
+  role: string,
+  mfaEnabled: boolean,
+  environment: MfaEnrollmentEnvironment = process.env,
+): boolean {
+  const enforcementEnabled = environment.MFA_ENFORCE_PRIVILEGED_ENROLLMENT === 'true';
+  return enforcementEnabled && PRIVILEGED_MFA_ROLES.has(role) && !mfaEnabled;
+}
+
+export function privilegedMfaDisableAllowed(
+  role: string,
+  environment: MfaDisableEnvironment = process.env,
+): boolean {
+  if (!PRIVILEGED_MFA_ROLES.has(role)) return true;
+  if (environment.MFA_ALLOW_PRIVILEGED_DISABLE === 'true') return true;
+  return environment.NODE_ENV !== 'production';
+}
 
 export async function getMfaStatus(userId: string): Promise<{
   enabled: boolean;
