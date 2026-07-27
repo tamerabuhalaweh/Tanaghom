@@ -148,6 +148,13 @@ aiProviderRouter.post('/select', async (req: Request, res: Response, next: NextF
         res.status(400).json({ error: `${provider} credential is missing for this user` });
         return;
       }
+      if (credential?.is_active && !isEnvProviderConfigured(provider) && !canDecryptProviderCredential(credential.encrypted_api_key)) {
+        res.status(409).json({
+          error: `${provider} credential must be re-entered before it can be selected`,
+          code: 'LLM_CREDENTIAL_REENTRY_REQUIRED',
+        });
+        return;
+      }
     }
 
     await setUserSelectedProvider(payload.sub, provider);
@@ -175,10 +182,27 @@ aiProviderRouter.post('/test', async (req: Request, res: Response, next: NextFun
       return;
     }
 
+    let apiKey: string | undefined;
+    if (credential?.encrypted_api_key) {
+      try {
+        apiKey = decryptSecret(credential.encrypted_api_key);
+      } catch {
+        res.status(409).json({
+          status: 'reconnect_required',
+          provider,
+          model: credential.model,
+          apiKeyStatus: 'reconnect_required',
+          rawKeyReturned: false,
+          code: 'LLM_CREDENTIAL_REENTRY_REQUIRED',
+          _label: 'The saved AI credential cannot be unlocked on this recovery environment. Re-enter it securely.',
+        });
+        return;
+      }
+    }
     const llm = createConfiguredLLMProvider({
       provider,
       model: credential?.model,
-      apiKey: credential?.encrypted_api_key ? decryptSecret(credential.encrypted_api_key) : undefined,
+      apiKey,
     });
     let result;
     try {
@@ -268,11 +292,22 @@ export async function resolveUserLLMProvider(userId: string): Promise<LLMProvide
     }
     throw new AppError(`Selected LLM provider ${selected} is missing credentials for this user.`, 424, 'LLM_PROVIDER_REQUIRED');
   }
-  return createConfiguredLLMProvider({
-    provider: credential.provider,
-    model: credential.model,
-    apiKey: decryptSecret(credential.encrypted_api_key),
-  });
+  try {
+    return createConfiguredLLMProvider({
+      provider: credential.provider,
+      model: credential.model,
+      apiKey: decryptSecret(credential.encrypted_api_key),
+    });
+  } catch {
+    if (isEnvProviderConfigured(selected)) {
+      return createConfiguredLLMProvider({ provider: selected });
+    }
+    throw new AppError(
+      `Saved ${selected} credential cannot be unlocked on this environment. Re-enter it securely in AI Provider settings.`,
+      424,
+      'LLM_CREDENTIAL_REENTRY_REQUIRED',
+    );
+  }
 }
 
 async function listSafeCredentials(userId: string) {
@@ -284,7 +319,11 @@ async function listSafeCredentials(userId: string) {
     id: credential.id,
     provider: credential.provider,
     model: credential.model,
-    apiKeyStatus: credential.is_active ? 'configured' : 'disabled',
+    apiKeyStatus: !credential.is_active
+      ? 'disabled'
+      : canDecryptProviderCredential(credential.encrypted_api_key)
+        ? 'configured'
+        : 'reconnect_required',
     keyFingerprint: credential.key_fingerprint,
     isActive: credential.is_active,
     lastUsedAt: credential.last_used_at,
@@ -293,11 +332,20 @@ async function listSafeCredentials(userId: string) {
 }
 
 function hasCredential(credentials: Awaited<ReturnType<typeof listSafeCredentials>>, provider: LLMProviderType): boolean {
-  return credentials.some((credential) => credential.provider === provider && credential.isActive);
+  return credentials.some((credential) => credential.provider === provider && credential.apiKeyStatus === 'configured');
 }
 
 function credentialModel(credentials: Awaited<ReturnType<typeof listSafeCredentials>>, provider: LLMProviderType): string | null {
-  return credentials.find((credential) => credential.provider === provider && credential.isActive)?.model || null;
+  return credentials.find((credential) => credential.provider === provider && credential.apiKeyStatus === 'configured')?.model || null;
+}
+
+function canDecryptProviderCredential(encryptedApiKey: string): boolean {
+  try {
+    decryptSecret(encryptedApiKey);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function getUserSelectedProvider(userId: string): Promise<SelectableProviderType> {

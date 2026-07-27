@@ -14,15 +14,19 @@ Canonical recovery tag: `hybrid-recovery-2026-07-19`
 
 Source-of-truth documentation checkpoint: PR `#209`
 
-Primary active deployment: Hybrid
+Primary VPS state: unavailable; operations incident remains open
 
 Hybrid URL: `https://tanaghum-hybrid.163-123-180-104.sslip.io`
 
-Backup Hybrid standby URL: `https://tanaghum-backup.155-117-45-45.sslip.io`
+Temporary production URL: `https://tanaghum-backup.155-117-45-45.sslip.io`
 
 Backup deployment runbook: [`docs/deployment/BACKUP_HYBRID_STANDBY.md`](../deployment/BACKUP_HYBRID_STANDBY.md)
 
-The backup URL is a warm code standby deployed from `hybrid-recovery-2026-07-19` at commit `a1a7ede`. Its five-scenario live browser gate and isolated database restore/application-login drill passed. It currently has an isolated seeded database and must not be represented as synchronized primary customer data.
+The recovery host is being promoted to temporary production during primary
+incident `#223`. Its source state, recovery artifact, monitoring target, backup
+ownership, and acceptance evidence must match the promotion record. After
+promotion, it is the source of truth for new writes until controlled failback.
+It must never be overwritten by an older primary snapshot.
 
 The SRD-R14 historical-learning and hierarchical-planning wave is implemented through the governed annual -> monthly initiative -> execution plan path. The latest product closure was `#201 / UX-R1G`; follow-up bug `#204` and live acceptance issue `#206` are closed. The next recommended product issue is `#208 / UX-R1H: Weekly operating cadence below execution plans`. Production-operations closure remains tracked by `#171`.
 

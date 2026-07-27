@@ -128,4 +128,22 @@ describe('production LLM provider resolution', () => {
       apiKeyStatus: 'configured',
     });
   });
+
+  it('requires secure re-entry when a restored credential uses an unavailable vault key', async () => {
+    process.env.SECRET_VAULT_ENCRYPTION_KEY = 'primary-provider-vault-key-with-at-least-32-characters';
+    const restoredCiphertext = encryptSecret('sk-primary-only-provider-key');
+    process.env.SECRET_VAULT_ENCRYPTION_KEY = 'recovery-provider-vault-key-with-at-least-32-characters';
+    prismaMocks.agentRep.findUnique.mockResolvedValue({ metadata: { llmProvider: 'deepseek' } });
+    prismaMocks.llmProviderCredential.findUnique.mockResolvedValue({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      encrypted_api_key: restoredCiphertext,
+      is_active: true,
+    });
+
+    await expect(resolveUserLLMProvider('user-1')).rejects.toMatchObject({
+      statusCode: 424,
+      code: 'LLM_CREDENTIAL_REENTRY_REQUIRED',
+    });
+  });
 });

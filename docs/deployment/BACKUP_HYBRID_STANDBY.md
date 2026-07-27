@@ -1,10 +1,13 @@
-# Hybrid Backup Standby
+# Hybrid Recovery Host And Temporary Production
 
 Last verified: 2026-07-25
 
 ## Purpose
 
-This host is an independently deployed Hybrid application recovery target. It provides a second HTTPS endpoint built from the reviewed Hybrid `main` release without changing the primary Hybrid or AB environments.
+This host is the Hybrid recovery target. During the primary VPS incident opened
+on 2026-07-27, it is explicitly promoted as temporary production. It provides
+the active customer endpoint from the reviewed Hybrid `main` release without
+changing the isolated AB environment.
 
 Backup URL: `https://tanaghum-backup.155-117-45-45.sslip.io`
 
@@ -17,13 +20,23 @@ Deployment rule: primary and standby must use the same reviewed main commit
 Server path: /opt/tanaghum-backup
 ```
 
-## Recovery Posture
+## Current Operating Posture
 
-The deployment is a **warm application standby with an isolated default
-database**. Primary customer data remains out of the standby application
-database until an incident promotion is authorized. The production backup path
-uses encrypted primary database artifacts and independent-host restore drills
-rather than continuous database replication.
+Before promotion, the deployment was a warm application standby with an
+isolated default database. Promotion requires restoring the latest approved
+primary artifact after preserving the standby database and completing the
+checks in `docs/operations/DISASTER_RECOVERY_RUNBOOK.md`.
+
+After the recorded promotion timestamp, this host is the source of truth for
+new customer writes. It must not be replaced by an older primary snapshot.
+Failback requires a final encrypted backup from this host, isolated restore on
+the recovered primary, full acceptance, and deliberate traffic redirection.
+
+The production credential-vault key must be held separately in an approved
+secret manager or offline escrow. It must not be embedded in database archives
+or Git. If the approved key is unavailable during recovery, credential records
+remain preserved but unusable; the UI must show `Reconnect required` and owners
+must re-enter secrets on the temporary-production host.
 
 Verified capabilities:
 
@@ -47,23 +60,26 @@ Not implemented or claimed:
 
 - Continuous database replication.
 - Automatic DNS failover from the primary Hybrid URL.
-- Off-server copy of this standby host's own backup files.
+- Off-server copy of this temporary production host's own backup files until a
+  new destination is configured.
 - External alert delivery because no webhook/email destination is configured.
 - Live external connector execution; customer credentials, mappings, scopes, and authorization remain required.
 - Postiz scheduling; the API key is accepted, but the current workspace exposes no channel and Instagram OAuth still requires provider setup.
 
 ## Acceptance Evidence
 
-The live Hybrid Playwright gate passed against the backup URL:
+The pre-promotion live gate passed against the isolated backup deployment.
+After restoration of the primary data, the gate correctly exposed two
+production conditions that must be resolved before final acceptance:
 
-```text
-5 passed
-- Stitchi prepares an AI-assisted commercial plan without executing before approval.
-- Manager, specialist, and admin sessions load without unexpected API or console failures.
-- Specialist is kept out of admin connector setup; manager and admin access is permitted.
-- Event Operations and Sales & Leads work at desktop and mobile widths.
-- Admin executive-report workflow preserves honest delivery readiness.
-```
+- privileged users are redirected to mandatory MFA enrollment;
+- saved credentials require secure re-entry because the primary vault key was
+  not available on the recovery host.
+
+The recovery-hardening release converts the credential condition from HTTP 500
+errors into an honest `Reconnect required` state. Final live browser acceptance
+must be rerun after this release is deployed and real privileged owners enroll
+MFA.
 
 The first restore drill also passed:
 
@@ -122,5 +138,6 @@ The full controlled promotion process is documented in
 - Never place VPS passwords, application passwords, API keys, database passwords, or provider tokens in this document or GitHub.
 - Rotate the VPS password because it was shared out of band during provisioning.
 - Keep SSH key access available before considering password-login disablement.
-- Customer traffic must not be redirected to this host while it contains isolated seed data.
+- Customer traffic may use this host only after the promotion evidence confirms
+  that the approved primary recovery artifact was restored and accepted.
 - External execution flags remain disabled until credentials, mapping, approval, and acceptance evidence exist.

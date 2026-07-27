@@ -1058,8 +1058,17 @@ export default function IntegrationCredentials() {
                   <div className="max-w-sm text-xs leading-5 text-neutral-500">
                     {Object.entries((credential.secretFingerprints || {}) as Record<string, unknown>).map(([key, value]) => `${key}: ${String(value)}`).join(' | ') || 'Hidden'}
                   </div>,
-                  <ProductStatus tone={credential.isActive ? 'good' : 'danger'}>{credential.isActive ? 'Configured' : 'Disabled'}</ProductStatus>,
-                  credential.isActive ? <SecondaryAction onClick={() => disableCredential(text(credential.id))}>Disable</SecondaryAction> : <ProductStatus tone="muted">Disabled</ProductStatus>,
+                  credential.requiresReentry === true
+                    ? <ProductStatus tone="warn">Reconnect required</ProductStatus>
+                    : <ProductStatus tone={credential.isActive ? 'good' : 'danger'}>{credential.isActive ? 'Configured' : 'Disabled'}</ProductStatus>,
+                  credential.isActive
+                    ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {credential.requiresReentry === true && <ProductStatus tone="muted">Re-enter in setup above</ProductStatus>}
+                        <SecondaryAction onClick={() => disableCredential(text(credential.id))}>Disable</SecondaryAction>
+                      </div>
+                    )
+                    : <ProductStatus tone="muted">Disabled</ProductStatus>,
                 ])}
               />
             ) : (
