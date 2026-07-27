@@ -1,6 +1,6 @@
 # Hybrid Recovery Host And Temporary Production
 
-Last verified: 2026-07-25
+Last verified: 2026-07-27
 
 ## Purpose
 
@@ -77,16 +77,20 @@ production conditions that must be resolved before final acceptance:
   not available on the recovery host.
 
 The recovery-hardening release converts the credential condition from HTTP 500
-errors into an honest `Reconnect required` state. Final live browser acceptance
-must be rerun after this release is deployed and real privileged owners enroll
-MFA.
+errors into an honest `Reconnect required` state. Non-privileged live browser
+acceptance passed after deploying release
+`8b035a17cac8741f1ba3a5064aadaf0564322b96`. Final privileged and full
+role-based acceptance remains pending until all five real privileged owners
+enroll MFA.
 
-The first restore drill also passed:
+The post-promotion restore drill also passed:
 
 ```text
-PostgreSQL tables restored: 135
+PostgreSQL tables restored: 137
 Application health validation: passed
 Application login validation: passed
+Critical restored record counts: passed
+Credential response sanitization: passed
 ```
 
 Evidence paths on the server:

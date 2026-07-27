@@ -19,7 +19,10 @@ AB remains isolated and is not part of this promotion.
 - Repository: `tamerabuhalaweh/Tanaghom`
 - Release branch: `main`
 - Pre-promotion release: `38d4f16d88ac6411553db94b4dc443d15fadfca8`
-- Promotion changes must pass all required GitHub checks before deployment.
+- Deployed reviewed release:
+  `8b035a17cac8741f1ba3a5064aadaf0564322b96`
+- Promotion pull request: `#224`
+- All required GitHub checks passed before deployment.
 
 ## Recovery Source
 
@@ -55,11 +58,12 @@ promotion timestamp must be recorded below.
 - [x] Public root and `/api/health` return HTTP 200.
 - [x] PostgreSQL and Redis report healthy.
 - [x] Security headers and API request IDs verified.
-- [ ] Authenticated browser acceptance passed.
+- [x] Non-privileged authenticated browser acceptance passed.
+- [ ] Privileged authenticated acceptance awaits owner-controlled MFA enrollment.
 - [x] External execution remains disabled.
-- [ ] GitHub-hosted uptime monitor targets temporary production.
+- [x] GitHub-hosted uptime monitor targets temporary production.
 - [x] Immediate post-promotion backup and isolated restore drill passed.
-- [ ] Four real privileged users completed owner-controlled MFA enrollment.
+- [ ] Five real privileged users completed owner-controlled MFA enrollment.
 
 ## Source-Of-Truth Rule
 
@@ -73,13 +77,58 @@ Measured source backup age: `181665` seconds (`2 days, 2 hours, 27 minutes, 45 s
 
 Promoted release SHA before monitoring/runbook update: `38d4f16d88ac6411553db94b4dc443d15fadfca8`
 
-Post-promotion backup: `20260727T091120Z`
+Current temporary-production release SHA:
+`8b035a17cac8741f1ba3a5064aadaf0564322b96`
 
-Post-promotion isolated restore drill: passed with 137 tables; application
-health and login passed.
+Post-promotion backup:
+`tanaghum-postgres-20260727T094314Z.dump`
+
+Post-promotion backup SHA-256:
+`67ad88dbe94ff715cb87ef223aaf28b52e92f381ab866faf8b2002625dc5eef2`
+
+Post-promotion isolated restore drill completed at `2026-07-27T09:45:48Z`:
+passed with 137 tables; application health, application login, restored
+record counts, and credential-response sanitization passed.
+
+GitHub-hosted uptime run:
+`https://github.com/tamerabuhalaweh/Tanaghom/actions/runs/30254866989`
+
+Authenticated non-privileged browser acceptance covered Command Center,
+Commercial Assessment, Commercial Planning, Execution Plans, Events, Content,
+Performance, Stitchi, and Scheduling. All pages rendered without horizontal
+overflow, browser console errors, or failed API responses. Stitchi returned a
+safe reconnect instruction instead of an HTTP 500 when the restored AI
+credential could not be decrypted.
 
 Operator acceptance result: runtime recovery and security-header checks passed;
-browser, GitHub external monitoring, and real-user MFA evidence remain pending.
+GitHub external monitoring, backup, restore, and non-privileged browser
+acceptance passed. Privileged acceptance and full role-based workflow
+acceptance remain pending because all five real privileged account owners must
+complete MFA enrollment. External webhook/email alert delivery is also pending
+because no destination has been provided.
+
+## Privileged MFA Status
+
+Production contains five active privileged account owners:
+
+- one administrator;
+- one CCO;
+- three department heads.
+
+Verified MFA enrollment at the time of this evidence: `0/5`.
+
+The enforcement control is working: privileged users receive enrollment-only
+sessions and are redirected to Account Security. Enrollment cannot be
+completed by a deployment operator because each owner must scan the
+authenticator QR code and retain their own recovery codes.
+
+## Alert Delivery Status
+
+The GitHub issue fallback and GitHub-hosted uptime workflow are operational.
+No external webhook or email alert destination is configured because no
+approved endpoint or recipient list has been provided. Do not mark external
+alert delivery complete until a controlled failure is received at the approved
+external destination with timestamp evidence.
 
 ## Recovery Findings
 
