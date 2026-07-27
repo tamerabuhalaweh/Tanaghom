@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
@@ -24,6 +25,7 @@ function numberValue(value: unknown): number {
 }
 
 export default function AccountSecurity() {
+  const navigate = useNavigate();
   const { token, completeMfaEnrollment, mfaEnrollmentRequired } = useAuth();
   const [status, setStatus] = useState<RecordMap | null>(null);
   const [setup, setSetup] = useState<RecordMap | null>(null);
@@ -132,12 +134,15 @@ export default function AccountSecurity() {
   const enabled = status?.enabled === true;
   const recovery = (status?.recoveryCodes || {}) as RecordMap;
   const unusedCodes = numberValue(recovery.unused);
+  const enrollmentOnly = mfaEnrollmentRequired && !enabled;
 
   return (
     <ProductPage
       eyebrow="Security"
       title="Account Security"
-      subtitle="Protect your sign-in with an authenticator app and one-time recovery codes. Recovery codes are displayed once and stored only as hashes."
+      subtitle={enrollmentOnly
+        ? 'Complete this one required security step to unlock your admin workspace.'
+        : 'Protect your sign-in with an authenticator app and one-time recovery codes.'}
       action={<ProductStatus tone={enabled ? 'good' : 'warn'}>{enabled ? 'MFA Enabled' : 'MFA Required'}</ProductStatus>}
     >
       {message && <Notice tone={message.toLowerCase().includes('failed') || message.toLowerCase().includes('invalid') ? 'danger' : 'info'}>{message}</Notice>}
@@ -147,17 +152,28 @@ export default function AccountSecurity() {
         </Notice>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="MFA Status" value={enabled ? 'Enabled' : 'Off'} detail="Authenticator app protection" tone={enabled ? 'good' : 'warn'} />
-        <MetricCard label="Recovery Codes" value={unusedCodes} detail="Unused one-time codes" tone={unusedCodes >= 5 ? 'good' : enabled ? 'warn' : 'muted'} />
-        <MetricCard label="Raw Secrets" value="Never Stored" detail="Only encrypted secrets and hashes are persisted" tone="info" />
-      </div>
+      {enrollmentOnly ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <MetricCard label="Security Setup" value="Required" detail="Your workspace unlocks after verification" tone="warn" />
+          <MetricCard label="Time Needed" value="About 2 min" detail="Use any standard authenticator app" tone="info" />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          <MetricCard label="MFA Status" value={enabled ? 'Enabled' : 'Off'} detail="Authenticator app protection" tone={enabled ? 'good' : 'warn'} />
+          <MetricCard label="Recovery Codes" value={unusedCodes} detail="Unused one-time codes" tone={unusedCodes >= 5 ? 'good' : enabled ? 'warn' : 'muted'} />
+          <MetricCard label="Stored Protection" value="Encrypted" detail="Secrets and recovery codes are never shown again" tone="info" />
+        </div>
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <ProductCard title="Authenticator App" subtitle="Use Google Authenticator, 1Password, Microsoft Authenticator, or another TOTP app.">
+      <div className={enrollmentOnly ? 'grid gap-6' : 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]'}>
+        <ProductCard title={enrollmentOnly ? 'Unlock Your Workspace' : 'Authenticator App'} subtitle="Use Google Authenticator, 1Password, Microsoft Authenticator, or another authenticator app.">
           {!enabled && !setup && (
             <div className="space-y-4">
-              <Notice tone="warn">Production customer access should require MFA for admins and department managers.</Notice>
+              <ol className="space-y-3 text-sm text-neutral-700">
+                <li><strong>1. Open your authenticator app.</strong> Choose the option to add a new account.</li>
+                <li><strong>2. Start setup below.</strong> Scan the setup URL or enter the one-time secret.</li>
+                <li><strong>3. Verify the 6-digit code.</strong> The full workspace unlocks immediately.</li>
+              </ol>
               <PrimaryAction disabled={loading} onClick={startSetup}>{loading ? 'Starting...' : 'Set Up Authenticator'}</PrimaryAction>
             </div>
           )}
@@ -205,22 +221,24 @@ export default function AccountSecurity() {
           )}
         </ProductCard>
 
-        <ProductCard title="Disable MFA" subtitle="Use only during controlled account recovery. Recovery codes are deleted when MFA is disabled.">
-          <div className="space-y-4">
-            <Field label="Authenticator Code">
-              <input
-                value={disableCode}
-                onChange={(event) => setDisableCode(event.target.value)}
-                inputMode="numeric"
-                maxLength={6}
-                className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
-              />
-            </Field>
-            <SecondaryAction disabled={loading || !enabled || disableCode.length !== 6} onClick={disableMfa}>
-              Disable MFA
-            </SecondaryAction>
-          </div>
-        </ProductCard>
+        {!enrollmentOnly && (
+          <ProductCard title="Disable MFA" subtitle="Use only during controlled account recovery. Recovery codes are deleted when MFA is disabled.">
+            <div className="space-y-4">
+              <Field label="Authenticator Code">
+                <input
+                  value={disableCode}
+                  onChange={(event) => setDisableCode(event.target.value)}
+                  inputMode="numeric"
+                  maxLength={6}
+                  className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-950 outline-none focus:border-blue-500"
+                />
+              </Field>
+              <SecondaryAction disabled={loading || !enabled || disableCode.length !== 6} onClick={disableMfa}>
+                Disable MFA
+              </SecondaryAction>
+            </div>
+          </ProductCard>
+        )}
       </div>
 
       {recoveryCodes.length > 0 && (
@@ -231,6 +249,9 @@ export default function AccountSecurity() {
                 {code}
               </div>
             ))}
+          </div>
+          <div className="mt-5">
+            <PrimaryAction onClick={() => navigate('/command-center')}>Continue to Workspace</PrimaryAction>
           </div>
         </ProductCard>
       )}

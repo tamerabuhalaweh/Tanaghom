@@ -210,12 +210,20 @@ function initials(value: string): string {
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, mfaEnrollmentRequired } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const role = normalizeRole(getField(user, ['role'], 'viewer'));
   const displayName = getField(user, ['name', 'email'], 'Workspace User');
   const currentTitle = pageTitle(location.pathname);
+  const securityEnrollmentMode = mfaEnrollmentRequired && location.pathname === '/account-security';
+  const securityNavItem: NavItem = {
+    path: '/account-security',
+    label: 'Finish Security Setup',
+    description: 'Required before workspace access',
+    icon: ShieldCheck,
+    roles: PRODUCT_ROLES,
+  };
   const primaryNav = useMemo(() => PRIMARY_NAV.filter(item => visibleForRole(item, role)).map(item => {
     if (item.path !== '/growth' || !EXECUTIVE_ROLES.includes(role)) return item;
     return {
@@ -259,20 +267,24 @@ export default function Layout() {
       <a className="hybrid-skip-link" href="#main-content">Skip to Main Content</a>
 
       <aside className="hybrid-sidebar">
-        <Link className="hybrid-brand" to="/command-center" aria-label="Tanaghum Today">
+        <Link className="hybrid-brand" to={securityEnrollmentMode ? '/account-security' : '/command-center'} aria-label={securityEnrollmentMode ? 'Tanaghum security setup' : 'Tanaghum Today'}>
           <span className="hybrid-brand-mark"><Sparkles size={19} aria-hidden="true" /></span>
           <span className="hybrid-brand-copy"><strong>Tanaghum</strong><small>Commercial workspace</small></span>
         </Link>
 
         <nav className="hybrid-primary-nav" aria-label="Product navigation">
-          <span className="hybrid-nav-heading">Workspace</span>
-          {primaryNav.map(item => <ShellNavLink key={item.path} item={item} active={isActive(location.pathname, item)} />)}
+          <span className="hybrid-nav-heading">{securityEnrollmentMode ? 'Required setup' : 'Workspace'}</span>
+          {securityEnrollmentMode
+            ? <ShellNavLink item={securityNavItem} active />
+            : primaryNav.map(item => <ShellNavLink key={item.path} item={item} active={isActive(location.pathname, item)} />)}
         </nav>
 
         <div className="hybrid-sidebar-footer">
-          <button className="hybrid-nav-link" type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen}>
-            <Settings size={19} aria-hidden="true" /><span>Setup & More</span>
-          </button>
+          {!securityEnrollmentMode && (
+            <button className="hybrid-nav-link" type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen}>
+              <Settings size={19} aria-hidden="true" /><span>Setup & More</span>
+            </button>
+          )}
           <div className="hybrid-account-card">
             <span className="hybrid-avatar">{initials(displayName)}</span>
             <span className="hybrid-account-copy"><strong>{displayName}</strong><small>{role.replaceAll('_', ' ')}</small></span>
@@ -288,40 +300,52 @@ export default function Layout() {
             <span><strong>Tanaghum</strong><small>{currentTitle}</small></span>
           </div>
           <div className="hybrid-route-context">
-            <span>Commercial workspace</span><ChevronRight size={15} aria-hidden="true" /><strong>{currentTitle}</strong>
+            <span>{securityEnrollmentMode ? 'Required account setup' : 'Commercial workspace'}</span><ChevronRight size={15} aria-hidden="true" /><strong>{currentTitle}</strong>
           </div>
           <div className="hybrid-topbar-actions">
-            <Link className="hybrid-topbar-action" to={`/stitchi?returnTo=${encodeURIComponent(location.pathname)}`}>
-              <Sparkles size={17} aria-hidden="true" />Ask Stitchi
-            </Link>
-            <button className="hybrid-icon-button" type="button" onClick={() => setMoreOpen(true)} aria-label="Open workspace menu" aria-expanded={moreOpen}>
-              <Menu size={20} aria-hidden="true" />
-            </button>
+            {securityEnrollmentMode ? (
+              <button className="hybrid-topbar-action" type="button" onClick={handleLogout}>
+                <LogOut size={17} aria-hidden="true" />Sign out
+              </button>
+            ) : (
+              <>
+                <Link className="hybrid-topbar-action" to={`/stitchi?returnTo=${encodeURIComponent(location.pathname)}`}>
+                  <Sparkles size={17} aria-hidden="true" />Ask Stitchi
+                </Link>
+                <button className="hybrid-icon-button" type="button" onClick={() => setMoreOpen(true)} aria-label="Open workspace menu" aria-expanded={moreOpen}>
+                  <Menu size={20} aria-hidden="true" />
+                </button>
+              </>
+            )}
           </div>
         </header>
 
         <main className="hybrid-main" id="main-content"><Outlet /></main>
       </div>
 
-      <nav className="hybrid-mobile-nav" aria-label="Mobile product navigation">
-        {primaryNav.slice(0, 4).map(item => <MobileNavLink key={item.path} item={item} active={isActive(location.pathname, item)} />)}
-        <button type="button" onClick={() => setMoreOpen(true)} className="hybrid-mobile-nav-link" aria-expanded={moreOpen}>
-          <MoreHorizontal size={20} aria-hidden="true" /><span>More</span>
-        </button>
-      </nav>
+      {!securityEnrollmentMode && (
+        <nav className="hybrid-mobile-nav" aria-label="Mobile product navigation">
+          {primaryNav.slice(0, 4).map(item => <MobileNavLink key={item.path} item={item} active={isActive(location.pathname, item)} />)}
+          <button type="button" onClick={() => setMoreOpen(true)} className="hybrid-mobile-nav-link" aria-expanded={moreOpen}>
+            <MoreHorizontal size={20} aria-hidden="true" /><span>More</span>
+          </button>
+        </nav>
+      )}
 
-      <MoreSheet
-        open={moreOpen}
-        role={role}
-        displayName={displayName}
-        primaryLinks={primaryNav.slice(4)}
-        workflowLinks={workflowLinks}
-        setupLinks={setupLinks}
-        adminLinks={adminLinks}
-        pathname={location.pathname}
-        onClose={() => setMoreOpen(false)}
-        onLogout={handleLogout}
-      />
+      {!securityEnrollmentMode && (
+        <MoreSheet
+          open={moreOpen}
+          role={role}
+          displayName={displayName}
+          primaryLinks={primaryNav.slice(4)}
+          workflowLinks={workflowLinks}
+          setupLinks={setupLinks}
+          adminLinks={adminLinks}
+          pathname={location.pathname}
+          onClose={() => setMoreOpen(false)}
+          onLogout={handleLogout}
+        />
+      )}
     </div>
   );
 }
