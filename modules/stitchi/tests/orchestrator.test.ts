@@ -1092,6 +1092,37 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('keeps GHL booked-meeting outcome summaries read-only instead of proposing Books work', async () => {
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Summarize the verified GoHighLevel sales outcomes for this event. Include booked meetings, attended meetings, no-shows, purchases, amount paid, outstanding balance, and ticket quantity. Do not change data or call external systems.',
+        eventId: '00000000-0000-0000-0000-000000000001',
+      },
+    );
+
+    expect(result.status).toBe('answered');
+    expect(result.actionRun).toBeNull();
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(providerMocks.generate).toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.any(String),
+      expect.objectContaining({
+        status: 'answered',
+        writesExecuted: false,
+        externalExecution: 'blocked',
+      }),
+    );
+  });
+
   it('does not create a commercial action when AI enrichment is unavailable', async () => {
     providerMocks.generate.mockRejectedValueOnce(
       new LLMProviderError('Gemma rejected the configured credential.', 400, 'LLM_PROVIDER_UNAVAILABLE'),
