@@ -28,8 +28,15 @@ export interface StitchiReadOnlyContext {
     total: number;
     byStatus: Record<string, number>;
     byTemperature: Record<string, number>;
+    byPaymentStatus: Record<string, number>;
     purchases: number;
     knownRevenue: number;
+    knownSaleValue: number;
+    knownAmountPaid: number;
+    knownOutstandingBalance: number;
+    knownTicketQuantity: number;
+    ghlMirrored: number;
+    latestGhlSyncAt: Date | null;
   };
   kpiSummary: {
     records: number;
@@ -492,6 +499,13 @@ export async function loadReadOnlyContext(
         lead_status: true,
         lead_temperature: true,
         purchase_amount: true,
+        payment_status: true,
+        sale_value: true,
+        amount_paid: true,
+        outstanding_balance: true,
+        ticket_quantity: true,
+        source_of_truth: true,
+        external_last_synced_at: true,
       },
       take: 500,
     }),
@@ -1041,11 +1055,6 @@ async function loadGovernedPerformanceContext(
     if (!approvedMapping.paymentAmountField) {
       missingCustomerDefinitions.push('Confirm the GoHighLevel field that stores amount paid.');
     }
-    if (!approvedMapping.saleValueField) {
-      missingCustomerDefinitions.push(
-        'Confirm the GoHighLevel field that stores total sale value or supports outstanding-balance calculation.',
-      );
-    }
     if (!approvedMapping.ticketQuantityField) {
       missingCustomerDefinitions.push(
         'Confirm the GoHighLevel field that stores purchased ticket quantity.',
@@ -1157,29 +1166,69 @@ function isCustomerVisibleRecordName(name: string): boolean {
 }
 
 function summarizeLeads(
-  leads: Array<{ lead_status: unknown; lead_temperature: unknown; purchase_amount: unknown }>,
+  leads: Array<{
+    lead_status: unknown;
+    lead_temperature: unknown;
+    purchase_amount: unknown;
+    payment_status: unknown;
+    sale_value: unknown;
+    amount_paid: unknown;
+    outstanding_balance: unknown;
+    ticket_quantity: number | null;
+    source_of_truth: unknown;
+    external_last_synced_at: Date | null;
+  }>,
 ) {
   const byStatus: Record<string, number> = {};
   const byTemperature: Record<string, number> = {};
+  const byPaymentStatus: Record<string, number> = {};
   let purchases = 0;
   let knownRevenue = 0;
+  let knownSaleValue = 0;
+  let knownAmountPaid = 0;
+  let knownOutstandingBalance = 0;
+  let knownTicketQuantity = 0;
+  let ghlMirrored = 0;
+  let latestGhlSyncAt: Date | null = null;
 
   for (const lead of leads) {
     const status = String(lead.lead_status);
     const temperature = String(lead.lead_temperature);
+    const paymentStatus = String(lead.payment_status || 'unknown');
     byStatus[status] = (byStatus[status] || 0) + 1;
     byTemperature[temperature] = (byTemperature[temperature] || 0) + 1;
+    byPaymentStatus[paymentStatus] = (byPaymentStatus[paymentStatus] || 0) + 1;
     const purchaseAmount = decimalToNumber(lead.purchase_amount) || 0;
     if (purchaseAmount > 0 || status === 'purchased') purchases += 1;
     knownRevenue += purchaseAmount;
+    knownSaleValue += decimalToNumber(lead.sale_value) || 0;
+    knownAmountPaid += decimalToNumber(lead.amount_paid) || 0;
+    knownOutstandingBalance += decimalToNumber(lead.outstanding_balance) || 0;
+    knownTicketQuantity += lead.ticket_quantity || 0;
+    if (String(lead.source_of_truth) === 'gohighlevel') {
+      ghlMirrored += 1;
+      if (
+        lead.external_last_synced_at &&
+        (!latestGhlSyncAt || lead.external_last_synced_at > latestGhlSyncAt)
+      ) {
+        latestGhlSyncAt = lead.external_last_synced_at;
+      }
+    }
   }
 
   return {
     total: leads.length,
     byStatus,
     byTemperature,
+    byPaymentStatus,
     purchases,
     knownRevenue,
+    knownSaleValue,
+    knownAmountPaid,
+    knownOutstandingBalance,
+    knownTicketQuantity,
+    ghlMirrored,
+    latestGhlSyncAt,
   };
 }
 
