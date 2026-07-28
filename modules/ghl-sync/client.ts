@@ -10,7 +10,9 @@ export interface GhlClientConfig {
 
 export interface GhlClient {
   pull(limit: number): Promise<GhlPullResult>;
-  upsertContact(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: unknown }>;
+  upsertContact(
+    payload: Record<string, unknown>,
+  ): Promise<{ ok: boolean; status: number; body: unknown }>;
 }
 
 export interface GhlConnectionTestResult {
@@ -46,8 +48,20 @@ export interface GhlLiveReadValidationResult {
   rawPayloadReturned: false;
 }
 
+interface GhlCustomFieldDefinition {
+  id: string;
+  fieldKey: string | null;
+  name: string | null;
+}
+
+const READ_RETRY_STATUSES = new Set([429, 502, 503, 504]);
+const READ_MAX_ATTEMPTS = 4;
+const READ_CONCURRENCY = 4;
+
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function asArray(value: unknown): unknown[] {
@@ -66,7 +80,8 @@ function firstNumber(record: Record<string, unknown>, keys: string[]): number | 
   for (const key of keys) {
     const value = record[key];
     if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value.trim() && !Number.isNaN(Number(value))) return Number(value);
+    if (typeof value === 'string' && value.trim() && !Number.isNaN(Number(value)))
+      return Number(value);
   }
   return null;
 }
@@ -94,7 +109,7 @@ function normalizeRemoteTag(input: unknown): GhlRemoteTagReference | null {
 }
 
 function flattenStages(input: unknown[]): unknown[] {
-  return input.flatMap(item => Array.isArray(item) ? item : [item]);
+  return input.flatMap((item) => (Array.isArray(item) ? item : [item]));
 }
 
 function normalizePipelineStages(input: unknown): GhlRemotePipelineStageReference[] {
@@ -104,7 +119,7 @@ function normalizePipelineStages(input: unknown): GhlRemotePipelineStageReferenc
   if (!pipelineId || !pipelineName) return [];
 
   return flattenStages(asArray(pipeline.stages))
-    .map(stageInput => {
+    .map((stageInput) => {
       const stage = asRecord(stageInput);
       const stageId = firstString(stage, ['id', 'stageId', 'pipelineStageId', '_id']);
       const stageName = firstString(stage, ['name', 'stageName']);
@@ -119,7 +134,7 @@ function normalizeContact(input: unknown): GhlContact | null {
   const id = firstString(record, ['id', 'contactId', '_id']);
   if (!id) return null;
   const tags = asArray(record.tags)
-    .map(tag => typeof tag === 'string' ? tag : firstString(asRecord(tag), ['name', 'id']))
+    .map((tag) => (typeof tag === 'string' ? tag : firstString(asRecord(tag), ['name', 'id'])))
     .filter((tag): tag is string => Boolean(tag));
   const customFields = normalizeCustomFields(
     record.customFields ?? record.custom_fields ?? record.customField,
@@ -154,10 +169,47 @@ function normalizeCustomFields(input: unknown): Record<string, unknown> {
       'name',
     ]);
     if (!key) continue;
-    const valueKey = ['value', 'field_value', 'fieldValue'].find((candidate) =>
-      Object.prototype.hasOwnProperty.call(field, candidate),
-    );
+    const valueKey = [
+      'value',
+      'field_value',
+      'fieldValue',
+      'fieldValueString',
+      'fieldValueNumber',
+      'fieldValueDate',
+      'fieldValueBoolean',
+      'fieldValueArray',
+      'fieldValueCheckbox',
+    ].find((candidate) => Object.prototype.hasOwnProperty.call(field, candidate));
     result[key] = valueKey ? field[valueKey] : null;
+  }
+  return result;
+}
+
+function normalizeCustomFieldDefinition(input: unknown): GhlCustomFieldDefinition | null {
+  const record = asRecord(input);
+  const id = firstString(record, ['id', '_id', 'fieldId', 'field_id']);
+  if (!id) return null;
+  return {
+    id,
+    fieldKey: firstString(record, ['fieldKey', 'field_key', 'key']),
+    name: firstString(record, ['name', 'label']),
+  };
+}
+
+function addCustomFieldAliases(
+  customFields: Record<string, unknown>,
+  definitions: GhlCustomFieldDefinition[],
+): Record<string, unknown> {
+  const result = { ...customFields };
+  for (const definition of definitions) {
+    if (!Object.prototype.hasOwnProperty.call(customFields, definition.id)) continue;
+    const value = customFields[definition.id];
+    if (definition.fieldKey && !Object.prototype.hasOwnProperty.call(result, definition.fieldKey)) {
+      result[definition.fieldKey] = value;
+    }
+    if (definition.name && !Object.prototype.hasOwnProperty.call(result, definition.name)) {
+      result[definition.name] = value;
+    }
   }
   return result;
 }
@@ -176,7 +228,16 @@ function normalizeOpportunity(input: unknown): GhlOpportunity | null {
     monetaryValue: firstNumber(record, ['monetaryValue', 'monetary_value', 'value']),
     name: firstString(record, ['name', 'title']),
     updatedAt: firstString(record, ['updatedAt', 'updated_at']),
+    customFields: normalizeCustomFields(
+      record.customFields ?? record.custom_fields ?? record.customField,
+    ),
   };
+}
+
+function opportunityDetailRecord(body: unknown): Record<string, unknown> {
+  const root = asRecord(body);
+  const data = asRecord(root.data);
+  return asRecord(root.opportunity ?? data.opportunity ?? body);
 }
 
 function normalizeAppointment(input: unknown, fallbackContactId: string): GhlAppointment | null {
@@ -215,27 +276,47 @@ export class LeadConnectorClient implements GhlClient {
       method: 'POST',
       body: JSON.stringify(contactSearchPage(this.config.locationId, 1)),
     });
-    const opportunitiesResult = await this.readValidationEndpoint(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=1`, {
-      method: 'GET',
-    });
-    const tagsResult = await this.readValidationEndpoint(`/locations/${encodeURIComponent(this.config.locationId)}/tags`, {
-      method: 'GET',
-    });
-    const pipelinesResult = await this.readValidationEndpoint(`/opportunities/pipelines?locationId=${encodeURIComponent(this.config.locationId)}`, {
-      method: 'GET',
-    });
+    const opportunitiesResult = await this.readValidationEndpoint(
+      `/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=1`,
+      {
+        method: 'GET',
+      },
+    );
+    const tagsResult = await this.readValidationEndpoint(
+      `/locations/${encodeURIComponent(this.config.locationId)}/tags`,
+      {
+        method: 'GET',
+      },
+    );
+    const pipelinesResult = await this.readValidationEndpoint(
+      `/opportunities/pipelines?locationId=${encodeURIComponent(this.config.locationId)}`,
+      {
+        method: 'GET',
+      },
+    );
 
-    if (!contactsResult.ok) warnings.push(`Contacts read check failed with status ${contactsResult.status}.`);
-    if (!opportunitiesResult.ok) warnings.push(`Opportunities read check failed with status ${opportunitiesResult.status}.`);
+    if (!contactsResult.ok)
+      warnings.push(`Contacts read check failed with status ${contactsResult.status}.`);
+    if (!opportunitiesResult.ok)
+      warnings.push(`Opportunities read check failed with status ${opportunitiesResult.status}.`);
     if (!tagsResult.ok) warnings.push(`Tags read check failed with status ${tagsResult.status}.`);
-    if (!pipelinesResult.ok) warnings.push(`Pipeline read check failed with status ${pipelinesResult.status}.`);
+    if (!pipelinesResult.ok)
+      warnings.push(`Pipeline read check failed with status ${pipelinesResult.status}.`);
 
-    const contactItems = contactsResult.ok ? extractItems(contactsResult.body, ['contacts', 'items', 'results']) : [];
-    const opportunityItems = opportunitiesResult.ok ? extractItems(opportunitiesResult.body, ['opportunities', 'items', 'results']) : [];
-    const remoteTags = tagsResult.ok
-      ? extractItems(tagsResult.body, ['tags', 'items', 'results']).map(normalizeRemoteTag).filter((tag): tag is GhlRemoteTagReference => Boolean(tag))
+    const contactItems = contactsResult.ok
+      ? extractItems(contactsResult.body, ['contacts', 'items', 'results'])
       : [];
-    const pipelines = pipelinesResult.ok ? extractItems(pipelinesResult.body, ['pipelines', 'items', 'results']) : [];
+    const opportunityItems = opportunitiesResult.ok
+      ? extractItems(opportunitiesResult.body, ['opportunities', 'items', 'results'])
+      : [];
+    const remoteTags = tagsResult.ok
+      ? extractItems(tagsResult.body, ['tags', 'items', 'results'])
+          .map(normalizeRemoteTag)
+          .filter((tag): tag is GhlRemoteTagReference => Boolean(tag))
+      : [];
+    const pipelines = pipelinesResult.ok
+      ? extractItems(pipelinesResult.body, ['pipelines', 'items', 'results'])
+      : [];
     const remotePipelineStages = pipelines.flatMap(normalizePipelineStages);
 
     return {
@@ -261,40 +342,112 @@ export class LeadConnectorClient implements GhlClient {
         method: 'POST',
         body: JSON.stringify(contactSearchPage(this.config.locationId, limit)),
       }),
-      this.request(`/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=${limit}`, {
-        method: 'GET',
-      }),
+      this.request(
+        `/opportunities/search?location_id=${encodeURIComponent(this.config.locationId)}&limit=${limit}`,
+        {
+          method: 'GET',
+        },
+      ),
     ]);
 
     const contacts = extractItems(contactsBody, ['contacts', 'items', 'results'])
       .map(normalizeContact)
       .filter((contact): contact is GhlContact => Boolean(contact))
       .slice(0, limit);
-    const contactIds = new Set(contacts.map(contact => contact.id));
-    const opportunities = extractItems(opportunitiesBody, ['opportunities', 'items', 'results'])
+    const contactIds = new Set(contacts.map((contact) => contact.id));
+    const opportunitySummaries = extractItems(opportunitiesBody, [
+      'opportunities',
+      'items',
+      'results',
+    ])
       .map(normalizeOpportunity)
-      .filter((opportunity): opportunity is GhlOpportunity => opportunity !== null && contactIds.has(opportunity.contactId));
+      .filter(
+        (opportunity): opportunity is GhlOpportunity =>
+          opportunity !== null && contactIds.has(opportunity.contactId),
+      );
 
     const warnings: string[] = [];
-    const appointmentResults = await Promise.allSettled(
-      contacts.map(contact => this.request(`/contacts/${encodeURIComponent(contact.id)}/appointments`, { method: 'GET' })
-        .then(body => extractItems(body, ['appointments', 'events', 'items', 'results'])
-          .map(item => normalizeAppointment(item, contact.id))
-          .filter((appointment): appointment is GhlAppointment => Boolean(appointment)))),
-    );
+    const [fieldDefinitionsResult, opportunityDetailResults, appointmentResults] =
+      await Promise.all([
+        this.request(
+          `/locations/${encodeURIComponent(this.config.locationId)}/customFields?model=opportunity`,
+          { method: 'GET' },
+        )
+          .then((body) =>
+            extractItems(body, ['customFields', 'fields', 'items', 'results'])
+              .map(normalizeCustomFieldDefinition)
+              .filter((field): field is GhlCustomFieldDefinition => Boolean(field)),
+          )
+          .catch(() => null),
+        settleWithConcurrency(opportunitySummaries, READ_CONCURRENCY, (opportunity) =>
+          this.request(`/opportunities/${encodeURIComponent(opportunity.id)}`, {
+            method: 'GET',
+          }),
+        ),
+        settleWithConcurrency(contacts, READ_CONCURRENCY, (contact) =>
+          this.request(`/contacts/${encodeURIComponent(contact.id)}/appointments`, {
+            method: 'GET',
+          }).then((body) =>
+            extractItems(body, ['appointments', 'events', 'items', 'results'])
+              .map((item) => normalizeAppointment(item, contact.id))
+              .filter((appointment): appointment is GhlAppointment => Boolean(appointment)),
+          ),
+        ),
+      ]);
+
+    if (fieldDefinitionsResult === null) {
+      warnings.push(
+        'Could not read GoHighLevel opportunity field definitions. Field-id mappings remain available.',
+      );
+    }
+    const definitions = fieldDefinitionsResult ?? [];
+    let detailFailures = 0;
+    const opportunities = opportunitySummaries.map((summary, index) => {
+      const detailResult = opportunityDetailResults[index];
+      if (!detailResult || detailResult.status === 'rejected') {
+        detailFailures += 1;
+        return summary;
+      }
+      const detail = normalizeOpportunity({
+        ...summary,
+        ...opportunityDetailRecord(detailResult.value),
+        id: summary.id,
+        contactId: summary.contactId,
+      });
+      if (!detail) return summary;
+      return {
+        ...summary,
+        ...detail,
+        customFields: addCustomFieldAliases(detail.customFields ?? {}, definitions),
+      };
+    });
+    if (detailFailures > 0) {
+      warnings.push(
+        `Could not read details for ${detailFailures} GoHighLevel opportunity record(s). Summary data was retained.`,
+      );
+    }
+
     const appointments: GhlAppointment[] = [];
-    appointmentResults.forEach((result, index) => {
+    let appointmentFailures = 0;
+    appointmentResults.forEach((result) => {
       if (result.status === 'fulfilled') {
         appointments.push(...result.value);
       } else {
-        warnings.push(`Could not read appointments for contact ${contacts[index]?.id || index + 1}. Lead contact and opportunity sync continued.`);
+        appointmentFailures += 1;
       }
     });
+    if (appointmentFailures > 0) {
+      warnings.push(
+        `Could not read appointments for ${appointmentFailures} GoHighLevel contact(s). Contact and opportunity sync continued.`,
+      );
+    }
 
     return { contacts, opportunities, appointments, warnings, rawReturned: false };
   }
 
-  async upsertContact(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: unknown }> {
+  async upsertContact(
+    payload: Record<string, unknown>,
+  ): Promise<{ ok: boolean; status: number; body: unknown }> {
     const response = await fetch(`${this.config.baseUrl}/contacts/upsert`, {
       method: 'POST',
       headers: this.headers(),
@@ -305,21 +458,28 @@ export class LeadConnectorClient implements GhlClient {
   }
 
   private async request(path: string, init: RequestInit): Promise<unknown> {
-    const response = await fetch(`${this.config.baseUrl}${path}`, {
-      ...init,
-      headers: {
-        ...this.headers(),
-        ...(init.headers || {}),
-      },
-    });
-    const body = await response.json().catch(() => ({ statusText: response.statusText }));
-    if (!response.ok) {
-      throw new ExternalServiceError('GoHighLevel', `API returned ${response.status}`);
+    for (let attempt = 1; attempt <= READ_MAX_ATTEMPTS; attempt += 1) {
+      const response = await fetch(`${this.config.baseUrl}${path}`, {
+        ...init,
+        headers: {
+          ...this.headers(),
+          ...(init.headers || {}),
+        },
+      });
+      const body = await response.json().catch(() => ({ statusText: response.statusText }));
+      if (response.ok) return body;
+      if (!READ_RETRY_STATUSES.has(response.status) || attempt === READ_MAX_ATTEMPTS) {
+        throw new ExternalServiceError('GoHighLevel', `API returned ${response.status}`);
+      }
+      await delay(250 * 2 ** (attempt - 1));
     }
-    return body;
+    throw new ExternalServiceError('GoHighLevel', 'API read failed');
   }
 
-  private async readValidationEndpoint(path: string, init: RequestInit): Promise<{ ok: boolean; status: number; body: unknown }> {
+  private async readValidationEndpoint(
+    path: string,
+    init: RequestInit,
+  ): Promise<{ ok: boolean; status: number; body: unknown }> {
     const response = await fetch(`${this.config.baseUrl}${path}`, {
       ...init,
       headers: {
@@ -340,7 +500,36 @@ export class LeadConnectorClient implements GhlClient {
   }
 }
 
-function contactSearchPage(locationId: string, pageLimit: number): {
+async function settleWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<Array<PromiseSettledResult<R>>> {
+  const results: Array<PromiseSettledResult<R>> = new Array(items.length);
+  let cursor = 0;
+  async function run(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      try {
+        results[index] = { status: 'fulfilled', value: await worker(items[index] as T) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => run()));
+  return results;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function contactSearchPage(
+  locationId: string,
+  pageLimit: number,
+): {
   locationId: string;
   page: number;
   pageLimit: number;

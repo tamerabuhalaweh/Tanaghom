@@ -36,14 +36,16 @@ describe('GHL lead mapper', () => {
         source: 'GHL Form',
         tags: ['Hot Lead'],
       },
-      [{
-        id: 'opp-1',
-        contactId: 'contact-1',
-        pipelineId: 'pipe-1',
-        stageId: 'stage-meeting',
-        status: 'open',
-        monetaryValue: 1200,
-      }],
+      [
+        {
+          id: 'opp-1',
+          contactId: 'contact-1',
+          pipelineId: 'pipe-1',
+          stageId: 'stage-meeting',
+          status: 'open',
+          monetaryValue: 1200,
+        },
+      ],
       [],
       mappings,
     );
@@ -65,20 +67,23 @@ describe('GHL lead mapper', () => {
 
     expect(mapped.leadStatus).toBe('purchased');
     expect(mapped.leadTemperature).toBe('buyer');
-    expect(mapped.purchaseAmount).toBe(2500);
+    expect(mapped.purchaseAmount).toBeNull();
+    expect(mapped.saleValue).toBe(2500);
   });
 
   it('maps booked GHL appointments into meeting-booked leads when no purchase outcome exists', () => {
     const mapped = mapGhlLead(
       { id: 'contact-3', name: 'Booked Lead', tags: [] },
       [],
-      [{
-        id: 'appt-1',
-        contactId: 'contact-3',
-        status: 'confirmed',
-        title: 'Discovery Call',
-        startTime: '2026-08-01T10:00:00.000Z',
-      }],
+      [
+        {
+          id: 'appt-1',
+          contactId: 'contact-3',
+          status: 'confirmed',
+          title: 'Discovery Call',
+          startTime: '2026-08-01T10:00:00.000Z',
+        },
+      ],
       buildGhlMappingSet([]),
     );
 
@@ -93,13 +98,15 @@ describe('GHL lead mapper', () => {
     const mapped = mapGhlLead(
       { id: 'contact-4', name: 'No Show Lead', tags: ['Hot'] },
       [],
-      [{
-        id: 'appt-2',
-        contactId: 'contact-4',
-        status: 'no_show',
-        title: 'Enrollment Call',
-        startTime: '2026-08-02T10:00:00.000Z',
-      }],
+      [
+        {
+          id: 'appt-2',
+          contactId: 'contact-4',
+          status: 'no_show',
+          title: 'Enrollment Call',
+          startTime: '2026-08-02T10:00:00.000Z',
+        },
+      ],
       buildGhlMappingSet([
         {
           validation_status: 'valid',

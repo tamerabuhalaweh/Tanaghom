@@ -18,32 +18,41 @@ const runInclude = {
   learning_set: { select: { id: true, title: true, status: true, approved_at: true } },
 } satisfies Prisma.CommercialHistoricalAssessmentRunInclude;
 
-export async function previewEvidence(tenantKey: string, scope: AssessmentScopeInput): Promise<AssessmentEvidencePreview> {
+export async function previewEvidence(
+  tenantKey: string,
+  scope: AssessmentScopeInput,
+): Promise<AssessmentEvidencePreview> {
   const [tenant, revenueLine, selectedEvents, selectedCampaigns] = await Promise.all([
-    prisma.tenant.findUnique({ where: { tenant_key: tenantKey }, select: { default_currency: true } }),
+    prisma.tenant.findUnique({
+      where: { tenant_key: tenantKey },
+      select: { default_currency: true },
+    }),
     scope.revenueLineId
       ? prisma.commercialRevenueLine.findFirst({
-        where: { id: scope.revenueLineId, tenant_key: tenantKey },
-        select: { id: true, name: true },
-      })
+          where: { id: scope.revenueLineId, tenant_key: tenantKey },
+          select: { id: true, name: true },
+        })
       : Promise.resolve(null),
     scope.eventIds.length
       ? prisma.commercialEvent.findMany({
-        where: { id: { in: scope.eventIds }, tenant_key: tenantKey },
-        select: { id: true, status: true },
-      })
+          where: { id: { in: scope.eventIds }, tenant_key: tenantKey },
+          select: { id: true, status: true },
+        })
       : Promise.resolve([]),
     scope.campaignIds.length
       ? prisma.contentRequest.findMany({
-        where: { id: { in: scope.campaignIds }, tenant_key: tenantKey },
-        select: { id: true },
-      })
+          where: { id: { in: scope.campaignIds }, tenant_key: tenantKey },
+          select: { id: true },
+        })
       : Promise.resolve([]),
   ]);
-  if (scope.revenueLineId && !revenueLine) throw new NotFoundError('CommercialRevenueLine', scope.revenueLineId);
+  if (scope.revenueLineId && !revenueLine)
+    throw new NotFoundError('CommercialRevenueLine', scope.revenueLineId);
   if (selectedEvents.length !== scope.eventIds.length) throw new NotFoundError('CommercialEvent');
-  if (selectedEvents.some(event => String(event.status) !== 'completed')) {
-    throw new ValidationError('Historical assessment event filters must reference completed events');
+  if (selectedEvents.some((event) => String(event.status) !== 'completed')) {
+    throw new ValidationError(
+      'Historical assessment event filters must reference completed events',
+    );
   }
   if (selectedCampaigns.length !== scope.campaignIds.length) throw new NotFoundError('Campaign');
   const defaultCurrency = String(tenant?.default_currency) === 'USD' ? 'USD' : 'AED';
@@ -53,7 +62,9 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
       tenant_key: tenantKey,
       ...(scope.revenueLineId ? { revenue_line_id: scope.revenueLineId } : {}),
       ...(scope.eventIds.length ? { linked_event_id: { in: scope.eventIds } } : {}),
-      ...(scope.audienceQuery ? { audience: { contains: scope.audienceQuery, mode: 'insensitive' as const } } : {}),
+      ...(scope.audienceQuery
+        ? { audience: { contains: scope.audienceQuery, mode: 'insensitive' as const } }
+        : {}),
       status: { in: ['active', 'paused', 'completed', 'archived'] },
       OR: [
         { updated_at: { gte: scope.dateFrom, lte: scope.dateTo } },
@@ -86,7 +97,9 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
       tenant_key: tenantKey,
       ...(scope.campaignIds.length ? { id: { in: scope.campaignIds } } : {}),
       ...(scope.eventIds.length ? { event_id: { in: scope.eventIds } } : {}),
-      ...(scope.audienceQuery ? { audience: { contains: scope.audienceQuery, mode: 'insensitive' as const } } : {}),
+      ...(scope.audienceQuery
+        ? { audience: { contains: scope.audienceQuery, mode: 'insensitive' as const } }
+        : {}),
       ...(scope.channels.length ? { target_platforms: { hasSome: scope.channels } } : {}),
       updated_at: { gte: scope.dateFrom, lte: scope.dateTo },
     },
@@ -106,18 +119,30 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
     take: 500,
   });
 
-  const planEventIds = plans.map(plan => plan.linked_event_id).filter((id): id is string => Boolean(id));
-  const campaignEventIds = campaigns.map(campaign => campaign.event_id).filter((id): id is string => Boolean(id));
+  const planEventIds = plans
+    .map((plan) => plan.linked_event_id)
+    .filter((id): id is string => Boolean(id));
+  const campaignEventIds = campaigns
+    .map((campaign) => campaign.event_id)
+    .filter((id): id is string => Boolean(id));
   const inferredEventIds = [...new Set([...planEventIds, ...campaignEventIds])];
-  const restrictToInferredEvents = Boolean(scope.revenueLineId || scope.campaignIds.length || scope.audienceQuery || scope.channels.length);
-  const scopedEventIds = scope.eventIds.length ? scope.eventIds : restrictToInferredEvents ? inferredEventIds : [];
+  const restrictToInferredEvents = Boolean(
+    scope.revenueLineId || scope.campaignIds.length || scope.audienceQuery || scope.channels.length,
+  );
+  const scopedEventIds = scope.eventIds.length
+    ? scope.eventIds
+    : restrictToInferredEvents
+      ? inferredEventIds
+      : [];
   const events = await prisma.commercialEvent.findMany({
     where: {
       tenant_key: tenantKey,
       status: 'completed',
       event_date: { gte: scope.dateFrom, lte: scope.dateTo },
       ...(scope.eventIds.length || restrictToInferredEvents ? { id: { in: scopedEventIds } } : {}),
-      ...(scope.audienceQuery ? { audience: { contains: scope.audienceQuery, mode: 'insensitive' as const } } : {}),
+      ...(scope.audienceQuery
+        ? { audience: { contains: scope.audienceQuery, mode: 'insensitive' as const } }
+        : {}),
       ...(scope.channels.length ? { selected_channels: { hasSome: scope.channels } } : {}),
     },
     select: {
@@ -139,97 +164,110 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
     orderBy: { event_date: 'desc' },
     take: 200,
   });
-  const eventIds = events.map(event => event.id);
+  const eventIds = events.map((event) => event.id);
 
   const [kpis, leads, problems, connectorJobs, assessmentSignals] = await Promise.all([
     eventIds.length
       ? prisma.eventKpiRecord.findMany({
-        where: {
-          tenant_key: tenantKey,
-          event_id: { in: eventIds },
-          metric_date: { gte: scope.dateFrom, lte: scope.dateTo },
-          ...(scope.channels.length ? { channel: { in: scope.channels } } : {}),
-        },
-        select: {
-          event_id: true,
-          source_type: true,
-          source_name: true,
-          metric_date: true,
-          channel: true,
-          reach: true,
-          impressions: true,
-          interactions: true,
-          clicks: true,
-          form_completions: true,
-          leads: true,
-          meetings_booked: true,
-          meetings_attended: true,
-          purchases: true,
-          no_shows: true,
-          spend: true,
-        },
-        take: 5000,
-      })
+          where: {
+            tenant_key: tenantKey,
+            event_id: { in: eventIds },
+            metric_date: { gte: scope.dateFrom, lte: scope.dateTo },
+            ...(scope.channels.length ? { channel: { in: scope.channels } } : {}),
+          },
+          select: {
+            event_id: true,
+            source_type: true,
+            source_name: true,
+            metric_date: true,
+            channel: true,
+            reach: true,
+            impressions: true,
+            interactions: true,
+            clicks: true,
+            form_completions: true,
+            leads: true,
+            meetings_booked: true,
+            meetings_attended: true,
+            purchases: true,
+            no_shows: true,
+            spend: true,
+          },
+          take: 5000,
+        })
       : Promise.resolve([]),
     eventIds.length
       ? prisma.leadCaptureRecord.findMany({
-        where: {
-          tenant_key: tenantKey,
-          event_id: { in: eventIds },
-          ...(scope.channels.length ? { channel_attribution: { in: scope.channels } } : {}),
-        },
-        select: {
-          event_id: true,
-          lead_status: true,
-          lead_temperature: true,
-          source_of_truth: true,
-          channel_attribution: true,
-          purchase_amount: true,
-          meeting_outcome: true,
-          created_at: true,
-        },
-        take: 5000,
-      })
+          where: {
+            tenant_key: tenantKey,
+            event_id: { in: eventIds },
+            ...(scope.channels.length ? { channel_attribution: { in: scope.channels } } : {}),
+          },
+          select: {
+            event_id: true,
+            lead_status: true,
+            lead_temperature: true,
+            source_of_truth: true,
+            channel_attribution: true,
+            purchase_amount: true,
+            payment_status: true,
+            amount_paid: true,
+            outstanding_balance: true,
+            ticket_quantity: true,
+            external_last_synced_at: true,
+            ghl_attribution_mapping_id: true,
+            meeting_outcome: true,
+            created_at: true,
+          },
+          take: 5000,
+        })
       : Promise.resolve([]),
     eventIds.length
       ? prisma.eventProblem.findMany({
-        where: { tenant_key: tenantKey, event_id: { in: eventIds } },
-        select: {
-          id: true,
-          event_id: true,
-          title: true,
-          category: true,
-          severity: true,
-          status: true,
-          impact_summary: true,
-          recommended_action: true,
-          resolution_notes: true,
-          created_at: true,
-        },
-        take: 1000,
-      })
+          where: { tenant_key: tenantKey, event_id: { in: eventIds } },
+          select: {
+            id: true,
+            event_id: true,
+            title: true,
+            category: true,
+            severity: true,
+            status: true,
+            impact_summary: true,
+            recommended_action: true,
+            resolution_notes: true,
+            created_at: true,
+          },
+          take: 1000,
+        })
       : Promise.resolve([]),
     eventIds.length
       ? prisma.connectorImportJob.findMany({
-        where: { tenant_key: tenantKey, event_id: { in: eventIds } },
-        select: {
-          id: true,
-          event_id: true,
-          connector_id: true,
-          state: true,
-          sync_status: true,
-          last_dry_run_at: true,
-          last_sync_at: true,
-        },
-        take: 1000,
-      })
+          where: { tenant_key: tenantKey, event_id: { in: eventIds } },
+          select: {
+            id: true,
+            event_id: true,
+            connector_id: true,
+            state: true,
+            sync_status: true,
+            last_dry_run_at: true,
+            last_sync_at: true,
+          },
+          take: 1000,
+        })
       : Promise.resolve([]),
     prisma.commercialAssessmentSignal.findMany({
       where: {
         tenant_key: tenantKey,
         created_at: { gte: scope.dateFrom, lte: scope.dateTo },
         ...(scope.revenueLineId ? { revenue_line_id: scope.revenueLineId } : {}),
-        ...(plans.length ? { OR: [{ commercial_plan_id: null }, { commercial_plan_id: { in: plans.map(plan => plan.id) } }] } : {}),
+        ...(plans.length
+          ? {
+              OR: [
+                { commercial_plan_id: null },
+                { commercial_plan_id: { in: plans.map((plan) => plan.id) } },
+              ],
+            }
+          : {}),
       },
       select: {
         id: true,
@@ -246,7 +284,7 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
     }),
   ]);
 
-  const eventNameById = new Map(events.map(event => [event.id, event.name]));
+  const eventNameById = new Map(events.map((event) => [event.id, event.name]));
   const eventCurrencySets = new Map<string, Set<'AED' | 'USD'>>();
   for (const plan of plans) {
     if (!plan.linked_event_id) continue;
@@ -407,19 +445,65 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
       byChannel: {},
       sourceOfTruth: new Set<string>(),
       knownRevenue: 0,
+      knownAmountPaid: 0,
+      knownOutstandingBalance: 0,
+      knownTicketQuantity: 0,
+      paymentStatusCounts: {},
+      ghlRecordCount: 0,
+      attributedGhlRecordCount: 0,
+      latestGhlSyncAt: null,
       meetingsAttended: 0,
       noShows: 0,
       latestObservedAt: lead.created_at,
     };
     current.total = Number(current.total) + 1;
-    incrementRecord(current.byStatus as Record<string, number>, String(lead.lead_status || 'unknown'));
-    incrementRecord(current.byTemperature as Record<string, number>, String(lead.lead_temperature || 'unknown'));
-    incrementRecord(current.byChannel as Record<string, number>, String(lead.channel_attribution || 'unknown'));
+    incrementRecord(
+      current.byStatus as Record<string, number>,
+      String(lead.lead_status || 'unknown'),
+    );
+    incrementRecord(
+      current.byTemperature as Record<string, number>,
+      String(lead.lead_temperature || 'unknown'),
+    );
+    incrementRecord(
+      current.byChannel as Record<string, number>,
+      String(lead.channel_attribution || 'unknown'),
+    );
     (current.sourceOfTruth as Set<string>).add(String(lead.source_of_truth || 'tanaghum'));
-    current.knownRevenue = Number(current.knownRevenue) + (decimalToNumber(lead.purchase_amount) || 0);
-    if (String(lead.meeting_outcome).toLowerCase().includes('attended')) current.meetingsAttended = Number(current.meetingsAttended) + 1;
-    if (String(lead.lead_status) === 'no_show' || String(lead.meeting_outcome).toLowerCase().includes('no_show')) current.noShows = Number(current.noShows) + 1;
-    if (lead.created_at > (current.latestObservedAt as Date)) current.latestObservedAt = lead.created_at;
+    current.knownRevenue =
+      Number(current.knownRevenue) + (decimalToNumber(lead.purchase_amount) || 0);
+    current.knownAmountPaid =
+      Number(current.knownAmountPaid) + (decimalToNumber(lead.amount_paid) || 0);
+    current.knownOutstandingBalance =
+      Number(current.knownOutstandingBalance) + (decimalToNumber(lead.outstanding_balance) || 0);
+    current.knownTicketQuantity =
+      Number(current.knownTicketQuantity) + (Number(lead.ticket_quantity) || 0);
+    incrementRecord(
+      current.paymentStatusCounts as Record<string, number>,
+      String(lead.payment_status || 'unknown'),
+    );
+    if (String(lead.source_of_truth) === 'gohighlevel') {
+      current.ghlRecordCount = Number(current.ghlRecordCount) + 1;
+      if (lead.ghl_attribution_mapping_id) {
+        current.attributedGhlRecordCount = Number(current.attributedGhlRecordCount) + 1;
+      }
+      if (
+        lead.external_last_synced_at &&
+        (!(current.latestGhlSyncAt instanceof Date) ||
+          lead.external_last_synced_at > current.latestGhlSyncAt)
+      ) {
+        current.latestGhlSyncAt = lead.external_last_synced_at;
+      }
+    }
+    if (String(lead.meeting_outcome).toLowerCase().includes('attended'))
+      current.meetingsAttended = Number(current.meetingsAttended) + 1;
+    if (
+      String(lead.lead_status) === 'no_show' ||
+      String(lead.meeting_outcome).toLowerCase().includes('no_show')
+    )
+      current.noShows = Number(current.noShows) + 1;
+    if (lead.created_at > (current.latestObservedAt as Date))
+      current.latestObservedAt = lead.created_at;
     leadGroups.set(eventId, current);
   }
   for (const [eventId, group] of leadGroups) {
@@ -509,15 +593,25 @@ export async function previewEvidence(tenantKey: string, scope: AssessmentScopeI
   const summary = buildEvidenceSummary(evidence, defaultCurrency);
   const missingData: string[] = [];
   if (!events.length) missingData.push('No completed events were found in this assessment period.');
-  if (events.length === 1) missingData.push('Only one completed event is available; cross-event comparison is limited.');
-  if (!plans.length) missingData.push('No active or completed commercial plans were found in this assessment period.');
-  if (!kpis.length) missingData.push('No verified KPI records were found for the completed events.');
-  if (!leads.length) missingData.push('No tenant-scoped lead outcomes were found for the completed events.');
-  if (!connectorJobs.some(job => String(job.sync_status) === 'synced')) {
-    missingData.push('No completed connector sync evidence was found; available records may be manual or incomplete.');
+  if (events.length === 1)
+    missingData.push('Only one completed event is available; cross-event comparison is limited.');
+  if (!plans.length)
+    missingData.push(
+      'No active or completed commercial plans were found in this assessment period.',
+    );
+  if (!kpis.length)
+    missingData.push('No verified KPI records were found for the completed events.');
+  if (!leads.length)
+    missingData.push('No tenant-scoped lead outcomes were found for the completed events.');
+  if (!connectorJobs.some((job) => String(job.sync_status) === 'synced')) {
+    missingData.push(
+      'No completed connector sync evidence was found; available records may be manual or incomplete.',
+    );
   }
   if (Number(summary.ambiguousCurrencyRecordCount || 0) > 0) {
-    missingData.push('Some monetary outcomes are linked to events with plans in more than one currency. Assign one event currency before comparing spend or revenue.');
+    missingData.push(
+      'Some monetary outcomes are linked to events with plans in more than one currency. Assign one event currency before comparing spend or revenue.',
+    );
   }
 
   return {
@@ -544,7 +638,7 @@ export async function createAssessmentRun(
   input: CreateAssessmentRunInput,
   preview: AssessmentEvidencePreview,
 ) {
-  return prisma.$transaction(async tx => {
+  return prisma.$transaction(async (tx) => {
     const run = await tx.commercialHistoricalAssessmentRun.create({
       data: {
         tenant_key: tenantKey,
@@ -564,7 +658,7 @@ export async function createAssessmentRun(
     });
     if (preview.evidence.length) {
       await tx.commercialHistoricalAssessmentEvidence.createMany({
-        data: preview.evidence.map(item => ({
+        data: preview.evidence.map((item) => ({
           tenant_key: tenantKey,
           assessment_run_id: run.id,
           evidence_type: item.evidenceType,
@@ -587,7 +681,10 @@ export async function createAssessmentRun(
       reason: `Immutable evidence snapshot created with ${preview.evidence.length} record(s)`,
       afterState: { evidenceCount: preview.evidence.length, missingData: preview.missingData },
     });
-    return tx.commercialHistoricalAssessmentRun.findUniqueOrThrow({ where: { id: run.id }, include: runInclude });
+    return tx.commercialHistoricalAssessmentRun.findUniqueOrThrow({
+      where: { id: run.id },
+      include: runInclude,
+    });
   });
 }
 
@@ -622,7 +719,8 @@ export async function startGeneration(tenantKey: string, id: string) {
   if (!['evidence_ready', 'failed'].includes(String(run.status))) {
     throw new ValidationError('Only evidence-ready or failed assessments can be generated');
   }
-  if (!run.evidence.length) throw new ValidationError('No historical evidence is available for AI analysis');
+  if (!run.evidence.length)
+    throw new ValidationError('No historical evidence is available for AI analysis');
   return prisma.commercialHistoricalAssessmentRun.update({
     where: { id },
     data: { status: 'generating', failure_reason: null },
@@ -637,23 +735,25 @@ export async function saveGeneratedFindings(
   generated: GeneratedAssessment,
   provider: { type: string; model: string | null },
 ) {
-  return prisma.$transaction(async tx => {
+  return prisma.$transaction(async (tx) => {
     const run = await tx.commercialHistoricalAssessmentRun.findFirst({
       where: { id, tenant_key: tenantKey },
       include: { evidence: { select: { id: true } } },
     });
     if (!run) throw new NotFoundError('CommercialHistoricalAssessmentRun', id);
-    const allowedEvidenceIds = new Set(run.evidence.map(item => item.id));
+    const allowedEvidenceIds = new Set(run.evidence.map((item) => item.id));
     for (const finding of generated.findings) {
-      if (finding.evidenceIds.some(evidenceId => !allowedEvidenceIds.has(evidenceId))) {
-        throw new ValidationError('AI finding referenced evidence outside this assessment snapshot');
+      if (finding.evidenceIds.some((evidenceId) => !allowedEvidenceIds.has(evidenceId))) {
+        throw new ValidationError(
+          'AI finding referenced evidence outside this assessment snapshot',
+        );
       }
     }
     await tx.commercialHistoricalAssessmentFinding.deleteMany({
       where: { assessment_run_id: id, tenant_key: tenantKey, decision: 'pending' },
     });
     await tx.commercialHistoricalAssessmentFinding.createMany({
-      data: generated.findings.map(finding => ({
+      data: generated.findings.map((finding) => ({
         tenant_key: tenantKey,
         assessment_run_id: id,
         finding_type: finding.type,
@@ -680,9 +780,16 @@ export async function saveGeneratedFindings(
       targetObjectType: 'commercial_historical_assessment_run',
       targetObjectId: id,
       reason: `AI generated ${generated.findings.length} evidence-backed finding(s)`,
-      afterState: { provider: provider.type, model: provider.model, findingCount: generated.findings.length },
+      afterState: {
+        provider: provider.type,
+        model: provider.model,
+        findingCount: generated.findings.length,
+      },
     });
-    return tx.commercialHistoricalAssessmentRun.findUniqueOrThrow({ where: { id }, include: runInclude });
+    return tx.commercialHistoricalAssessmentRun.findUniqueOrThrow({
+      where: { id },
+      include: runInclude,
+    });
   });
 }
 
@@ -699,14 +806,16 @@ export async function decideFinding(
   findingId: string,
   input: DecideAssessmentFindingInput,
 ) {
-  return prisma.$transaction(async tx => {
+  return prisma.$transaction(async (tx) => {
     const finding = await tx.commercialHistoricalAssessmentFinding.findFirst({
       where: { id: findingId, tenant_key: tenantKey },
       include: { assessment_run: { select: { id: true, title: true, status: true } } },
     });
     if (!finding) throw new NotFoundError('CommercialHistoricalAssessmentFinding', findingId);
     if (!['generated', 'approved'].includes(String(finding.assessment_run.status))) {
-      throw new ValidationError('Assessment findings can be reviewed only after AI generation completes');
+      throw new ValidationError(
+        'Assessment findings can be reviewed only after AI generation completes',
+      );
     }
 
     let learningSetId: string | null = null;
@@ -750,9 +859,10 @@ export async function decideFinding(
       }
       await tx.commercialHistoricalAssessmentRun.update({
         where: { id: finding.assessment_run.id },
-        data: approvedFindings > 0
-          ? { status: 'approved', approved_at: new Date() }
-          : { status: 'archived', approved_at: null },
+        data:
+          approvedFindings > 0
+            ? { status: 'approved', approved_at: new Date() }
+            : { status: 'archived', approved_at: null },
       });
     }
     await createAudit(tx, {
@@ -774,7 +884,9 @@ export async function listLearningSets(tenantKey: string) {
   return prisma.commercialLearningSet.findMany({
     where: { tenant_key: tenantKey, status: 'active' },
     include: {
-      assessment_run: { select: { id: true, title: true, date_from: true, date_to: true, revenue_line_id: true } },
+      assessment_run: {
+        select: { id: true, title: true, date_from: true, date_to: true, revenue_line_id: true },
+      },
       findings: {
         where: { decision: 'approved' },
         orderBy: { created_at: 'asc' },
@@ -786,13 +898,18 @@ export async function listLearningSets(tenantKey: string) {
 }
 
 export function serializeAssessment<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value, (_key, item) => {
-    if (item instanceof Prisma.Decimal) return item.toNumber();
-    return item;
-  })) as T;
+  return JSON.parse(
+    JSON.stringify(value, (_key, item) => {
+      if (item instanceof Prisma.Decimal) return item.toNumber();
+      return item;
+    }),
+  ) as T;
 }
 
-export function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency: 'AED' | 'USD'): Record<string, unknown> {
+export function buildEvidenceSummary(
+  evidence: EvidenceDraft[],
+  defaultCurrency: 'AED' | 'USD',
+): Record<string, unknown> {
   const sourceCounts: Record<string, number> = {};
   const eventIds = new Set<string>();
   const planIds = new Set<string>();
@@ -811,22 +928,28 @@ export function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency:
     knownSpend: 0,
     knownRevenue: 0,
   };
-  const targetsByCurrency: Record<string, { budgetTarget: number; revenueTarget: number; plans: number }> = {};
+  const targetsByCurrency: Record<
+    string,
+    { budgetTarget: number; revenueTarget: number; plans: number }
+  > = {};
   const actualsByCurrency: Record<string, { knownSpend: number; knownRevenue: number }> = {};
   let ambiguousCurrencyRecordCount = 0;
-  const eventComparisonById = new Map<string, {
-    eventId: string;
-    eventName: string;
-    eventDate: string | null;
-    currency: 'AED' | 'USD' | 'mixed';
-    reach: number;
-    leads: number;
-    purchases: number;
-    knownSpend: number;
-    knownRevenue: number;
-    meetingsBooked: number;
-    noShows: number;
-  }>();
+  const eventComparisonById = new Map<
+    string,
+    {
+      eventId: string;
+      eventName: string;
+      eventDate: string | null;
+      currency: 'AED' | 'USD' | 'mixed';
+      reach: number;
+      leads: number;
+      purchases: number;
+      knownSpend: number;
+      knownRevenue: number;
+      meetingsBooked: number;
+      noShows: number;
+    }
+  >();
 
   const eventComparison = (eventId: string) => {
     const current = eventComparisonById.get(eventId);
@@ -856,12 +979,17 @@ export function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency:
       comparison.eventName = item.sourceName || 'Completed event';
       comparison.eventDate = item.observedAt?.toISOString() || null;
       const currency = String(item.payload.currency);
-      comparison.currency = currency === 'mixed' ? 'mixed' : currency === 'USD' ? 'USD' : defaultCurrency;
+      comparison.currency =
+        currency === 'mixed' ? 'mixed' : currency === 'USD' ? 'USD' : defaultCurrency;
     }
     if (item.evidenceType === 'commercial_plan') {
       planIds.add(item.sourceObjectId);
       const currency = String(item.payload.currency || defaultCurrency);
-      const current = targetsByCurrency[currency] || { budgetTarget: 0, revenueTarget: 0, plans: 0 };
+      const current = targetsByCurrency[currency] || {
+        budgetTarget: 0,
+        revenueTarget: 0,
+        plans: 0,
+      };
       current.budgetTarget += Number(item.payload.budgetTarget || 0);
       current.revenueTarget += Number(item.payload.revenueTarget || 0);
       current.plans += 1;
@@ -870,7 +998,18 @@ export function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency:
     if (item.evidenceType === 'event_kpi') {
       const currency = String(item.payload.currency || defaultCurrency);
       channels.add(String(item.payload.channel || 'unknown'));
-      for (const key of ['reach', 'impressions', 'interactions', 'clicks', 'formCompletions', 'leads', 'meetingsBooked', 'meetingsAttended', 'purchases', 'noShows'] as const) {
+      for (const key of [
+        'reach',
+        'impressions',
+        'interactions',
+        'clicks',
+        'formCompletions',
+        'leads',
+        'meetingsBooked',
+        'meetingsAttended',
+        'purchases',
+        'noShows',
+      ] as const) {
         outcomes[key] += Number(item.payload[key] || 0);
       }
       const knownSpend = Number(item.payload.spend || 0);
@@ -917,7 +1056,10 @@ export function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency:
   }
 
   const actualCurrencies = Object.keys(actualsByCurrency);
-  const operatingCurrency = actualCurrencies.length > 1 || ambiguousCurrencyRecordCount > 0 ? 'mixed' : actualCurrencies[0] || defaultCurrency;
+  const operatingCurrency =
+    actualCurrencies.length > 1 || ambiguousCurrencyRecordCount > 0
+      ? 'mixed'
+      : actualCurrencies[0] || defaultCurrency;
   if (operatingCurrency !== 'mixed') {
     outcomes.knownSpend = actualsByCurrency[operatingCurrency]?.knownSpend || 0;
     outcomes.knownRevenue = actualsByCurrency[operatingCurrency]?.knownRevenue || 0;
@@ -940,8 +1082,10 @@ export function buildEvidenceSummary(evidence: EvidenceDraft[], defaultCurrency:
       ...(operatingCurrency === 'mixed' ? { knownSpend: 0, knownRevenue: 0 } : {}),
     },
     eventComparison: [...eventComparisonById.values()]
-      .filter(item => eventIds.has(item.eventId))
-      .sort((left, right) => String(right.eventDate || '').localeCompare(String(left.eventDate || ''))),
+      .filter((item) => eventIds.has(item.eventId))
+      .sort((left, right) =>
+        String(right.eventDate || '').localeCompare(String(left.eventDate || '')),
+      ),
   };
 }
 
@@ -956,7 +1100,12 @@ function decimalToNumber(value: unknown): number | null {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
-  if (typeof value === 'object' && value && 'toNumber' in value && typeof value.toNumber === 'function') {
+  if (
+    typeof value === 'object' &&
+    value &&
+    'toNumber' in value &&
+    typeof value.toNumber === 'function'
+  ) {
     const parsed = value.toNumber();
     return Number.isFinite(parsed) ? parsed : null;
   }

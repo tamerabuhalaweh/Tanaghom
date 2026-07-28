@@ -1,20 +1,42 @@
 import { z } from 'zod';
 
 export const LEAD_STATUSES = [
-  'new_lead', 'contacted', 'meeting_booked', 'meeting_attended',
-  'no_show', 'purchased', 'lost', 'follow_up_needed',
-  'qualified', 'nurturing', 'converted', 'archived',
+  'new_lead',
+  'contacted',
+  'meeting_booked',
+  'meeting_attended',
+  'no_show',
+  'purchased',
+  'lost',
+  'follow_up_needed',
+  'qualified',
+  'nurturing',
+  'converted',
+  'archived',
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 export const LEAD_TEMPERATURES = ['cold', 'warm', 'hot', 'buyer'] as const;
 export type LeadTemperature = (typeof LEAD_TEMPERATURES)[number];
 
-export const AUDIENCE_SOURCES = ['follower', 'non_follower', 'existing_customer', 'referral'] as const;
+export const AUDIENCE_SOURCES = [
+  'follower',
+  'non_follower',
+  'existing_customer',
+  'referral',
+] as const;
 export type AudienceSource = (typeof AUDIENCE_SOURCES)[number];
 
 export const CHANNEL_ATTRIBUTIONS = [
-  'meta', 'instagram', 'youtube', 'whatsapp', 'email', 'organic', 'dark_ad', 'referral', 'manual',
+  'meta',
+  'instagram',
+  'youtube',
+  'whatsapp',
+  'email',
+  'organic',
+  'dark_ad',
+  'referral',
+  'manual',
 ] as const;
 export type ChannelAttribution = (typeof CHANNEL_ATTRIBUTIONS)[number];
 
@@ -44,7 +66,10 @@ export function validateLeadTransition(from: LeadStatus, to: LeadStatus): void {
 }
 
 export class LeadTransitionError extends Error {
-  constructor(public readonly from: LeadStatus, public readonly to: LeadStatus) {
+  constructor(
+    public readonly from: LeadStatus,
+    public readonly to: LeadStatus,
+  ) {
     super(`Invalid lead transition: ${from} -> ${to}`);
     this.name = 'LeadTransitionError';
   }
@@ -128,6 +153,13 @@ export interface LeadSummary {
   purchaseDate: Date | null;
   purchaseAmount: number | null;
   purchaseReference: string | null;
+  paymentDate: Date | null;
+  paymentStatus: 'unknown' | 'partial' | 'paid_in_full' | 'refunded' | 'cancelled';
+  saleValue: number | null;
+  amountPaid: number | null;
+  outstandingBalance: number | null;
+  ticketQuantity: number | null;
+  paymentSource: string | null;
   sourceOfTruth: 'tanaghum' | 'gohighlevel';
   externalSourceProvider: string | null;
   externalSourceId: string | null;

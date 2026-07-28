@@ -44,6 +44,7 @@ describe('plan-scoped GHL attribution policy and validation', () => {
     });
     expect(mapping.paymentAmountField).toBeUndefined();
     expect(mapping.ticketQuantityField).toBeUndefined();
+    expect(mapping.paymentDateField).toBeUndefined();
   });
 
   it('validates read-only matching candidates', () => {
@@ -56,4 +57,3 @@ describe('plan-scoped GHL attribution policy and validation', () => {
     ).toEqual(['buyer']);
   });
 });
-

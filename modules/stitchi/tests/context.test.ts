@@ -145,8 +145,18 @@ describe('Stitchi read-only context loader', () => {
       { title: 'WhatsApp follow-up delayed', severity: 'critical', category: 'sales' },
     ]);
     prismaMocks.integrationCredential.findMany.mockResolvedValue([
-      { id: 'cred-ghl', provider: 'gohighlevel', credential_type: 'api_key', last_validated_at: new Date('2026-07-08T08:00:00Z') },
-      { id: 'cred-kajabi', provider: 'kajabi', credential_type: 'oauth_client', last_validated_at: null },
+      {
+        id: 'cred-ghl',
+        provider: 'gohighlevel',
+        credential_type: 'api_key',
+        last_validated_at: new Date('2026-07-08T08:00:00Z'),
+      },
+      {
+        id: 'cred-kajabi',
+        provider: 'kajabi',
+        credential_type: 'oauth_client',
+        last_validated_at: null,
+      },
     ]);
     prismaMocks.connectorImportJob.findMany.mockResolvedValue([
       {
@@ -312,7 +322,12 @@ describe('Stitchi read-only context loader', () => {
       },
     ]);
 
-    const context = await loadReadOnlyContext('tenant-a', conversation, 'event-1', 'marketing_manager');
+    const context = await loadReadOnlyContext(
+      'tenant-a',
+      conversation,
+      'event-1',
+      'marketing_manager',
+    );
 
     expect(context.currentUser).toMatchObject({
       id: 'user-1',
@@ -320,14 +335,18 @@ describe('Stitchi read-only context loader', () => {
       role: 'marketing_manager',
       departmentName: 'Commercial',
     });
-    expect(prismaMocks.commercialEvent.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'event-1', tenant_key: 'tenant-a' },
-    }));
-    expect(prismaMocks.leadCaptureRecord.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { tenant_key: 'tenant-a', event_id: 'event-1' },
-    }));
+    expect(prismaMocks.commercialEvent.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'event-1', tenant_key: 'tenant-a' },
+      }),
+    );
+    expect(prismaMocks.leadCaptureRecord.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenant_key: 'tenant-a', event_id: 'event-1' },
+      }),
+    );
     expect(context.selectedEvent?.name).toBe('Leadership Course Launch');
-    expect(context.recentEvents.map(event => event.name)).toEqual(['Leadership Course Launch']);
+    expect(context.recentEvents.map((event) => event.name)).toEqual(['Leadership Course Launch']);
     expect(context.leadSummary.total).toBe(2);
     expect(context.leadSummary.byStatus.purchased).toBe(1);
     expect(context.leadSummary.knownRevenue).toBe(2500);
@@ -352,7 +371,7 @@ describe('Stitchi read-only context loader', () => {
         readyForMatching: true,
       },
     });
-    expect(context.governedPerformance.ghlAttribution.missingCustomerDefinitions).toHaveLength(3);
+    expect(context.governedPerformance.ghlAttribution.missingCustomerDefinitions).toHaveLength(4);
     expect(context.riskSummary.critical).toBe(1);
     expect(context.connectorSummary.readyForSync).toBe(1);
     expect(context.unifiedDataLayer.kajabi).toMatchObject({

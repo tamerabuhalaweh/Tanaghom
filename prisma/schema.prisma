@@ -3268,6 +3268,7 @@ model LeadCaptureRecord {
   purchase_date                DateTime?
   purchase_amount              Decimal?     @db.Decimal(12, 2)
   purchase_reference           String?
+  payment_date                 DateTime?
   payment_status      LeadPaymentStatus @default(unknown)
   sale_value          Decimal?          @db.Decimal(12, 2)
   amount_paid         Decimal?          @db.Decimal(12, 2)
@@ -3313,6 +3314,7 @@ model LeadCaptureRecord {
   @@index([external_last_synced_at])
   @@index([commercial_plan_id])
   @@index([ghl_attribution_mapping_id])
+  @@index([payment_date])
   @@index([payment_status])
   @@index([audience_source])
   @@index([channel_attribution])
@@ -4827,6 +4829,7 @@ model GhlPlanAttributionMapping {
   sale_value_field      String?
   ticket_quantity_field String?
   payment_status_field  String?
+  payment_date_field    String?
   custom_field_rules    Json?
   effective_from        DateTime?
   effective_to          DateTime?

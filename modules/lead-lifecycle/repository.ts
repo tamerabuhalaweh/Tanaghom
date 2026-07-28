@@ -2,10 +2,16 @@ import { prisma } from '@shared/database';
 import { NotFoundError } from '@shared/errors';
 import { Prisma } from '@prisma/client';
 import type {
-  CreateLeadInput, UpdateLeadInput, LeadSummary,
-  UpdateMeetingInput, UpdatePurchaseInput,
-  SetTemperatureInput, LeadStatus, LeadTemperature,
-  EventDashboardSummary, LeadStatsSummary,
+  CreateLeadInput,
+  UpdateLeadInput,
+  LeadSummary,
+  UpdateMeetingInput,
+  UpdatePurchaseInput,
+  SetTemperatureInput,
+  LeadStatus,
+  LeadTemperature,
+  EventDashboardSummary,
+  LeadStatsSummary,
 } from './types';
 
 export async function listLeads(
@@ -32,7 +38,12 @@ export async function getLeadById(tenantKey: string, id: string): Promise<LeadSu
   return mapLead(lead);
 }
 
-export async function createLead(tenantKey: string, userId: string, agentRepId: string, input: CreateLeadInput): Promise<LeadSummary> {
+export async function createLead(
+  tenantKey: string,
+  userId: string,
+  agentRepId: string,
+  input: CreateLeadInput,
+): Promise<LeadSummary> {
   if (input.eventId) {
     const event = await prisma.commercialEvent.findFirst({
       where: { id: input.eventId, tenant_key: tenantKey },
@@ -74,8 +85,14 @@ export async function createLead(tenantKey: string, userId: string, agentRepId: 
   return mapLead(lead);
 }
 
-export async function updateLead(tenantKey: string, id: string, input: UpdateLeadInput): Promise<LeadSummary> {
-  const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
+export async function updateLead(
+  tenantKey: string,
+  id: string,
+  input: UpdateLeadInput,
+): Promise<LeadSummary> {
+  const existing = await prisma.leadCaptureRecord.findFirst({
+    where: { id, tenant_key: tenantKey },
+  });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
   const data: Prisma.LeadCaptureRecordUpdateInput = {};
@@ -89,14 +106,23 @@ export async function updateLead(tenantKey: string, id: string, input: UpdateLea
   if (input.leadTemperature !== undefined) data.lead_temperature = input.leadTemperature;
   if (input.salesNotes !== undefined) data.sales_notes = input.salesNotes;
   if (input.nextAction !== undefined) data.next_action = input.nextAction;
-  if (input.followUpDate !== undefined) data.follow_up_date = input.followUpDate ? new Date(input.followUpDate) : null;
+  if (input.followUpDate !== undefined)
+    data.follow_up_date = input.followUpDate ? new Date(input.followUpDate) : null;
 
   const lead = await prisma.leadCaptureRecord.update({ where: { id }, data });
   return mapLead(lead);
 }
 
-export async function transitionLead(tenantKey: string, id: string, toStatus: LeadStatus, userId: string, reason?: string): Promise<LeadSummary> {
-  const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
+export async function transitionLead(
+  tenantKey: string,
+  id: string,
+  toStatus: LeadStatus,
+  userId: string,
+  reason?: string,
+): Promise<LeadSummary> {
+  const existing = await prisma.leadCaptureRecord.findFirst({
+    where: { id, tenant_key: tenantKey },
+  });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
   const lead = await prisma.leadCaptureRecord.update({
@@ -118,8 +144,15 @@ export async function transitionLead(tenantKey: string, id: string, toStatus: Le
   return mapLead(lead);
 }
 
-export async function updateMeeting(tenantKey: string, id: string, input: UpdateMeetingInput, userId: string): Promise<LeadSummary> {
-  const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
+export async function updateMeeting(
+  tenantKey: string,
+  id: string,
+  input: UpdateMeetingInput,
+  userId: string,
+): Promise<LeadSummary> {
+  const existing = await prisma.leadCaptureRecord.findFirst({
+    where: { id, tenant_key: tenantKey },
+  });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
   const lead = await prisma.leadCaptureRecord.update({
@@ -147,8 +180,15 @@ export async function updateMeeting(tenantKey: string, id: string, input: Update
   return mapLead(lead);
 }
 
-export async function updatePurchase(tenantKey: string, id: string, input: UpdatePurchaseInput, userId: string): Promise<LeadSummary> {
-  const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
+export async function updatePurchase(
+  tenantKey: string,
+  id: string,
+  input: UpdatePurchaseInput,
+  userId: string,
+): Promise<LeadSummary> {
+  const existing = await prisma.leadCaptureRecord.findFirst({
+    where: { id, tenant_key: tenantKey },
+  });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
   const lead = await prisma.leadCaptureRecord.update({
@@ -176,8 +216,15 @@ export async function updatePurchase(tenantKey: string, id: string, input: Updat
   return mapLead(lead);
 }
 
-export async function setTemperature(tenantKey: string, id: string, input: SetTemperatureInput, userId: string): Promise<LeadSummary> {
-  const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
+export async function setTemperature(
+  tenantKey: string,
+  id: string,
+  input: SetTemperatureInput,
+  userId: string,
+): Promise<LeadSummary> {
+  const existing = await prisma.leadCaptureRecord.findFirst({
+    where: { id, tenant_key: tenantKey },
+  });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
   const lead = await prisma.leadCaptureRecord.update({
@@ -200,8 +247,15 @@ export async function setTemperature(tenantKey: string, id: string, input: SetTe
   return mapLead(lead);
 }
 
-export async function qualifyLead(tenantKey: string, id: string, userId: string, score: number): Promise<LeadSummary> {
-  const existing = await prisma.leadCaptureRecord.findFirst({ where: { id, tenant_key: tenantKey } });
+export async function qualifyLead(
+  tenantKey: string,
+  id: string,
+  userId: string,
+  score: number,
+): Promise<LeadSummary> {
+  const existing = await prisma.leadCaptureRecord.findFirst({
+    where: { id, tenant_key: tenantKey },
+  });
   if (!existing) throw new NotFoundError('LeadCaptureRecord', id);
 
   const toStatus: LeadStatus = score >= 80 ? 'qualified' : score >= 60 ? 'nurturing' : 'lost';
@@ -236,7 +290,10 @@ export async function getLeadStats(tenantKey: string): Promise<LeadStatsSummary>
   return { total, qualified, nurturing, newLeads };
 }
 
-export async function getEventDashboard(tenantKey: string, eventId: string): Promise<EventDashboardSummary> {
+export async function getEventDashboard(
+  tenantKey: string,
+  eventId: string,
+): Promise<EventDashboardSummary> {
   const leads = await prisma.leadCaptureRecord.findMany({
     where: { tenant_key: tenantKey, event_id: eventId },
   });
@@ -253,11 +310,15 @@ export async function getEventDashboard(tenantKey: string, eventId: string): Pro
   for (const lead of leads) {
     byStatus[lead.lead_status] = (byStatus[lead.lead_status] || 0) + 1;
     byTemperature[lead.lead_temperature] = (byTemperature[lead.lead_temperature] || 0) + 1;
-    if (lead.audience_source) byAudienceSource[lead.audience_source] = (byAudienceSource[lead.audience_source] || 0) + 1;
-    if (lead.channel_attribution) byChannelAttribution[lead.channel_attribution] = (byChannelAttribution[lead.channel_attribution] || 0) + 1;
+    if (lead.audience_source)
+      byAudienceSource[lead.audience_source] = (byAudienceSource[lead.audience_source] || 0) + 1;
+    if (lead.channel_attribution)
+      byChannelAttribution[lead.channel_attribution] =
+        (byChannelAttribution[lead.channel_attribution] || 0) + 1;
     if (lead.follow_up_date && lead.follow_up_date > new Date()) upcomingFollowUps++;
-    if (lead.meeting_date && !lead.purchase_date) meetingsScheduled++;
-    if (lead.purchase_date) {
+    const isPurchased = lead.lead_status === 'purchased' || Boolean(lead.purchase_date);
+    if (lead.meeting_date && !isPurchased) meetingsScheduled++;
+    if (isPurchased) {
       purchases++;
       if (lead.purchase_amount) totalRevenue += Number(lead.purchase_amount);
     }
@@ -301,13 +362,20 @@ function mapLead(l: Record<string, unknown>): LeadSummary {
     purchaseDate: l.purchase_date as Date | null,
     purchaseAmount: l.purchase_amount != null ? Number(l.purchase_amount) : null,
     purchaseReference: l.purchase_reference as string | null,
+    paymentDate: l.payment_date as Date | null,
+    paymentStatus: (l.payment_status as LeadSummary['paymentStatus']) || 'unknown',
+    saleValue: l.sale_value != null ? Number(l.sale_value) : null,
+    amountPaid: l.amount_paid != null ? Number(l.amount_paid) : null,
+    outstandingBalance: l.outstanding_balance != null ? Number(l.outstanding_balance) : null,
+    ticketQuantity: l.ticket_quantity != null ? Number(l.ticket_quantity) : null,
+    paymentSource: l.payment_source as string | null,
     sourceOfTruth: (l.source_of_truth as LeadSummary['sourceOfTruth']) || 'tanaghum',
     externalSourceProvider: l.external_source_provider as string | null,
     externalSourceId: l.external_source_id as string | null,
     externalOpportunityId: l.external_opportunity_id as string | null,
     externalPipelineId: l.external_pipeline_id as string | null,
     externalStageId: l.external_stage_id as string | null,
-    externalTags: Array.isArray(l.external_tags) ? l.external_tags as string[] : [],
+    externalTags: Array.isArray(l.external_tags) ? (l.external_tags as string[]) : [],
     externalLastSyncedAt: l.external_last_synced_at as Date | null,
     createdAt: l.created_at as Date,
     updatedAt: l.updated_at as Date,
