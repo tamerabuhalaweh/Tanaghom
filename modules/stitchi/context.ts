@@ -30,6 +30,9 @@ export interface StitchiReadOnlyContext {
     byTemperature: Record<string, number>;
     byPaymentStatus: Record<string, number>;
     purchases: number;
+    meetingsBooked: number;
+    meetingsAttended: number;
+    noShows: number;
     knownRevenue: number;
     knownSaleValue: number;
     knownAmountPaid: number;
@@ -504,6 +507,8 @@ export async function loadReadOnlyContext(
         amount_paid: true,
         outstanding_balance: true,
         ticket_quantity: true,
+        meeting_date: true,
+        meeting_outcome: true,
         source_of_truth: true,
         external_last_synced_at: true,
       },
@@ -1175,6 +1180,8 @@ function summarizeLeads(
     amount_paid: unknown;
     outstanding_balance: unknown;
     ticket_quantity: number | null;
+    meeting_date: Date | null;
+    meeting_outcome: unknown;
     source_of_truth: unknown;
     external_last_synced_at: Date | null;
   }>,
@@ -1188,6 +1195,9 @@ function summarizeLeads(
   let knownAmountPaid = 0;
   let knownOutstandingBalance = 0;
   let knownTicketQuantity = 0;
+  let meetingsBooked = 0;
+  let meetingsAttended = 0;
+  let noShows = 0;
   let ghlMirrored = 0;
   let latestGhlSyncAt: Date | null = null;
 
@@ -1205,6 +1215,15 @@ function summarizeLeads(
     knownAmountPaid += decimalToNumber(lead.amount_paid) || 0;
     knownOutstandingBalance += decimalToNumber(lead.outstanding_balance) || 0;
     knownTicketQuantity += lead.ticket_quantity || 0;
+    const meetingOutcome = String(lead.meeting_outcome || '').toLowerCase();
+    if (
+      lead.meeting_date ||
+      ['meeting_booked', 'meeting_attended', 'no_show'].includes(status)
+    )
+      meetingsBooked += 1;
+    if (status === 'meeting_attended' || meetingOutcome.includes('attended'))
+      meetingsAttended += 1;
+    if (status === 'no_show' || meetingOutcome.includes('no_show')) noShows += 1;
     if (String(lead.source_of_truth) === 'gohighlevel') {
       ghlMirrored += 1;
       if (
@@ -1222,6 +1241,9 @@ function summarizeLeads(
     byTemperature,
     byPaymentStatus,
     purchases,
+    meetingsBooked,
+    meetingsAttended,
+    noShows,
     knownRevenue,
     knownSaleValue,
     knownAmountPaid,
