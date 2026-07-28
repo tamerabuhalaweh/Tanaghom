@@ -30,6 +30,7 @@ import {
   testGhlConnection,
   validateMappingAcceptance,
   validateGhlLiveCredentials,
+  discoverGhlReferenceData,
 } from '../service';
 
 describe('GHL Setup - tenant isolation', () => {
@@ -640,5 +641,130 @@ describe('GHL Setup - live customer credential validation', () => {
     expect(result.status).toBe('failed');
     expect(result.requiredActions).toContain('Grant opportunities read access to the customer GoHighLevel credential.');
     expect(prismaMocks.integrationCredential.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('GHL Setup - safe mapping reference discovery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    credentialServiceMocks.getActiveIntegrationCredential.mockResolvedValue(null);
+  });
+
+  it('does not call GHL when the tenant credential is missing', async () => {
+    const clientFactory = vi.fn();
+
+    const result = await discoverGhlReferenceData(
+      'admin',
+      'user-1',
+      'customer-a',
+      clientFactory,
+    );
+
+    expect(result.status).toBe('requires_credentials');
+    expect(result.tags).toEqual([]);
+    expect(result.pipelines).toEqual([]);
+    expect(result.rawSecretsReturned).toBe(false);
+    expect(result.rawPayloadReturned).toBe(false);
+    expect(clientFactory).not.toHaveBeenCalled();
+  });
+
+  it('returns grouped, sanitized choices without CRM records or secrets', async () => {
+    credentialServiceMocks.getActiveIntegrationCredential.mockResolvedValue({
+      secrets: {
+        apiKey: 'tenant-ghl-secret',
+        locationId: 'loc-1',
+      },
+    });
+    const clientFactory = vi.fn().mockReturnValue({
+      discoverReferenceData: vi.fn().mockResolvedValue({
+        canReadTags: true,
+        canReadPipelines: true,
+        remoteTags: [{ id: 'tag-1', name: 'Meeting Booked' }],
+        remotePipelineStages: [
+          {
+            pipelineId: 'pipe-1',
+            pipelineName: 'Marketing Pipeline',
+            stageId: 'stage-sale',
+            stageName: 'Sale',
+          },
+          {
+            pipelineId: 'pipe-1',
+            pipelineName: 'Marketing Pipeline',
+            stageId: 'stage-no-show',
+            stageName: 'No Show',
+          },
+        ],
+        warnings: [],
+        rawPayloadReturned: false,
+      }),
+    });
+
+    const result = await discoverGhlReferenceData(
+      'marketing_manager',
+      'user-1',
+      'customer-a',
+      clientFactory,
+    );
+
+    expect(result.status).toBe('ready');
+    expect(result.tags).toEqual([{ id: 'tag-1', name: 'Meeting Booked' }]);
+    expect(result.pipelines).toEqual([
+      {
+        id: 'pipe-1',
+        name: 'Marketing Pipeline',
+        stages: [
+          { id: 'stage-no-show', name: 'No Show' },
+          { id: 'stage-sale', name: 'Sale' },
+        ],
+      },
+    ]);
+    expect(result.rawSecretsReturned).toBe(false);
+    expect(result.rawPayloadReturned).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('tenant-ghl-secret');
+  });
+
+  it('keeps partial discovery honest when one reference scope is unavailable', async () => {
+    credentialServiceMocks.getActiveIntegrationCredential.mockResolvedValue({
+      secrets: {
+        apiKey: 'tenant-ghl-secret',
+        locationId: 'loc-1',
+      },
+    });
+    const clientFactory = vi.fn().mockReturnValue({
+      discoverReferenceData: vi.fn().mockResolvedValue({
+        canReadTags: false,
+        canReadPipelines: true,
+        remoteTags: [],
+        remotePipelineStages: [
+          {
+            pipelineId: 'pipe-1',
+            pipelineName: 'Marketing Pipeline',
+            stageId: 'stage-sale',
+            stageName: 'Sale',
+          },
+        ],
+        warnings: ['Tags read failed with status 403.'],
+        rawPayloadReturned: false,
+      }),
+    });
+
+    const result = await discoverGhlReferenceData(
+      'cco',
+      'user-1',
+      'customer-a',
+      clientFactory,
+    );
+
+    expect(result.status).toBe('partial');
+    expect(result.requiredActions).toContain(
+      'Grant location tags read access to load GHL tag choices.',
+    );
+    expect(result.pipelines).toHaveLength(1);
+  });
+
+  it('requires setup write permission because discovery calls the external provider', async () => {
+    await expect(
+      discoverGhlReferenceData('sales_manager', 'user-1', 'customer-a'),
+    ).rejects.toThrow("does not have permission 'ghl_setup:write'");
   });
 });

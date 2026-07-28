@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
 import { ghlSetupApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import {
@@ -37,6 +38,12 @@ function text(value: unknown, fallback = 'Not configured'): string {
 
 function titleCase(value: string): string {
   return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function shortId(value: unknown): string {
+  const id = text(value, '');
+  if (!id) return '';
+  return id.length > 12 ? `${id.slice(0, 6)}...${id.slice(-4)}` : id;
 }
 
 function tone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'muted' {
@@ -81,12 +88,13 @@ export default function GhlWizard() {
   const [connectionTest, setConnectionTest] = useState<RecordMap | null>(null);
   const [mappingCheck, setMappingCheck] = useState<RecordMap | null>(null);
   const [liveValidation, setLiveValidation] = useState<RecordMap | null>(null);
+  const [referenceData, setReferenceData] = useState<RecordMap | null>(null);
   const [locationForm, setLocationForm] = useState({ ghlLocationId: '', displayName: '' });
   const [tagForm, setTagForm] = useState({
     ghlTagId: '',
     ghlTagName: '',
     internalTag: 'new_lead',
-    direction: 'bidirectional',
+    direction: 'inbound',
   });
   const [pipelineForm, setPipelineForm] = useState({
     ghlPipelineId: '',
@@ -142,6 +150,15 @@ export default function GhlWizard() {
   const liveValidationActions = asStrings(liveValidation?.requiredActions);
   const liveValidationWarnings = asStrings(liveValidation?.warnings);
   const missingSavedMappings = asRecords(liveValidation?.missingSavedMappings);
+  const referenceTags = asRecords(referenceData?.tags);
+  const referencePipelines = asRecords(referenceData?.pipelines);
+  const selectedReferencePipeline = referencePipelines.find(
+    pipeline => text(pipeline.id, '') === pipelineForm.ghlPipelineId,
+  );
+  const selectedReferenceStages = asRecords(selectedReferencePipeline?.stages);
+  const referenceStatus = text(referenceData?.status, 'Not loaded');
+  const referenceWarnings = asStrings(referenceData?.warnings);
+  const referenceActions = asStrings(referenceData?.requiredActions);
 
   const railSteps = useMemo(() => {
     return ['credentials', 'location', 'tags', 'pipeline', 'review'].map(step => ({
@@ -178,7 +195,7 @@ export default function GhlWizard() {
     try {
       await ghlSetupApi.saveTags([tagForm], token);
       setMessage('GoHighLevel tag mapping saved.');
-      setTagForm({ ghlTagId: '', ghlTagName: '', internalTag: 'new_lead', direction: 'bidirectional' });
+      setTagForm({ ghlTagId: '', ghlTagName: '', internalTag: 'new_lead', direction: 'inbound' });
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Tag mapping failed');
@@ -255,8 +272,12 @@ export default function GhlWizard() {
       const result = await ghlSetupApi.liveValidation(token);
       setLiveValidation(result as RecordMap);
       const status = text(asRecord(result).status, 'failed');
+      if (status === 'validated' || status === 'validated_with_warnings') {
+        const references = await ghlSetupApi.referenceData(token);
+        setReferenceData(references as RecordMap);
+      }
       setMessage(status === 'validated'
-        ? 'Live GHL validation passed. Tanaghum can read the customer CRM location.'
+        ? 'Live GHL validation passed. Mapping choices were loaded from the customer CRM.'
         : 'Live GHL validation needs attention. Review the customer actions below.');
       await load();
     } catch (err) {
@@ -264,6 +285,56 @@ export default function GhlWizard() {
     } finally {
       setSaving('');
     }
+  }
+
+  async function loadReferenceData() {
+    if (!token) return;
+    setSaving('reference-data');
+    setMessage('');
+    try {
+      const result = await ghlSetupApi.referenceData(token);
+      const record = result as RecordMap;
+      setReferenceData(record);
+      const status = text(record.status, 'failed');
+      setMessage(status === 'ready'
+        ? 'GHL tags, pipelines, and stages are ready to select below.'
+        : 'Some GHL mapping choices could not be loaded. Review the required action below.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'GHL mapping choices could not be loaded');
+    } finally {
+      setSaving('');
+    }
+  }
+
+  function selectReferenceTag(tagId: string) {
+    const selected = referenceTags.find(tag => text(tag.id, '') === tagId);
+    setTagForm(current => ({
+      ...current,
+      ghlTagId: tagId,
+      ghlTagName: text(selected?.name, ''),
+    }));
+  }
+
+  function selectReferencePipeline(pipelineId: string) {
+    const selected = referencePipelines.find(
+      pipeline => text(pipeline.id, '') === pipelineId,
+    );
+    setPipelineForm(current => ({
+      ...current,
+      ghlPipelineId: pipelineId,
+      ghlPipelineName: text(selected?.name, ''),
+      ghlStageId: '',
+      ghlStageName: '',
+    }));
+  }
+
+  function selectReferenceStage(stageId: string) {
+    const selected = selectedReferenceStages.find(stage => text(stage.id, '') === stageId);
+    setPipelineForm(current => ({
+      ...current,
+      ghlStageId: stageId,
+      ghlStageName: text(selected?.name, ''),
+    }));
   }
 
   async function testWriteGate() {
@@ -331,9 +402,20 @@ export default function GhlWizard() {
       <ProductCard
         title="Live Customer CRM Validation"
         subtitle="After the customer saves a real GHL API key and location ID, validate read-only access to contacts, opportunities, tags, and pipeline stages. This does not write to GHL."
-        action={<PrimaryAction onClick={validateLiveGhl} disabled={saving === 'live-validation' || !hasApiKey || !hasLocationId}>
-          {saving === 'live-validation' ? 'Validating...' : 'Validate Live CRM Access'}
-        </PrimaryAction>}
+        action={<div className="flex flex-wrap gap-2">
+          <SecondaryAction
+            onClick={loadReferenceData}
+            disabled={saving === 'reference-data' || !hasApiKey || !hasLocationId}
+          >
+            <span className="inline-flex items-center gap-2">
+              <RefreshCw size={16} aria-hidden="true" />
+              {saving === 'reference-data' ? 'Loading...' : 'Load GHL Choices'}
+            </span>
+          </SecondaryAction>
+          <PrimaryAction onClick={validateLiveGhl} disabled={saving === 'live-validation' || !hasApiKey || !hasLocationId}>
+            {saving === 'live-validation' ? 'Validating...' : 'Validate Live CRM Access'}
+          </PrimaryAction>
+        </div>}
       >
         <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
           <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
@@ -372,6 +454,22 @@ export default function GhlWizard() {
             {liveValidationWarnings.length > 0 && (
               <Notice tone="info">{liveValidationWarnings.join(' ')}</Notice>
             )}
+            {referenceData && (
+              <DetailGrid items={[
+                { label: 'Mapping Choices', value: titleCase(referenceStatus) },
+                { label: 'Available Tags', value: String(referenceTags.length) },
+                { label: 'Available Pipelines', value: String(referencePipelines.length) },
+                {
+                  label: 'Available Stages',
+                  value: String(referencePipelines.reduce(
+                    (total, pipeline) => total + asRecords(pipeline.stages).length,
+                    0,
+                  )),
+                },
+              ]} />
+            )}
+            {referenceActions.length > 0 && <Notice tone="warn">{referenceActions.join(' ')}</Notice>}
+            {referenceWarnings.length > 0 && <Notice tone="info">{referenceWarnings.join(' ')}</Notice>}
           </div>
         </div>
       </ProductCard>
@@ -415,27 +513,52 @@ export default function GhlWizard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <ProductCard title="Add Tag Mapping" subtitle="Map customer GHL tags to Tanaghum lead states.">
+        <ProductCard title="Map a GHL Tag" subtitle="Choose a tag from the connected location, then define what it means in Tanaghum.">
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="GHL Tag ID">
-              <input value={tagForm.ghlTagId} onChange={event => setTagForm(current => ({ ...current, ghlTagId: event.target.value }))} className="w-full rounded-md border border-neutral-200 p-3 text-sm" />
-            </Field>
-            <Field label="GHL Tag Name">
-              <input value={tagForm.ghlTagName} onChange={event => setTagForm(current => ({ ...current, ghlTagName: event.target.value }))} className="w-full rounded-md border border-neutral-200 p-3 text-sm" />
+            <Field
+              label="GHL Tag"
+              helper={referenceTags.length
+                ? 'These choices were read directly from the connected GHL location.'
+                : 'Load GHL choices above before creating a mapping.'}
+            >
+              <select
+                value={tagForm.ghlTagId}
+                onChange={event => selectReferenceTag(event.target.value)}
+                className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm"
+                disabled={!referenceTags.length}
+              >
+                <option value="">Select a GHL tag</option>
+                {referenceTags.map(tag => (
+                  <option key={text(tag.id)} value={text(tag.id)}>
+                    {text(tag.name)} ({shortId(tag.id)})
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Tanaghum Lead State">
-              <select value={tagForm.internalTag} onChange={event => setTagForm(current => ({ ...current, internalTag: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm">
+              <select value={tagForm.internalTag} onChange={event => setTagForm(current => ({ ...current, internalTag: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm">
                 {INTERNAL_TAGS.map(item => <option key={item} value={item}>{titleCase(item)}</option>)}
               </select>
             </Field>
             <Field label="Direction">
-              <select value={tagForm.direction} onChange={event => setTagForm(current => ({ ...current, direction: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm">
+              <select value={tagForm.direction} onChange={event => setTagForm(current => ({ ...current, direction: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm">
                 <option value="inbound">GHL to Tanaghum</option>
                 <option value="outbound">Tanaghum to GHL</option>
                 <option value="bidirectional">Bidirectional</option>
               </select>
             </Field>
           </div>
+          <details className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-neutral-800">Advanced manual reference</summary>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Field label="GHL Tag ID">
+                <input value={tagForm.ghlTagId} onChange={event => setTagForm(current => ({ ...current, ghlTagId: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm" />
+              </Field>
+              <Field label="GHL Tag Name">
+                <input value={tagForm.ghlTagName} onChange={event => setTagForm(current => ({ ...current, ghlTagName: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm" />
+              </Field>
+            </div>
+          </details>
           <div className="mt-4">
             <PrimaryAction onClick={saveTag} disabled={saving === 'tag' || !tagForm.ghlTagId || !tagForm.ghlTagName}>
               {saving === 'tag' ? 'Saving...' : 'Save Tag Mapping'}
@@ -464,26 +587,66 @@ export default function GhlWizard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <ProductCard title="Add Pipeline Mapping" subtitle="Map GHL opportunity stages to Tanaghum sales outcomes.">
+        <ProductCard title="Map a GHL Sales Stage" subtitle="Choose a pipeline and stage from GHL, then define the business outcome it represents.">
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="GHL Pipeline ID">
-              <input value={pipelineForm.ghlPipelineId} onChange={event => setPipelineForm(current => ({ ...current, ghlPipelineId: event.target.value }))} className="w-full rounded-md border border-neutral-200 p-3 text-sm" />
+            <Field
+              label="GHL Pipeline"
+              helper={referencePipelines.length
+                ? 'The short reference distinguishes pipelines that share the same name.'
+                : 'Load GHL choices above before creating a mapping.'}
+            >
+              <select
+                value={pipelineForm.ghlPipelineId}
+                onChange={event => selectReferencePipeline(event.target.value)}
+                className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm"
+                disabled={!referencePipelines.length}
+              >
+                <option value="">Select a GHL pipeline</option>
+                {referencePipelines.map(pipeline => (
+                  <option key={text(pipeline.id)} value={text(pipeline.id)}>
+                    {text(pipeline.name)} ({shortId(pipeline.id)})
+                  </option>
+                ))}
+              </select>
             </Field>
-            <Field label="Pipeline Name">
-              <input value={pipelineForm.ghlPipelineName} onChange={event => setPipelineForm(current => ({ ...current, ghlPipelineName: event.target.value }))} className="w-full rounded-md border border-neutral-200 p-3 text-sm" />
-            </Field>
-            <Field label="GHL Stage ID">
-              <input value={pipelineForm.ghlStageId} onChange={event => setPipelineForm(current => ({ ...current, ghlStageId: event.target.value }))} className="w-full rounded-md border border-neutral-200 p-3 text-sm" />
-            </Field>
-            <Field label="Stage Name">
-              <input value={pipelineForm.ghlStageName} onChange={event => setPipelineForm(current => ({ ...current, ghlStageName: event.target.value }))} className="w-full rounded-md border border-neutral-200 p-3 text-sm" />
+            <Field label="GHL Stage">
+              <select
+                value={pipelineForm.ghlStageId}
+                onChange={event => selectReferenceStage(event.target.value)}
+                className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm"
+                disabled={!pipelineForm.ghlPipelineId || !selectedReferenceStages.length}
+              >
+                <option value="">Select a GHL stage</option>
+                {selectedReferenceStages.map(stage => (
+                  <option key={text(stage.id)} value={text(stage.id)}>
+                    {text(stage.name)} ({shortId(stage.id)})
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Tanaghum Sales Stage">
-              <select value={pipelineForm.internalStage} onChange={event => setPipelineForm(current => ({ ...current, internalStage: event.target.value }))} className="w-full rounded-md border border-neutral-200 bg-white p-3 text-sm">
+              <select value={pipelineForm.internalStage} onChange={event => setPipelineForm(current => ({ ...current, internalStage: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm">
                 {INTERNAL_STAGES.map(item => <option key={item} value={item}>{titleCase(item)}</option>)}
               </select>
             </Field>
           </div>
+          <details className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-neutral-800">Advanced manual reference</summary>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Field label="GHL Pipeline ID">
+                <input value={pipelineForm.ghlPipelineId} onChange={event => setPipelineForm(current => ({ ...current, ghlPipelineId: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm" />
+              </Field>
+              <Field label="Pipeline Name">
+                <input value={pipelineForm.ghlPipelineName} onChange={event => setPipelineForm(current => ({ ...current, ghlPipelineName: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm" />
+              </Field>
+              <Field label="GHL Stage ID">
+                <input value={pipelineForm.ghlStageId} onChange={event => setPipelineForm(current => ({ ...current, ghlStageId: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm" />
+              </Field>
+              <Field label="Stage Name">
+                <input value={pipelineForm.ghlStageName} onChange={event => setPipelineForm(current => ({ ...current, ghlStageName: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm" />
+              </Field>
+            </div>
+          </details>
           <div className="mt-4">
             <PrimaryAction onClick={savePipeline} disabled={saving === 'pipeline' || !pipelineForm.ghlPipelineId || !pipelineForm.ghlPipelineName || !pipelineForm.ghlStageId || !pipelineForm.ghlStageName}>
               {saving === 'pipeline' ? 'Saving...' : 'Save Pipeline Mapping'}

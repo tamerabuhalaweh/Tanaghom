@@ -101,10 +101,9 @@ export async function getGhlSyncStatus(
       }),
     ]);
 
-  const mappingBlockers = productionMappingBlockers(mappingReadiness);
-  if (eventId && !attributionMapping) {
-    mappingBlockers.push('Approve a plan-specific GHL attribution mapping for this event.');
-  }
+  const mappingBlockers = eventId
+    ? eventScopedMappingBlockers(mappingReadiness, attributionMapping)
+    : productionMappingBlockers(mappingReadiness);
   const mappingStatus = summarizeProductionMappingStatus(
     mappings,
     mappingReadiness,
@@ -288,7 +287,10 @@ async function pullInternal(
     eventId ? getApprovedMappingForEvent(tenantKey, eventId) : Promise.resolve(null),
   ]);
   const mappingSet = buildGhlMappingSet(mappings);
-  const mappingBlockers = productionMappingBlockers(mappingReadiness);
+  const globalMappingGaps = productionMappingBlockers(mappingReadiness);
+  const mappingBlockers = eventId
+    ? eventScopedMappingBlockers(mappingReadiness, attributionMapping)
+    : globalMappingGaps;
   const startedAt = new Date();
   const baseRun = {
     tenant_key: tenantKey,
@@ -321,25 +323,6 @@ async function pullInternal(
     };
   }
 
-  if (mode === 'pull_sync' && mappingBlockers.length > 0) {
-    const completedAt = new Date();
-    const run = await prisma.ghlLeadSyncRun.create({
-      data: {
-        ...baseRun,
-        status: 'mapping_required',
-        errors: mappingBlockers,
-        duration_ms: durationMs(startedAt, completedAt),
-        completed_at: completedAt,
-      },
-    });
-    return {
-      run: mapRun(run),
-      contacts: [],
-      pull: emptyPull(),
-      attributionMapping,
-    };
-  }
-
   if (eventId && !attributionMapping) {
     const completedAt = new Date();
     const run = await prisma.ghlLeadSyncRun.create({
@@ -356,6 +339,25 @@ async function pullInternal(
       contacts: [],
       pull: emptyPull(),
       attributionMapping: null,
+    };
+  }
+
+  if (mode === 'pull_sync' && mappingBlockers.length > 0) {
+    const completedAt = new Date();
+    const run = await prisma.ghlLeadSyncRun.create({
+      data: {
+        ...baseRun,
+        status: 'mapping_required',
+        errors: mappingBlockers,
+        duration_ms: durationMs(startedAt, completedAt),
+        completed_at: completedAt,
+      },
+    });
+    return {
+      run: mapRun(run),
+      contacts: [],
+      pull: emptyPull(),
+      attributionMapping,
     };
   }
 
@@ -441,10 +443,43 @@ async function pullInternal(
       pull.opportunities.filter((opportunity) => matchedContactIds.has(opportunity.contactId)),
       mappingSet,
     );
+    const recordMappingBlockers =
+      mode === 'pull_sync' && eventId && attributionMapping
+        ? eventRecordMappingBlockers(
+            pull.opportunities.filter((opportunity) =>
+              attribution.selectedOpportunityIds.has(opportunity.contactId),
+            ),
+            mappingSet,
+          )
+        : [];
+    if (recordMappingBlockers.length > 0) {
+      const completedAt = new Date();
+      const run = await prisma.ghlLeadSyncRun.create({
+        data: {
+          ...baseRun,
+          status: 'mapping_required',
+          contacts_pulled: pull.contacts.length,
+          opportunities_pulled: pull.opportunities.length,
+          appointments_pulled: pull.appointments.length,
+          tags_mapped: tagsMapped,
+          stages_mapped: stagesMapped,
+          warnings: [...pull.warnings, ...attribution.warnings],
+          errors: recordMappingBlockers,
+          duration_ms: durationMs(startedAt, completedAt),
+          completed_at: completedAt,
+        },
+      });
+      return { run: mapRun(run), contacts: [], pull, attributionMapping };
+    }
     const warnings = [
       ...pull.warnings,
       ...attribution.warnings,
       ...mappingBlockers.map((blocker) => `Preview only: ${blocker}`),
+      ...(eventId
+        ? globalMappingGaps
+            .filter(gap => !mappingBlockers.includes(gap))
+            .map(gap => `Other product/event mapping still incomplete: ${gap}`)
+        : []),
       ...unresolvedPaymentWarnings(attributionMapping),
     ];
     const completedAt = new Date();
@@ -788,6 +823,46 @@ function productionMappingBlockers(readiness: GhlMappingReadinessShape): string[
     }
   }
   return blockers;
+}
+
+function eventScopedMappingBlockers(
+  readiness: GhlMappingReadinessShape,
+  attributionMapping: GhlPlanAttributionMapping | null,
+): string[] {
+  const blockers: string[] = [];
+  if (readiness.location.state !== 'ready') {
+    blockers.push('Map the customer GoHighLevel location before event read sync.');
+  }
+  if (!attributionMapping) {
+    blockers.push('Approve a plan-specific GHL attribution mapping for this event.');
+  }
+  return blockers;
+}
+
+function eventRecordMappingBlockers(
+  opportunities: GhlPullResult['opportunities'],
+  mappings: ReturnType<typeof buildGhlMappingSet>,
+): string[] {
+  const blockers = new Set<string>();
+  for (const opportunity of opportunities) {
+    const stageId = String(opportunity.stageId || '').trim().toLowerCase();
+    const pipelineId = String(opportunity.pipelineId || '').trim().toLowerCase();
+    if (!stageId) {
+      blockers.add(
+        `GHL opportunity ${opportunity.id} has no stage. Assign a stage in GHL before syncing this event.`,
+      );
+      continue;
+    }
+    const mapped =
+      mappings.mappedStageIds.has(stageId) ||
+      (pipelineId && mappings.mappedStageIds.has(`${pipelineId}:${stageId}`));
+    if (!mapped) {
+      blockers.add(
+        `Map GHL stage ${opportunity.stageId} for pipeline ${opportunity.pipelineId || 'unknown'} before syncing this event.`,
+      );
+    }
+  }
+  return Array.from(blockers);
 }
 
 function durationMs(startedAt: Date, completedAt: Date): number {

@@ -48,6 +48,15 @@ export interface GhlLiveReadValidationResult {
   rawPayloadReturned: false;
 }
 
+export interface GhlReferenceDataResult {
+  canReadTags: boolean;
+  canReadPipelines: boolean;
+  remoteTags: GhlRemoteTagReference[];
+  remotePipelineStages: GhlRemotePipelineStageReference[];
+  warnings: string[];
+  rawPayloadReturned: false;
+}
+
 interface GhlCustomFieldDefinition {
   id: string;
   fieldKey: string | null;
@@ -331,6 +340,41 @@ export class LeadConnectorClient implements GhlClient {
       stagesFound: remotePipelineStages.length,
       remoteTags,
       remotePipelineStages,
+      warnings,
+      rawPayloadReturned: false,
+    };
+  }
+
+  async discoverReferenceData(): Promise<GhlReferenceDataResult> {
+    const [tagsResult, pipelinesResult] = await Promise.all([
+      this.readValidationEndpoint(
+        `/locations/${encodeURIComponent(this.config.locationId)}/tags`,
+        { method: 'GET' },
+      ),
+      this.readValidationEndpoint(
+        `/opportunities/pipelines?locationId=${encodeURIComponent(this.config.locationId)}`,
+        { method: 'GET' },
+      ),
+    ]);
+    const warnings: string[] = [];
+    if (!tagsResult.ok) warnings.push(`Tags read failed with status ${tagsResult.status}.`);
+    if (!pipelinesResult.ok)
+      warnings.push(`Pipeline read failed with status ${pipelinesResult.status}.`);
+
+    const remoteTags = tagsResult.ok
+      ? extractItems(tagsResult.body, ['tags', 'items', 'results'])
+          .map(normalizeRemoteTag)
+          .filter((tag): tag is GhlRemoteTagReference => Boolean(tag))
+      : [];
+    const pipelines = pipelinesResult.ok
+      ? extractItems(pipelinesResult.body, ['pipelines', 'items', 'results'])
+      : [];
+
+    return {
+      canReadTags: tagsResult.ok,
+      canReadPipelines: pipelinesResult.ok,
+      remoteTags,
+      remotePipelineStages: pipelines.flatMap(normalizePipelineStages),
       warnings,
       rawPayloadReturned: false,
     };

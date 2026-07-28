@@ -377,6 +377,65 @@ describe('LeadConnectorClient', () => {
     expect(JSON.stringify(result)).not.toContain('tenant-owned-key');
   });
 
+  it('discovers only sanitized tag and pipeline-stage references for mapping choices', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          tags: [
+            { id: 'tag-1', name: 'Meeting Booked', contacts: [{ email: 'hidden@example.com' }] },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          pipelines: [
+            {
+              id: 'pipe-1',
+              name: 'Marketing Pipeline',
+              stages: [
+                { id: 'stage-1', name: 'Sale', opportunityValue: 1000 },
+                { id: 'stage-2', name: 'No Show' },
+              ],
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new LeadConnectorClient({
+      baseUrl: 'https://services.leadconnectorhq.com',
+      apiKey: 'secret-token',
+      locationId: 'loc-1',
+      version: '2021-07-28',
+    });
+
+    const result = await client.discoverReferenceData();
+
+    expect(result).toEqual({
+      canReadTags: true,
+      canReadPipelines: true,
+      remoteTags: [{ id: 'tag-1', name: 'Meeting Booked' }],
+      remotePipelineStages: [
+        {
+          pipelineId: 'pipe-1',
+          pipelineName: 'Marketing Pipeline',
+          stageId: 'stage-1',
+          stageName: 'Sale',
+        },
+        {
+          pipelineId: 'pipe-1',
+          pipelineName: 'Marketing Pipeline',
+          stageId: 'stage-2',
+          stageName: 'No Show',
+        },
+      ],
+      warnings: [],
+      rawPayloadReturned: false,
+    });
+    expect(JSON.stringify(result)).not.toContain('hidden@example.com');
+    expect(JSON.stringify(result)).not.toContain('secret-token');
+  });
+
   it('returns granular blockers when some live read surfaces fail', async () => {
     const fetchMock = vi
       .fn()

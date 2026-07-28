@@ -145,6 +145,33 @@ export interface GhlLiveValidation {
   rawPayloadReturned: false;
 }
 
+export interface GhlReferenceTag {
+  id: string;
+  name: string;
+}
+
+export interface GhlReferenceStage {
+  id: string;
+  name: string;
+}
+
+export interface GhlReferencePipeline {
+  id: string;
+  name: string;
+  stages: GhlReferenceStage[];
+}
+
+export interface GhlReferenceData {
+  status: 'requires_credentials' | 'ready' | 'partial' | 'failed';
+  tags: GhlReferenceTag[];
+  pipelines: GhlReferencePipeline[];
+  warnings: string[];
+  requiredActions: string[];
+  discoveredAt: string | null;
+  rawSecretsReturned: false;
+  rawPayloadReturned: false;
+}
+
 export interface GhlMappingOutcome {
   key: string;
   label: string;
