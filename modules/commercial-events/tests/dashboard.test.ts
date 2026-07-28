@@ -105,17 +105,31 @@ describe('Commercial Events dashboard and KPI records', () => {
       {
         id: 'lead-1',
         lead_status: 'qualified',
+        lead_temperature: 'hot',
         platform: 'instagram',
         lead_name_placeholder: 'Prospect One',
         lead_email_placeholder: 'one@example.com',
+        meeting_date: null,
+        meeting_outcome: null,
+        payment_status: 'unknown',
+        source_of_truth: 'tanaghum',
+        external_source_provider: null,
+        external_last_synced_at: null,
         created_at: new Date('2026-07-02T12:00:00Z'),
       },
       {
         id: 'lead-2',
         lead_status: 'new_lead',
+        lead_temperature: 'cold',
         platform: 'manual',
         lead_name_placeholder: 'Prospect Two',
         lead_email_placeholder: null,
+        meeting_date: null,
+        meeting_outcome: null,
+        payment_status: 'unknown',
+        source_of_truth: 'tanaghum',
+        external_source_provider: null,
+        external_last_synced_at: null,
         created_at: new Date('2026-07-02T13:00:00Z'),
       },
     ]);
@@ -166,6 +180,56 @@ describe('Commercial Events dashboard and KPI records', () => {
     expect(dashboard.leadTemperature.find(item => item.label === 'Hot')?.value).toBe(1);
     expect(dashboard.sourceStatus.primarySource).toBe('manual');
     expect(dashboard.sourceStatus.manualFallbackActive).toBe(true);
+  });
+
+  it('reconciles GHL meeting and purchase outcomes without duplicating KPI totals', async () => {
+    prismaMocks.eventKpiRecord.findMany.mockResolvedValue([]);
+    prismaMocks.leadCaptureRecord.findMany.mockResolvedValue([
+      {
+        id: 'ghl-no-show',
+        lead_status: 'no_show',
+        lead_temperature: 'warm',
+        platform: 'gohighlevel',
+        lead_name_placeholder: 'No-show lead',
+        lead_email_placeholder: null,
+        meeting_date: new Date('2026-07-29T08:00:00Z'),
+        meeting_outcome: 'no_show',
+        payment_status: 'unknown',
+        source_of_truth: 'gohighlevel',
+        external_source_provider: 'gohighlevel',
+        external_last_synced_at: new Date('2026-07-28T13:21:06Z'),
+        created_at: new Date('2026-07-28T13:21:06Z'),
+      },
+      {
+        id: 'ghl-purchase',
+        lead_status: 'purchased',
+        lead_temperature: 'buyer',
+        platform: 'gohighlevel',
+        lead_name_placeholder: 'Purchased lead',
+        lead_email_placeholder: null,
+        meeting_date: null,
+        meeting_outcome: null,
+        payment_status: 'partial',
+        source_of_truth: 'gohighlevel',
+        external_source_provider: 'gohighlevel',
+        external_last_synced_at: new Date('2026-07-28T13:21:06Z'),
+        created_at: new Date('2026-07-28T13:21:06Z'),
+      },
+    ]);
+
+    const dashboard = await eventRepo.getEventDashboard('tenant-a', baseEvent.id);
+
+    expect(dashboard.kpis.meetingsBooked).toBe(1);
+    expect(dashboard.kpis.meetingsAttended).toBe(0);
+    expect(dashboard.kpis.noShows).toBe(1);
+    expect(dashboard.kpis.noShowRate).toBe(100);
+    expect(dashboard.kpis.purchases).toBe(1);
+    expect(dashboard.funnel.find(item => item.label === 'Meetings')?.value).toBe(1);
+    expect(dashboard.funnel.find(item => item.label === 'Purchases')?.value).toBe(1);
+    expect(dashboard.leadTemperature.find(item => item.label === 'Buyer')?.value).toBe(1);
+    expect(dashboard.leadTemperature.find(item => item.label === 'No-show')?.value).toBe(1);
+    expect(dashboard.nextActions.some(item => item.title === 'Run no-show recovery')).toBe(true);
+    expect(dashboard.nextActions.some(item => item.title === 'Book meetings for captured leads')).toBe(false);
   });
 
   it('classifies connector, imported, and manual KPI sources honestly', async () => {
