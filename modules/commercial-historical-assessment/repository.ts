@@ -610,7 +610,14 @@ export async function previewEvidence(
     missingData.push('No verified KPI records were found for the completed events.');
   if (!leads.length)
     missingData.push('No tenant-scoped lead outcomes were found for the completed events.');
-  if (!connectorJobs.some((job) => String(job.sync_status) === 'synced')) {
+  const hasCompletedConnectorEvidence =
+    connectorJobs.some(job => String(job.sync_status) === 'synced') ||
+    leads.some(
+      lead =>
+        String(lead.source_of_truth) === 'gohighlevel' &&
+        lead.external_last_synced_at instanceof Date,
+    );
+  if (!hasCompletedConnectorEvidence) {
     missingData.push(
       'No completed connector sync evidence was found; available records may be manual or incomplete.',
     );

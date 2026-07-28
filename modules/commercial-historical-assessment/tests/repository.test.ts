@@ -213,6 +213,25 @@ describe('historical assessment evidence repository', () => {
     expect(storedText).not.toContain('apiKey');
   });
 
+  it('recognizes timestamped GHL lead mirrors as completed connector evidence', async () => {
+    prismaMocks.connectorImportJob.findMany.mockResolvedValue([]);
+
+    const preview = await previewEvidence('tenant-a', scope);
+
+    expect(preview.missingData).not.toContain(
+      'No completed connector sync evidence was found; available records may be manual or incomplete.',
+    );
+    expect(preview.evidence).toContainEqual(
+      expect.objectContaining({
+        evidenceType: 'lead_outcome',
+        payload: expect.objectContaining({
+          ghlRecordCount: 1,
+          latestGhlSyncAt: new Date('2025-06-21T00:00:00.000Z'),
+        }),
+      }),
+    );
+  });
+
   it('reconciles GHL-only meeting, no-show, and purchase evidence into operating actuals', () => {
     const summary = buildEvidenceSummary(
       [
