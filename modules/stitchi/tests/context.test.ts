@@ -123,8 +123,30 @@ describe('Stitchi read-only context loader', () => {
       },
     ]);
     prismaMocks.leadCaptureRecord.findMany.mockResolvedValue([
-      { lead_status: 'meeting_booked', lead_temperature: 'hot', purchase_amount: decimal('0') },
-      { lead_status: 'purchased', lead_temperature: 'buyer', purchase_amount: decimal('2500') },
+      {
+        lead_status: 'meeting_booked',
+        lead_temperature: 'hot',
+        purchase_amount: decimal('0'),
+        payment_status: 'unknown',
+        sale_value: null,
+        amount_paid: null,
+        outstanding_balance: null,
+        ticket_quantity: null,
+        source_of_truth: 'tanaghum',
+        external_last_synced_at: null,
+      },
+      {
+        lead_status: 'purchased',
+        lead_temperature: 'buyer',
+        purchase_amount: decimal('2500'),
+        payment_status: 'partial',
+        sale_value: decimal('3000'),
+        amount_paid: decimal('2500'),
+        outstanding_balance: decimal('500'),
+        ticket_quantity: 1,
+        source_of_truth: 'gohighlevel',
+        external_last_synced_at: new Date('2026-07-08T10:00:00Z'),
+      },
     ]);
     prismaMocks.eventKpiRecord.findMany.mockResolvedValue([
       {
@@ -350,6 +372,15 @@ describe('Stitchi read-only context loader', () => {
     expect(context.leadSummary.total).toBe(2);
     expect(context.leadSummary.byStatus.purchased).toBe(1);
     expect(context.leadSummary.knownRevenue).toBe(2500);
+    expect(context.leadSummary).toMatchObject({
+      byPaymentStatus: { unknown: 1, partial: 1 },
+      knownSaleValue: 3000,
+      knownAmountPaid: 2500,
+      knownOutstandingBalance: 500,
+      knownTicketQuantity: 1,
+      ghlMirrored: 1,
+      latestGhlSyncAt: new Date('2026-07-08T10:00:00Z'),
+    });
     expect(context.kpiSummary.reach).toBe(1000);
     expect(context.kpiSummary.spend).toBe(250);
     expect(context.governedPerformance).toMatchObject({
@@ -371,7 +402,12 @@ describe('Stitchi read-only context loader', () => {
         readyForMatching: true,
       },
     });
-    expect(context.governedPerformance.ghlAttribution.missingCustomerDefinitions).toHaveLength(4);
+    expect(context.governedPerformance.ghlAttribution.missingCustomerDefinitions).toHaveLength(3);
+    expect(
+      context.governedPerformance.ghlAttribution.missingCustomerDefinitions,
+    ).not.toContain(
+      'Confirm the GoHighLevel field that stores total sale value or supports outstanding-balance calculation.',
+    );
     expect(context.riskSummary.critical).toBe(1);
     expect(context.connectorSummary.readyForSync).toBe(1);
     expect(context.unifiedDataLayer.kajabi).toMatchObject({
