@@ -1,5 +1,10 @@
 import { auditLog } from '@shared/logging';
-import { LeadConnectorClient, type GhlConnectionTestResult, type GhlLiveReadValidationResult } from '../ghl-sync/client';
+import {
+  LeadConnectorClient,
+  type GhlConnectionTestResult,
+  type GhlLiveReadValidationResult,
+  type GhlReferenceDataResult,
+} from '../ghl-sync/client';
 import { checkGhlSetupReadPermission, checkGhlSetupWritePermission } from './policy';
 import * as repo from './repository';
 import type {
@@ -14,6 +19,7 @@ import type {
   GhlPipelineMapping,
   GhlLocationMapping,
   GhlMappingReadiness,
+  GhlReferenceData,
 } from './types';
 
 const LIVE_WRITE_BLOCK_REASON = 'GHL live writes are not authorized in this environment. All CRM operations are read-only or dry-run.';
@@ -41,6 +47,10 @@ interface GhlLiveValidationClient {
   validateReadAccess(): Promise<GhlLiveReadValidationResult>;
 }
 
+interface GhlReferenceDataClient {
+  discoverReferenceData(): Promise<GhlReferenceDataResult>;
+}
+
 function defaultClientFactory(config: repo.GhlSetupRuntimeConfig): GhlConnectionTestClient {
   return new LeadConnectorClient({
     baseUrl: config.baseUrl,
@@ -51,6 +61,15 @@ function defaultClientFactory(config: repo.GhlSetupRuntimeConfig): GhlConnection
 }
 
 function defaultLiveValidationClientFactory(config: repo.GhlSetupRuntimeConfig): GhlLiveValidationClient {
+  return new LeadConnectorClient({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    locationId: config.locationId,
+    version: process.env.GHL_API_VERSION || '2021-07-28',
+  });
+}
+
+function defaultReferenceDataClientFactory(config: repo.GhlSetupRuntimeConfig): GhlReferenceDataClient {
   return new LeadConnectorClient({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
@@ -262,6 +281,103 @@ export async function validateGhlLiveCredentials(
       warnings: [],
       requiredActions: ['Check the GoHighLevel API key, location ID, scopes, API version, and network access, then validate again.'],
       lastValidatedAt: null,
+      rawSecretsReturned: false,
+      rawPayloadReturned: false,
+    };
+  }
+}
+
+export async function discoverGhlReferenceData(
+  role: string,
+  userId: string,
+  tenantKey: string,
+  clientFactory = defaultReferenceDataClientFactory,
+): Promise<GhlReferenceData> {
+  checkGhlSetupWritePermission(role);
+
+  const config = await repo.resolveGhlSetupRuntimeConfig(tenantKey);
+  if (!config.apiKey || !config.locationId || config.source !== 'tenant_vault') {
+    return {
+      status: 'requires_credentials',
+      tags: [],
+      pipelines: [],
+      warnings: [],
+      requiredActions: ['Save and validate the customer-owned GoHighLevel credential first.'],
+      discoveredAt: null,
+      rawSecretsReturned: false,
+      rawPayloadReturned: false,
+    };
+  }
+
+  try {
+    const result = await clientFactory(config).discoverReferenceData();
+    const pipelinesById = new Map<string, GhlReferenceData['pipelines'][number]>();
+    for (const stage of result.remotePipelineStages) {
+      const pipeline = pipelinesById.get(stage.pipelineId) || {
+        id: stage.pipelineId,
+        name: stage.pipelineName,
+        stages: [],
+      };
+      pipeline.stages.push({ id: stage.stageId, name: stage.stageName });
+      pipelinesById.set(stage.pipelineId, pipeline);
+    }
+
+    const requiredActions: string[] = [];
+    if (!result.canReadTags)
+      requiredActions.push('Grant location tags read access to load GHL tag choices.');
+    if (!result.canReadPipelines)
+      requiredActions.push('Grant opportunities pipeline read access to load GHL stage choices.');
+
+    const status: GhlReferenceData['status'] =
+      result.canReadTags && result.canReadPipelines
+        ? 'ready'
+        : result.canReadTags || result.canReadPipelines
+          ? 'partial'
+          : 'failed';
+    const discoveredAt = new Date().toISOString();
+
+    auditLog(
+      {
+        actor: `user:${userId}`,
+        action: 'ghl_reference_data_discovered',
+        object_type: 'ghl_setup',
+        object_id: tenantKey,
+        result: status,
+      },
+      `Sanitized GHL mapping references discovered for tenant ${tenantKey}: tags=${result.remoteTags.length}, pipelines=${pipelinesById.size}, stages=${result.remotePipelineStages.length}`,
+    );
+
+    return {
+      status,
+      tags: result.remoteTags.map(tag => ({ id: tag.id, name: tag.name })),
+      pipelines: Array.from(pipelinesById.values()).map(pipeline => ({
+        ...pipeline,
+        stages: pipeline.stages.sort((a, b) => a.name.localeCompare(b.name)),
+      })),
+      warnings: result.warnings,
+      requiredActions,
+      discoveredAt,
+      rawSecretsReturned: false,
+      rawPayloadReturned: false,
+    };
+  } catch (err) {
+    auditLog(
+      {
+        actor: `user:${userId}`,
+        action: 'ghl_reference_data_discovery_failed',
+        object_type: 'ghl_setup',
+        object_id: tenantKey,
+        result: 'failed',
+      },
+      `GHL reference discovery failed for tenant ${tenantKey}: ${err instanceof Error ? err.message : 'unknown error'}`,
+    );
+    return {
+      status: 'failed',
+      tags: [],
+      pipelines: [],
+      warnings: [],
+      requiredActions: ['Check the GHL credential scopes and retry loading mapping choices.'],
+      discoveredAt: null,
       rawSecretsReturned: false,
       rawPayloadReturned: false,
     };

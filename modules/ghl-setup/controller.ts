@@ -89,6 +89,21 @@ ghlSetupRouter.post('/live-validation', async (req: Request, res: Response, next
   }
 });
 
+ghlSetupRouter.post('/reference-data', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = getPayload(req);
+    const tenantKey = payload.tenantKey || 'default';
+    const result = await service.discoverGhlReferenceData(
+      payload.role,
+      payload.sub,
+      tenantKey,
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 const tagMappingSchema = z.object({
   ghlTagId: z.string().min(1),
   ghlTagName: z.string().min(1),

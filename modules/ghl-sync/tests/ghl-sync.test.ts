@@ -133,7 +133,7 @@ function productionReadyMappings() {
         mappingType: 'pipeline',
         ghlPipelineId: 'pipe-1',
         ghlPipelineName: 'Sales',
-        ghlStageId: `stage-${stage}`,
+        ghlStageId: stage === 'meeting_booked' ? 'stage-booked' : `stage-${stage}`,
         ghlStageName: stage,
         internalStage: stage,
       },
@@ -358,6 +358,101 @@ describe('GHL Sync', () => {
     expect(result.run.status).toBe('mapping_required');
     expect(result.run.errors).toContain('Map a GoHighLevel pipeline stage for Purchased.');
     expect(mockClient.pull).not.toHaveBeenCalled();
+    expect(prismaMocks.leadCaptureRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('treats an approved event mapping as ready without requiring unrelated product outcomes', async () => {
+    const eventMappings = [
+      {
+        validation_status: 'valid',
+        field_mappings: {
+          mappingType: 'pipeline',
+          ghlPipelineId: 'pipe-1',
+          ghlPipelineName: 'Sales',
+          ghlStageId: 'stage-booked',
+          ghlStageName: 'Booked',
+          internalStage: 'meeting_booked',
+        },
+      },
+    ];
+    prismaMocks.connectorFieldMapping.findMany
+      .mockResolvedValueOnce(eventMappings)
+      .mockResolvedValueOnce(eventMappings);
+
+    const status = await repo.getGhlSyncStatus('tenant-a', 'event-1');
+
+    expect(status.mappingStatus).toBe('ready');
+    expect(status.acceptance.status).toBe('ready_for_read_sync');
+    expect(status.acceptance.readyForReadSync).toBe(true);
+  });
+
+  it('syncs an approved event when every matched opportunity stage has a saved mapping', async () => {
+    const eventMappings = [
+      {
+        validation_status: 'valid',
+        field_mappings: {
+          mappingType: 'pipeline',
+          ghlPipelineId: 'pipe-1',
+          ghlPipelineName: 'Sales',
+          ghlStageId: 'stage-booked',
+          ghlStageName: 'Booked',
+          internalStage: 'meeting_booked',
+        },
+      },
+    ];
+    prismaMocks.connectorFieldMapping.findMany
+      .mockResolvedValueOnce(eventMappings)
+      .mockResolvedValueOnce(eventMappings);
+
+    const result = await repo.syncPull(
+      'tenant-a',
+      'user-1',
+      'agent-1',
+      'event-1',
+      25,
+      () => mockClient,
+    );
+
+    expect(result.run.status).toBe('synced');
+    expect(result.upserted).toHaveLength(1);
+    expect(result.run.warnings).toContain(
+      'Other product/event mapping still incomplete: Map a GoHighLevel pipeline stage for Purchased.',
+    );
+    expect(prismaMocks.leadCaptureRecord.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops an event sync before lead writes when a matched opportunity stage is unmapped', async () => {
+    const eventMappings = [
+      {
+        validation_status: 'valid',
+        field_mappings: {
+          mappingType: 'pipeline',
+          ghlPipelineId: 'pipe-1',
+          ghlPipelineName: 'Sales',
+          ghlStageId: 'stage-other',
+          ghlStageName: 'Other',
+          internalStage: 'contacted',
+        },
+      },
+    ];
+    prismaMocks.connectorFieldMapping.findMany
+      .mockResolvedValueOnce(eventMappings)
+      .mockResolvedValueOnce(eventMappings);
+
+    const result = await repo.syncPull(
+      'tenant-a',
+      'user-1',
+      'agent-1',
+      'event-1',
+      25,
+      () => mockClient,
+    );
+
+    expect(result.run.status).toBe('mapping_required');
+    expect(result.run.errors).toContain(
+      'Map GHL stage stage-booked for pipeline pipe-1 before syncing this event.',
+    );
+    expect(result.upserted).toEqual([]);
     expect(prismaMocks.leadCaptureRecord.create).not.toHaveBeenCalled();
   });
 
