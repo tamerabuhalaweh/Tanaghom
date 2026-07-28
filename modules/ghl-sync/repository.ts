@@ -1,4 +1,5 @@
 import { Prisma, type GhlPlanAttributionMapping } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { prisma } from '@shared/database';
 import { ExternalServiceError, NotFoundError } from '@shared/errors';
 import { getActiveIntegrationCredential } from '../integration-credentials/service';
@@ -20,6 +21,8 @@ import type {
 const GHL_READ_PROVIDER_ENDPOINT = [
   'POST /contacts/search',
   'GET /opportunities/search',
+  'GET /opportunities/{opportunityId}',
+  'GET /locations/{locationId}/customFields?model=opportunity',
   'GET /contacts/{contactId}/appointments',
 ].join(' + ');
 
@@ -64,45 +67,61 @@ export async function resolveGhlSyncRuntimeConfig(tenantKey: string): Promise<Gh
     };
   }
   return {
-    baseUrl: credential.secrets.baseUrl || process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com',
+    baseUrl:
+      credential.secrets.baseUrl ||
+      process.env.GHL_BASE_URL ||
+      'https://services.leadconnectorhq.com',
     apiKey: credential.secrets.apiKey || '',
     locationId: credential.secrets.locationId || '',
     source: 'tenant_vault',
   };
 }
 
-export async function getGhlSyncStatus(tenantKey: string, eventId?: string): Promise<GhlSyncStatusSummary> {
+export async function getGhlSyncStatus(
+  tenantKey: string,
+  eventId?: string,
+): Promise<GhlSyncStatusSummary> {
   if (eventId) await assertEventOwnedByTenant(tenantKey, eventId);
-  const [config, mappings, mappingReadiness, attributionMapping, lastRun, ghlLeadCount] = await Promise.all([
-    resolveGhlSyncRuntimeConfig(tenantKey),
-    getMappingRecords(tenantKey),
-    getGhlMappingReadiness(tenantKey),
-    eventId ? getApprovedMappingForEvent(tenantKey, eventId) : Promise.resolve(null),
-    prisma.ghlLeadSyncRun.findFirst({
-      where: { tenant_key: tenantKey, event_id: eventId || undefined },
-      orderBy: { started_at: 'desc' },
-    }),
-    prisma.leadCaptureRecord.count({
-      where: {
-        tenant_key: tenantKey,
-        event_id: eventId || undefined,
-        source_of_truth: 'gohighlevel',
-      },
-    }),
-  ]);
+  const [config, mappings, mappingReadiness, attributionMapping, lastRun, ghlLeadCount] =
+    await Promise.all([
+      resolveGhlSyncRuntimeConfig(tenantKey),
+      getMappingRecords(tenantKey),
+      getGhlMappingReadiness(tenantKey),
+      eventId ? getApprovedMappingForEvent(tenantKey, eventId) : Promise.resolve(null),
+      prisma.ghlLeadSyncRun.findFirst({
+        where: { tenant_key: tenantKey, event_id: eventId || undefined },
+        orderBy: { started_at: 'desc' },
+      }),
+      prisma.leadCaptureRecord.count({
+        where: {
+          tenant_key: tenantKey,
+          event_id: eventId || undefined,
+          source_of_truth: 'gohighlevel',
+        },
+      }),
+    ]);
 
   const mappingBlockers = productionMappingBlockers(mappingReadiness);
   if (eventId && !attributionMapping) {
     mappingBlockers.push('Approve a plan-specific GHL attribution mapping for this event.');
   }
-  const mappingStatus = summarizeProductionMappingStatus(mappings, mappingReadiness, mappingBlockers);
+  const mappingStatus = summarizeProductionMappingStatus(
+    mappings,
+    mappingReadiness,
+    mappingBlockers,
+  );
   const readSyncEnabled = process.env.GHL_READ_SYNC_ENABLED === 'true';
   const writeBackEnabled = process.env.GHL_WRITE_BACK_ENABLED === 'true';
   const requiredActions: string[] = [];
-  if (!credentialConfigured(config)) requiredActions.push('Configure tenant-owned GoHighLevel API key and location id.');
+  if (!credentialConfigured(config))
+    requiredActions.push('Configure tenant-owned GoHighLevel API key and location id.');
   if (mappingStatus !== 'ready') requiredActions.push(...mappingBlockers);
-  if (!readSyncEnabled) requiredActions.push('Enable GHL_READ_SYNC_ENABLED=true before live read sync.');
-  if (!writeBackEnabled) requiredActions.push('Write-back is disabled by default; enable only after customer authorization.');
+  if (!readSyncEnabled)
+    requiredActions.push('Enable GHL_READ_SYNC_ENABLED=true before live read sync.');
+  if (!writeBackEnabled)
+    requiredActions.push(
+      'Write-back is disabled by default; enable only after customer authorization.',
+    );
   const acceptance = buildGhlAcceptance({
     credentialConfigured: credentialConfigured(config),
     mappingStatus,
@@ -138,7 +157,8 @@ function buildGhlAcceptance(input: {
       status: 'requires_credentials',
       readyForReadSync: false,
       customerAction: 'Save the customer-owned GHL API key and location ID.',
-      systemAction: 'After credentials are saved, validate read-only CRM access before syncing leads.',
+      systemAction:
+        'After credentials are saved, validate read-only CRM access before syncing leads.',
       readOnly: true,
       externalWritesAllowed: false,
       rawSecretsReturned: false,
@@ -149,7 +169,8 @@ function buildGhlAcceptance(input: {
     return {
       status: 'requires_mapping',
       readyForReadSync: false,
-      customerAction: 'Map GHL tags and pipeline stages to lead status, temperature, meetings, no-shows, and purchases.',
+      customerAction:
+        'Map GHL tags and pipeline stages to lead status, temperature, meetings, no-shows, and purchases.',
       systemAction: 'Use mapping validation before running a production pull sync.',
       readOnly: true,
       externalWritesAllowed: false,
@@ -185,7 +206,8 @@ function buildGhlAcceptance(input: {
     status: 'ready_for_read_sync',
     readyForReadSync: true,
     customerAction: 'Approve a read-only GHL pull preview or sync for the selected event.',
-    systemAction: 'Pull contacts, opportunities, appointments, purchases, tags, and stages from GHL without writing back.',
+    systemAction:
+      'Pull contacts, opportunities, appointments, purchases, tags, and stages from GHL without writing back.',
     readOnly: true,
     externalWritesAllowed: false,
     rawSecretsReturned: false,
@@ -382,13 +404,33 @@ async function pullInternal(
       const contactOpportunities = pull.opportunities.filter(
         (opportunity) => opportunity.contactId === contact.id,
       );
+      const selectedOpportunityId = attribution.selectedOpportunityIds.get(contact.id);
+      const selectedOpportunity = selectedOpportunityId
+        ? (contactOpportunities.find((opportunity) => opportunity.id === selectedOpportunityId) ??
+          null)
+        : (contactOpportunities[0] ?? null);
+      const orderedOpportunities = selectedOpportunity
+        ? [
+            selectedOpportunity,
+            ...contactOpportunities.filter(
+              (opportunity) => opportunity.id !== selectedOpportunity.id,
+            ),
+          ]
+        : contactOpportunities;
       const mappedLead = mapGhlLead(
         contact,
-        contactOpportunities,
+        orderedOpportunities,
         pull.appointments.filter((appointment) => appointment.contactId === contact.id),
         mappingSet,
       );
-      return applyPaymentEvidence(mappedLead, contact.customFields ?? {}, attributionMapping);
+      return applyPaymentEvidence(
+        mappedLead,
+        {
+          ...(contact.customFields ?? {}),
+          ...(selectedOpportunity?.customFields ?? {}),
+        },
+        attributionMapping,
+      );
     });
     const tagsMapped = attribution.contacts.reduce(
       (total, contact) => total + countMappedTags(contact, mappingSet),
@@ -402,7 +444,7 @@ async function pullInternal(
     const warnings = [
       ...pull.warnings,
       ...attribution.warnings,
-      ...mappingBlockers.map(blocker => `Preview only: ${blocker}`),
+      ...mappingBlockers.map((blocker) => `Preview only: ${blocker}`),
       ...unresolvedPaymentWarnings(attributionMapping),
     ];
     const completedAt = new Date();
@@ -441,7 +483,11 @@ async function pullInternal(
   }
 }
 
-export async function buildWriteBackPreview(tenantKey: string, userId: string, leadId: string): Promise<GhlWriteBackPreview> {
+export async function buildWriteBackPreview(
+  tenantKey: string,
+  userId: string,
+  leadId: string,
+): Promise<GhlWriteBackPreview> {
   const [config, lead, mappings] = await Promise.all([
     resolveGhlSyncRuntimeConfig(tenantKey),
     prisma.leadCaptureRecord.findFirst({ where: { id: leadId, tenant_key: tenantKey } }),
@@ -450,11 +496,17 @@ export async function buildWriteBackPreview(tenantKey: string, userId: string, l
   if (!lead) throw new NotFoundError('LeadCaptureRecord', leadId);
   const startedAt = new Date();
   const completedAt = new Date();
-  const mappedTags = outboundTagsForLead(String(lead.lead_status), String(lead.lead_temperature), mappings);
+  const mappedTags = outboundTagsForLead(
+    String(lead.lead_status),
+    String(lead.lead_temperature),
+    mappings,
+  );
   const reasons: string[] = [];
-  if (!credentialConfigured(config)) reasons.push('Tenant-owned GoHighLevel credentials are missing.');
+  if (!credentialConfigured(config))
+    reasons.push('Tenant-owned GoHighLevel credentials are missing.');
   if (!lead.external_source_id) reasons.push('Lead is not linked to a GoHighLevel contact id.');
-  if (process.env.GHL_WRITE_BACK_ENABLED !== 'true') reasons.push('GHL_WRITE_BACK_ENABLED is not true.');
+  if (process.env.GHL_WRITE_BACK_ENABLED !== 'true')
+    reasons.push('GHL_WRITE_BACK_ENABLED is not true.');
 
   await prisma.ghlLeadSyncRun.create({
     data: {
@@ -503,7 +555,9 @@ export async function executeWriteBack(
   if (preview.reasons.length > 0) return preview;
 
   const config = await resolveGhlSyncRuntimeConfig(tenantKey);
-  const lead = await prisma.leadCaptureRecord.findFirst({ where: { id: leadId, tenant_key: tenantKey } });
+  const lead = await prisma.leadCaptureRecord.findFirst({
+    where: { id: leadId, tenant_key: tenantKey },
+  });
   if (!lead) throw new NotFoundError('LeadCaptureRecord', leadId);
 
   const response = await clientFactory(config).upsertContact(preview.payload);
@@ -526,7 +580,10 @@ export async function executeWriteBack(
         completed_at: completedAt,
       },
     });
-    throw new ExternalServiceError('GoHighLevel', `Write-back failed with status ${response.status}`);
+    throw new ExternalServiceError(
+      'GoHighLevel',
+      `Write-back failed with status ${response.status}`,
+    );
   }
 
   const startedAt = new Date();
@@ -583,7 +640,9 @@ async function upsertGhlLeadMirror(
     lead_name_placeholder: mappedLead.leadName,
     lead_email_placeholder: mappedLead.leadEmail,
     lead_phone_placeholder: mappedLead.leadPhone,
-    purchase_amount: mappedLead.purchaseAmount == null ? null : new Prisma.Decimal(mappedLead.purchaseAmount),
+    purchase_amount:
+      mappedLead.purchaseAmount == null ? null : new Prisma.Decimal(mappedLead.purchaseAmount),
+    payment_date: mappedLead.paymentDate,
     payment_status: mappedLead.paymentStatus,
     sale_value: mappedLead.saleValue == null ? null : new Prisma.Decimal(mappedLead.saleValue),
     amount_paid: mappedLead.amountPaid == null ? null : new Prisma.Decimal(mappedLead.amountPaid),
@@ -593,8 +652,10 @@ async function upsertGhlLeadMirror(
         : new Prisma.Decimal(mappedLead.outstandingBalance),
     ticket_quantity: mappedLead.ticketQuantity,
     payment_source: mappedLead.paymentSource,
-    commercial_plan_id: attributionMapping?.commercial_plan_id || existing?.commercial_plan_id || null,
-    ghl_attribution_mapping_id: attributionMapping?.id || existing?.ghl_attribution_mapping_id || null,
+    commercial_plan_id:
+      attributionMapping?.commercial_plan_id || existing?.commercial_plan_id || null,
+    ghl_attribution_mapping_id:
+      attributionMapping?.id || existing?.ghl_attribution_mapping_id || null,
     purchase_reference: mappedLead.purchaseReference,
     meeting_date: mappedLead.meetingDate,
     meeting_type: mappedLead.meetingType,
@@ -611,7 +672,10 @@ async function upsertGhlLeadMirror(
   };
   if (existing) {
     await prisma.leadCaptureRecord.update({ where: { id: existing.id }, data });
-    if (existing.lead_status !== mappedLead.leadStatus || existing.lead_temperature !== mappedLead.leadTemperature) {
+    if (
+      existing.lead_status !== mappedLead.leadStatus ||
+      existing.lead_temperature !== mappedLead.leadTemperature
+    ) {
       await prisma.leadLifecycleEvent.create({
         data: {
           tenant_key: tenantKey,
@@ -622,7 +686,11 @@ async function upsertGhlLeadMirror(
           to_temperature: mappedLead.leadTemperature,
           actor_user_id: userId,
           reason: 'GoHighLevel source-of-truth sync',
-          metadata: { provider: 'gohighlevel', contactId: mappedLead.ghlContactId, opportunityId: mappedLead.ghlOpportunityId },
+          metadata: {
+            provider: 'gohighlevel',
+            contactId: mappedLead.ghlContactId,
+            opportunityId: mappedLead.ghlOpportunityId,
+          },
         },
       });
     }
@@ -646,13 +714,20 @@ async function upsertGhlLeadMirror(
       to_temperature: mappedLead.leadTemperature,
       actor_user_id: userId,
       reason: 'GoHighLevel source-of-truth lead imported',
-      metadata: { provider: 'gohighlevel', contactId: mappedLead.ghlContactId, opportunityId: mappedLead.ghlOpportunityId },
+      metadata: {
+        provider: 'gohighlevel',
+        contactId: mappedLead.ghlContactId,
+        opportunityId: mappedLead.ghlOpportunityId,
+      },
     },
   });
 }
 
 async function assertEventOwnedByTenant(tenantKey: string, eventId: string): Promise<void> {
-  const event = await prisma.commercialEvent.findFirst({ where: { id: eventId, tenant_key: tenantKey }, select: { id: true } });
+  const event = await prisma.commercialEvent.findFirst({
+    where: { id: eventId, tenant_key: tenantKey },
+    select: { id: true },
+  });
   if (!event) throw new NotFoundError('CommercialEvent', eventId);
 }
 
@@ -677,10 +752,11 @@ function summarizeProductionMappingStatus(
   blockers: string[],
 ): 'missing' | 'partial' | 'ready' {
   if (blockers.length === 0) return 'ready';
-  const hasAnyMappedData = readiness.location.mapping !== null
-    || readiness.tags.totalCount > 0
-    || readiness.pipelines.totalCount > 0
-    || records.length > 0;
+  const hasAnyMappedData =
+    readiness.location.mapping !== null ||
+    readiness.tags.totalCount > 0 ||
+    readiness.pipelines.totalCount > 0 ||
+    records.length > 0;
   return hasAnyMappedData ? 'partial' : 'missing';
 }
 
@@ -692,13 +768,13 @@ function productionMappingBlockers(readiness: GhlMappingReadinessShape): string[
 
   const pipelineTargets = new Set(
     readiness.pipelines.items
-      .filter(item => item.status === 'mapped')
-      .map(item => String(item.internalStage)),
+      .filter((item) => item.status === 'mapped')
+      .map((item) => String(item.internalStage)),
   );
   const temperatureTargets = new Set(
     readiness.tags.items
-      .filter(item => item.status === 'mapped')
-      .map(item => String(item.internalTag)),
+      .filter((item) => item.status === 'mapped')
+      .map((item) => String(item.internalTag)),
   );
 
   for (const [key, label] of REQUIRED_PIPELINE_OUTCOMES) {
@@ -731,21 +807,50 @@ function emptyPull(): GhlPullResult {
 function filterPullByAttribution(
   pull: GhlPullResult,
   mapping: GhlPlanAttributionMapping | null,
-): { contacts: GhlPullResult['contacts']; warnings: string[] } {
-  if (!mapping) return { contacts: pull.contacts, warnings: [] };
+): {
+  contacts: GhlPullResult['contacts'];
+  warnings: string[];
+  selectedOpportunityIds: Map<string, string>;
+} {
+  if (!mapping) {
+    return {
+      contacts: pull.contacts,
+      warnings: [],
+      selectedOpportunityIds: new Map(
+        pull.contacts.flatMap((contact) => {
+          const opportunity = pull.opportunities.find((item) => item.contactId === contact.id);
+          return opportunity ? [[contact.id, opportunity.id] as const] : [];
+        }),
+      ),
+    };
+  }
   const missingCustomFields = new Set<string>();
+  const selectedOpportunityIds = new Map<string, string>();
   const contacts = pull.contacts.filter((contact) => {
-    const evaluation = evaluateGhlAttribution(mapping, {
-      pipelineIds: pull.opportunities
-        .filter((opportunity) => opportunity.contactId === contact.id)
-        .map((opportunity) => opportunity.pipelineId || '')
-        .filter(Boolean),
-      tags: contact.tags,
-      source: contact.source ?? null,
-      customFields: contact.customFields ?? {},
-    });
-    evaluation.missingCustomFields.forEach((field) => missingCustomFields.add(field));
-    return evaluation.matched;
+    const opportunities = pull.opportunities.filter(
+      (opportunity) => opportunity.contactId === contact.id,
+    );
+    const candidates = opportunities.length > 0 ? opportunities : [null];
+    const evaluations = candidates.map((opportunity) => ({
+      opportunity,
+      evaluation: evaluateGhlAttribution(mapping, {
+        pipelineIds: opportunity?.pipelineId ? [opportunity.pipelineId] : [],
+        tags: contact.tags,
+        source: contact.source ?? null,
+        customFields: {
+          ...(contact.customFields ?? {}),
+          ...(opportunity?.customFields ?? {}),
+        },
+      }),
+    }));
+    const match = evaluations.find((item) => item.evaluation.matched);
+    if (match?.opportunity) selectedOpportunityIds.set(contact.id, match.opportunity.id);
+    if (!match) {
+      evaluations.forEach((item) =>
+        item.evaluation.missingCustomFields.forEach((field) => missingCustomFields.add(field)),
+      );
+    }
+    return Boolean(match);
   });
   const warnings: string[] = [];
   const excluded = pull.contacts.length - contacts.length;
@@ -759,7 +864,7 @@ function filterPullByAttribution(
       `GHL did not return configured attribution field(s): ${Array.from(missingCustomFields).sort().join(', ')}.`,
     );
   }
-  return { contacts, warnings };
+  return { contacts, warnings, selectedOpportunityIds };
 }
 
 function applyPaymentEvidence(
@@ -771,11 +876,18 @@ function applyPaymentEvidence(
   const configuredSaleValue = nonNegativeNumber(
     readGhlCustomField(customFields, mapping.sale_value_field),
   );
-  const amountPaid = nonNegativeNumber(
+  const configuredAmountPaid = nonNegativeNumber(
     readGhlCustomField(customFields, mapping.payment_amount_field),
   );
+  const amountPaid =
+    mappedLead.leadStatus === 'purchased' && configuredAmountPaid === 0
+      ? null
+      : configuredAmountPaid;
   const ticketQuantity = positiveInteger(
     readGhlCustomField(customFields, mapping.ticket_quantity_field),
+  );
+  const paymentDate = paymentEvidenceDate(
+    readGhlCustomField(customFields, mapping.payment_date_field),
   );
   const saleValue = configuredSaleValue ?? mappedLead.saleValue;
   const explicitPaymentStatus = normalizePaymentStatus(
@@ -790,15 +902,33 @@ function applyPaymentEvidence(
           ? 'partial'
           : 'unknown'
       : 'unknown');
-  return {
+  const enriched = {
     ...mappedLead,
+    purchaseAmount: amountPaid,
     saleValue,
     amountPaid,
     outstandingBalance:
       saleValue !== null && amountPaid !== null ? Math.max(0, saleValue - amountPaid) : null,
     ticketQuantity,
+    paymentDate,
     paymentStatus,
     paymentSource: mappedLead.leadStatus === 'purchased' ? 'gohighlevel' : null,
+  };
+  return {
+    ...enriched,
+    syncFingerprint: createHash('sha256')
+      .update(
+        JSON.stringify({
+          base: mappedLead.syncFingerprint,
+          saleValue,
+          amountPaid,
+          outstandingBalance: enriched.outstandingBalance,
+          ticketQuantity,
+          paymentDate: paymentDate?.toISOString() ?? null,
+          paymentStatus,
+        }),
+      )
+      .digest('hex'),
   };
 }
 
@@ -813,10 +943,18 @@ function positiveInteger(value: unknown): number | null {
   return parsed !== null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function normalizePaymentStatus(
-  value: unknown,
-): GhlMappedLead['paymentStatus'] | null {
-  const normalized = String(value ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+function paymentEvidenceDate(value: unknown): Date | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizePaymentStatus(value: unknown): GhlMappedLead['paymentStatus'] | null {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
   if (['partial', 'partially_paid', 'deposit_paid'].includes(normalized)) return 'partial';
   if (['paid', 'paid_in_full', 'fully_paid', 'complete'].includes(normalized)) {
     return 'paid_in_full';
@@ -839,10 +977,19 @@ function unresolvedPaymentWarnings(mapping: GhlPlanAttributionMapping | null): s
       'Customer ticket quantity field is not defined; imported ticket quantity remains unknown.',
     );
   }
+  if (!mapping.payment_date_field) {
+    warnings.push(
+      'Customer payment date field is not defined; imported payment date remains unknown.',
+    );
+  }
   return warnings;
 }
 
-function outboundTagsForLead(status: string, temperature: string, mappings: Array<{ field_mappings: unknown; validation_status: string }>): string[] {
+function outboundTagsForLead(
+  status: string,
+  temperature: string,
+  mappings: Array<{ field_mappings: unknown; validation_status: string }>,
+): string[] {
   const tags = new Set<string>();
   for (const mapping of mappings) {
     if (mapping.validation_status !== 'valid') continue;

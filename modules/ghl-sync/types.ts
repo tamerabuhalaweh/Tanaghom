@@ -1,10 +1,27 @@
 import { z } from 'zod';
-import { LEAD_STATUSES, LEAD_TEMPERATURES, type LeadStatus, type LeadTemperature } from '../lead-lifecycle/types';
+import {
+  LEAD_STATUSES,
+  LEAD_TEMPERATURES,
+  type LeadStatus,
+  type LeadTemperature,
+} from '../lead-lifecycle/types';
 
-export const GHL_SYNC_MODES = ['pull_preview', 'pull_sync', 'write_back_preview', 'write_back'] as const;
+export const GHL_SYNC_MODES = [
+  'pull_preview',
+  'pull_sync',
+  'write_back_preview',
+  'write_back',
+] as const;
 export type GhlSyncMode = (typeof GHL_SYNC_MODES)[number];
 
-export const GHL_SYNC_STATUSES = ['requires_credentials', 'mapping_required', 'blocked', 'previewed', 'synced', 'failed'] as const;
+export const GHL_SYNC_STATUSES = [
+  'requires_credentials',
+  'mapping_required',
+  'blocked',
+  'previewed',
+  'synced',
+  'failed',
+] as const;
 export type GhlSyncStatus = (typeof GHL_SYNC_STATUSES)[number];
 
 export const ghlPullSchema = z.object({
@@ -40,6 +57,7 @@ export interface GhlOpportunity {
   monetaryValue?: number | null;
   name?: string | null;
   updatedAt?: string | null;
+  customFields?: Record<string, unknown>;
 }
 
 export interface GhlAppointment {
@@ -85,6 +103,7 @@ export interface GhlMappedLead {
   amountPaid: number | null;
   outstandingBalance: number | null;
   ticketQuantity: number | null;
+  paymentDate: Date | null;
   paymentStatus: 'unknown' | 'partial' | 'paid_in_full' | 'refunded' | 'cancelled';
   paymentSource: string | null;
   purchaseReference: string | null;
@@ -128,7 +147,12 @@ export interface GhlSyncStatusSummary {
   readSyncEnabled: boolean;
   writeBackEnabled: boolean;
   acceptance: {
-    status: 'requires_credentials' | 'requires_mapping' | 'blocked_by_environment' | 'ready_for_read_sync' | 'synced';
+    status:
+      | 'requires_credentials'
+      | 'requires_mapping'
+      | 'blocked_by_environment'
+      | 'ready_for_read_sync'
+      | 'synced';
     readyForReadSync: boolean;
     customerAction: string;
     systemAction: string;

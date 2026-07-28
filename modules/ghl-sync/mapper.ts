@@ -16,7 +16,9 @@ type MappingRecord = {
 };
 
 function normalize(value: unknown): string {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '')
+    .trim()
+    .toLowerCase();
 }
 
 function truthyString(value: unknown): string | null {
@@ -33,7 +35,12 @@ export function buildGhlMappingSet(records: MappingRecord[]): GhlMappingSet {
 
   for (const record of records) {
     if (record.validation_status !== 'valid') continue;
-    if (!record.field_mappings || typeof record.field_mappings !== 'object' || Array.isArray(record.field_mappings)) continue;
+    if (
+      !record.field_mappings ||
+      typeof record.field_mappings !== 'object' ||
+      Array.isArray(record.field_mappings)
+    )
+      continue;
     const fields = record.field_mappings as Record<string, unknown>;
     const mappingType = String(fields.mappingType || '');
 
@@ -81,18 +88,26 @@ function parseDate(value: unknown): Date | null {
 
 function selectPrimaryAppointment(appointments: GhlAppointment[]): GhlAppointment | null {
   if (!appointments.length) return null;
-  return [...appointments].sort((a, b) => {
-    const aTime = parseDate(a.startTime)?.getTime() ?? 0;
-    const bTime = parseDate(b.startTime)?.getTime() ?? 0;
-    return bTime - aTime;
-  })[0] || null;
+  return (
+    [...appointments].sort((a, b) => {
+      const aTime = parseDate(a.startTime)?.getTime() ?? 0;
+      const bTime = parseDate(b.startTime)?.getTime() ?? 0;
+      return bTime - aTime;
+    })[0] || null
+  );
 }
 
 function appointmentOutcome(status: string): 'booked' | 'attended' | 'no_show' | null {
   const normalized = normalize(status).replace(/[\s-]+/g, '_');
   if (!normalized) return 'booked';
   if (normalized.includes('no_show') || normalized.includes('noshow')) return 'no_show';
-  if (normalized.includes('attended') || normalized.includes('showed') || normalized.includes('completed') || normalized.includes('complete')) return 'attended';
+  if (
+    normalized.includes('attended') ||
+    normalized.includes('showed') ||
+    normalized.includes('completed') ||
+    normalized.includes('complete')
+  )
+    return 'attended';
   if (normalized.includes('cancel')) return null;
   return 'booked';
 }
@@ -101,12 +116,20 @@ function applyAppointmentStatus(
   currentStatus: LeadStatus,
   currentTemperature: LeadTemperature,
   appointment: GhlAppointment | null,
-): { status: LeadStatus; temperature: LeadTemperature; meetingOutcome: string | null; meetingDate: Date | null; meetingType: string | null } {
+): {
+  status: LeadStatus;
+  temperature: LeadTemperature;
+  meetingOutcome: string | null;
+  meetingDate: Date | null;
+  meetingType: string | null;
+} {
   if (!appointment || currentStatus === 'purchased' || currentStatus === 'lost') {
     return {
       status: currentStatus,
       temperature: currentTemperature,
-      meetingOutcome: ['meeting_attended', 'no_show'].includes(currentStatus) ? currentStatus : null,
+      meetingOutcome: ['meeting_attended', 'no_show'].includes(currentStatus)
+        ? currentStatus
+        : null,
       meetingDate: appointment ? parseDate(appointment.startTime) : null,
       meetingType: truthyString(appointment?.title),
     };
@@ -116,26 +139,64 @@ function applyAppointmentStatus(
   const meetingDate = parseDate(appointment.startTime);
   const meetingType = truthyString(appointment.title) || truthyString(appointment.calendarId);
   if (outcome === 'no_show') {
-    return { status: 'no_show', temperature: currentTemperature === 'cold' ? 'warm' : currentTemperature, meetingOutcome: 'no_show', meetingDate, meetingType };
+    return {
+      status: 'no_show',
+      temperature: currentTemperature === 'cold' ? 'warm' : currentTemperature,
+      meetingOutcome: 'no_show',
+      meetingDate,
+      meetingType,
+    };
   }
   if (outcome === 'attended') {
-    return { status: 'meeting_attended', temperature: currentTemperature === 'cold' ? 'hot' : currentTemperature, meetingOutcome: 'meeting_attended', meetingDate, meetingType };
+    return {
+      status: 'meeting_attended',
+      temperature: currentTemperature === 'cold' ? 'hot' : currentTemperature,
+      meetingOutcome: 'meeting_attended',
+      meetingDate,
+      meetingType,
+    };
   }
-  if (outcome === 'booked' && ['new_lead', 'qualified', 'contacted', 'follow_up_needed'].includes(currentStatus)) {
-    return { status: 'meeting_booked', temperature: currentTemperature === 'cold' ? 'warm' : currentTemperature, meetingOutcome: null, meetingDate, meetingType };
+  if (
+    outcome === 'booked' &&
+    ['new_lead', 'qualified', 'contacted', 'follow_up_needed'].includes(currentStatus)
+  ) {
+    return {
+      status: 'meeting_booked',
+      temperature: currentTemperature === 'cold' ? 'warm' : currentTemperature,
+      meetingOutcome: null,
+      meetingDate,
+      meetingType,
+    };
   }
-  return { status: currentStatus, temperature: currentTemperature, meetingOutcome: ['meeting_attended', 'no_show'].includes(currentStatus) ? currentStatus : null, meetingDate, meetingType };
+  return {
+    status: currentStatus,
+    temperature: currentTemperature,
+    meetingOutcome: ['meeting_attended', 'no_show'].includes(currentStatus) ? currentStatus : null,
+    meetingDate,
+    meetingType,
+  };
 }
 
-export function mapGhlLead(contact: GhlContact, opportunities: GhlOpportunity[], appointments: GhlAppointment[], mappings: GhlMappingSet): GhlMappedLead {
-  const contactTags = contact.tags.map(tag => String(tag).trim()).filter(Boolean);
+export function mapGhlLead(
+  contact: GhlContact,
+  opportunities: GhlOpportunity[],
+  appointments: GhlAppointment[],
+  mappings: GhlMappingSet,
+): GhlMappedLead {
+  const contactTags = contact.tags.map((tag) => String(tag).trim()).filter(Boolean);
   const normalizedTags = contactTags.map(normalize);
-  const primaryOpportunity = opportunities.find(opp => opp.contactId === contact.id) || null;
-  const primaryAppointment = selectPrimaryAppointment(appointments.filter(appointment => appointment.contactId === contact.id));
+  const primaryOpportunity = opportunities.find((opp) => opp.contactId === contact.id) || null;
+  const primaryAppointment = selectPrimaryAppointment(
+    appointments.filter((appointment) => appointment.contactId === contact.id),
+  );
   const stageKeys = [
     primaryOpportunity?.stageId,
-    primaryOpportunity?.pipelineId ? `${primaryOpportunity.pipelineId}:${primaryOpportunity.stageId || ''}` : '',
-  ].map(normalize).filter(Boolean);
+    primaryOpportunity?.pipelineId
+      ? `${primaryOpportunity.pipelineId}:${primaryOpportunity.stageId || ''}`
+      : '',
+  ]
+    .map(normalize)
+    .filter(Boolean);
 
   let leadStatus: LeadStatus = 'new_lead';
   let leadTemperature: LeadTemperature = 'cold';
@@ -153,7 +214,11 @@ export function mapGhlLead(contact: GhlContact, opportunities: GhlOpportunity[],
   }
 
   const opportunityStatus = normalize(primaryOpportunity?.status);
-  if (opportunityStatus === 'won' || opportunityStatus === 'closed_won' || opportunityStatus === 'purchased') {
+  if (
+    opportunityStatus === 'won' ||
+    opportunityStatus === 'closed_won' ||
+    opportunityStatus === 'purchased'
+  ) {
     leadStatus = 'purchased';
     leadTemperature = 'buyer';
   } else if (opportunityStatus === 'lost' || opportunityStatus === 'closed_lost') {
@@ -170,27 +235,36 @@ export function mapGhlLead(contact: GhlContact, opportunities: GhlOpportunity[],
   leadStatus = appointmentState.status;
   leadTemperature = leadStatus === 'purchased' ? 'buyer' : appointmentState.temperature;
 
-  const name = truthyString(contact.name)
-    || [contact.firstName, contact.lastName].map(value => String(value || '').trim()).filter(Boolean).join(' ')
-    || null;
-  const purchaseAmount = leadStatus === 'purchased' && primaryOpportunity?.monetaryValue != null
-    ? Number(primaryOpportunity.monetaryValue)
-    : null;
+  const name =
+    truthyString(contact.name) ||
+    [contact.firstName, contact.lastName]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .join(' ') ||
+    null;
+  const saleValue =
+    leadStatus === 'purchased' && primaryOpportunity?.monetaryValue != null
+      ? Number(primaryOpportunity.monetaryValue)
+      : null;
 
-  const fingerprint = createHash('sha256').update(JSON.stringify({
-    contactId: contact.id,
-    opportunityId: primaryOpportunity?.id || null,
-    email: contact.email || null,
-    phone: contact.phone || null,
-    tags: contactTags,
-    status: leadStatus,
-    temperature: leadTemperature,
-    stageId: primaryOpportunity?.stageId || null,
-    appointmentId: primaryAppointment?.id || null,
-    appointmentStatus: primaryAppointment?.status || null,
-    appointmentStart: primaryAppointment?.startTime || null,
-    value: purchaseAmount,
-  })).digest('hex');
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify({
+        contactId: contact.id,
+        opportunityId: primaryOpportunity?.id || null,
+        email: contact.email || null,
+        phone: contact.phone || null,
+        tags: contactTags,
+        status: leadStatus,
+        temperature: leadTemperature,
+        stageId: primaryOpportunity?.stageId || null,
+        appointmentId: primaryAppointment?.id || null,
+        appointmentStatus: primaryAppointment?.status || null,
+        appointmentStart: primaryAppointment?.startTime || null,
+        saleValue,
+      }),
+    )
+    .digest('hex');
 
   return {
     ghlContactId: contact.id,
@@ -204,11 +278,12 @@ export function mapGhlLead(contact: GhlContact, opportunities: GhlOpportunity[],
     pipelineId: truthyString(primaryOpportunity?.pipelineId),
     stageId: truthyString(primaryOpportunity?.stageId),
     tags: contactTags,
-    purchaseAmount,
-    saleValue: purchaseAmount,
+    purchaseAmount: null,
+    saleValue,
     amountPaid: null,
     outstandingBalance: null,
     ticketQuantity: null,
+    paymentDate: null,
     paymentStatus: 'unknown',
     paymentSource: leadStatus === 'purchased' ? 'gohighlevel' : null,
     purchaseReference: primaryOpportunity?.id || null,
@@ -220,13 +295,20 @@ export function mapGhlLead(contact: GhlContact, opportunities: GhlOpportunity[],
 }
 
 export function countMappedTags(contact: GhlContact, mappings: GhlMappingSet): number {
-  return contact.tags.filter(tag => mappings.mappedTagIds.has(normalize(tag))).length;
+  return contact.tags.filter((tag) => mappings.mappedTagIds.has(normalize(tag))).length;
 }
 
-export function countMappedStages(opportunities: GhlOpportunity[], mappings: GhlMappingSet): number {
-  return opportunities.filter(opp => {
+export function countMappedStages(
+  opportunities: GhlOpportunity[],
+  mappings: GhlMappingSet,
+): number {
+  return opportunities.filter((opp) => {
     const stageId = normalize(opp.stageId);
-    const pipelineStageId = normalize(opp.pipelineId) && stageId ? `${normalize(opp.pipelineId)}:${stageId}` : '';
-    return Boolean((stageId && mappings.mappedStageIds.has(stageId)) || (pipelineStageId && mappings.mappedStageIds.has(pipelineStageId)));
+    const pipelineStageId =
+      normalize(opp.pipelineId) && stageId ? `${normalize(opp.pipelineId)}:${stageId}` : '';
+    return Boolean(
+      (stageId && mappings.mappedStageIds.has(stageId)) ||
+      (pipelineStageId && mappings.mappedStageIds.has(pipelineStageId)),
+    );
   }).length;
 }

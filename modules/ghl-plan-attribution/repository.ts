@@ -60,6 +60,7 @@ export async function createMapping(
         sale_value_field: input.saleValueField ?? null,
         ticket_quantity_field: input.ticketQuantityField ?? null,
         payment_status_field: input.paymentStatusField ?? null,
+        payment_date_field: input.paymentDateField ?? null,
         custom_field_rules: input.customFieldRules as Prisma.InputJsonValue,
         effective_from: input.effectiveFrom ?? null,
         effective_to: input.effectiveTo ?? null,
@@ -101,9 +102,7 @@ export async function updateMapping(
         ...(input.eventId !== undefined ? { event_id: input.eventId } : {}),
         ...(input.locationId !== undefined ? { location_id: input.locationId } : {}),
         ...(input.pipelineId !== undefined ? { pipeline_id: input.pipelineId } : {}),
-        ...(input.identifyingTags !== undefined
-          ? { identifying_tags: input.identifyingTags }
-          : {}),
+        ...(input.identifyingTags !== undefined ? { identifying_tags: input.identifyingTags } : {}),
         ...(input.sourceValues !== undefined ? { source_values: input.sourceValues } : {}),
         ...(input.matchMode !== undefined ? { match_mode: input.matchMode } : {}),
         ...(input.paymentAmountField !== undefined
@@ -115,6 +114,9 @@ export async function updateMapping(
           : {}),
         ...(input.paymentStatusField !== undefined
           ? { payment_status_field: input.paymentStatusField }
+          : {}),
+        ...(input.paymentDateField !== undefined
+          ? { payment_date_field: input.paymentDateField }
           : {}),
         ...(input.customFieldRules !== undefined
           ? { custom_field_rules: input.customFieldRules as Prisma.InputJsonValue }
@@ -146,12 +148,18 @@ function assertEffectiveIdentityRules(
   const pipelineId = input.pipelineId === undefined ? existing.pipeline_id : input.pipelineId;
   const identifyingTags =
     input.identifyingTags === undefined ? existing.identifying_tags : input.identifyingTags;
-  const sourceValues = input.sourceValues === undefined ? existing.source_values : input.sourceValues;
+  const sourceValues =
+    input.sourceValues === undefined ? existing.source_values : input.sourceValues;
   const customFieldRules =
     input.customFieldRules === undefined
       ? parseRules(existing.custom_field_rules)
       : input.customFieldRules;
-  if (!pipelineId && identifyingTags.length === 0 && sourceValues.length === 0 && customFieldRules.length === 0) {
+  if (
+    !pipelineId &&
+    identifyingTags.length === 0 &&
+    sourceValues.length === 0 &&
+    customFieldRules.length === 0
+  ) {
     throw new ValidationError(
       'Define at least one pipeline, tag, source, or custom-field attribution rule',
     );
@@ -318,7 +326,13 @@ function parseRules(value: Prisma.JsonValue | null): Array<{
 }> {
   if (!Array.isArray(value)) return [];
   return value.filter(
-    (rule): rule is { field: string; operator: 'equals' | 'contains' | 'exists'; value?: string | null } =>
+    (
+      rule,
+    ): rule is {
+      field: string;
+      operator: 'equals' | 'contains' | 'exists';
+      value?: string | null;
+    } =>
       typeof rule === 'object' &&
       rule !== null &&
       'field' in rule &&
@@ -344,6 +358,7 @@ function serialize(record: Record<string, unknown>) {
     saleValueField: record.sale_value_field,
     ticketQuantityField: record.ticket_quantity_field,
     paymentStatusField: record.payment_status_field,
+    paymentDateField: record.payment_date_field,
     customFieldRules: record.custom_field_rules,
     effectiveFrom: record.effective_from,
     effectiveTo: record.effective_to,

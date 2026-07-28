@@ -156,10 +156,10 @@ export interface StitchiReadOnlyContext {
       stage: string;
       revenueLine: string;
       status: string;
-        budgetTarget: number | null;
-        revenueTarget: number | null;
-        currency: string;
-        linkedEventId: string | null;
+      budgetTarget: number | null;
+      revenueTarget: number | null;
+      currency: string;
+      linkedEventId: string | null;
     }>;
   };
   annualPlanning: {
@@ -287,117 +287,131 @@ export async function loadReadOnlyContext(
       findUnique(args: unknown): Promise<{ default_currency?: unknown } | null>;
     };
     commercialRevenueLine?: {
-      findMany(args: unknown): Promise<Array<{
-        id: string;
-        revenue_line_type: unknown;
-        name: string;
-        status: unknown;
-        _count?: { plans?: number; assessment_signals?: number };
-      }>>;
+      findMany(args: unknown): Promise<
+        Array<{
+          id: string;
+          revenue_line_type: unknown;
+          name: string;
+          status: unknown;
+          _count?: { plans?: number; assessment_signals?: number };
+        }>
+      >;
     };
     commercialPlan?: {
-      findMany(args: unknown): Promise<Array<{
-        title: string;
-        stage: unknown;
-        status: unknown;
-        id: string;
-        budget_target: unknown;
-        revenue_target: unknown;
-        currency?: unknown;
-        linked_event_id: string | null;
-        revenue_line: { name: string };
-        hierarchy_assignment?: { id: string } | null;
-      }>>;
+      findMany(args: unknown): Promise<
+        Array<{
+          title: string;
+          stage: unknown;
+          status: unknown;
+          id: string;
+          budget_target: unknown;
+          revenue_target: unknown;
+          currency?: unknown;
+          linked_event_id: string | null;
+          revenue_line: { name: string };
+          hierarchy_assignment?: { id: string } | null;
+        }>
+      >;
     };
     commercialPlanHierarchyAssignment?: {
-      findMany(args: unknown): Promise<Array<{
-        commercial_plan_id: string;
-        annual_plan_id: string;
-        monthly_portfolio_item_id: string;
-        commercial_plan: {
-          title: string;
-          _count?: { event_links?: number; campaign_links?: number };
-        };
-        annual_plan: { title: string; year: number };
-        monthly_item: { title: string; month: number };
-      }>>;
+      findMany(args: unknown): Promise<
+        Array<{
+          commercial_plan_id: string;
+          annual_plan_id: string;
+          monthly_portfolio_item_id: string;
+          commercial_plan: {
+            title: string;
+            _count?: { event_links?: number; campaign_links?: number };
+          };
+          annual_plan: { title: string; year: number };
+          monthly_item: { title: string; month: number };
+        }>
+      >;
     };
     commercialAssessmentSignal?: {
       findMany(args: unknown): Promise<Array<{ id: string }>>;
     };
     commercialExecutiveReport?: {
-      findMany(args: unknown): Promise<Array<{
-        title: string;
-        status: unknown;
-        confidence: string;
-        created_at: Date;
-      }>>;
+      findMany(args: unknown): Promise<
+        Array<{
+          title: string;
+          status: unknown;
+          confidence: string;
+          created_at: Date;
+        }>
+      >;
     };
     commercialExecutiveReportSchedule?: {
       findMany(args: unknown): Promise<Array<{ id: string }>>;
     };
     commercialHistoricalAssessmentRun?: {
-      findMany(args: unknown): Promise<Array<{
-        id: string;
-        title: string;
-        status: unknown;
-        date_from: Date;
-        date_to: Date;
-        missing_data: unknown;
-        created_at: Date;
-        _count?: { evidence?: number };
-        findings: Array<{
+      findMany(args: unknown): Promise<
+        Array<{
           id: string;
-          finding_type: unknown;
           title: string;
-          summary: string;
-          recommendation: string;
-          confidence: unknown;
-          evidence_ids: string[];
-        }>;
-      }>>;
+          status: unknown;
+          date_from: Date;
+          date_to: Date;
+          missing_data: unknown;
+          created_at: Date;
+          _count?: { evidence?: number };
+          findings: Array<{
+            id: string;
+            finding_type: unknown;
+            title: string;
+            summary: string;
+            recommendation: string;
+            confidence: unknown;
+            evidence_ids: string[];
+          }>;
+        }>
+      >;
     };
     commercialLearningSet?: {
-      findMany(args: unknown): Promise<Array<{
-        id: string;
-        title: string;
-        findings: Array<{
+      findMany(args: unknown): Promise<
+        Array<{
           id: string;
-          finding_type: unknown;
           title: string;
-          recommendation: string;
-          confidence: unknown;
-          evidence_ids: string[];
-        }>;
-      }>>;
+          findings: Array<{
+            id: string;
+            finding_type: unknown;
+            title: string;
+            recommendation: string;
+            confidence: unknown;
+            evidence_ids: string[];
+          }>;
+        }>
+      >;
     };
     annualCommercialPlan?: {
-      findMany(args: unknown): Promise<Array<{
-        id: string;
-        year: number;
-        title: string;
-        revision: number;
-        status: unknown;
-        currency: unknown;
-        budget_target: unknown;
-        revenue_target: unknown;
-        items: Array<{
+      findMany(args: unknown): Promise<
+        Array<{
           id: string;
-          month: number;
+          year: number;
           title: string;
-          revenue_line_id: string;
-          commercial_plan_id: string | null;
-          event_id: string | null;
+          revision: number;
+          status: unknown;
           currency: unknown;
-          budget_allocation: unknown;
+          budget_target: unknown;
           revenue_target: unknown;
-          priority: unknown;
-          readiness: unknown;
-          planned_start_date: Date | null;
-          planned_end_date: Date | null;
-          revenue_line: { name: string };
-        }>;
-      }>>;
+          items: Array<{
+            id: string;
+            month: number;
+            title: string;
+            revenue_line_id: string;
+            commercial_plan_id: string | null;
+            event_id: string | null;
+            currency: unknown;
+            budget_allocation: unknown;
+            revenue_target: unknown;
+            priority: unknown;
+            readiness: unknown;
+            planned_start_date: Date | null;
+            planned_end_date: Date | null;
+            revenue_line: { name: string };
+          }>;
+        }>
+      >;
     };
   };
 
@@ -462,9 +476,9 @@ export async function loadReadOnlyContext(
     }),
     eventId
       ? prisma.commercialEvent.findFirst({
-        where: { id: eventId, tenant_key: tenantKey },
-        select: eventSelect,
-      })
+          where: { id: eventId, tenant_key: tenantKey },
+          select: eventSelect,
+        })
       : Promise.resolve(null),
     prisma.commercialEvent.findMany({
       where: { tenant_key: tenantKey },
@@ -499,7 +513,11 @@ export async function loadReadOnlyContext(
       take: 500,
     }),
     prisma.eventProblem.findMany({
-      where: { tenant_key: tenantKey, ...(eventId ? { event_id: eventId } : {}), status: { in: ['open', 'investigating'] } },
+      where: {
+        tenant_key: tenantKey,
+        ...(eventId ? { event_id: eventId } : {}),
+        status: { in: ['open', 'investigating'] },
+      },
       select: {
         title: true,
         severity: true,
@@ -614,7 +632,14 @@ export async function loadReadOnlyContext(
         title: true,
         findings: {
           where: { decision: 'approved' },
-          select: { id: true, finding_type: true, title: true, recommendation: true, confidence: true, evidence_ids: true },
+          select: {
+            id: true,
+            finding_type: true,
+            title: true,
+            recommendation: true,
+            confidence: true,
+            evidence_ids: true,
+          },
           take: 12,
         },
       },
@@ -656,7 +681,8 @@ export async function loadReadOnlyContext(
       orderBy: [{ year: 'desc' }, { scenario_version: 'desc' }],
       take: 3,
     }) ?? Promise.resolve([]),
-    commercialClients.commercialPlanHierarchyAssignment?.findMany(hierarchyAssignmentQuery) ?? Promise.resolve([]),
+    commercialClients.commercialPlanHierarchyAssignment?.findMany(hierarchyAssignmentQuery) ??
+      Promise.resolve([]),
   ]);
   const governedPerformance =
     eventId && selectedEvent
@@ -677,7 +703,9 @@ export async function loadReadOnlyContext(
       eventId: conversation.eventId,
     },
     selectedEvent: selectedEvent ? mapEvent(selectedEvent) : null,
-    recentEvents: recentEvents.filter(event => isCustomerVisibleRecordName(event.name)).map(mapEvent),
+    recentEvents: recentEvents
+      .filter((event) => isCustomerVisibleRecordName(event.name))
+      .map(mapEvent),
     leadSummary: summarizeLeads(leads),
     kpiSummary: summarizeKpis(kpis),
     governedPerformance,
@@ -687,10 +715,11 @@ export async function loadReadOnlyContext(
     ghlCrm,
     commercialCenter: {
       defaultCurrency: String(tenantSettings?.default_currency) === 'USD' ? 'USD' : 'AED',
-      configuredRevenueLines: revenueLines.filter(line => String(line.status) === 'active').length,
-      activePlans: commercialPlans.filter(plan => String(plan.status) === 'active').length,
+      configuredRevenueLines: revenueLines.filter((line) => String(line.status) === 'active')
+        .length,
+      activePlans: commercialPlans.filter((plan) => String(plan.status) === 'active').length,
       openAssessmentSignals: assessmentSignals.length,
-      revenueLines: revenueLines.map(line => ({
+      revenueLines: revenueLines.map((line) => ({
         id: line.id,
         type: String(line.revenue_line_type),
         name: line.name,
@@ -698,7 +727,7 @@ export async function loadReadOnlyContext(
         planCount: line._count?.plans || 0,
         openSignals: line._count?.assessment_signals || 0,
       })),
-      recentPlans: commercialPlans.map(plan => ({
+      recentPlans: commercialPlans.map((plan) => ({
         id: plan.id,
         title: plan.title,
         stage: String(plan.stage),
@@ -716,13 +745,15 @@ export async function loadReadOnlyContext(
     historicalAssessment: {
       recentRuns: historicalAssessmentRuns.length,
       latestRunId: historicalAssessmentRuns[0]?.id || null,
-      latestRunStatus: historicalAssessmentRuns[0] ? String(historicalAssessmentRuns[0].status) : null,
+      latestRunStatus: historicalAssessmentRuns[0]
+        ? String(historicalAssessmentRuns[0].status)
+        : null,
       latestRunTitle: historicalAssessmentRuns[0]?.title || null,
       latestDateFrom: historicalAssessmentRuns[0]?.date_from || null,
       latestDateTo: historicalAssessmentRuns[0]?.date_to || null,
       latestEvidenceCount: historicalAssessmentRuns[0]?._count?.evidence || 0,
       latestMissingData: historicalAssessmentRuns[0]?.missing_data || [],
-      pendingFindings: (historicalAssessmentRuns[0]?.findings || []).map(finding => ({
+      pendingFindings: (historicalAssessmentRuns[0]?.findings || []).map((finding) => ({
         id: finding.id,
         type: String(finding.finding_type),
         title: finding.title,
@@ -731,16 +762,26 @@ export async function loadReadOnlyContext(
         confidence: decimalToNumber(finding.confidence) || 0,
         evidenceIds: finding.evidence_ids,
       })),
-      approvedLearning: learningSets.flatMap(set => set.findings).slice(0, 12).map(finding => ({
-        id: finding.id,
-        learningSetId: learningSets.find(set => set.findings.some(candidate => candidate.id === finding.id))?.id || '',
-        type: String(finding.finding_type),
-        title: finding.title,
-        recommendation: finding.recommendation,
-        confidence: decimalToNumber(finding.confidence) || 0,
-      })),
+      approvedLearning: learningSets
+        .flatMap((set) => set.findings)
+        .slice(0, 12)
+        .map((finding) => ({
+          id: finding.id,
+          learningSetId:
+            learningSets.find((set) =>
+              set.findings.some((candidate) => candidate.id === finding.id),
+            )?.id || '',
+          type: String(finding.finding_type),
+          title: finding.title,
+          recommendation: finding.recommendation,
+          confidence: decimalToNumber(finding.confidence) || 0,
+        })),
       requiredActions: historicalAssessmentRuns.length
-        ? learningSets.length ? [] : ['Review and approve evidence-backed historical findings before reusing them in future plans.']
+        ? learningSets.length
+          ? []
+          : [
+              'Review and approve evidence-backed historical findings before reusing them in future plans.',
+            ]
         : ['Create a historical assessment before preparing the next commercial plan.'],
     },
     guardrails: {
@@ -781,45 +822,61 @@ function summarizeAnnualPlanning(
   }>,
   learningSets: Array<{ id: string; title: string; findings: unknown[] }>,
 ): StitchiReadOnlyContext['annualPlanning'] {
-  const current = plans.find(plan => ['active', 'approved'].includes(String(plan.status))) || plans[0] || null;
+  const current =
+    plans.find((plan) => ['active', 'approved'].includes(String(plan.status))) || plans[0] || null;
   const currentCurrency = current ? String(current.currency) : 'AED';
-  const currentPlan = current ? {
-    id: current.id,
-    revision: current.revision,
-    year: current.year,
-    title: current.title,
-    status: String(current.status),
-    currency: currentCurrency,
-    budgetTarget: decimalToNumber(current.budget_target) || 0,
-    revenueTarget: decimalToNumber(current.revenue_target) || 0,
-    itemCount: current.items.length,
-    allocatedBudget: current.items
-      .filter(item => String(item.currency) === currentCurrency)
-      .reduce((sum, item) => sum + (decimalToNumber(item.budget_allocation) || 0), 0),
-    monthlyItems: current.items.map(item => ({
-      id: item.id,
-      month: item.month,
-      title: item.title,
-      revenueLineId: item.revenue_line_id,
-      revenueLineName: item.revenue_line.name,
-      commercialPlanId: item.commercial_plan_id,
-      eventId: item.event_id,
-      currency: String(item.currency),
-      budgetAllocation: decimalToNumber(item.budget_allocation) || 0,
-      revenueTarget: decimalToNumber(item.revenue_target) || 0,
-      priority: String(item.priority),
-      readiness: String(item.readiness),
-      plannedStartDate: item.planned_start_date,
-      plannedEndDate: item.planned_end_date,
-    })),
-  } : null;
+  const currentPlan = current
+    ? {
+        id: current.id,
+        revision: current.revision,
+        year: current.year,
+        title: current.title,
+        status: String(current.status),
+        currency: currentCurrency,
+        budgetTarget: decimalToNumber(current.budget_target) || 0,
+        revenueTarget: decimalToNumber(current.revenue_target) || 0,
+        itemCount: current.items.length,
+        allocatedBudget: current.items
+          .filter((item) => String(item.currency) === currentCurrency)
+          .reduce((sum, item) => sum + (decimalToNumber(item.budget_allocation) || 0), 0),
+        monthlyItems: current.items.map((item) => ({
+          id: item.id,
+          month: item.month,
+          title: item.title,
+          revenueLineId: item.revenue_line_id,
+          revenueLineName: item.revenue_line.name,
+          commercialPlanId: item.commercial_plan_id,
+          eventId: item.event_id,
+          currency: String(item.currency),
+          budgetAllocation: decimalToNumber(item.budget_allocation) || 0,
+          revenueTarget: decimalToNumber(item.revenue_target) || 0,
+          priority: String(item.priority),
+          readiness: String(item.readiness),
+          plannedStartDate: item.planned_start_date,
+          plannedEndDate: item.planned_end_date,
+        })),
+      }
+    : null;
   const requiredActions: string[] = [];
-  if (!currentPlan) requiredActions.push('Prepare the next annual commercial strategy and total budget for approval.');
-  else if (!currentPlan.itemCount) requiredActions.push(`Add the monthly products and events that will deliver the ${currentPlan.year} plan.`);
-  if (!learningSets.length) requiredActions.push('Approve historical assessment findings before reusing them in annual planning.');
+  if (!currentPlan)
+    requiredActions.push(
+      'Prepare the next annual commercial strategy and total budget for approval.',
+    );
+  else if (!currentPlan.itemCount)
+    requiredActions.push(
+      `Add the monthly products and events that will deliver the ${currentPlan.year} plan.`,
+    );
+  if (!learningSets.length)
+    requiredActions.push(
+      'Approve historical assessment findings before reusing them in annual planning.',
+    );
   return {
     currentPlan,
-    approvedLearningSets: learningSets.map(set => ({ id: set.id, title: set.title, findingCount: set.findings.length })),
+    approvedLearningSets: learningSets.map((set) => ({
+      id: set.id,
+      title: set.title,
+      findingCount: set.findings.length,
+    })),
     requiredActions,
   };
 }
@@ -843,12 +900,12 @@ function summarizeCommercialHierarchy(
     monthly_item: { title: string; month: number };
   }>,
 ): StitchiReadOnlyContext['commercialHierarchy'] {
-  const linkedPlanIds = new Set(assignments.map(assignment => assignment.commercial_plan_id));
+  const linkedPlanIds = new Set(assignments.map((assignment) => assignment.commercial_plan_id));
   const orphanPlans = plans
-    .filter(plan => !plan.hierarchy_assignment && !linkedPlanIds.has(plan.id))
-    .filter(plan => !['archived', 'superseded'].includes(String(plan.status)))
-    .map(plan => ({ id: plan.id, title: plan.title, status: String(plan.status) }));
-  const linkedPlans = assignments.map(assignment => ({
+    .filter((plan) => !plan.hierarchy_assignment && !linkedPlanIds.has(plan.id))
+    .filter((plan) => !['archived', 'superseded'].includes(String(plan.status)))
+    .map((plan) => ({ id: plan.id, title: plan.title, status: String(plan.status) }));
+  const linkedPlans = assignments.map((assignment) => ({
     commercialPlanId: assignment.commercial_plan_id,
     commercialPlanTitle: assignment.commercial_plan.title,
     annualPlanId: assignment.annual_plan_id,
@@ -862,10 +919,14 @@ function summarizeCommercialHierarchy(
   }));
   const requiredActions: string[] = [];
   if (orphanPlans.length) {
-    requiredActions.push(`${orphanPlans.length} recent execution plan(s) still need an annual and monthly parent.`);
+    requiredActions.push(
+      `${orphanPlans.length} recent execution plan(s) still need an annual and monthly parent.`,
+    );
   }
-  if (linkedPlans.some(plan => plan.linkedEvents + plan.linkedCampaigns === 0)) {
-    requiredActions.push('Connect operating events or campaigns to plans that have no execution work yet.');
+  if (linkedPlans.some((plan) => plan.linkedEvents + plan.linkedCampaigns === 0)) {
+    requiredActions.push(
+      'Connect operating events or campaigns to plans that have no execution work yet.',
+    );
   }
   return { linkedPlans, orphanPlans, requiredActions };
 }
@@ -877,8 +938,14 @@ function summarizeExecutiveReporting(
   const latest = reports[0] || null;
   const requiredActions: string[] = [];
   if (!latest) requiredActions.push('Generate the first CEO commercial report preview.');
-  if (!schedules.length) requiredActions.push('Configure the daily 9 AM executive report workflow for CEO, GM, and CCO.');
-  if (latest && latest.confidence === 'low') requiredActions.push('Improve report confidence by connecting/importing CRM, analytics, and course data.');
+  if (!schedules.length)
+    requiredActions.push(
+      'Configure the daily 9 AM executive report workflow for CEO, GM, and CCO.',
+    );
+  if (latest && latest.confidence === 'low')
+    requiredActions.push(
+      'Improve report confidence by connecting/importing CRM, analytics, and course data.',
+    );
   return {
     recentReports: reports.length,
     activeSchedules: schedules.length,
@@ -920,7 +987,9 @@ async function loadGhlCrmSummary(tenantKey: string, eventId?: string) {
       externalWritesAllowed: false as const,
       mirroredLeadCount: 0,
       lastSyncAt: null,
-      requiredActions: ['GoHighLevel CRM readiness could not be loaded. Ask an admin to check Connector Setup.'],
+      requiredActions: [
+        'GoHighLevel CRM readiness could not be loaded. Ask an admin to check Connector Setup.',
+      ],
       rawSecretsReturned: false as const,
     };
   }
@@ -982,6 +1051,11 @@ async function loadGovernedPerformanceContext(
         'Confirm the GoHighLevel field that stores purchased ticket quantity.',
       );
     }
+    if (!approvedMapping.paymentDateField) {
+      missingCustomerDefinitions.push(
+        'Confirm the GoHighLevel field that stores the payment date.',
+      );
+    }
   }
 
   const effectiveTargets = targets.map((target) => ({
@@ -1002,18 +1076,15 @@ async function loadGovernedPerformanceContext(
     eventCapacity: {
       venueCapacity: capacity.venueCapacity == null ? null : Number(capacity.venueCapacity),
       sellableTicketCapacity:
-        capacity.sellableTicketCapacity == null
-          ? null
-          : Number(capacity.sellableTicketCapacity),
+        capacity.sellableTicketCapacity == null ? null : Number(capacity.sellableTicketCapacity),
       source: capacity.source == null ? null : String(capacity.source),
       confirmedAt: capacity.confirmedAt instanceof Date ? capacity.confirmedAt : null,
       isAbsolute: Boolean(capacity.isAbsolute),
     },
     effectiveTargets,
     inheritedTargets: effectiveTargets.filter((target) => target.appliedAs === 'inherited').length,
-    eventSpecificTargets: effectiveTargets.filter(
-      (target) => target.appliedAs === 'event_specific',
-    ).length,
+    eventSpecificTargets: effectiveTargets.filter((target) => target.appliedAs === 'event_specific')
+      .length,
     dailyEvaluation: {
       onTrack: evaluation.summary.onTrack,
       warning: evaluation.summary.warning,
@@ -1085,7 +1156,9 @@ function isCustomerVisibleRecordName(name: string): boolean {
   return !/\b(sprint\s*\d+|acceptance|smoke test|test tenant|customer review event)\b/i.test(name);
 }
 
-function summarizeLeads(leads: Array<{ lead_status: unknown; lead_temperature: unknown; purchase_amount: unknown }>) {
+function summarizeLeads(
+  leads: Array<{ lead_status: unknown; lead_temperature: unknown; purchase_amount: unknown }>,
+) {
   const byStatus: Record<string, number> = {};
   const byTemperature: Record<string, number> = {};
   let purchases = 0;
@@ -1110,50 +1183,57 @@ function summarizeLeads(leads: Array<{ lead_status: unknown; lead_temperature: u
   };
 }
 
-function summarizeKpis(kpis: Array<{
-  reach: number;
-  impressions: number;
-  interactions: number;
-  clicks: number;
-  form_completions: number;
-  leads: number;
-  meetings_booked: number;
-  meetings_attended: number;
-  purchases: number;
-  no_shows: number;
-  spend: unknown;
-}>) {
-  return kpis.reduce((summary, row) => {
-    summary.records += 1;
-    summary.reach += row.reach;
-    summary.impressions += row.impressions;
-    summary.interactions += row.interactions;
-    summary.clicks += row.clicks;
-    summary.formCompletions += row.form_completions;
-    summary.leads += row.leads;
-    summary.meetingsBooked += row.meetings_booked;
-    summary.meetingsAttended += row.meetings_attended;
-    summary.purchases += row.purchases;
-    summary.noShows += row.no_shows;
-    summary.spend += decimalToNumber(row.spend) || 0;
-    return summary;
-  }, {
-    records: 0,
-    reach: 0,
-    impressions: 0,
-    interactions: 0,
-    clicks: 0,
-    formCompletions: 0,
-    leads: 0,
-    meetingsBooked: 0,
-    meetingsAttended: 0,
-    purchases: 0,
-    noShows: 0,
-    spend: 0,
-  });
+function summarizeKpis(
+  kpis: Array<{
+    reach: number;
+    impressions: number;
+    interactions: number;
+    clicks: number;
+    form_completions: number;
+    leads: number;
+    meetings_booked: number;
+    meetings_attended: number;
+    purchases: number;
+    no_shows: number;
+    spend: unknown;
+  }>,
+) {
+  return kpis.reduce(
+    (summary, row) => {
+      summary.records += 1;
+      summary.reach += row.reach;
+      summary.impressions += row.impressions;
+      summary.interactions += row.interactions;
+      summary.clicks += row.clicks;
+      summary.formCompletions += row.form_completions;
+      summary.leads += row.leads;
+      summary.meetingsBooked += row.meetings_booked;
+      summary.meetingsAttended += row.meetings_attended;
+      summary.purchases += row.purchases;
+      summary.noShows += row.no_shows;
+      summary.spend += decimalToNumber(row.spend) || 0;
+      return summary;
+    },
+    {
+      records: 0,
+      reach: 0,
+      impressions: 0,
+      interactions: 0,
+      clicks: 0,
+      formCompletions: 0,
+      leads: 0,
+      meetingsBooked: 0,
+      meetingsAttended: 0,
+      purchases: 0,
+      noShows: 0,
+      spend: 0,
+    },
+  );
 }
 
-function summarizeProblems(problems: Array<{ title: string; severity: unknown; category: unknown }>) {
+function summarizeProblems(
+  problems: Array<{ title: string; severity: unknown; category: unknown }>,
+) {
   return {
     open: problems.length,
     critical: problems.filter((problem) => String(problem.severity) === 'critical').length,
@@ -1172,29 +1252,48 @@ function summarizeConnectors(
   return {
     configuredCredentials,
     connectorJobs: jobs.length,
-    readyForSync: jobs.filter((job) => String(job.sync_status) === 'ready_for_sync' || String(job.state) === 'test_passed').length,
+    readyForSync: jobs.filter(
+      (job) => String(job.sync_status) === 'ready_for_sync' || String(job.state) === 'test_passed',
+    ).length,
     synced: jobs.filter((job) => String(job.sync_status) === 'synced').length,
-    blocked: jobs.filter((job) => ['blocked', 'failed'].includes(String(job.sync_status)) || String(job.state) === 'blocked').length,
+    blocked: jobs.filter(
+      (job) =>
+        ['blocked', 'failed'].includes(String(job.sync_status)) || String(job.state) === 'blocked',
+    ).length,
   };
 }
 
 function summarizeUnifiedDataLayer(
-  credentials: Array<{ provider: unknown; credential_type: unknown; last_validated_at: Date | null }>,
-  jobs: Array<{ connector_id?: unknown; sync_status: unknown; state: unknown; last_dry_run_at?: Date | null; last_sync_at?: Date | null }>,
+  credentials: Array<{
+    provider: unknown;
+    credential_type: unknown;
+    last_validated_at: Date | null;
+  }>,
+  jobs: Array<{
+    connector_id?: unknown;
+    sync_status: unknown;
+    state: unknown;
+    last_dry_run_at?: Date | null;
+    last_sync_at?: Date | null;
+  }>,
 ): StitchiReadOnlyContext['unifiedDataLayer'] {
   const source = (provider: string): DataSourceContext => {
-    const providerCredentials = credentials.filter(credential => String(credential.provider) === provider);
-    const connectorJobs = jobs.filter(job => String(job.connector_id) === provider);
+    const providerCredentials = credentials.filter(
+      (credential) => String(credential.provider) === provider,
+    );
+    const connectorJobs = jobs.filter((job) => String(job.connector_id) === provider);
     const latestJob = connectorJobs[0] || null;
     const hasCredential = providerCredentials.length > 0;
-    const validated = providerCredentials.some(credential => credential.last_validated_at);
-    const hasDryRun = connectorJobs.some(job => Boolean(job.last_dry_run_at));
-    const synced = connectorJobs.some(job => String(job.sync_status) === 'synced');
+    const validated = providerCredentials.some((credential) => credential.last_validated_at);
+    const hasDryRun = connectorJobs.some((job) => Boolean(job.last_dry_run_at));
+    const synced = connectorJobs.some((job) => String(job.sync_status) === 'synced');
     const requiredActions: string[] = [];
     if (!hasCredential) requiredActions.push(`Save customer-owned ${provider} credentials.`);
     if (hasCredential && !validated) requiredActions.push(`Validate ${provider} read access.`);
-    if (validated && !hasDryRun) requiredActions.push(`Run ${provider} read-only dry-run for this event.`);
-    if (hasDryRun && !synced) requiredActions.push(`Approve ${provider} import after reviewing dry-run rows.`);
+    if (validated && !hasDryRun)
+      requiredActions.push(`Run ${provider} read-only dry-run for this event.`);
+    if (hasDryRun && !synced)
+      requiredActions.push(`Approve ${provider} import after reviewing dry-run rows.`);
     return {
       provider,
       credentialStatus: !hasCredential ? 'missing' : validated ? 'validated' : 'configured',
@@ -1205,37 +1304,59 @@ function summarizeUnifiedDataLayer(
     };
   };
 
-  const ghlCredential = credentials.some(credential => String(credential.provider) === 'gohighlevel');
-  const whatsappCredential = credentials.some(credential => String(credential.provider) === 'whatsapp');
-  const smartLabsCredential = credentials.some(credential => String(credential.provider) === 'smartlabs_voice');
+  const ghlCredential = credentials.some(
+    (credential) => String(credential.provider) === 'gohighlevel',
+  );
+  const whatsappCredential = credentials.some(
+    (credential) => String(credential.provider) === 'whatsapp',
+  );
+  const smartLabsCredential = credentials.some(
+    (credential) => String(credential.provider) === 'smartlabs_voice',
+  );
   return {
     kajabi: source('kajabi'),
-    acquisition: [
-      source('meta_analytics'),
-      source('youtube_analytics'),
-      source('formaloo'),
-    ],
+    acquisition: [source('meta_analytics'), source('youtube_analytics'), source('formaloo')],
     whatsappFollowUp: {
       sourceOfTruth: 'gohighlevel',
       ghlCredentialStatus: ghlCredential ? 'configured' : 'missing',
       whatsappCredentialStatus: whatsappCredential ? 'configured' : 'missing',
       readyForPreparedFollowUp: ghlCredential || whatsappCredential,
-      executionEnabled: process.env.WHATSAPP_LIVE_ENABLED === 'true' && process.env.EXTERNAL_EXECUTION_ENABLED === 'true',
+      executionEnabled:
+        process.env.WHATSAPP_LIVE_ENABLED === 'true' &&
+        process.env.EXTERNAL_EXECUTION_ENABLED === 'true',
       externalWritesAllowed: false,
       requiredActions: [
-        ...(!ghlCredential ? ['Save customer-owned GoHighLevel credentials for CRM-driven WhatsApp follow-up.'] : []),
-        ...(!whatsappCredential ? ['Save WhatsApp credential only if direct WhatsApp Cloud sending is required.'] : []),
-        ...(process.env.WHATSAPP_LIVE_ENABLED === 'true' && process.env.EXTERNAL_EXECUTION_ENABLED === 'true' ? [] : ['External WhatsApp sending remains disabled until customer authorization and policy flags are enabled.']),
+        ...(!ghlCredential
+          ? ['Save customer-owned GoHighLevel credentials for CRM-driven WhatsApp follow-up.']
+          : []),
+        ...(!whatsappCredential
+          ? ['Save WhatsApp credential only if direct WhatsApp Cloud sending is required.']
+          : []),
+        ...(process.env.WHATSAPP_LIVE_ENABLED === 'true' &&
+        process.env.EXTERNAL_EXECUTION_ENABLED === 'true'
+          ? []
+          : [
+              'External WhatsApp sending remains disabled until customer authorization and policy flags are enabled.',
+            ]),
       ],
     },
     smartLabsVoice: {
       credentialStatus: smartLabsCredential ? 'configured' : 'missing',
       readyForHandoffPreview: true,
-      executionEnabled: process.env.SMARTLABS_LIVE_ENABLED === 'true' && process.env.VOICE_CHAT_LIVE_ENABLED === 'true',
+      executionEnabled:
+        process.env.SMARTLABS_LIVE_ENABLED === 'true' &&
+        process.env.VOICE_CHAT_LIVE_ENABLED === 'true',
       externalCallsAllowed: false,
       requiredActions: [
-        ...(!smartLabsCredential ? ['Save customer-owned SmartLabs API key, agent id, and voice settings.'] : []),
-        ...(process.env.SMARTLABS_LIVE_ENABLED === 'true' && process.env.VOICE_CHAT_LIVE_ENABLED === 'true' ? [] : ['SmartLabs live conversation/TTS execution remains disabled until customer authorization and policy flags are enabled.']),
+        ...(!smartLabsCredential
+          ? ['Save customer-owned SmartLabs API key, agent id, and voice settings.']
+          : []),
+        ...(process.env.SMARTLABS_LIVE_ENABLED === 'true' &&
+        process.env.VOICE_CHAT_LIVE_ENABLED === 'true'
+          ? []
+          : [
+              'SmartLabs live conversation/TTS execution remains disabled until customer authorization and policy flags are enabled.',
+            ]),
       ],
     },
   };

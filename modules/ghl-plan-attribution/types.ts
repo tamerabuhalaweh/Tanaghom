@@ -21,6 +21,7 @@ const mappingFieldsSchema = z.object({
   saleValueField: z.string().trim().min(1).max(300).nullable().optional(),
   ticketQuantityField: z.string().trim().min(1).max(300).nullable().optional(),
   paymentStatusField: z.string().trim().min(1).max(300).nullable().optional(),
+  paymentDateField: z.string().trim().min(1).max(300).nullable().optional(),
   customFieldRules: z
     .array(
       z.object({
@@ -87,4 +88,3 @@ export type CreateAttributionMappingInput = z.infer<typeof createAttributionMapp
 export type UpdateAttributionMappingInput = z.infer<typeof updateAttributionMappingSchema>;
 export type ApproveAttributionMappingInput = z.infer<typeof approveAttributionMappingSchema>;
 export type PreviewAttributionMatchInput = z.infer<typeof previewAttributionMatchSchema>;
-
