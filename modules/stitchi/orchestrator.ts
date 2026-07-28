@@ -434,6 +434,7 @@ async function deriveActionProposal(
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
+  if (isReadOnlyInformationRequest(content)) return null;
   const executiveReportProposal = deriveExecutiveReportActionProposal(content);
   if (executiveReportProposal) return executiveReportProposal;
   const historicalAssessmentProposal = await deriveHistoricalAssessmentActionProposal(
@@ -2178,7 +2179,7 @@ function isCommercialCenterRequest(lower: string, metadata?: Record<string, unkn
   ) {
     return true;
   }
-  if (/(commercial plan|revenue line|business line|online course|online courses|course launch|leadership course|book launch|books?|merchandise|merch|b2b|platinum|trainer network|loyalty|community)/i.test(lower)) {
+  if (/(commercial plan|revenue line|business line|online course|online courses|course launch|leadership course|book launch|\bbooks?\b|merchandise|merch|b2b|platinum|trainer network|loyalty|community)/i.test(lower)) {
     return true;
   }
   return /(commercial|three-year|quarterly|department)/i.test(lower) && /(plan|strategy|target|budget|revenue|launch|pipeline|forecast|report|dashboard|assessment|signal|risk|gap)/i.test(lower);
@@ -2564,12 +2565,30 @@ function normalizeForMatch(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function isReadOnlyInformationRequest(content: string): boolean {
+  const lower = content.toLowerCase().trim();
+  const mutationRequested =
+    /\b(create|add|update|change|edit|remove|delete|approve|reject|execute|schedule|publish|send|record|configure|connect|link|assign|save|mark)\b/i.test(
+      lower,
+    );
+  const explicitNoWrite =
+    /\b(?:do not|don't|without)\b[^.!?\n]{0,80}\b(?:change|write|create|update|execute|call|save|modify)\b/i.test(
+      lower,
+    );
+  const informationLead =
+    /^(?:please\s+)?(?:summarize|explain|show|list|report|review|tell me|what|which|who|when|where|why|how many|how much)\b/i.test(
+      lower,
+    );
+
+  return explicitNoWrite || (informationLead && !mutationRequested);
+}
+
 function capitalizeWords(value: string): string {
   return value.replace(/\b[a-z]/g, char => char.toUpperCase());
 }
 
 function inferRevenueLineType(lower: string): CommercialRevenueLineType {
-  if (/(book|books|book launch|reader funnel|publication|author)/i.test(lower)) return 'book';
+  if (/(book launch|reader funnel|\b(?:book|books|publication|author)\b)/i.test(lower)) return 'book';
   if (/(merchandise|merch|product drop|bundle|t-shirt|shirt|hoodie)/i.test(lower)) return 'merchandise';
   if (/(online course|course|ÙƒÙˆØ±Ø³|Ø¯ÙˆØ±Ø©)/i.test(lower)) return 'online_course';
   if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
@@ -2580,7 +2599,7 @@ function inferRevenueLineType(lower: string): CommercialRevenueLineType {
 }
 
 function inferExplicitRevenueLineType(lower: string): ReturnType<typeof inferRevenueLineType> | undefined {
-  if (/(book|books|book launch|reader funnel|publication|author)/i.test(lower)) return 'book';
+  if (/(book launch|reader funnel|\b(?:book|books|publication|author)\b)/i.test(lower)) return 'book';
   if (/(merchandise|merch|product drop|bundle|t-shirt|shirt|hoodie)/i.test(lower)) return 'merchandise';
   if (/(online course|online courses|course|courses|leadership course)/i.test(lower)) return 'online_course';
   if (/(b2b|corporate|company|enterprise|business user)/i.test(lower)) return 'b2b';
