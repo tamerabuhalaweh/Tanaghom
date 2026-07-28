@@ -383,9 +383,13 @@ export async function listEventLeads(tenantKey: string, eventId: string) {
     select: {
       id: true,
       lead_status: true,
+      lead_temperature: true,
       platform: true,
       lead_name_placeholder: true,
       lead_email_placeholder: true,
+      meeting_date: true,
+      meeting_outcome: true,
+      payment_status: true,
       source_of_truth: true,
       external_source_provider: true,
       external_last_synced_at: true,
@@ -398,9 +402,13 @@ export async function listEventLeads(tenantKey: string, eventId: string) {
   return leads.map(lead => ({
     id: lead.id,
     status: lead.lead_status,
+    leadTemperature: lead.lead_temperature,
     platform: lead.platform || 'manual',
     leadName: lead.lead_name_placeholder,
     leadEmail: lead.lead_email_placeholder,
+    meetingDate: lead.meeting_date,
+    meetingOutcome: lead.meeting_outcome,
+    paymentStatus: lead.payment_status,
     sourceOfTruth: lead.source_of_truth,
     externalSourceProvider: lead.external_source_provider,
     externalLastSyncedAt: lead.external_last_synced_at,
@@ -430,12 +438,23 @@ export async function getEventDashboard(tenantKey: string, eventId: string): Pro
   const totals = aggregateRecords(records);
   const verifiedTotals = aggregateRecords(verifiedRecords);
   const capturedLeads = leads.length;
+  const leadOutcomes = summarizeLeadOutcomes(leads);
   const newLeads = Math.max(capturedLeads, totals.leads);
   const actualSpend = verifiedTotals.spend;
   const plannedBudget = event.plannedBudget || 0;
-  const meetingsNotAttended = Math.max(0, totals.meetingsBooked - totals.meetingsAttended);
-  const noShows = Math.max(totals.noShows, meetingsNotAttended);
-  const noShowRate = totals.meetingsBooked > 0 ? percentage(noShows, totals.meetingsBooked) : 0;
+  const meetingsBooked = Math.max(totals.meetingsBooked, leadOutcomes.meetingsBooked);
+  const meetingsAttended = Math.max(totals.meetingsAttended, leadOutcomes.meetingsAttended);
+  const purchases = Math.max(totals.purchases, leadOutcomes.purchases);
+  const meetingsNotAttended = Math.max(0, meetingsBooked - meetingsAttended);
+  const noShows = Math.max(totals.noShows, leadOutcomes.noShows, meetingsNotAttended);
+  const noShowRate = meetingsBooked > 0 ? percentage(noShows, meetingsBooked) : 0;
+  const effectiveTotals = {
+    ...totals,
+    meetingsBooked,
+    meetingsAttended,
+    purchases,
+    noShows,
+  };
 
   const dashboard: EventDashboardSummary = {
     event,
@@ -444,9 +463,9 @@ export async function getEventDashboard(tenantKey: string, eventId: string): Pro
       capturedLeads,
       reportedLeads: totals.leads,
       formCompletions: totals.formCompletions,
-      meetingsBooked: totals.meetingsBooked,
-      meetingsAttended: totals.meetingsAttended,
-      purchases: totals.purchases,
+      meetingsBooked,
+      meetingsAttended,
+      purchases,
       noShows,
       noShowRate,
       plannedBudget,
@@ -458,19 +477,19 @@ export async function getEventDashboard(tenantKey: string, eventId: string): Pro
       clicks: totals.clicks,
       interactionRate: totals.impressions > 0 ? percentage(totals.interactions, totals.impressions) : 0,
       costPerLead: newLeads > 0 ? roundCurrency(actualSpend / newLeads) : 0,
-      costPerPurchase: totals.purchases > 0 ? roundCurrency(actualSpend / totals.purchases) : 0,
+      costPerPurchase: purchases > 0 ? roundCurrency(actualSpend / purchases) : 0,
     },
     funnel: [
       { label: 'Reach', value: totals.reach },
       { label: 'Interactions', value: totals.interactions },
       { label: 'Forms', value: totals.formCompletions },
       { label: 'Leads', value: newLeads },
-      { label: 'Meetings', value: totals.meetingsBooked },
-      { label: 'Purchases', value: totals.purchases },
+      { label: 'Meetings', value: meetingsBooked },
+      { label: 'Purchases', value: purchases },
     ],
     channelPerformance: buildChannelPerformance(records),
-    leadTemperature: buildLeadTemperature(leads, totals.purchases, noShows),
-    nextActions: buildNextActions(event, records, totals, capturedLeads, noShows),
+    leadTemperature: buildLeadTemperature(leads, purchases, noShows),
+    nextActions: buildNextActions(event, records, effectiveTotals, capturedLeads, noShows),
     kpiRecords: records,
     campaigns,
     leads,
@@ -672,13 +691,31 @@ function buildLeadTemperature(
   purchases: number,
   noShows: number,
 ) {
-  const counts = { cold: 0, warm: 0, hot: 0, buyer: purchases, noShow: noShows };
+  const counts = { cold: 0, warm: 0, hot: 0, buyer: 0, noShow: 0 };
   for (const lead of leads) {
-    if (lead.status === 'converted') counts.buyer += 1;
-    else if (lead.status === 'qualified') counts.hot += 1;
-    else if (lead.status === 'contacted' || lead.status === 'nurturing') counts.warm += 1;
+    if (lead.status === 'no_show' || lead.meetingOutcome === 'no_show') {
+      counts.noShow += 1;
+      continue;
+    }
+    if (
+      lead.status === 'purchased' ||
+      lead.status === 'converted' ||
+      lead.leadTemperature === 'buyer'
+    ) {
+      counts.buyer += 1;
+      continue;
+    }
+    if (lead.leadTemperature === 'hot' || lead.status === 'qualified') counts.hot += 1;
+    else if (
+      lead.leadTemperature === 'warm' ||
+      lead.status === 'contacted' ||
+      lead.status === 'nurturing'
+    )
+      counts.warm += 1;
     else counts.cold += 1;
   }
+  counts.buyer = Math.max(counts.buyer, purchases);
+  counts.noShow = Math.max(counts.noShow, noShows);
 
   return [
     { label: 'Cold', value: counts.cold },
@@ -687,6 +724,28 @@ function buildLeadTemperature(
     { label: 'Buyer', value: counts.buyer },
     { label: 'No-show', value: counts.noShow },
   ];
+}
+
+function summarizeLeadOutcomes(leads: EventDashboardSummary['leads']) {
+  return leads.reduce(
+    (summary, lead) => {
+      const meetingOutcome = String(lead.meetingOutcome || '').toLowerCase();
+      const meetingBooked =
+        Boolean(lead.meetingDate) ||
+        ['meeting_booked', 'meeting_attended', 'no_show'].includes(lead.status);
+      if (meetingBooked) summary.meetingsBooked += 1;
+      if (lead.status === 'meeting_attended' || meetingOutcome === 'meeting_attended')
+        summary.meetingsAttended += 1;
+      if (
+        lead.status === 'purchased' ||
+        ['partial', 'paid_in_full'].includes(String(lead.paymentStatus || '').toLowerCase())
+      )
+        summary.purchases += 1;
+      if (lead.status === 'no_show' || meetingOutcome === 'no_show') summary.noShows += 1;
+      return summary;
+    },
+    { meetingsBooked: 0, meetingsAttended: 0, purchases: 0, noShows: 0 },
+  );
 }
 
 function buildNextActions(

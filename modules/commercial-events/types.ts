@@ -260,9 +260,13 @@ export interface EventDashboardSummary {
   leads: Array<{
     id: string;
     status: string;
+    leadTemperature: string;
     platform: string;
     leadName: string | null;
     leadEmail: string | null;
+    meetingDate: Date | null;
+    meetingOutcome: string | null;
+    paymentStatus: string;
     sourceOfTruth: 'tanaghum' | 'gohighlevel';
     externalSourceProvider: string | null;
     externalLastSyncedAt: Date | null;
