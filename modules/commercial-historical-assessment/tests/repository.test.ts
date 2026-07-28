@@ -119,6 +119,7 @@ describe('historical assessment evidence repository', () => {
         ticket_quantity: 2,
         external_last_synced_at: new Date('2025-06-21T00:00:00.000Z'),
         ghl_attribution_mapping_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        meeting_date: new Date('2025-06-20T00:00:00.000Z'),
         meeting_outcome: 'attended',
         created_at: new Date('2025-06-20T00:00:00.000Z'),
       },
@@ -184,6 +185,8 @@ describe('historical assessment evidence repository', () => {
       operatingActuals: {
         currency: 'USD',
         leads: 100,
+        meetingsBooked: 20,
+        meetingsAttended: 15,
         purchases: 10,
         knownSpend: 2500,
         knownRevenue: 3000,
@@ -208,6 +211,67 @@ describe('historical assessment evidence repository', () => {
     expect(storedText).not.toContain('@example');
     expect(storedText).not.toContain('phone');
     expect(storedText).not.toContain('apiKey');
+  });
+
+  it('reconciles GHL-only meeting, no-show, and purchase evidence into operating actuals', () => {
+    const summary = buildEvidenceSummary(
+      [
+        {
+          evidenceType: 'event',
+          sourceObjectType: 'commercial_event',
+          sourceObjectId: 'event-1',
+          sourceName: 'Controlled GHL event',
+          metricKey: 'completed_event_context',
+          metricValue: null,
+          metricUnit: 'AED',
+          observedAt: new Date('2026-07-28T00:00:00.000Z'),
+          payload: { currency: 'AED' },
+        },
+        {
+          evidenceType: 'lead_outcome',
+          sourceObjectType: 'event_lead_outcomes',
+          sourceObjectId: 'event-1',
+          sourceName: 'Controlled GHL event',
+          metricKey: 'lead_funnel_outcomes',
+          metricValue: 400,
+          metricUnit: 'AED',
+          observedAt: new Date('2026-07-28T13:21:06.000Z'),
+          payload: {
+            currency: 'AED',
+            total: 2,
+            byStatus: { no_show: 1, purchased: 1 },
+            meetingsBooked: 1,
+            meetingsAttended: 0,
+            noShows: 1,
+            knownRevenue: 400,
+          },
+        },
+      ],
+      'AED',
+    );
+
+    expect(summary).toMatchObject({
+      operatingActuals: {
+        currency: 'AED',
+        leads: 2,
+        meetingsBooked: 1,
+        meetingsAttended: 0,
+        purchases: 1,
+        noShows: 1,
+        knownRevenue: 400,
+      },
+      eventComparison: [
+        expect.objectContaining({
+          eventId: 'event-1',
+          leads: 2,
+          meetingsBooked: 1,
+          meetingsAttended: 0,
+          purchases: 1,
+          noShows: 1,
+          knownRevenue: 400,
+        }),
+      ],
+    });
   });
 
   it('withholds mixed-currency event money instead of combining or relabeling it', () => {
