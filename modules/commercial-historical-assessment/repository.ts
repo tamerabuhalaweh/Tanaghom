@@ -216,6 +216,7 @@ export async function previewEvidence(
             ticket_quantity: true,
             external_last_synced_at: true,
             ghl_attribution_mapping_id: true,
+            meeting_date: true,
             meeting_outcome: true,
             created_at: true,
           },
@@ -452,6 +453,7 @@ export async function previewEvidence(
       ghlRecordCount: 0,
       attributedGhlRecordCount: 0,
       latestGhlSyncAt: null,
+      meetingsBooked: 0,
       meetingsAttended: 0,
       noShows: 0,
       latestObservedAt: lead.created_at,
@@ -490,11 +492,16 @@ export async function previewEvidence(
       if (
         lead.external_last_synced_at &&
         (!(current.latestGhlSyncAt instanceof Date) ||
-          lead.external_last_synced_at > current.latestGhlSyncAt)
+        lead.external_last_synced_at > current.latestGhlSyncAt)
       ) {
         current.latestGhlSyncAt = lead.external_last_synced_at;
       }
     }
+    if (
+      lead.meeting_date ||
+      ['meeting_booked', 'meeting_attended', 'no_show'].includes(String(lead.lead_status))
+    )
+      current.meetingsBooked = Number(current.meetingsBooked) + 1;
     if (String(lead.meeting_outcome).toLowerCase().includes('attended'))
       current.meetingsAttended = Number(current.meetingsAttended) + 1;
     if (
@@ -947,6 +954,7 @@ export function buildEvidenceSummary(
       knownSpend: number;
       knownRevenue: number;
       meetingsBooked: number;
+      meetingsAttended: number;
       noShows: number;
     }
   >();
@@ -965,6 +973,7 @@ export function buildEvidenceSummary(
       knownSpend: 0,
       knownRevenue: 0,
       meetingsBooked: 0,
+      meetingsAttended: 0,
       noShows: 0,
     };
     eventComparisonById.set(eventId, created);
@@ -1028,6 +1037,7 @@ export function buildEvidenceSummary(
         comparison.purchases += Number(item.payload.purchases || 0);
         if (currency !== 'mixed') comparison.knownSpend += knownSpend;
         comparison.meetingsBooked += Number(item.payload.meetingsBooked || 0);
+        comparison.meetingsAttended += Number(item.payload.meetingsAttended || 0);
         comparison.noShows += Number(item.payload.noShows || 0);
       }
     }
@@ -1050,10 +1060,36 @@ export function buildEvidenceSummary(
           comparison.purchases,
           Number((item.payload.byStatus as Record<string, unknown> | undefined)?.purchased || 0),
         );
+        comparison.meetingsBooked = Math.max(
+          comparison.meetingsBooked,
+          Number(item.payload.meetingsBooked || 0),
+        );
+        comparison.meetingsAttended = Math.max(
+          comparison.meetingsAttended,
+          Number(item.payload.meetingsAttended || 0),
+        );
         comparison.noShows = Math.max(comparison.noShows, Number(item.payload.noShows || 0));
       }
     }
   }
+
+  const completedEventActuals = [...eventComparisonById.values()].filter(item =>
+    eventIds.has(item.eventId),
+  );
+  outcomes.leads = completedEventActuals.reduce((total, item) => total + item.leads, 0);
+  outcomes.meetingsBooked = completedEventActuals.reduce(
+    (total, item) => total + item.meetingsBooked,
+    0,
+  );
+  outcomes.meetingsAttended = completedEventActuals.reduce(
+    (total, item) => total + item.meetingsAttended,
+    0,
+  );
+  outcomes.purchases = completedEventActuals.reduce(
+    (total, item) => total + item.purchases,
+    0,
+  );
+  outcomes.noShows = completedEventActuals.reduce((total, item) => total + item.noShows, 0);
 
   const actualCurrencies = Object.keys(actualsByCurrency);
   const operatingCurrency =
@@ -1081,8 +1117,7 @@ export function buildEvidenceSummary(
       ...outcomes,
       ...(operatingCurrency === 'mixed' ? { knownSpend: 0, knownRevenue: 0 } : {}),
     },
-    eventComparison: [...eventComparisonById.values()]
-      .filter((item) => eventIds.has(item.eventId))
+    eventComparison: completedEventActuals
       .sort((left, right) =>
         String(right.eventDate || '').localeCompare(String(left.eventDate || '')),
       ),
