@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: Boolean(initialToken),
     error: null as string | null,
     mfaEnrollmentRequired: false,
+    mfaChallengeRequired: false,
   });
 
   useEffect(() => {
@@ -62,13 +63,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading: false,
         error: null,
         mfaEnrollmentRequired: data.mfaEnrollmentRequired === true,
+        mfaChallengeRequired: false,
       });
       return true;
     } catch (err) {
-      const message = err instanceof ApiError && err.code === 'MFA_REQUIRED'
+      const requiresMfa = err instanceof ApiError && err.code === 'MFA_REQUIRED';
+      const message = requiresMfa
         ? 'Authenticator or recovery code required'
         : err instanceof Error ? err.message : 'Login failed';
-      setState(s => ({ ...s, loading: false, error: message }));
+      setState(s => ({
+        ...s,
+        loading: false,
+        error: message,
+        mfaChallengeRequired: requiresMfa || s.mfaChallengeRequired,
+      }));
       return false;
     }
   };
@@ -77,7 +85,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('token');
     if (token) void authApi.logout(token).catch(() => undefined);
     localStorage.removeItem('token');
-    setState({ token: null, user: null, agentRep: null, loading: false, error: null, mfaEnrollmentRequired: false });
+    setState({
+      token: null,
+      user: null,
+      agentRep: null,
+      loading: false,
+      error: null,
+      mfaEnrollmentRequired: false,
+      mfaChallengeRequired: false,
+    });
   };
 
   const completeMfaEnrollment = (replacementToken: string) => {
@@ -86,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...s,
       token: replacementToken,
       mfaEnrollmentRequired: false,
+      mfaChallengeRequired: false,
       error: null,
     }));
   };

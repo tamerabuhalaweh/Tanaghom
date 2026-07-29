@@ -7,6 +7,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   mfaEnrollmentRequired: boolean;
+  mfaChallengeRequired: boolean;
 }
 
 export interface AuthContextType extends AuthState {
