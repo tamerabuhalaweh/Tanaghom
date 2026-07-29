@@ -11,7 +11,7 @@ const user = {
 async function installMfaLogin(page: Page, validCode: string) {
   const requests: Array<Record<string, unknown>> = [];
 
-  await page.route(/http:\/\/(127\.0\.0\.1|localhost):4000\/auth\/login/, async route => {
+  await page.route('**/auth/login', async route => {
     const body = route.request().postDataJSON() as Record<string, unknown>;
     requests.push(body);
 
