@@ -1,21 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
-  const { login, loading, error, token } = useAuth()
+  const { login, loading, error, token, mfaChallengeRequired } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mfaCode, setMfaCode] = useState('')
+  const [mfaError, setMfaError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [emailError, setEmailError] = useState('')
-  const mfaPromptVisible = Boolean(error?.toLowerCase().includes('authenticator code'))
+  const mfaInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (token) navigate('/command-center', { replace: true })
   }, [navigate, token])
+
+  useEffect(() => {
+    if (mfaChallengeRequired) mfaInputRef.current?.focus()
+  }, [mfaChallengeRequired])
 
   const validateEmail = (value: string): boolean => {
     if (!value) {
@@ -34,8 +39,13 @@ export default function Login() {
     e.preventDefault()
     const isEmailValid = validateEmail(email)
     if (!isEmailValid || !password) return
-    if (mfaPromptVisible && !/^(\d{6}|[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/i.test(mfaCode.trim())) return
-    await login(email, password, mfaPromptVisible ? mfaCode : undefined)
+    if (mfaChallengeRequired && !/^(\d{6}|[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/i.test(mfaCode.trim())) {
+      setMfaError('Enter a 6-digit authenticator code or a recovery code in the format AB12-CD34-EF56.')
+      mfaInputRef.current?.focus()
+      return
+    }
+    setMfaError('')
+    await login(email, password, mfaChallengeRequired ? mfaCode.trim() : undefined)
   }
 
   return (
@@ -151,21 +161,42 @@ export default function Login() {
                 </div>
               </div>
 
-              {mfaPromptVisible && (
-                <div>
+              {mfaChallengeRequired && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-4">
+                  <div className="mb-3">
+                    <div className="text-sm font-semibold text-blue-950">Verify it is you</div>
+                    <p className="mt-1 text-xs leading-5 text-blue-800">
+                      Enter the current code from your authenticator app. You may use one unused recovery code instead.
+                    </p>
+                  </div>
                   <label htmlFor="mfaCode" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                     Authenticator or recovery code
                   </label>
                   <input
+                    ref={mfaInputRef}
                     id="mfaCode"
                     inputMode="text"
+                    autoComplete="one-time-code"
                     maxLength={14}
                     value={mfaCode}
-                    onChange={e => setMfaCode(e.target.value.toUpperCase().slice(0, 14))}
+                    onChange={e => {
+                      setMfaCode(e.target.value.toUpperCase().slice(0, 14))
+                      if (mfaError) setMfaError('')
+                    }}
                     placeholder="123456 or AB12-CD34-EF56"
                     className="w-full rounded-md border border-black/15 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10"
                     required
+                    aria-invalid={Boolean(mfaError)}
+                    aria-describedby={mfaError ? 'mfa-error' : 'mfa-help'}
                   />
+                  <p id="mfa-help" className="mt-1.5 text-xs text-blue-800">
+                    Recovery codes are single-use. Never share either code with another person.
+                  </p>
+                  {mfaError && (
+                    <p id="mfa-error" className="mt-1.5 text-xs text-red-600" role="alert">
+                      {mfaError}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -180,7 +211,9 @@ export default function Login() {
                 disabled={loading}
                 className="w-full rounded-md bg-[var(--color-text-primary)] py-3 text-sm font-medium text-white transition hover:bg-[var(--color-brand-800)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? 'Opening workspace...' : 'Open Command Center'}
+                {loading
+                  ? mfaChallengeRequired ? 'Verifying...' : 'Opening workspace...'
+                  : mfaChallengeRequired ? 'Verify and Sign In' : 'Open Command Center'}
               </button>
             </form>
 
