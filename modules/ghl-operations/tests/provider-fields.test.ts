@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildOpportunityCustomFields } from '../repository';
+import {
+  buildOpportunityCustomFields,
+  buildOpportunityProviderPayload,
+} from '../repository';
 
 const action = {
   type: 'opportunity_upsert' as const,
@@ -60,6 +63,41 @@ const definitions = [
 ];
 
 describe('GHL opportunity custom-field contract', () => {
+  it('keeps location and contact only on create payloads', () => {
+    expect(
+      buildOpportunityProviderPayload(action, 'location-1', 'contact-1', null, []),
+    ).toEqual(
+      expect.objectContaining({
+        locationId: 'location-1',
+        contactId: 'contact-1',
+        pipelineId: 'pipeline-1',
+        pipelineStageId: 'stage-sale',
+      }),
+    );
+  });
+
+  it('removes location and contact from update payloads', () => {
+    const payload = buildOpportunityProviderPayload(
+      action,
+      'location-1',
+      'contact-1',
+      'opportunity-1',
+      [],
+    );
+
+    expect(payload).not.toHaveProperty('locationId');
+    expect(payload).not.toHaveProperty('contactId');
+    expect(payload).toEqual(
+      expect.objectContaining({
+        pipelineId: 'pipeline-1',
+        pipelineStageId: 'stage-sale',
+        name: 'Partially paid ticket',
+        status: 'won',
+        monetaryValue: 1000,
+      }),
+    );
+  });
+
   it('resolves configured keys to live ids and provider-native values', () => {
     expect(buildOpportunityCustomFields(action, mapping, definitions)).toEqual({
       fields: [
