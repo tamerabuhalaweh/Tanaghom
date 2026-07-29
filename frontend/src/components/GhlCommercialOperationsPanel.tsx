@@ -8,7 +8,7 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { CheckCircle2, Clock3, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Clock3, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { ghlOperationsApi } from '../api';
 import { Notice, ProductCard, ProductStatus } from './ProductUI';
 
@@ -44,6 +44,15 @@ function numberValue(value: unknown): number {
 
 function records(value: unknown): RecordMap[] {
   return Array.isArray(value) ? (value as RecordMap[]) : [];
+}
+
+function taskForOperation(value: unknown): Task {
+  const operationType = text(value);
+  if (operationType === 'contact_tags_update') return 'tags';
+  if (operationType === 'opportunity_upsert') return 'sale';
+  if (operationType === 'appointment_upsert') return 'meeting';
+  if (operationType === 'whatsapp_send') return 'whatsapp';
+  return 'customer';
 }
 
 function record(value: unknown): RecordMap {
@@ -104,6 +113,7 @@ export function GhlCommercialOperationsPanel({
   const [task, setTask] = useState<Task>('customer');
   const [referenceData, setReferenceData] = useState<RecordMap>({});
   const [operation, setOperation] = useState<RecordMap | null>(null);
+  const [historySelectionId, setHistorySelectionId] = useState('');
   const [previewActionSignature, setPreviewActionSignature] = useState('');
   const [history, setHistory] = useState<RecordMap[]>([]);
   const [busy, setBusy] = useState('');
@@ -230,7 +240,10 @@ export function GhlCommercialOperationsPanel({
   ]);
   const actionSignature = JSON.stringify(action);
   const visibleOperation =
-    operation && previewActionSignature === actionSignature ? operation : null;
+    operation &&
+    (historySelectionId === text(operation.id) || previewActionSignature === actionSignature)
+      ? operation
+      : null;
   const preview = record(visibleOperation?.preview);
   const summary = record(preview.summary);
   const blockers = Array.isArray(preview.blockers)
@@ -304,6 +317,7 @@ export function GhlCommercialOperationsPanel({
         },
         token,
       );
+      setHistorySelectionId('');
       setOperation(record(result));
       setPreviewActionSignature(actionSignature);
       await load();
@@ -400,6 +414,7 @@ export function GhlCommercialOperationsPanel({
               onClick={() => {
                 setTask(item.id);
                 setOperation(null);
+                setHistorySelectionId('');
                 setMessage('');
               }}
             >
@@ -781,7 +796,21 @@ export function GhlCommercialOperationsPanel({
           <section className="ghl-history">
             <h4>Recent customer actions</h4>
             {history.slice(0, 5).map((item) => (
-              <div key={text(item.id)} className="ghl-history-row">
+              <button
+                key={text(item.id)}
+                className={`ghl-history-row ${
+                  historySelectionId === text(item.id) ? 'is-selected' : ''
+                }`}
+                type="button"
+                aria-label={`Review ${titleCase(item.operationType)} action`}
+                onClick={() => {
+                  setTask(taskForOperation(item.operationType));
+                  setOperation(item);
+                  setHistorySelectionId(text(item.id));
+                  setPreviewActionSignature('');
+                  setMessage('');
+                }}
+              >
                 <Clock3 size={15} aria-hidden="true" />
                 <span>
                   <strong>{titleCase(item.operationType)}</strong>
@@ -790,7 +819,8 @@ export function GhlCommercialOperationsPanel({
                     {new Date(text(item.updatedAt, text(item.createdAt))).toLocaleString()}
                   </small>
                 </span>
-              </div>
+                <ChevronRight size={17} aria-hidden="true" />
+              </button>
             ))}
           </section>
         ) : null}
