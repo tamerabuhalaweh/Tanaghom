@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type ReactElement,
+} from 'react';
 import { CheckCircle2, Clock3, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { ghlOperationsApi } from '../api';
 import { Notice, ProductCard, ProductStatus } from './ProductUI';
@@ -104,13 +113,16 @@ export function GhlCommercialOperationsPanel({
   const [opportunityName, setOpportunityName] = useState(
     `${text(lead.leadName, text(lead.name, 'Customer'))} opportunity`,
   );
-  const [opportunityStatus, setOpportunityStatus] = useState('open');
+  const savedPaymentStatus = text(lead.paymentStatus, 'unknown');
+  const [opportunityStatus, setOpportunityStatus] = useState(
+    savedPaymentStatus === 'partial' || savedPaymentStatus === 'paid_in_full' ? 'won' : 'open',
+  );
   const [monetaryValue, setMonetaryValue] = useState(String(numberValue(lead.saleValue) || ''));
   const [amountPaid, setAmountPaid] = useState(String(numberValue(lead.amountPaid) || ''));
   const [ticketQuantity, setTicketQuantity] = useState(
     String(numberValue(lead.ticketQuantity) || ''),
   );
-  const [paymentStatus, setPaymentStatus] = useState(text(lead.paymentStatus, 'unknown'));
+  const [paymentStatus, setPaymentStatus] = useState(savedPaymentStatus);
   const [paymentDate, setPaymentDate] = useState(toDateInput(lead.paymentDate));
   const [tagToAdd, setTagToAdd] = useState('');
   const [tagToRemove, setTagToRemove] = useState('');
@@ -268,6 +280,18 @@ export function GhlCommercialOperationsPanel({
           ? 'Enter the payment date before reviewing a partial payment.'
           : 'Enter the payment date before reviewing a fully paid sale.',
       );
+      return;
+    }
+    if (
+      task === 'sale' &&
+      (paymentStatus === 'partial' || paymentStatus === 'paid_in_full') &&
+      opportunityStatus !== 'won'
+    ) {
+      setMessage('Set opportunity status to Won for a partial or fully paid sale.');
+      return;
+    }
+    if (task === 'sale' && Number(amountPaid) > 0 && paymentStatus === 'unknown') {
+      setMessage('Choose Partially paid or Paid in full when an amount has been received.');
       return;
     }
     setBusy('prepare');
@@ -500,7 +524,14 @@ export function GhlCommercialOperationsPanel({
                   onChange={(event) => setOpportunityName(event.target.value)}
                 />
               </Field>
-              <Field label="Status">
+              <Field
+                label="Status"
+                helper={
+                  paymentStatus === 'partial' || paymentStatus === 'paid_in_full'
+                    ? 'Partial and fully paid ticket purchases must use Won.'
+                    : undefined
+                }
+              >
                 <select
                   value={opportunityStatus}
                   onChange={(event) => setOpportunityStatus(event.target.value)}
@@ -538,7 +569,13 @@ export function GhlCommercialOperationsPanel({
               <Field label="Payment status">
                 <select
                   value={paymentStatus}
-                  onChange={(event) => setPaymentStatus(event.target.value)}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value;
+                    setPaymentStatus(nextStatus);
+                    if (nextStatus === 'partial' || nextStatus === 'paid_in_full') {
+                      setOpportunityStatus('won');
+                    }
+                  }}
                 >
                   <option value="unknown">Unknown</option>
                   <option value="partial">Partially paid</option>
@@ -769,13 +806,29 @@ function Field({
 }: {
   label: string;
   helper?: string;
-  children: ReactNode;
+  children: ReactElement<{
+    id?: string;
+    'aria-describedby'?: string;
+  }>;
 }) {
+  const generatedId = useId();
+  const controlId = children.props.id || generatedId;
+  const helperId = `${generatedId}-helper`;
+  const describedBy = [children.props['aria-describedby'], helper ? helperId : '']
+    .filter(Boolean)
+    .join(' ');
+  const control = isValidElement(children)
+    ? cloneElement(children, {
+        id: controlId,
+        ...(describedBy ? { 'aria-describedby': describedBy } : {}),
+      })
+    : children;
+
   return (
-    <label className="ghl-field">
-      <span>{label}</span>
-      {children}
-      {helper ? <small>{helper}</small> : null}
-    </label>
+    <div className="ghl-field">
+      <label htmlFor={controlId}>{label}</label>
+      {control}
+      {helper ? <small id={helperId}>{helper}</small> : null}
+    </div>
   );
 }

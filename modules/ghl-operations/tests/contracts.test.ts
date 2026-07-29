@@ -134,6 +134,70 @@ describe('GHL commercial operation contracts', () => {
     }
   });
 
+  it('requires Won status when a ticket is partially or fully paid', () => {
+    expect(() =>
+      ghlOperationActionSchema.parse({
+        type: 'opportunity_upsert',
+        leadId,
+        pipelineId: 'pipeline-1',
+        stageId: 'stage-sale',
+        name: 'Partially paid ticket',
+        status: 'open',
+        monetaryValue: 1000,
+        payment: {
+          totalSaleValue: 1000,
+          amountPaid: 400,
+          outstandingBalance: 600,
+          paymentStatus: 'partial',
+          paymentDate: '2026-07-29T12:00:00.000Z',
+          ticketQuantity: 1,
+        },
+      }),
+    ).toThrow('A partial or fully paid sale must use Won opportunity status');
+
+    expect(() =>
+      ghlOperationActionSchema.parse({
+        type: 'opportunity_upsert',
+        leadId,
+        pipelineId: 'pipeline-1',
+        stageId: 'stage-sale',
+        name: 'Fully paid ticket',
+        status: 'open',
+        monetaryValue: 1000,
+        payment: {
+          totalSaleValue: 1000,
+          amountPaid: 1000,
+          outstandingBalance: 0,
+          paymentStatus: 'paid_in_full',
+          paymentDate: '2026-07-29T12:00:00.000Z',
+          ticketQuantity: 1,
+        },
+      }),
+    ).toThrow('A partial or fully paid sale must use Won opportunity status');
+  });
+
+  it('requires an explicit payment status whenever money was received', () => {
+    expect(() =>
+      ghlOperationActionSchema.parse({
+        type: 'opportunity_upsert',
+        leadId,
+        pipelineId: 'pipeline-1',
+        stageId: 'stage-sale',
+        name: 'Unclassified payment',
+        status: 'won',
+        monetaryValue: 1000,
+        payment: {
+          totalSaleValue: 1000,
+          amountPaid: 400,
+          outstandingBalance: 600,
+          paymentStatus: 'unknown',
+          paymentDate: '2026-07-29T12:00:00.000Z',
+          ticketQuantity: 1,
+        },
+      }),
+    ).toThrow('A received payment requires an explicit payment status');
+  });
+
   it('rejects empty or contradictory tag updates', () => {
     expect(() =>
       ghlOperationActionSchema.parse({

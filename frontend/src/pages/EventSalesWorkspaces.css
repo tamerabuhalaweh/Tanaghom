@@ -1546,11 +1546,17 @@
   min-width: 0;
 }
 
-.ghl-field > span {
+.ghl-field > label {
   color: #555b67;
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.ghl-field > small {
+  color: #6b7280;
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 .ghl-field input,
