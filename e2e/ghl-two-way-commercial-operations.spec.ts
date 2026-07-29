@@ -56,6 +56,9 @@ const lead = {
   sourceOfTruth: 'gohighlevel',
   externalSourceProvider: 'gohighlevel',
   externalContactId: 'ghl-contact-1',
+  saleValue: 1000,
+  amountPaid: 400,
+  paymentStatus: 'partial',
   paymentDate: '2026-07-27T00:00:00.000Z',
 };
 
@@ -341,11 +344,46 @@ test.describe('GHL two-way commercial operations', () => {
     await form
       .getByRole('combobox', { name: 'Payment status', exact: true })
       .selectOption('partial');
+    await expect(form.getByRole('combobox', { name: 'Status', exact: true })).toHaveValue('won');
     await paymentDate.fill('');
     await page.getByRole('button', { name: 'Review change' }).click();
 
     await expect(
       page.getByText('Enter the payment date before reviewing a partial payment.'),
+    ).toBeVisible();
+    expect(monitor.previewCalls()).toBe(0);
+    monitor.assertClean();
+  });
+
+  test('blocks a paid sale changed back to Open before calling the API', async ({ page }) => {
+    const monitor = await installMocks(page, 'cco');
+    await openLeadsTab(page);
+
+    await page.getByRole('tab', { name: /Sale & payment/ }).click();
+    const form = page.getByRole('tabpanel', { name: /Sale & payment/ });
+    await form.getByRole('combobox', { name: 'Status', exact: true }).selectOption('open');
+    await page.getByRole('button', { name: 'Review change' }).click();
+
+    await expect(
+      page.getByText('Set opportunity status to Won for a partial or fully paid sale.'),
+    ).toBeVisible();
+    expect(monitor.previewCalls()).toBe(0);
+    monitor.assertClean();
+  });
+
+  test('blocks a received amount without an explicit payment status before the API', async ({
+    page,
+  }) => {
+    const monitor = await installMocks(page, 'cco');
+    await openLeadsTab(page);
+
+    await page.getByRole('tab', { name: /Sale & payment/ }).click();
+    const form = page.getByRole('tabpanel', { name: /Sale & payment/ });
+    await form.getByRole('combobox', { name: 'Payment status', exact: true }).selectOption('unknown');
+    await page.getByRole('button', { name: 'Review change' }).click();
+
+    await expect(
+      page.getByText('Choose Partially paid or Paid in full when an amount has been received.'),
     ).toBeVisible();
     expect(monitor.previewCalls()).toBe(0);
     monitor.assertClean();

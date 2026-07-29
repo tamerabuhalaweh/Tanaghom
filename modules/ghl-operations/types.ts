@@ -31,6 +31,21 @@ const compactText = z.string().trim().min(1).max(500);
 const tag = z.string().trim().min(1).max(160);
 const scalar = z.union([z.string().max(4000), z.number().finite(), z.boolean(), z.null()]);
 
+export function paidSaleRequiresWon(input: {
+  status?: string;
+  payment?: { paymentStatus?: string; amountPaid?: number };
+}): boolean {
+  const paymentStatus = input.payment?.paymentStatus;
+  const amountPaid = input.payment?.amountPaid ?? 0;
+  const receivedPayment =
+    paymentStatus === 'partial' ||
+    paymentStatus === 'paid_in_full' ||
+    (amountPaid > 0 && paymentStatus !== 'refunded' && paymentStatus !== 'cancelled');
+  return (
+    receivedPayment && input.status !== 'won'
+  );
+}
+
 const contactUpsertSchema = z.object({
   type: z.literal('contact_upsert'),
   leadId: uuid,
@@ -123,6 +138,17 @@ const paymentSchema = z
         });
       }
     }
+    if (
+      input.amountPaid !== undefined &&
+      input.amountPaid > 0 &&
+      (!input.paymentStatus || input.paymentStatus === 'unknown')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['paymentStatus'],
+        message: 'A received payment requires an explicit payment status',
+      });
+    }
   });
 
 const opportunityUpsertSchema = z.object({
@@ -205,12 +231,19 @@ export const ghlOperationActionSchema = z
     if (
       input.type === 'opportunity_upsert' &&
       input.status === 'won' &&
-      !input.payment?.paymentStatus
+      (!input.payment?.paymentStatus || input.payment.paymentStatus === 'unknown')
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['payment', 'paymentStatus'],
         message: 'A won opportunity requires an explicit payment status',
+      });
+    }
+    if (input.type === 'opportunity_upsert' && paidSaleRequiresWon(input)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['status'],
+        message: 'A partial or fully paid sale must use Won opportunity status',
       });
     }
   });

@@ -9,6 +9,7 @@ import { resolveGhlSyncRuntimeConfig, type GhlRuntimeConfig } from '../ghl-sync/
 import type { GhlOperationsClient } from './client';
 import { extractProviderIds, isGhlWhatsAppDnd } from './client';
 import { assertGhlOperationTransition } from './state-machine';
+import { ghlOperationActionSchema, paidSaleRequiresWon } from './types';
 import type {
   DecideGhlOperationInput,
   ExecuteGhlOperationInput,
@@ -997,6 +998,31 @@ async function buildExecutionGate(
   }
   if (process.env.GHL_WRITE_BACK_ENABLED !== 'true') {
     reasons.push('GHL_WRITE_BACK_ENABLED is not true');
+  }
+  const rawAction = asRecord(record.input_payload);
+  const rawPayment = asRecord(rawAction.payment);
+  if (
+    rawAction.type === 'opportunity_upsert' &&
+    paidSaleRequiresWon({
+      status: typeof rawAction.status === 'string' ? rawAction.status : undefined,
+      payment: {
+        paymentStatus:
+          typeof rawPayment.paymentStatus === 'string' ? rawPayment.paymentStatus : undefined,
+        amountPaid:
+          typeof rawPayment.amountPaid === 'number' ? rawPayment.amountPaid : undefined,
+      },
+    })
+  ) {
+    reasons.push('A partial or fully paid sale must use Won opportunity status');
+  }
+  const parsedAction = ghlOperationActionSchema.safeParse(record.input_payload);
+  if (!parsedAction.success) {
+    reasons.push('Stored GHL operation payload is invalid');
+  } else if (parsedAction.data.type === 'opportunity_upsert') {
+    const providerPayload = asRecord(asRecord(record.preview_payload).providerPayload);
+    if (providerPayload.status !== parsedAction.data.status) {
+      reasons.push('Stored GHL opportunity preview no longer matches the approved action');
+    }
   }
   if (
     record.operation_type === 'whatsapp_send' &&
