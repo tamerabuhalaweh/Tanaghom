@@ -1646,13 +1646,34 @@
 }
 
 .ghl-history-row {
+  width: 100%;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.65rem;
+  border: 1px solid transparent;
   border-radius: 0.6rem;
   background: #f7f8fa;
   padding: 0.65rem 0.75rem;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.ghl-history-row:hover,
+.ghl-history-row:focus-visible,
+.ghl-history-row.is-selected {
+  border-color: #90cbbd;
+  background: #edf8f5;
+}
+
+.ghl-history-row:focus-visible {
+  outline: 3px solid rgb(16 185 129 / 22%);
+  outline-offset: 2px;
 }
 
 .ghl-history-row strong,
