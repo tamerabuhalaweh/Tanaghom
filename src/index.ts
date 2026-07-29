@@ -11,7 +11,7 @@ import { resolveRateLimitCapacity, resolveRateLimitKey } from '@shared/auth/rate
 import { assertTokenNotRevoked } from '@shared/auth/token-revocation';
 import { validateEnvironment, isDemoMode, isLiveExecutionEnabled, assertDemoSafe } from './env-validation';
 import { healthCheck } from './routes/health';
-import { AppError } from '../shared/errors';
+import { AppError, ValidationError } from '../shared/errors';
 import { authRouter } from '../modules/auth/controller';
 import { usersDepartmentsRouter } from '../modules/users-departments/controller';
 import { campaignsRouter } from '../modules/campaigns/controller';
@@ -345,6 +345,7 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
     res.status(err.statusCode).json({
       error: err.message,
       code: err.code,
+      ...(err instanceof ValidationError && err.fields ? { fields: err.fields } : {}),
       requestId: req.requestId,
     });
     return;

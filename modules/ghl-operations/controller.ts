@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
+import { validateOrThrow } from '@shared/validation';
 import {
   decideGhlOperationSchema,
   executeGhlOperationSchema,
@@ -26,7 +27,7 @@ function session(req: Request) {
 
 ghlOperationsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = listGhlOperationsSchema.parse(req.query);
+    const input = validateOrThrow(listGhlOperationsSchema, req.query);
     res.json(await service.list(session(req), input));
   } catch (error) {
     next(error);
@@ -54,7 +55,7 @@ ghlOperationsRouter.get('/:id', async (req: Request, res: Response, next: NextFu
 
 ghlOperationsRouter.post('/preview', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = prepareGhlOperationSchema.parse(req.body);
+    const input = validateOrThrow(prepareGhlOperationSchema, req.body);
     res.status(201).json(await service.prepare(session(req), input));
   } catch (error) {
     next(error);
@@ -63,7 +64,7 @@ ghlOperationsRouter.post('/preview', async (req: Request, res: Response, next: N
 
 ghlOperationsRouter.post('/:id/submit', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = submitGhlOperationSchema.parse(req.body);
+    const input = validateOrThrow(submitGhlOperationSchema, req.body);
     res.json(await service.submit(session(req), req.params.id as string, input));
   } catch (error) {
     next(error);
@@ -74,7 +75,7 @@ ghlOperationsRouter.post(
   '/:id/decision',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const input = decideGhlOperationSchema.parse(req.body);
+      const input = validateOrThrow(decideGhlOperationSchema, req.body);
       res.json(await service.decide(session(req), req.params.id as string, input));
     } catch (error) {
       next(error);
@@ -86,7 +87,7 @@ ghlOperationsRouter.post(
   '/:id/execute',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const input = executeGhlOperationSchema.parse(req.body);
+      const input = validateOrThrow(executeGhlOperationSchema, req.body);
       res.json(await service.execute(session(req), req.params.id as string, input));
     } catch (error) {
       next(error);
@@ -98,7 +99,7 @@ ghlOperationsRouter.post(
   '/:id/reconcile',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const input = reconcileGhlOperationSchema.parse(req.body);
+      const input = validateOrThrow(reconcileGhlOperationSchema, req.body);
       res.json(await service.reconcile(session(req), req.params.id as string, input));
     } catch (error) {
       next(error);

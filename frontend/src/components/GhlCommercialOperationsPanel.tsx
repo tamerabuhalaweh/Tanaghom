@@ -71,6 +71,13 @@ function toIsoDateTime(value: string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString();
 }
 
+function toDateInput(value: unknown): string {
+  const raw = text(value);
+  if (!raw) return '';
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+}
+
 export function GhlCommercialOperationsPanel({
   token,
   role,
@@ -104,7 +111,7 @@ export function GhlCommercialOperationsPanel({
     String(numberValue(lead.ticketQuantity) || ''),
   );
   const [paymentStatus, setPaymentStatus] = useState(text(lead.paymentStatus, 'unknown'));
-  const [paymentDate, setPaymentDate] = useState('');
+  const [paymentDate, setPaymentDate] = useState(toDateInput(lead.paymentDate));
   const [tagToAdd, setTagToAdd] = useState('');
   const [tagToRemove, setTagToRemove] = useState('');
   const [calendarId, setCalendarId] = useState('');
@@ -251,6 +258,18 @@ export function GhlCommercialOperationsPanel({
 
   async function prepare() {
     if (!action || !canPrepare) return;
+    if (
+      task === 'sale' &&
+      (paymentStatus === 'partial' || paymentStatus === 'paid_in_full') &&
+      !paymentDate
+    ) {
+      setMessage(
+        paymentStatus === 'partial'
+          ? 'Enter the payment date before reviewing a partial payment.'
+          : 'Enter the payment date before reviewing a fully paid sale.',
+      );
+      return;
+    }
     setBusy('prepare');
     setMessage('');
     try {
@@ -528,11 +547,23 @@ export function GhlCommercialOperationsPanel({
                   <option value="cancelled">Cancelled</option>
                 </select>
               </Field>
-              <Field label="Payment date">
+              <Field
+                label={
+                  paymentStatus === 'partial' || paymentStatus === 'paid_in_full'
+                    ? 'Payment date *'
+                    : 'Payment date'
+                }
+                helper={
+                  paymentStatus === 'partial' || paymentStatus === 'paid_in_full'
+                    ? 'Required for partial and fully paid sales.'
+                    : undefined
+                }
+              >
                 <input
                   type="date"
                   value={paymentDate}
                   onChange={(event) => setPaymentDate(event.target.value)}
+                  required={paymentStatus === 'partial' || paymentStatus === 'paid_in_full'}
                 />
               </Field>
             </div>
@@ -731,11 +762,20 @@ export function GhlCommercialOperationsPanel({
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  helper,
+  children,
+}: {
+  label: string;
+  helper?: string;
+  children: ReactNode;
+}) {
   return (
     <label className="ghl-field">
       <span>{label}</span>
       {children}
+      {helper ? <small>{helper}</small> : null}
     </label>
   );
 }

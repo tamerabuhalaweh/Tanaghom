@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
 import { getActiveIntegrationCredential } from '../integration-credentials/service';
 import { LEAD_STATUSES, LEAD_TEMPERATURES } from '../lead-lifecycle/types';
+import { GHL_OPERATIONAL_TAG_TARGET } from './types';
 import type {
   CredentialStatus,
   GhlCredentialStatus,
@@ -279,20 +280,24 @@ export async function markGhlCredentialValidated(tenantKey: string, validatedAt 
 
 function normalizeTagTarget(value: unknown): GhlTagTarget {
   const target = String(value || 'new_lead');
-  if (isLeadStatusOrTemperature(target)) return target;
+  if (isGhlTagTarget(target)) return target;
   return 'new_lead';
 }
 
-function isLeadStatusOrTemperature(value: string): value is GhlTagTarget {
-  return (LEAD_STATUSES as readonly string[]).includes(value) || (LEAD_TEMPERATURES as readonly string[]).includes(value);
+function isGhlTagTarget(value: string): value is GhlTagTarget {
+  return (
+    value === GHL_OPERATIONAL_TAG_TARGET ||
+    (LEAD_STATUSES as readonly string[]).includes(value) ||
+    (LEAD_TEMPERATURES as readonly string[]).includes(value)
+  );
 }
 
 function validateGhlTagMapping(mapping: Omit<GhlTagMapping, 'status'>): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   if (!mapping.ghlTagId.trim()) errors.push('GHL tag id is required');
   if (!mapping.ghlTagName.trim()) errors.push('GHL tag name is required');
-  if (!isLeadStatusOrTemperature(mapping.internalTag)) {
-    errors.push(`Unsupported Tanaghum lead tag target: ${mapping.internalTag}`);
+  if (!isGhlTagTarget(mapping.internalTag)) {
+    errors.push(`Unsupported Tanaghum tag meaning: ${mapping.internalTag}`);
   }
   return { valid: errors.length === 0, errors };
 }

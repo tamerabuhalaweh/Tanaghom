@@ -1,5 +1,7 @@
 import { createSign, generateKeyPairSync, sign } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ValidationError } from '@shared/errors';
+import { validateOrThrow } from '@shared/validation';
 import { checkGhlOperationPermission } from '../policy';
 import { assertGhlOperationTransition, isTerminalGhlOperationStatus } from '../state-machine';
 import {
@@ -101,6 +103,35 @@ describe('GHL commercial operation contracts', () => {
         },
       }),
     ).toThrow('Paid in full requires a payment date');
+  });
+
+  it('converts a missing payment date into a field-level application validation error', () => {
+    expect.assertions(3);
+    try {
+      validateOrThrow(prepareGhlOperationSchema, {
+        eventId: '22222222-2222-4222-8222-222222222222',
+        action: {
+          type: 'opportunity_upsert',
+          leadId,
+          pipelineId: 'pipeline-1',
+          stageId: 'stage-sale',
+          name: 'Partial payment without date',
+          status: 'won',
+          payment: {
+            totalSaleValue: 1000,
+            amountPaid: 400,
+            outstandingBalance: 600,
+            paymentStatus: 'partial',
+          },
+        },
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).statusCode).toBe(400);
+      expect((error as ValidationError).fields).toEqual({
+        'action.payment.paymentDate': 'Partial payment requires a payment date',
+      });
+    }
   });
 
   it('rejects empty or contradictory tag updates', () => {

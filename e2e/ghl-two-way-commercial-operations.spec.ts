@@ -56,6 +56,7 @@ const lead = {
   sourceOfTruth: 'gohighlevel',
   externalSourceProvider: 'gohighlevel',
   externalContactId: 'ghl-contact-1',
+  paymentDate: '2026-07-27T00:00:00.000Z',
 };
 
 function dashboardBody() {
@@ -127,6 +128,7 @@ async function installMocks(page: Page, role: Role) {
   const unexpected: string[] = [];
   const failures: string[] = [];
   const browserProblems: string[] = [];
+  let previewCalls = 0;
   let operationStatus: 'previewed' | 'pending_approval' | 'approved' = 'previewed';
 
   await page.addInitScript(() => window.localStorage.setItem('token', 'ghl-operations-token'));
@@ -220,6 +222,7 @@ async function installMocks(page: Page, role: Role) {
       return json(role === 'viewer' ? [publicOperation(role, 'approved')] : []);
     }
     if (path === '/ghl-operations/preview' && method === 'POST') {
+      previewCalls += 1;
       operationStatus = 'previewed';
       return json(publicOperation(role, operationStatus), 201);
     }
@@ -243,6 +246,9 @@ async function installMocks(page: Page, role: Role) {
       expect(browserProblems, 'GHL operations UI must not emit console errors or warnings').toEqual(
         [],
       );
+    },
+    previewCalls() {
+      return previewCalls;
     },
   };
 }
@@ -318,6 +324,30 @@ test.describe('GHL two-way commercial operations', () => {
 
     await expect(page.getByText('Approved and queued.')).toBeVisible();
     await expect(page.getByRole('button', { name: /Execute|Reconcile/ })).toHaveCount(0);
+    monitor.assertClean();
+  });
+
+  test('prefills saved payment date and blocks an incomplete partial payment before the API', async ({
+    page,
+  }) => {
+    const monitor = await installMocks(page, 'cco');
+    await openLeadsTab(page);
+
+    await page.getByRole('tab', { name: /Sale & payment/ }).click();
+    const form = page.getByRole('tabpanel', { name: /Sale & payment/ });
+    const paymentDate = form.getByLabel(/Payment date/);
+    await expect(paymentDate).toHaveValue('2026-07-27');
+
+    await form
+      .getByRole('combobox', { name: 'Payment status', exact: true })
+      .selectOption('partial');
+    await paymentDate.fill('');
+    await page.getByRole('button', { name: 'Review change' }).click();
+
+    await expect(
+      page.getByText('Enter the payment date before reviewing a partial payment.'),
+    ).toBeVisible();
+    expect(monitor.previewCalls()).toBe(0);
     monitor.assertClean();
   });
 

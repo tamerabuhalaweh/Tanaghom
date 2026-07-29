@@ -92,6 +92,30 @@ describe('GHL Setup - tenant isolation', () => {
     );
   });
 
+  it('accepts an operational GHL tag without changing lead status or temperature semantics', async () => {
+    prismaMocks.connectorFieldMapping.create.mockResolvedValue({});
+    await saveTagMappings('admin', 'user-1', 'customer-z', [
+      {
+        ghlTagId: 'tag-event-uat',
+        ghlTagName: 'tanaghum-moaaskar-uat',
+        internalTag: 'operational',
+        direction: 'bidirectional',
+      },
+    ]);
+    expect(prismaMocks.connectorFieldMapping.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tenant_key: 'customer-z',
+          field_mappings: expect.objectContaining({
+            mappingType: 'tag',
+            internalTag: 'operational',
+          }),
+          validation_status: 'valid',
+        }),
+      }),
+    );
+  });
+
   it('pipeline mapping save scopes to tenant key', async () => {
     prismaMocks.connectorFieldMapping.create.mockResolvedValue({});
     await savePipelineMappings('admin', 'user-1', 'customer-w', [

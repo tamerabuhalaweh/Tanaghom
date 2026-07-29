@@ -44,8 +44,13 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
+    const fieldDetail =
+      err.fields && typeof err.fields === 'object' && !Array.isArray(err.fields)
+        ? Object.values(err.fields).find((value): value is string => typeof value === 'string')
+        : undefined;
     const detail =
-      typeof err.error === 'string'
+      fieldDetail ??
+      (typeof err.error === 'string'
         ? err.error
         : typeof err.message === 'string'
           ? err.message
@@ -53,7 +58,7 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
             ? err._label
             : Array.isArray(err.reasons)
               ? err.reasons.join('; ')
-              : `API error: ${res.status}`;
+              : `API error: ${res.status}`);
     throw new ApiError(detail, res.status, typeof err.code === 'string' ? err.code : undefined);
   }
 
