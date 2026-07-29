@@ -506,6 +506,7 @@ export async function executeApprovedActionRun(
   tenantKey: string,
   userId: string,
   actionRunId: string,
+  agentRepId?: string,
 ) {
   checkStitchiPermission(role, 'stitchi:execute_action');
   const run = await repo.getActionRun(tenantKey, userId, role, actionRunId);
@@ -514,12 +515,14 @@ export async function executeApprovedActionRun(
   }
   await repo.markActionRunRunning(tenantKey, userId, role, actionRunId);
   try {
-    const executed = await executeStitchiAction({
-      role,
-      tenantKey,
-      userId,
-      requestingUserId: run.userId,
-      actionType: run.actionType,
+      const executed = await executeStitchiAction({
+        role,
+        tenantKey,
+        userId,
+        requestingUserId: run.userId,
+        agentRepId,
+        actionRunId,
+        actionType: run.actionType,
       inputPayload: run.inputPayload,
     });
     const actionRun = await repo.completeActionRun(tenantKey, userId, actionRunId, {
@@ -547,6 +550,7 @@ export async function approveAndExecuteActionRun(
   userId: string,
   actionRunId: string,
   input: ActionDecisionInput,
+  agentRepId?: string,
 ) {
   checkStitchiPermission(role, 'stitchi:approve_action');
   const existing = await repo.getActionRun(tenantKey, userId, role, actionRunId);
@@ -574,7 +578,13 @@ export async function approveAndExecuteActionRun(
     }
   }
   const approval = await approveActionRun(role, tenantKey, userId, actionRunId, input);
-  const execution = await executeApprovedActionRun(role, tenantKey, userId, actionRunId);
+  const execution = await executeApprovedActionRun(
+    role,
+    tenantKey,
+    userId,
+    actionRunId,
+    agentRepId,
+  );
   return {
     approval,
     actionRun: execution.actionRun,

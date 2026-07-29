@@ -269,6 +269,7 @@ export function mapGhlLead(
   return {
     ghlContactId: contact.id,
     ghlOpportunityId: primaryOpportunity?.id || null,
+    ghlAppointmentId: primaryAppointment?.id || null,
     leadName: name,
     leadEmail: truthyString(contact.email),
     leadPhone: truthyString(contact.phone),

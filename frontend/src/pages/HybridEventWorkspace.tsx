@@ -21,6 +21,7 @@ import {
   leadsApi,
   learningRecommendationsApi,
 } from '../api';
+import { GhlCommercialOperationsPanel } from '../components/GhlCommercialOperationsPanel';
 import {
   BarList,
   DetailGrid,
@@ -100,13 +101,6 @@ function formatDate(value: unknown): string {
   const date = new Date(String(value));
   if (Number.isNaN(date.getTime())) return 'Not set';
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function formatDateTime(value: unknown): string {
-  if (!value) return 'Not synced';
-  const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) return 'Not synced';
-  return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function statusTone(value: unknown): 'default' | 'good' | 'warn' | 'danger' | 'info' | 'muted' {
@@ -818,21 +812,50 @@ function evaluationLabel(status: string): string {
 }
 
 function LeadsTab({
+  token,
+  role,
+  eventId,
   salesLeads,
   leadTemperature,
   ghlStatus,
   navigate,
+  onRefresh,
 }: {
+  token: string;
+  role: string;
+  eventId: string;
   salesLeads: RecordMap[];
   leadTemperature: RecordMap[];
   ghlStatus: RecordMap | null;
   navigate: (path: string) => void;
+  onRefresh: () => void;
 }) {
+  const [selectedLeadId, setSelectedLeadId] = useState('');
+  const [leadSearch, setLeadSearch] = useState('');
   const statusCounts = salesLeads.reduce<Record<string, number>>((acc, lead) => {
     const status = text(lead.leadStatus || lead.status, 'new_lead');
     acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {});
+  const normalizedLeadSearch = leadSearch.trim().toLowerCase();
+  const visibleLeads = normalizedLeadSearch
+    ? salesLeads.filter(lead =>
+        [
+          lead.leadName,
+          lead.name,
+          lead.leadEmail,
+          lead.email,
+          lead.leadPhone,
+          lead.phone,
+          lead.leadStatus,
+          lead.status,
+        ].some(value => text(value).toLowerCase().includes(normalizedLeadSearch)),
+      )
+    : salesLeads;
+  const selectedLead =
+    visibleLeads.find(lead => text(lead.id, '') === selectedLeadId) ||
+    visibleLeads[0] ||
+    null;
 
   return (
     <div className="space-y-5">
@@ -863,21 +886,47 @@ function LeadsTab({
         </ProductCard>
 
         <ProductCard
-          title="Lead List"
-          subtitle="Recent CRM/local leads for this event."
+          title="Select a customer"
+          subtitle="Choose the customer you want to follow up, update or move through the sales process."
           action={<SecondaryAction onClick={() => navigate('/integration-credentials')}>Configure CRM</SecondaryAction>}
         >
           {salesLeads.length ? (
-            <ProductTable
-              columns={['Lead', 'Status', 'Temperature', 'Source', 'Last Sync']}
-              rows={salesLeads.slice(0, 10).map((lead, index) => [
-                leadTitle(lead, index),
-                <ProductStatus tone={statusTone(lead.leadStatus || lead.status)}>{titleCase(lead.leadStatus || lead.status)}</ProductStatus>,
-                <ProductStatus tone={statusTone(lead.leadTemperature)}>{titleCase(lead.leadTemperature)}</ProductStatus>,
-                titleCase(lead.sourceOfTruth || lead.externalSourceProvider || lead.platform || 'Tanaghum'),
-                formatDateTime(lead.externalLastSyncedAt || lead.lastSyncedAt),
-              ])}
-            />
+            <>
+              <label className="ghl-lead-search">
+                <span>Find customer</span>
+                <input
+                  type="search"
+                  value={leadSearch}
+                  onChange={event => setLeadSearch(event.target.value)}
+                  placeholder="Search name, email, phone or status"
+                />
+                <small>{visibleLeads.length} of {salesLeads.length} customers</small>
+              </label>
+              {visibleLeads.length ? <div className="ghl-lead-chooser">
+                {visibleLeads.map((lead, index) => {
+                  const active = text(selectedLead?.id, '') === text(lead.id, '');
+                  return (
+                    <button
+                      key={text(lead.id, String(index))}
+                      type="button"
+                      className={active ? 'is-active' : ''}
+                      onClick={() => setSelectedLeadId(text(lead.id))}
+                    >
+                      <span><strong>{leadTitle(lead, index)}</strong><small>{text(lead.leadEmail || lead.email, 'No email recorded')}</small></span>
+                      <span className="ghl-lead-meta">
+                        <ProductStatus tone={statusTone(lead.leadStatus || lead.status)}>{titleCase(lead.leadStatus || lead.status)}</ProductStatus>
+                        <small>{titleCase(lead.sourceOfTruth || lead.externalSourceProvider || 'Tanaghum')}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div> : (
+                <EmptyProductState
+                  title="No matching customers"
+                  message="Try a different name, email, phone number or status."
+                />
+              )}
+            </>
           ) : (
             <EmptyProductState
               title="No leads yet"
@@ -886,6 +935,17 @@ function LeadsTab({
           )}
         </ProductCard>
       </div>
+
+      {selectedLead ? (
+        <GhlCommercialOperationsPanel
+          key={text(selectedLead.id)}
+          token={token}
+          role={role}
+          eventId={eventId}
+          lead={selectedLead}
+          onRefresh={onRefresh}
+        />
+      ) : null}
 
       <ProductCard title="Lead Status Breakdown" subtitle="Simple count by current sales stage.">
         {Object.keys(statusCounts).length ? (
@@ -1099,7 +1159,7 @@ export default function HybridEventWorkspace() {
           {activeTab === 'overview' ? <OverviewTab kpis={kpis} nextActions={nextActions} sourceStatus={sourceStatus} problemDashboard={problemDashboard} onNavigate={setActiveTab} /> : null}
           {activeTab === 'strategy' ? <StrategyTab event={event} emailPlans={emailPlans} whatsappPlans={whatsappPlans} upsellPlans={upsellPlans} contentRequirements={contentRequirements} salesTasks={salesTasks} navigate={navigate} /> : null}
           {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} governedTargets={governedTargets} eventCapacity={eventCapacity} kpiEvaluation={kpiEvaluation} eventId={selectedEventId} token={token} canManage={role === 'cco'} onRefresh={() => load(selectedEventId, { background: true })} navigate={navigate} /> : null}
-          {activeTab === 'leads' ? <LeadsTab salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} navigate={navigate} /> : null}
+          {activeTab === 'leads' ? <LeadsTab token={token || ''} role={role} eventId={selectedEventId || ''} salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} navigate={navigate} onRefresh={() => load(selectedEventId || '', { background: true })} /> : null}
           {activeTab === 'blockers' ? <BlockersTab problemDashboard={problemDashboard} eventProblems={eventProblems} /> : null}
           {activeTab === 'closeout' ? <CloseoutTab closeoutReport={closeoutReport} learningSummary={learningSummary} channelPerformance={closeoutChannels} sourcePerformance={closeoutSources} /> : null}
         </>

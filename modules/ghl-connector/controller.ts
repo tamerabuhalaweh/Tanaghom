@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError, NotFoundError } from '@shared/errors';
+import { AppError, UnauthorizedError, NotFoundError } from '@shared/errors';
 import { prisma } from '@shared/database';
 import { auditLog } from '@shared/logging';
 import { evaluateExternalExecution } from '@shared/policy';
@@ -94,7 +94,10 @@ ghlRouter.post('/handoff', async (req: Request, res: Response, next: NextFunctio
     const payload = getPayload(req);
     const { leadId } = req.body;
 
-    const lead = await prisma.leadCaptureRecord.findUnique({ where: { id: leadId } }) as Record<string, unknown> | null;
+    const tenantKey = payload.tenantKey || 'default';
+    const lead = await prisma.leadCaptureRecord.findFirst({
+      where: { id: leadId, tenant_key: tenantKey },
+    }) as Record<string, unknown> | null;
     if (!lead) throw new NotFoundError('Lead', leadId);
 
     const handoffPackage = {
@@ -219,10 +222,13 @@ ghlRouter.post('/sandbox-contact', async (req: Request, res: Response, next: Nex
       mode: z.enum(['preview', 'execute']).default('preview'),
     }).parse(req.body);
 
-    const lead = await prisma.leadCaptureRecord.findUnique({ where: { id: input.leadId } }) as Record<string, unknown> | null;
+    const tenantKey = payload.tenantKey || 'default';
+    const lead = await prisma.leadCaptureRecord.findFirst({
+      where: { id: input.leadId, tenant_key: tenantKey },
+    }) as Record<string, unknown> | null;
     if (!lead) throw new NotFoundError('Lead', input.leadId);
 
-    const config = await resolveGhlRuntimeConfig(payload.tenantKey || 'default');
+    const config = await resolveGhlRuntimeConfig(tenantKey);
     const contactPayload = buildGhlContactPayload(lead, config);
     const gate = await ghlSandboxWriteGate(config);
 
@@ -248,34 +254,11 @@ ghlRouter.post('/sandbox-contact', async (req: Request, res: Response, next: Nex
       return;
     }
 
-    const response = await fetch(`${config.baseUrl}/contacts/upsert`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        Version: process.env.GHL_API_VERSION || '2021-07-28',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(contactPayload),
-    });
-    const body = await response.json().catch(() => ({ statusText: response.statusText }));
-
-    auditLog(
-      { actor: `user:${payload.sub}`, action: 'ghl_sandbox_contact_executed', object_type: 'lead', object_id: input.leadId, result: response.ok ? 'success' : 'failed' },
-      `GHL sandbox contact API returned ${response.status}`,
+    throw new AppError(
+      'Direct sandbox writes are retired. Use the governed GHL operations workflow.',
+      409,
+      'GHL_GOVERNED_OPERATION_REQUIRED',
     );
-
-    res.status(response.ok ? 200 : 502).json({
-      status: response.ok ? 'sandbox_contact_upserted' : 'failed',
-      ghlStatus: response.status,
-      response: body,
-      payload: contactPayload,
-      safety: {
-        executionPerformed: true,
-        productionWrite: false,
-        sandboxOnly: true,
-      },
-      _label: response.ok ? 'Sandbox contact written to GoHighLevel test location' : 'GoHighLevel sandbox API call failed',
-    });
   } catch (err) {
     next(err);
   }

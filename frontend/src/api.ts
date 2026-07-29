@@ -512,6 +512,26 @@ export const ghlSyncApi = {
   writeBack: (token: string, data: { leadId: string }) => apiFetch<unknown>('/ghl-sync/write-back', { method: 'POST', body: data, token }),
 };
 
+export const ghlOperationsApi = {
+  list: (token: string, filters?: { eventId?: string; leadId?: string; status?: string; type?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (filters?.eventId) query.set('eventId', filters.eventId);
+    if (filters?.leadId) query.set('leadId', filters.leadId);
+    if (filters?.status) query.set('status', filters.status);
+    if (filters?.type) query.set('type', filters.type);
+    if (filters?.limit) query.set('limit', String(filters.limit));
+    return apiFetch<unknown>(`/ghl-operations${query.size ? `?${query}` : ''}`, { token });
+  },
+  referenceData: (token: string) =>
+    apiFetch<unknown>('/ghl-operations/reference-data', { token }),
+  preview: (data: unknown, token: string) =>
+    apiFetch<unknown>('/ghl-operations/preview', { method: 'POST', body: data, token }),
+  submit: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/ghl-operations/${id}/submit`, { method: 'POST', body: data, token }),
+  decide: (id: string, data: unknown, token: string) =>
+    apiFetch<unknown>(`/ghl-operations/${id}/decision`, { method: 'POST', body: data, token }),
+};
+
 export const kajabiApi = {
   status: (token: string) => apiFetch<unknown>('/kajabi/status', { token }),
   validateReadAccess: (token: string) => apiFetch<unknown>('/kajabi/validate-read-access', { method: 'POST', token }),

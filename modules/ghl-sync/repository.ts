@@ -699,6 +699,7 @@ async function upsertGhlLeadMirror(
     external_source_provider: 'gohighlevel',
     external_source_id: mappedLead.ghlContactId,
     external_opportunity_id: mappedLead.ghlOpportunityId,
+    external_appointment_id: mappedLead.ghlAppointmentId,
     external_pipeline_id: mappedLead.pipelineId,
     external_stage_id: mappedLead.stageId,
     external_tags: mappedLead.tags,

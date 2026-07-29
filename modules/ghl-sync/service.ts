@@ -1,10 +1,9 @@
-import { UnauthorizedError } from '@shared/errors';
+import { AppError, UnauthorizedError } from '@shared/errors';
 import { auditLog } from '@shared/logging';
 import { LeadConnectorClient } from './client';
 import { checkGhlSyncPermission } from './policy';
 import {
   buildWriteBackPreview,
-  executeWriteBack,
   getGhlSyncStatus,
   previewPull,
   syncPull,
@@ -76,15 +75,12 @@ export async function writeBackPreview(role: string, tenantKey: string, userId: 
 
 export async function writeBack(role: string, tenantKey: string, userId: string, input: GhlWriteBackInput) {
   checkGhlSyncPermission(role, 'ghl_sync:write_back');
-  const preview = await executeWriteBack(tenantKey, userId, input.leadId, clientFactory);
-  auditLog(
-    { actor: `user:${userId}`, action: 'ghl_write_back', object_type: 'lead', object_id: input.leadId, result: preview.execution },
-    `GHL write-back ${preview.execution}`,
+  void tenantKey;
+  void userId;
+  void input;
+  throw new AppError(
+    'Use the governed GHL operations workflow to review, approve, and execute CRM changes.',
+    409,
+    'GHL_GOVERNED_OPERATION_REQUIRED',
   );
-  return {
-    sourceOfTruth: 'gohighlevel',
-    tanaghumRole: 'operating_reporting_layer',
-    preview,
-    rawPayloadReturned: false,
-  };
 }

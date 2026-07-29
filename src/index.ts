@@ -54,6 +54,11 @@ import { csvImportRouter } from '../modules/csv-import/controller';
 import { connectorReadinessRouter } from '../modules/connector-readiness/controller';
 import { ghlSetupRouter } from '../modules/ghl-setup/controller';
 import { ghlSyncRouter } from '../modules/ghl-sync/controller';
+import { ghlOperationsRouter } from '../modules/ghl-operations/controller';
+import {
+  startGhlOperationsWorker,
+  stopGhlOperationsWorker,
+} from '../modules/ghl-operations/worker';
 import { ghlPlanAttributionRouter } from '../modules/ghl-plan-attribution/controller';
 import { postizChannelRouter } from '../modules/postiz-channel-selection/controller';
 import { smartlabsValidationRouter } from '../modules/smartlabs-validation/controller';
@@ -93,9 +98,10 @@ app.set('trust proxy', 1);
 /* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   namespace Express {
-    interface Request {
-      requestId?: string;
-    }
+      interface Request {
+        requestId?: string;
+        rawBody?: Buffer;
+      }
   }
 }
 /* eslint-enable @typescript-eslint/no-namespace */
@@ -240,7 +246,12 @@ app.use(cors({
   credentials: true,
 }));
 app.use(enforceOrigin);
-app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+app.use(express.json({
+  limit: REQUEST_BODY_LIMIT,
+  verify: (req, _res, buffer) => {
+    (req as express.Request).rawBody = Buffer.from(buffer);
+  },
+}));
 app.use(expressRateLimit({
   windowMs: RATE_LIMIT_WINDOW_SECONDS * 1000,
   limit: Math.max(RATE_LIMIT_AUTHENTICATED_MAX_REQUESTS, RATE_LIMIT_MAX_REQUESTS),
@@ -308,6 +319,7 @@ app.use('/csv-import', csvImportRouter);
 app.use('/connector-readiness', connectorReadinessRouter);
 app.use('/ghl-setup', ghlSetupRouter);
 app.use('/ghl-sync', ghlSyncRouter);
+app.use('/ghl-operations', ghlOperationsRouter);
 app.use('/ghl-attribution', ghlPlanAttributionRouter);
 app.use('/postiz-channels', postizChannelRouter);
 app.use('/smartlabs-validation', smartlabsValidationRouter);
@@ -359,6 +371,7 @@ async function start(): Promise<void> {
     app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
     });
+    startGhlOperationsWorker();
   } catch (err) {
     logger.error({ err }, 'Failed to start server');
     process.exit(1);
@@ -367,6 +380,7 @@ async function start(): Promise<void> {
 
 async function shutdown(): Promise<void> {
   logger.info('Shutting down...');
+  stopGhlOperationsWorker();
   await disconnectDatabase();
   await closeQueue();
   process.exit(0);

@@ -51,6 +51,11 @@ const commercialKpiMocks = vi.hoisted(() => ({
   createTarget: vi.fn(),
   setEventCapacity: vi.fn(),
 }));
+const ghlOperationsMocks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+  get: vi.fn(),
+  submit: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
@@ -64,6 +69,7 @@ vi.mock('@modules/commercial-historical-assessment/service', () => historicalAss
 vi.mock('@modules/commercial-plan-hierarchy/service', () => commercialHierarchyMocks);
 vi.mock('@modules/commercial-budget-reconciliation/service', () => commercialBudgetMocks);
 vi.mock('@modules/commercial-kpi-governance/service', () => commercialKpiMocks);
+vi.mock('@modules/ghl-operations/service', () => ghlOperationsMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -86,6 +92,11 @@ describe('Stitchi action registry', () => {
     commercialCenterMocks.createAssessmentSignal.mockResolvedValue({ id: 'commercial-signal-1' });
     commercialDisciplineMocks.createRecord.mockResolvedValue({ id: 'discipline-record-1' });
     commercialExecutiveMocks.createSchedule.mockResolvedValue({ id: 'executive-report-schedule-1' });
+    ghlOperationsMocks.prepare.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000950',
+      status: 'previewed',
+      rawSecretsReturned: false,
+    });
     annualPlanningMocks.createAnnualPlan.mockResolvedValue({ id: 'annual-plan-1', year: 2027 });
     annualPlanningMocks.createPortfolioItem.mockResolvedValue({ id: 'annual-plan-1', revision: 2 });
     annualPlanningMocks.createExecutionPlanForPortfolioItem.mockResolvedValue({
@@ -161,6 +172,7 @@ describe('Stitchi action registry', () => {
       'review_commercial_spend_evidence',
       'create_governed_event_kpi_target',
       'set_event_capacity',
+      'prepare_ghl_operation',
     ]);
   });
 
@@ -827,5 +839,65 @@ describe('Stitchi action registry', () => {
       actionType: 'publish_to_postiz',
       inputPayload: {},
     })).rejects.toThrow(ValidationError);
+  });
+
+  it('prepares a governed GHL command without executing the provider', async () => {
+    const result = await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: '00000000-0000-0000-0000-000000000001',
+      agentRepId: '00000000-0000-0000-0000-000000000002',
+      actionRunId: '00000000-0000-0000-0000-000000000003',
+      actionType: 'prepare_ghl_operation',
+      inputPayload: {
+        eventId: '00000000-0000-0000-0000-000000000004',
+        reason: 'Prepare the customer sync for management review.',
+        action: {
+          type: 'contact_upsert',
+          leadId: '00000000-0000-0000-0000-000000000010',
+          source: 'Tanaghum via Stitchi',
+        },
+      },
+    });
+
+    expect(ghlOperationsMocks.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'marketing_manager',
+        tenantKey: 'tenant-a',
+        agentRepId: '00000000-0000-0000-0000-000000000002',
+      }),
+      expect.objectContaining({
+        idempotencyKey: 'stitchi:00000000-0000-0000-0000-000000000003',
+        stitchiActionRunId: '00000000-0000-0000-0000-000000000003',
+        action: expect.objectContaining({ type: 'contact_upsert' }),
+      }),
+    );
+    expect(result).toMatchObject({
+      objectType: 'ghl_operation_command',
+      objectId: '00000000-0000-0000-0000-000000000950',
+      result: {
+        status: 'previewed',
+        externalExecutionPerformed: false,
+      },
+    });
+  });
+
+  it('requires the acting AgentRep and action run identity for CRM preparation', async () => {
+    await expect(
+      executeStitchiAction({
+        role: 'marketing_manager',
+        tenantKey: 'tenant-a',
+        userId: '00000000-0000-0000-0000-000000000001',
+        actionType: 'prepare_ghl_operation',
+        inputPayload: {
+          reason: 'Prepare a customer sync.',
+          action: {
+            type: 'contact_upsert',
+            leadId: '00000000-0000-0000-0000-000000000010',
+          },
+        },
+      }),
+    ).rejects.toThrow('Stitchi session is missing the CRM approval identity');
+    expect(ghlOperationsMocks.prepare).not.toHaveBeenCalled();
   });
 });

@@ -94,7 +94,7 @@ async function installMocks(page: Page, role: Role) {
     const path = url.pathname;
     const method = request.method();
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    const knownPrefix = ['/auth/', '/events', '/leads', '/event-problems', '/planner/', '/ghl-sync/', '/closeout/', '/learning-recommendations/', '/analytics/', '/social-growth/', '/ghl/', '/smartlabs/', '/commercial-kpis'];
+    const knownPrefix = ['/auth/', '/events', '/leads', '/event-problems', '/planner/', '/ghl-sync/', '/ghl-operations', '/closeout/', '/learning-recommendations/', '/analytics/', '/social-growth/', '/ghl/', '/smartlabs/', '/commercial-kpis'];
     if (!knownPrefix.some(prefix => path === prefix || path.startsWith(prefix))) return route.continue();
 
     if (path === '/auth/session') return json({ user: people[role], agentRep: { id: `profile-${role}`, name: people[role].name, status: 'active' } });
@@ -121,6 +121,16 @@ async function installMocks(page: Page, role: Role) {
     if (path === `/planner/events/${event.id}/content-requirements`) return json([{ id: 'content-1', assetType: 'video', description: 'Event announcement', platform: 'instagram', status: 'in_progress' }]);
     if (path === `/planner/events/${event.id}/sales-tasks`) return json([{ id: 'task-1', taskType: 'follow_up', description: 'Call hot leads', ownerRole: 'sales_manager', status: 'pending' }]);
     if (path === '/ghl-sync/status') return json({ credentialStatus: 'configured', mappingStatus: 'ready', acceptance: { status: 'ready_for_read_sync', readyForReadSync: true } });
+    if (path === '/ghl-operations/reference-data') {
+      return json({
+        status: 'configured',
+        capabilities: { prepare: true, approve: true },
+        pipelines: [],
+        tags: [],
+        calendars: [],
+      });
+    }
+    if (path === '/ghl-operations' && method === 'GET') return json([]);
     if (path === `/closeout/events/${event.id}/report`) return json({ eventSummary: event, budget: { planned: 5000, actual: 2100 }, leadFunnel: { totalLeads: 3, meetingsBooked: 1, purchases: 0 }, channelPerformance: [], sourcePerformance: [], topBarriers: [] });
     if (path === `/learning-recommendations/events/${event.id}`) return json({ recommendations: [{ id: 'rec-1', title: 'Keep same-day follow-up', rationale: 'Hot leads converted faster when assigned on the same day.', priority: 'high' }] });
     if (path === `/commercial-kpis/events/${event.id}/effective` && method === 'GET') {

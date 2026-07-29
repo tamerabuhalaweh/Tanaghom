@@ -155,6 +155,8 @@ model Tenant {
   stitchi_messages StitchiMessage[]
   stitchi_action_runs StitchiActionRun[]
   stitchi_action_approvals StitchiActionApproval[]
+  ghl_operation_commands GhlOperationCommand[]
+  ghl_webhook_events GhlWebhookEvent[]
 
   @@map("tenants")
 }
@@ -346,6 +348,8 @@ model User {
   commercial_kpi_targets_approved                   CommercialKpiTarget[]                   @relation("CommercialKpiTargetApprovedBy")
   ghl_attribution_mappings_created                  GhlPlanAttributionMapping[]             @relation("GhlPlanAttributionMappingCreatedBy")
   ghl_attribution_mappings_approved                 GhlPlanAttributionMapping[]             @relation("GhlPlanAttributionMappingApprovedBy")
+  ghl_operations_requested GhlOperationCommand[] @relation("GhlOperationRequestedBy")
+  ghl_operations_approved GhlOperationCommand[] @relation("GhlOperationApprovedBy")
   tenant_subscription_events TenantSubscriptionEvent[]
   stitchi_conversations StitchiConversation[] @relation("StitchiConversationUser")
   stitchi_action_runs StitchiActionRun[] @relation("StitchiActionRunUser")
@@ -651,6 +655,7 @@ model StitchiActionRun {
   conversation StitchiConversation     @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
   user         User                    @relation("StitchiActionRunUser", fields: [user_id], references: [id])
   approvals    StitchiActionApproval[]
+  ghl_operations GhlOperationCommand[]
 
   @@index([tenant_key])
   @@index([conversation_id])
@@ -1383,6 +1388,7 @@ enum ApprovalTargetType {
   content_item
   draft_version
   saif_decision_record
+  external_operation
 }
 
 enum ApprovalStatus {
@@ -3280,6 +3286,7 @@ model LeadCaptureRecord {
   external_source_provider     String?
   external_source_id           String?
   external_opportunity_id      String?
+  external_appointment_id      String?
   external_pipeline_id         String?
   external_stage_id            String?
   external_tags                String[]     @default([])
@@ -3303,6 +3310,7 @@ model LeadCaptureRecord {
   whatsapp_handoffs WhatsAppHandoffRequest[]
   sequence_plans   ConversionSequencePlan[]
   lifecycle_events LeadLifecycleEvent[]
+  ghl_operations GhlOperationCommand[]
 
   @@index([tenant_key])
   @@index([lead_status])
@@ -3311,6 +3319,7 @@ model LeadCaptureRecord {
   @@index([external_source_provider])
   @@index([external_source_id])
   @@index([external_opportunity_id])
+  @@index([external_appointment_id])
   @@index([external_last_synced_at])
   @@index([commercial_plan_id])
   @@index([ghl_attribution_mapping_id])
@@ -3387,6 +3396,145 @@ model GhlLeadSyncRun {
   @@index([created_by_user_id])
   @@index([started_at])
   @@map("ghl_lead_sync_runs")
+}
+
+enum GhlOperationType {
+  contact_upsert
+  contact_tags_update
+  opportunity_upsert
+  appointment_upsert
+  whatsapp_send
+}
+
+enum GhlOperationStatus {
+  previewed
+  pending_approval
+  approved
+  executing
+  provider_accepted
+  reconciled
+  rejected
+  cancelled
+  blocked
+  failed
+  reconciliation_failed
+  expired
+}
+
+enum GhlReconciliationStatus {
+  pending
+  confirmed
+  failed
+  not_required
+}
+
+enum GhlWebhookProcessingStatus {
+  received
+  processed
+  duplicate
+  rejected
+  failed
+}
+
+model GhlOperationCommand {
+  id                        String                  @id @default(uuid()) @db.Uuid
+  tenant_key                String
+  event_id                  String?                 @db.Uuid
+  commercial_plan_id        String?                 @db.Uuid
+  lead_id                   String?                 @db.Uuid
+  stitchi_action_run_id     String?                 @db.Uuid
+  operation_type            GhlOperationType
+  status                    GhlOperationStatus      @default(previewed)
+  reconciliation_status     GhlReconciliationStatus @default(pending)
+  idempotency_key           String
+  request_hash              String
+  preview_hash              String
+  version                   Int                     @default(1)
+  input_payload             Json
+  preview_payload           Json
+  provider_endpoint         String
+  provider_object_id        String?
+  provider_contact_id       String?
+  provider_opportunity_id   String?
+  provider_appointment_id   String?
+  provider_message_id       String?
+  provider_response_status  Int?
+  provider_result           Json?
+  failure_reason            String?                 @db.Text
+  approval_id               String?                 @db.Uuid
+  capability_resolution_id  String?                 @db.Uuid
+  mcp_mediation_request_id  String?                 @db.Uuid
+  mcp_mediation_decision_id String?                 @db.Uuid
+  requested_by_user_id      String                  @db.Uuid
+  requested_by_agent_rep_id String                  @db.Uuid
+  approved_by_user_id       String?                 @db.Uuid
+  approved_by_agent_rep_id  String?                 @db.Uuid
+  approved_at               DateTime?
+  executed_at               DateTime?
+  execution_lease_id        String?
+  execution_lease_expires_at DateTime?
+  reconciled_at             DateTime?
+  expires_at                DateTime
+  attempt_count             Int                     @default(0)
+  raw_secrets_returned      Boolean                 @default(false)
+  created_at                DateTime                @default(now())
+  updated_at                DateTime                @updatedAt
+
+  tenant             Tenant             @relation(fields: [tenant_key], references: [tenant_key])
+  event              CommercialEvent?   @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  commercial_plan    CommercialPlan?    @relation(fields: [commercial_plan_id], references: [id], onDelete: SetNull)
+  lead               LeadCaptureRecord? @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+  stitchi_action_run StitchiActionRun?  @relation(fields: [stitchi_action_run_id], references: [id], onDelete: SetNull)
+  requested_by       User               @relation("GhlOperationRequestedBy", fields: [requested_by_user_id], references: [id])
+  approved_by        User?              @relation("GhlOperationApprovedBy", fields: [approved_by_user_id], references: [id])
+
+  @@unique([tenant_key, idempotency_key])
+  @@index([tenant_key])
+  @@index([event_id])
+  @@index([commercial_plan_id])
+  @@index([lead_id])
+  @@index([stitchi_action_run_id])
+  @@index([operation_type])
+  @@index([status])
+  @@index([status, execution_lease_expires_at])
+  @@index([reconciliation_status])
+  @@index([provider_object_id])
+  @@index([provider_contact_id])
+  @@index([provider_opportunity_id])
+  @@index([provider_appointment_id])
+  @@index([provider_message_id])
+  @@index([requested_by_user_id])
+  @@index([requested_by_agent_rep_id])
+  @@index([approved_by_user_id])
+  @@index([approved_by_agent_rep_id])
+  @@index([created_at])
+  @@map("ghl_operation_commands")
+}
+
+model GhlWebhookEvent {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  tenant_key         String
+  provider_event_id  String
+  event_type         String
+  payload_hash       String
+  signature_verified Boolean                    @default(false)
+  processing_status  GhlWebhookProcessingStatus @default(received)
+  provider_object_id String?
+  location_id        String?
+  summary            Json?
+  error_summary      String?                    @db.Text
+  received_at        DateTime                   @default(now())
+  processed_at       DateTime?
+
+  tenant Tenant @relation(fields: [tenant_key], references: [tenant_key])
+
+  @@unique([tenant_key, provider_event_id])
+  @@index([tenant_key])
+  @@index([event_type])
+  @@index([processing_status])
+  @@index([provider_object_id])
+  @@index([received_at])
+  @@map("ghl_webhook_events")
 }
 
 model LeadSourceAttribution {
@@ -4073,6 +4221,7 @@ model CommercialPlan {
   governed_kpi_targets     CommercialKpiTarget[]
   ghl_attribution_mappings GhlPlanAttributionMapping[]
   ghl_leads                LeadCaptureRecord[]                @relation("GhlLeadCommercialPlan")
+  ghl_operations           GhlOperationCommand[]
 
   @@index([tenant_key])
   @@index([revenue_line_id])
@@ -4684,6 +4833,7 @@ model CommercialEvent {
   budget_allocations       CommercialBudgetAllocation[]
   governed_kpi_targets     CommercialKpiTarget[]
   ghl_attribution_mappings GhlPlanAttributionMapping[]
+  ghl_operations           GhlOperationCommand[]
 
   @@index([tenant_key])
   @@index([event_type])
