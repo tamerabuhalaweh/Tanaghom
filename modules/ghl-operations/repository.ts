@@ -914,16 +914,13 @@ function buildProviderPreview(
       );
       blockers.push(...customFields.blockers);
       providerEndpoint = opportunityId ? `/opportunities/${opportunityId}` : '/opportunities/';
-      providerPayload = {
-        locationId: config.locationId || '<configured location>',
+      providerPayload = buildOpportunityProviderPayload(
+        action,
+        config.locationId || '<configured location>',
         contactId,
-        pipelineId: action.pipelineId,
-        pipelineStageId: action.stageId,
-        name: action.name,
-        status: action.status,
-        ...(action.monetaryValue !== undefined ? { monetaryValue: action.monetaryValue } : {}),
-        customFields: customFields.fields,
-      };
+        opportunityId,
+        customFields.fields,
+      );
       summary = {
         title: opportunityId ? 'Update sale in GHL' : 'Create sale in GHL',
         opportunityName: action.name,
@@ -988,6 +985,25 @@ function buildProviderPreview(
     blockers,
     readyForApproval: blockers.length === 0,
     rawSecretsReturned: false,
+  };
+}
+
+export function buildOpportunityProviderPayload(
+  action: Extract<GhlOperationAction, { type: 'opportunity_upsert' }>,
+  locationId: string,
+  contactId: string | null,
+  opportunityId: string | null | undefined,
+  customFields: Array<{ id?: string; key?: string; fieldValue: string }>,
+): JsonRecord {
+  return {
+    // GHL requires these identifiers when creating, but rejects them on update.
+    ...(opportunityId ? {} : { locationId, contactId }),
+    pipelineId: action.pipelineId,
+    pipelineStageId: action.stageId,
+    name: action.name,
+    status: action.status,
+    ...(action.monetaryValue !== undefined ? { monetaryValue: action.monetaryValue } : {}),
+    customFields,
   };
 }
 
