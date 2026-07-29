@@ -8,6 +8,26 @@ export interface GhlOperationsClientConfig {
   version: string;
 }
 
+export interface GhlOpportunityFieldReference {
+  id: string;
+  key: string | null;
+  name: string;
+  dataType: string;
+  picklistOptions: string[];
+}
+
+export interface GhlOperationsReferenceData {
+  tags: Array<{ id: string; name: string }>;
+  pipelines: Array<{
+    id: string;
+    name: string;
+    stages: Array<{ id: string; name: string }>;
+  }>;
+  calendars: Array<{ id: string; name: string }>;
+  opportunityFields: GhlOpportunityFieldReference[];
+  warnings: string[];
+}
+
 export interface GhlOperationsClient {
   upsertContact(payload: Record<string, unknown>): Promise<GhlProviderResult>;
   addTags(contactId: string, tags: string[]): Promise<GhlProviderResult>;
@@ -20,16 +40,7 @@ export interface GhlOperationsClient {
   getContact(id: string): Promise<GhlProviderResult>;
   getOpportunity(id: string): Promise<GhlProviderResult>;
   getAppointment(id: string): Promise<GhlProviderResult>;
-  referenceData(): Promise<{
-    tags: Array<{ id: string; name: string }>;
-    pipelines: Array<{
-      id: string;
-      name: string;
-      stages: Array<{ id: string; name: string }>;
-    }>;
-    calendars: Array<{ id: string; name: string }>;
-    warnings: string[];
-  }>;
+  referenceData(): Promise<GhlOperationsReferenceData>;
 }
 
 export class HighLevelOperationsClient implements GhlOperationsClient {
@@ -84,19 +95,27 @@ export class HighLevelOperationsClient implements GhlOperationsClient {
   }
 
   async referenceData() {
-    const [tagsResult, pipelinesResult, calendarsResult] = await Promise.all([
-      this.read(`/locations/${encodeURIComponent(this.config.locationId)}/tags`),
-      this.read(
-        `/opportunities/pipelines?locationId=${encodeURIComponent(this.config.locationId)}`,
-      ),
-      this.read(`/calendars/?locationId=${encodeURIComponent(this.config.locationId)}`),
-    ]);
+    const [tagsResult, pipelinesResult, calendarsResult, opportunityFieldsResult] =
+      await Promise.all([
+        this.read(`/locations/${encodeURIComponent(this.config.locationId)}/tags`),
+        this.read(
+          `/opportunities/pipelines?locationId=${encodeURIComponent(this.config.locationId)}`,
+        ),
+        this.read(`/calendars/?locationId=${encodeURIComponent(this.config.locationId)}`),
+        this.read(
+          `/locations/${encodeURIComponent(this.config.locationId)}/customFields?model=opportunity`,
+        ),
+      ]);
     const warnings: string[] = [];
     if (!tagsResult.ok) warnings.push(`GHL tags are unavailable (HTTP ${tagsResult.status}).`);
     if (!pipelinesResult.ok)
       warnings.push(`GHL pipelines are unavailable (HTTP ${pipelinesResult.status}).`);
     if (!calendarsResult.ok)
       warnings.push(`GHL calendars are unavailable (HTTP ${calendarsResult.status}).`);
+    if (!opportunityFieldsResult.ok)
+      warnings.push(
+        `GHL opportunity fields are unavailable (HTTP ${opportunityFieldsResult.status}).`,
+      );
     return {
       tags: extractArray(tagsResult.body, ['tags'])
         .map((value) => {
@@ -139,6 +158,30 @@ export class HighLevelOperationsClient implements GhlOperationsClient {
           return id && name ? { id, name } : null;
         })
         .filter((value): value is { id: string; name: string } => Boolean(value)),
+      opportunityFields: extractArray(opportunityFieldsResult.body, [
+        'customFields',
+        'fields',
+        'items',
+        'results',
+      ])
+        .map((value) => {
+          const record = asRecord(value);
+          const id = firstString([record.id, record._id, record.fieldId]);
+          const name = firstString([record.name, record.label]);
+          if (!id || !name) return null;
+          return {
+            id,
+            key: firstString([record.fieldKey, record.field_key, record.key]),
+            name,
+            dataType: firstString([record.dataType, record.data_type, record.type]) || 'UNKNOWN',
+            picklistOptions: Array.isArray(record.picklistOptions)
+              ? record.picklistOptions
+                  .map((option) => (typeof option === 'string' ? option.trim() : ''))
+                  .filter(Boolean)
+              : [],
+          };
+        })
+        .filter((value): value is GhlOpportunityFieldReference => Boolean(value)),
       warnings,
     };
   }
@@ -254,10 +297,27 @@ export function isGhlWhatsAppDnd(body: unknown): boolean {
   return status === 'active' || status === 'permanent';
 }
 
+export function summarizeGhlProviderError(body: unknown): string | null {
+  const root = asRecord(body);
+  const candidates = [
+    ...asStringMessages(root.message),
+    ...asStringMessages(root.error),
+    ...asStringMessages(root.statusText),
+  ];
+  const summary = candidates.map((value) => value.replace(/\s+/g, ' ').trim()).find(Boolean);
+  return summary ? summary.slice(0, 500) : null;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function asStringMessages(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
+  return [];
 }
 
 function firstString(values: unknown[]): string | null {
