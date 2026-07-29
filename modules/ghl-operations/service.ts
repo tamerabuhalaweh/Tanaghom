@@ -1,7 +1,7 @@
 import type { SessionContext } from '@shared/auth';
 import { ValidationError } from '@shared/errors';
 import type { GhlRuntimeConfig } from '../ghl-sync/repository';
-import { HighLevelOperationsClient } from './client';
+import { HighLevelOperationsClient, type GhlOperationsReferenceData } from './client';
 import { checkGhlOperationPermission, hasGhlOperationPermission } from './policy';
 import * as repo from './repository';
 import { sha256 } from './signature';
@@ -44,6 +44,7 @@ export async function referenceData(session: SessionContext) {
       tags: [],
       pipelines: [],
       calendars: [],
+      opportunityFields: [],
       warnings: [],
       rawSecretsReturned: false,
       rawPayloadReturned: false,
@@ -58,6 +59,7 @@ export async function referenceData(session: SessionContext) {
       tags: [],
       pipelines: [],
       calendars: [],
+      opportunityFields: [],
       warnings: ['Connect and validate the customer-owned GHL account first.'],
       rawSecretsReturned: false,
       rawPayloadReturned: false,
@@ -106,8 +108,14 @@ export async function prepare(session: SessionContext, input: PrepareGhlOperatio
   if (input.action.type === 'whatsapp_send') {
     checkGhlOperationPermission(session.role, 'ghl-operations:send-whatsapp');
   }
-  await validateLiveProviderReferences(session.tenantKey, input);
-  return repo.prepareOperation(session.tenantKey, session.humanUserId, session.agentRepId, input);
+  const providerReferences = await validateLiveProviderReferences(session.tenantKey, input);
+  return repo.prepareOperation(
+    session.tenantKey,
+    session.humanUserId,
+    session.agentRepId,
+    input,
+    providerReferences,
+  );
 }
 
 export async function submit(session: SessionContext, id: string, input: SubmitGhlOperationInput) {
@@ -370,14 +378,14 @@ function visibleOperation(
 async function validateLiveProviderReferences(
   tenantKey: string,
   input: PrepareGhlOperationInput,
-): Promise<void> {
+): Promise<GhlOperationsReferenceData | undefined> {
   const action = input.action;
   if (!['contact_tags_update', 'opportunity_upsert', 'appointment_upsert'].includes(action.type)) {
-    return;
+    return undefined;
   }
   const { resolveGhlSyncRuntimeConfig } = await import('../ghl-sync/repository');
   const config = await resolveGhlSyncRuntimeConfig(tenantKey);
-  if (!config.apiKey || !config.locationId || config.source !== 'tenant_vault') return;
+  if (!config.apiKey || !config.locationId || config.source !== 'tenant_vault') return undefined;
   const refs = await clientFactory(config).referenceData();
   if (action.type === 'contact_tags_update') {
     const available = new Set(refs.tags.flatMap((tag) => [tag.id, tag.name]));
@@ -399,6 +407,7 @@ async function validateLiveProviderReferences(
   ) {
     throw new ValidationError('The selected GHL calendar no longer exists');
   }
+  return refs;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

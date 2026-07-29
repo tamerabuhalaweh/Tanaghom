@@ -6,8 +6,12 @@ import { evaluateExternalExecution } from '@shared/policy/external-execution';
 import { getApprovedMappingForEvent } from '../ghl-plan-attribution/repository';
 import { getGhlMappingReadiness } from '../ghl-setup/repository';
 import { resolveGhlSyncRuntimeConfig, type GhlRuntimeConfig } from '../ghl-sync/repository';
-import type { GhlOperationsClient } from './client';
-import { extractProviderIds, isGhlWhatsAppDnd } from './client';
+import type {
+  GhlOperationsClient,
+  GhlOperationsReferenceData,
+  GhlOpportunityFieldReference,
+} from './client';
+import { extractProviderIds, isGhlWhatsAppDnd, summarizeGhlProviderError } from './client';
 import { assertGhlOperationTransition } from './state-machine';
 import { ghlOperationActionSchema, paidSaleRequiresWon } from './types';
 import type {
@@ -62,6 +66,7 @@ export async function prepareOperation(
   userId: string,
   agentRepId: string,
   input: PrepareGhlOperationInput,
+  providerReferences?: GhlOperationsReferenceData,
 ): Promise<GhlOperationSummary> {
   const requestHash = hashJson({
     eventId: input.eventId ?? null,
@@ -98,7 +103,13 @@ export async function prepareOperation(
   }
 
   const context = await loadPreviewContext(tenantKey, userId, input);
-  const preview = buildProviderPreview(context.config, context.lead, context.mapping, input.action);
+  const preview = buildProviderPreview(
+    context.config,
+    context.lead,
+    context.mapping,
+    input.action,
+    providerReferences,
+  );
   const previewHash = hashJson(preview);
   const expiresAt = new Date(Date.now() + PREVIEW_LIFETIME_MS);
   const record = await prisma.$transaction(async (tx) => {
@@ -320,6 +331,7 @@ export async function executeOperation(
     const providerPayload = asRecord(preview.providerPayload);
     const response = await performProviderOperation(client, action, preview, providerPayload);
     if (!response.ok) {
+      const providerError = summarizeGhlProviderError(response.body);
       const failed = await transitionWithAudit(
         tenantKey,
         userId,
@@ -327,10 +339,16 @@ export async function executeOperation(
         'failed',
         {
           provider_response_status: response.status,
-          failure_reason: `GoHighLevel returned HTTP ${response.status}`,
+          failure_reason: [`GoHighLevel returned HTTP ${response.status}`, providerError]
+            .filter(Boolean)
+            .join(': '),
         },
         'ghl_operation_provider_failed',
-        { status: response.status },
+        {
+          status: response.status,
+          ...(providerError ? { providerError } : {}),
+          rawPayloadReturned: false,
+        },
       );
       return serialize(failed);
     }
@@ -832,6 +850,7 @@ function buildProviderPreview(
   lead: Awaited<ReturnType<typeof prisma.leadCaptureRecord.findFirst>> & {},
   mapping: Awaited<ReturnType<typeof getApprovedMappingForEvent>>,
   action: GhlOperationAction,
+  providerReferences?: GhlOperationsReferenceData,
 ): JsonRecord {
   const blockers: string[] = [];
   if (!config.apiKey || !config.locationId || config.source !== 'tenant_vault') {
@@ -888,6 +907,12 @@ function buildProviderPreview(
     }
     case 'opportunity_upsert': {
       const opportunityId = action.opportunityId || lead.external_opportunity_id;
+      const customFields = buildOpportunityCustomFields(
+        action,
+        mapping,
+        providerReferences?.opportunityFields,
+      );
+      blockers.push(...customFields.blockers);
       providerEndpoint = opportunityId ? `/opportunities/${opportunityId}` : '/opportunities/';
       providerPayload = {
         locationId: config.locationId || '<configured location>',
@@ -897,7 +922,7 @@ function buildProviderPreview(
         name: action.name,
         status: action.status,
         ...(action.monetaryValue !== undefined ? { monetaryValue: action.monetaryValue } : {}),
-        customFields: buildOpportunityCustomFields(action, mapping),
+        customFields: customFields.fields,
       };
       summary = {
         title: opportunityId ? 'Update sale in GHL' : 'Create sale in GHL',
@@ -966,15 +991,34 @@ function buildProviderPreview(
   };
 }
 
-function buildOpportunityCustomFields(
+export function buildOpportunityCustomFields(
   action: Extract<GhlOperationAction, { type: 'opportunity_upsert' }>,
   mapping: Awaited<ReturnType<typeof getApprovedMappingForEvent>>,
-): Array<{ id: string; fieldValue: string | number }> {
-  const fields: Array<{ id: string; fieldValue: string | number }> = [];
-  const add = (id: string | null | undefined, value: unknown) => {
-    if (id && value !== undefined && value !== null && value !== '') {
-      fields.push({ id, fieldValue: value instanceof Date ? value.toISOString() : String(value) });
+  opportunityFields?: GhlOpportunityFieldReference[],
+): {
+  fields: Array<{ id?: string; key?: string; fieldValue: string }>;
+  blockers: string[];
+} {
+  const fields: Array<{ id?: string; key?: string; fieldValue: string }> = [];
+  const blockers: string[] = [];
+  const add = (identifier: string | null | undefined, value: unknown) => {
+    if (!identifier || value === undefined || value === null || value === '') return;
+    const definition = resolveOpportunityField(identifier, opportunityFields);
+    if (opportunityFields && !definition) {
+      blockers.push(`Mapped GHL opportunity field no longer exists: ${identifier}`);
+      return;
     }
+    const fieldValue = formatOpportunityFieldValue(value, definition);
+    if (definition && fieldValue === null) {
+      blockers.push(`Value '${String(value)}' is not valid for GHL field ${definition.name}`);
+      return;
+    }
+    const reference = definition
+      ? { id: definition.id }
+      : identifier.includes('.')
+        ? { key: identifier }
+        : { id: identifier };
+    fields.push({ ...reference, fieldValue: fieldValue ?? String(value) });
   };
   if (action.payment && mapping) {
     add(mapping.sale_value_field, action.payment.totalSaleValue);
@@ -984,7 +1028,46 @@ function buildOpportunityCustomFields(
     add(mapping.payment_date_field, action.payment.paymentDate);
   }
   for (const [id, value] of Object.entries(action.customFields)) add(id, value);
-  return fields;
+  return { fields, blockers: [...new Set(blockers)] };
+}
+
+function resolveOpportunityField(
+  identifier: string,
+  definitions?: GhlOpportunityFieldReference[],
+): GhlOpportunityFieldReference | null {
+  if (!definitions) return null;
+  const normalized = normalizeFieldReference(identifier);
+  return (
+    definitions.find(
+      (definition) =>
+        normalizeFieldReference(definition.id) === normalized ||
+        normalizeFieldReference(definition.key || '') === normalized ||
+        normalizeFieldReference(definition.name) === normalized,
+    ) || null
+  );
+}
+
+function formatOpportunityFieldValue(
+  value: unknown,
+  definition: GhlOpportunityFieldReference | null,
+): string | null {
+  if (!definition) return value instanceof Date ? value.toISOString() : String(value);
+  if (definition.dataType === 'DATE') {
+    const date = value instanceof Date ? value : new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+  }
+  if (definition.dataType === 'SINGLE_OPTIONS') {
+    const normalized = normalizeFieldReference(String(value));
+    return (
+      definition.picklistOptions.find((option) => normalizeFieldReference(option) === normalized) ||
+      null
+    );
+  }
+  return String(value);
+}
+
+function normalizeFieldReference(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 async function buildExecutionGate(
@@ -1008,8 +1091,7 @@ async function buildExecutionGate(
       payment: {
         paymentStatus:
           typeof rawPayment.paymentStatus === 'string' ? rawPayment.paymentStatus : undefined,
-        amountPaid:
-          typeof rawPayment.amountPaid === 'number' ? rawPayment.amountPaid : undefined,
+        amountPaid: typeof rawPayment.amountPaid === 'number' ? rawPayment.amountPaid : undefined,
       },
     })
   ) {

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { extractProviderIds, HighLevelOperationsClient, validateGhlBaseUrl } from '../client';
+import {
+  extractProviderIds,
+  HighLevelOperationsClient,
+  summarizeGhlProviderError,
+  validateGhlBaseUrl,
+} from '../client';
 
 function response(body: unknown, ok = true, status = 200) {
   return {
@@ -97,6 +102,20 @@ describe('HighLevel governed operations client', () => {
             },
           ],
         }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          customFields: [
+            {
+              id: 'field-1',
+              fieldKey: 'opportunity.payment_status',
+              name: 'Payment Status',
+              dataType: 'SINGLE_OPTIONS',
+              picklistOptions: ['Partial', 'Paid in Full'],
+              locationId: 'must-not-leak-location',
+            },
+          ],
+        }),
       );
     vi.stubGlobal('fetch', fetchMock);
     const client = new HighLevelOperationsClient({
@@ -118,6 +137,15 @@ describe('HighLevel governed operations client', () => {
         },
       ],
       calendars: [{ id: 'calendar-1', name: 'Sales Calendar' }],
+      opportunityFields: [
+        {
+          id: 'field-1',
+          key: 'opportunity.payment_status',
+          name: 'Payment Status',
+          dataType: 'SINGLE_OPTIONS',
+          picklistOptions: ['Partial', 'Paid in Full'],
+        },
+      ],
       warnings: [],
     });
     expect(JSON.stringify(result)).not.toContain('must-not-leak@example.com');
@@ -138,6 +166,17 @@ describe('HighLevel governed operations client', () => {
       appointmentId: null,
       messageId: 'message-1',
     });
+  });
+
+  it('reduces provider errors to a bounded safe message', () => {
+    expect(
+      summarizeGhlProviderError({
+        statusCode: 422,
+        message: ['customFields.0.id must be a valid custom field identifier'],
+        customer: { email: 'must-not-leak@example.com' },
+      }),
+    ).toBe('customFields.0.id must be a valid custom field identifier');
+    expect(summarizeGhlProviderError({})).toBeNull();
   });
 
   it('pins CRM operations to the official HTTPS API host', () => {
