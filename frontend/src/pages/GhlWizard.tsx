@@ -55,6 +55,7 @@ function tone(value: string): 'good' | 'warn' | 'danger' | 'info' | 'muted' {
 }
 
 const INTERNAL_TAGS = [
+  'operational',
   'new_lead',
   'contacted',
   'qualified',
@@ -535,9 +536,16 @@ export default function GhlWizard() {
                 ))}
               </select>
             </Field>
-            <Field label="Tanaghum Lead State">
+            <Field
+              label="Tanaghum Meaning"
+              helper="Choose Operational for approved segmentation or event tags that must not change lead status."
+            >
               <select value={tagForm.internalTag} onChange={event => setTagForm(current => ({ ...current, internalTag: event.target.value }))} className="min-h-11 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm">
-                {INTERNAL_TAGS.map(item => <option key={item} value={item}>{titleCase(item)}</option>)}
+                {INTERNAL_TAGS.map(item => (
+                  <option key={item} value={item}>
+                    {item === 'operational' ? 'Operational / segmentation only' : titleCase(item)}
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="Direction">

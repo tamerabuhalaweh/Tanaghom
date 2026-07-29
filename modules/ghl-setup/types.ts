@@ -45,7 +45,8 @@ export const GHL_MAPPING_ACCEPTANCE_STATUSES = [
 
 export type GhlMappingAcceptanceStatus = (typeof GHL_MAPPING_ACCEPTANCE_STATUSES)[number];
 
-export type GhlTagTarget = LeadStatus | LeadTemperature;
+export const GHL_OPERATIONAL_TAG_TARGET = 'operational' as const;
+export type GhlTagTarget = LeadStatus | LeadTemperature | typeof GHL_OPERATIONAL_TAG_TARGET;
 
 export interface GhlCredentialStatus {
   provider: 'gohighlevel';

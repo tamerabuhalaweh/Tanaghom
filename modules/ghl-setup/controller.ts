@@ -3,11 +3,16 @@ import { z } from 'zod';
 import { verifyToken, type JwtPayload } from '@shared/auth';
 import { UnauthorizedError } from '@shared/errors';
 import { LEAD_STATUSES, LEAD_TEMPERATURES } from '../lead-lifecycle/types';
+import { GHL_OPERATIONAL_TAG_TARGET } from './types';
 import * as service from './service';
 
 export const ghlSetupRouter = Router();
 
-const tagTargetValues = [...LEAD_STATUSES, ...LEAD_TEMPERATURES] as [string, ...string[]];
+const tagTargetValues = [
+  GHL_OPERATIONAL_TAG_TARGET,
+  ...LEAD_STATUSES,
+  ...LEAD_TEMPERATURES,
+] as [string, ...string[]];
 const leadStatusValues = [...LEAD_STATUSES] as [string, ...string[]];
 
 function getPayload(req: Request): JwtPayload {

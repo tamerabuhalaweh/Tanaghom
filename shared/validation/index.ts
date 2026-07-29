@@ -14,7 +14,10 @@ export const paginationSchema = z.object({
 
 export type PaginationInput = z.infer<typeof paginationSchema>;
 
-export function validateOrThrow<T>(schema: z.ZodSchema<T>, data: unknown): T {
+export function validateOrThrow<TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  data: unknown,
+): z.output<TSchema> {
   const result = schema.safeParse(data);
   if (!result.success) {
     const fields: Record<string, string> = {};
