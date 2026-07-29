@@ -58,6 +58,8 @@ import {
   createKpiTargetSchema,
   eventCapacitySchema,
 } from '@modules/commercial-kpi-governance/types';
+import * as ghlOperationsService from '@modules/ghl-operations/service';
+import { ghlOperationActionSchema } from '@modules/ghl-operations/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -96,6 +98,7 @@ const SUPPORTED_ACTIONS = [
   'review_commercial_spend_evidence',
   'create_governed_event_kpi_target',
   'set_event_capacity',
+  'prepare_ghl_operation',
 ] as const;
 
 export type StitchiExecutableActionType = (typeof SUPPORTED_ACTIONS)[number];
@@ -201,6 +204,18 @@ const transitionAnnualCommercialPlanActionSchema = z.object({
   decision: z.union([annualPlanTransitionSchema, rejectAnnualPlanSchema]),
 });
 
+const prepareGhlOperationActionSchema = z
+  .object({
+    operationId: z.string().uuid().optional(),
+    eventId: z.string().uuid().optional(),
+    commercialPlanId: z.string().uuid().optional(),
+    reason: z.string().trim().min(3).max(1000),
+    action: ghlOperationActionSchema.optional(),
+  })
+  .refine((input) => Boolean(input.operationId || input.action), {
+    message: 'A prepared CRM operation or a complete CRM action is required',
+  });
+
 export function isExecutableStitchiAction(actionType: string): actionType is StitchiExecutableActionType {
   return SUPPORTED_ACTIONS.includes(actionType as StitchiExecutableActionType);
 }
@@ -221,6 +236,8 @@ export async function executeStitchiAction(input: {
   tenantKey: string;
   userId: string;
   requestingUserId?: string;
+  agentRepId?: string;
+  actionRunId?: string;
   actionType: string;
   inputPayload: unknown;
 }): Promise<{ objectType: string; objectId: string; result: unknown }> {
@@ -548,6 +565,50 @@ export async function executeStitchiAction(input: {
         payload.review,
       );
       return { objectType: 'event_kpi_record', objectId: payload.kpiId, result };
+    }
+    case 'prepare_ghl_operation': {
+      if (!input.agentRepId || !input.actionRunId) {
+        throw new ValidationError('Stitchi session is missing the CRM approval identity');
+      }
+      const payload = prepareGhlOperationActionSchema.parse(input.inputPayload);
+      const session = {
+        role: input.role,
+        tenantKey: input.tenantKey,
+        humanUserId: input.userId,
+        agentRepId: input.agentRepId,
+      };
+      const result = payload.operationId
+        ? await ghlOperationsService.get(session, payload.operationId).then((operation) => {
+            if (!('previewHash' in operation) || !('version' in operation)) {
+              throw new ForbiddenError(
+                'This CRM operation belongs to another user and cannot be submitted by Stitchi',
+              );
+            }
+            return ghlOperationsService.submit(session, operation.id, {
+              previewHash: operation.previewHash,
+              expectedVersion: operation.version,
+              reason: payload.reason,
+            });
+          })
+        : await ghlOperationsService.prepare(session, {
+            idempotencyKey: `stitchi:${input.actionRunId}`,
+            eventId: payload.eventId,
+            commercialPlanId: payload.commercialPlanId,
+            stitchiActionRunId: input.actionRunId,
+            action: payload.action!,
+          });
+      return {
+        objectType: 'ghl_operation_command',
+        objectId: result.id,
+        result: {
+          ...result,
+          nextAction:
+            result.status === 'pending_approval'
+              ? 'Awaiting CCO or delegated manager approval.'
+              : 'Review this CRM draft before submitting it for manager approval.',
+          externalExecutionPerformed: false,
+        },
+      };
     }
     default:
       throw new ForbiddenError('Stitchi action is not executable');

@@ -154,6 +154,7 @@ function actionTitle(actionType: string): string {
     link_commercial_plan_event: 'Connect event to execution plan',
     link_commercial_plan_campaign: 'Connect campaign to execution plan',
     link_commercial_plan_learning: 'Use approved learning in plan',
+    prepare_ghl_operation: 'Prepare GoHighLevel customer action',
   };
   return labels[actionType] || actionType.replaceAll('_', ' ');
 }
@@ -180,8 +181,8 @@ function statusAccent(status: string): 'teal' | 'amber' | 'rose' | 'blue' | 'vio
 }
 
 function isOperatorIntent(content: string): boolean {
-  return /\b(create|build|prepare|set up|setup|update|change|edit|record|save|link|launch|plan)\b/i.test(content)
-    && /\b(plan|commercial|revenue line|online course|course launch|event|blocker|risk|kpi|lead|audience|budget|revenue target|action plan)\b/i.test(content);
+  return /\b(create|build|prepare|set up|setup|update|change|edit|record|save|link|launch|plan|sync|send|add|remove)\b/i.test(content)
+    && /\b(plan|commercial|revenue line|online course|course launch|event|blocker|risk|kpi|lead|customer|crm|ghl|gohighlevel|whatsapp|tag|opportunity|meeting|payment|audience|budget|revenue target|action plan)\b/i.test(content);
 }
 
 function resultObject(action: ActionRun): { objectType: string; objectId: string } | null {
@@ -206,6 +207,9 @@ function actionResultLink(action: ActionRun): { to: string; label: string } | nu
   }
   if (result.objectType === 'event_problem' || result.objectType === 'commercial_event') {
     return { to: '/events', label: 'Open Events' };
+  }
+  if (result.objectType === 'ghl_operation_command') {
+    return { to: '/events', label: 'Open Sales & Leads' };
   }
   return null;
 }
@@ -276,6 +280,8 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
       budgetTargetId: text(params.get('budgetTargetId')),
       budgetRevision: text(params.get('budgetRevision')),
       budgetCurrency: text(params.get('budgetCurrency')),
+      leadId: text(params.get('leadId')),
+      ghlOperationId: text(params.get('ghlOperationId')),
       prompt: text(params.get('prompt')),
       mode: text(params.get('mode')),
     };
@@ -290,6 +296,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const endRef = useRef<HTMLDivElement | null>(null);
+  const consumedGhlOperationRef = useRef(false);
 
   const loadConversation = useCallback(async () => {
     if (!token) return;
@@ -356,6 +363,10 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
         ...(searchContext.budgetTargetId ? { budgetTargetId: searchContext.budgetTargetId } : {}),
         ...(searchContext.budgetRevision ? { budgetRevision: searchContext.budgetRevision } : {}),
         ...(searchContext.budgetCurrency ? { budgetCurrency: searchContext.budgetCurrency } : {}),
+        ...(searchContext.leadId ? { leadId: searchContext.leadId } : {}),
+        ...(!consumedGhlOperationRef.current && searchContext.ghlOperationId
+          ? { ghlOperationId: searchContext.ghlOperationId }
+          : {}),
       },
     };
   }
@@ -374,6 +385,16 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
       const shouldPrepare = nextMode === 'prepare' || isOperatorIntent(content);
       if (shouldPrepare) {
         const result = await stitchiApi.orchestrate(conversation.id, requestPayload(content), token) as RecordMap;
+        if (searchContext.ghlOperationId) {
+          consumedGhlOperationRef.current = true;
+          const params = new URLSearchParams(location.search);
+          params.delete('ghlOperationId');
+          window.history.replaceState(
+            null,
+            '',
+            `${location.pathname}${params.size ? `?${params}` : ''}`,
+          );
+        }
         const userMessage = mapMessage(result.userMessage);
         const assistantMessage = mapMessage(result.assistantMessage);
         const actionRun = mapAction(result.actionRun);
@@ -422,7 +443,11 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
         const result = await stitchiApi.approveAndExecuteAction(actionId, { notes: 'Approved and saved from Stitchi assistant' }, token) as RecordMap;
         const actionRun = mapAction(result.actionRun);
         if (actionRun) setActions(prev => [actionRun, ...prev.filter(item => item.id !== actionRun.id)]);
-        setMessage('Saved to Tanaghum. The workspace has been refreshed.');
+        setMessage(
+          actionRun?.actionType === 'prepare_ghl_operation'
+            ? 'CRM draft submitted. It is now awaiting manager approval; GHL has not changed yet.'
+            : 'Saved to Tanaghum. The workspace has been refreshed.',
+        );
         window.dispatchEvent(new CustomEvent('tanaghum:commercial-data-changed', { detail: { source: 'stitchi' } }));
       } else {
         await stitchiApi.rejectAction(actionId, { notes: 'Rejected from Stitchi assistant' }, token);

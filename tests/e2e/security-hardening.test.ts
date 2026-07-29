@@ -118,7 +118,9 @@ describe('Execution Kill Switches', () => {
     expect(EXECUTION_KILL_SWITCHES).toContain('ANALYTICS_LIVE_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('OPENCLAW_ORCHESTRATION_ENABLED');
     expect(EXECUTION_KILL_SWITCHES).toContain('AGENTSCOPE_PROCESS_ENABLED');
-    expect(EXECUTION_KILL_SWITCHES).toHaveLength(15);
+    expect(EXECUTION_KILL_SWITCHES).toContain('GHL_WRITE_BACK_ENABLED');
+    expect(EXECUTION_KILL_SWITCHES).toContain('GHL_WHATSAPP_SEND_ENABLED');
+    expect(EXECUTION_KILL_SWITCHES).toHaveLength(17);
   });
 
   it('all kill switches default to false', () => {

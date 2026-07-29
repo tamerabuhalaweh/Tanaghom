@@ -8,6 +8,7 @@ import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
 import type { CommercialCurrency, CommercialRevenueLineType } from '@modules/commercial-command-center/types';
 import * as historicalAssessmentService from '@modules/commercial-historical-assessment/service';
 import { assessmentScopeSchema } from '@modules/commercial-historical-assessment/types';
+import { ghlOperationActionSchema, type GhlOperationAction } from '@modules/ghl-operations/types';
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext, type StitchiReadOnlyContext } from './context';
 import { checkStitchiPermission } from './policy';
 import * as repo from './repository';
@@ -122,7 +123,10 @@ async function loadContextNode(state: typeof orchestrationState.State) {
 
 async function classifyNode(state: typeof orchestrationState.State): Promise<Partial<typeof orchestrationState.State>> {
   const effectiveContent = state.effectiveContent || state.content;
-  if (isExternalExecutionRequest(effectiveContent)) {
+  if (
+    isExternalExecutionRequest(effectiveContent) &&
+    !isGovernedGhlOperationRequest(effectiveContent)
+  ) {
     return {
       status: 'blocked' as const,
       assistantText: [
@@ -434,7 +438,10 @@ async function deriveActionProposal(
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
-  if (isReadOnlyInformationRequest(content)) return null;
+  const hasStructuredGhlAction = Boolean(objectMetadata(metadata, 'ghlOperationAction'));
+  if (isReadOnlyInformationRequest(content) && !hasStructuredGhlAction) return null;
+  const ghlProposal = deriveGhlOperationActionProposal(content, eventId, metadata);
+  if (ghlProposal) return ghlProposal;
   const executiveReportProposal = deriveExecutiveReportActionProposal(content);
   if (executiveReportProposal) return executiveReportProposal;
   const historicalAssessmentProposal = await deriveHistoricalAssessmentActionProposal(
@@ -2030,6 +2037,16 @@ function textMetadata(metadata: Record<string, unknown> | undefined, key: string
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
+function objectMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | null {
+  const value = metadata?.[key];
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 function numberMetadata(metadata: Record<string, unknown> | undefined, key: string): number | null {
   const value = metadata?.[key];
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -2041,6 +2058,143 @@ function stringArrayMetadata(metadata: Record<string, unknown> | undefined, key:
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : [];
+}
+
+function deriveGhlOperationActionProposal(
+  content: string,
+  eventId?: string,
+  metadata?: Record<string, unknown>,
+): ActionProposal | FollowUpResponse | null {
+  const preparedOperationId = textMetadata(metadata, 'ghlOperationId');
+  if (preparedOperationId) {
+    return {
+      actionType: 'prepare_ghl_operation',
+      inputPayload: {
+        operationId: preparedOperationId,
+        reason: 'Stitchi submitted the reviewed CRM draft for executive approval.',
+      },
+      previewPayload: {
+        title: 'Submit reviewed CRM action',
+        operationId: preparedOperationId,
+        nextState: 'Awaiting manager approval',
+        externalExecutionPerformed: false,
+      },
+      assistantText:
+        'I found the reviewed CRM draft. Approve this card to submit it for CCO or delegated manager approval. GHL will not be changed at this stage.',
+      riskLevel: 'high',
+      reason:
+        'This submits an external CRM change for governed approval but does not execute it in GoHighLevel.',
+    };
+  }
+
+  const structuredAction = objectMetadata(metadata, 'ghlOperationAction');
+  if (!structuredAction && !isGovernedGhlOperationRequest(content)) return null;
+  let action: GhlOperationAction | null = null;
+
+  if (structuredAction) {
+    const parsed = ghlOperationActionSchema.safeParse(structuredAction);
+    if (!parsed.success) {
+      return {
+        kind: 'follow_up',
+        assistantText:
+          'The selected CRM action is incomplete. Review the customer, pipeline, stage, meeting time, or message details and try again. No CRM data was changed.',
+      };
+    }
+    action = parsed.data;
+  } else {
+    const leadId =
+      textMetadata(metadata, 'leadId') ||
+      extractUuidAfter(content, 'lead') ||
+      extractUuidAfter(content, 'customer');
+    if (!leadId) {
+      return {
+        kind: 'follow_up',
+        assistantText:
+          'Which customer should I update? Open Sales & Leads, select the customer, then ask me to sync the customer, update tags, prepare a sale or meeting, or send a WhatsApp message.',
+      };
+    }
+
+    if (
+      /(sync|create|update).{0,30}(customer|contact).{0,30}(ghl|crm)|(?:ghl|crm).{0,30}(customer|contact)/i.test(
+        content,
+      )
+    ) {
+      action = { type: 'contact_upsert', leadId, source: 'Tanaghum via Stitchi' };
+    } else if (/(add|remove).{0,20}tag/i.test(content)) {
+      const addMatch = /add\s+tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
+      const removeMatch = /remove\s+tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
+      const addTags = addMatch?.[1]?.trim() ? [addMatch[1].trim()] : [];
+      const removeTags = removeMatch?.[1]?.trim() ? [removeMatch[1].trim()] : [];
+      if (!addTags.length && !removeTags.length) {
+        return {
+          kind: 'follow_up',
+          assistantText:
+            'Which GHL tag should I add or remove? Use the exact mapped tag name. No CRM data was changed.',
+        };
+      }
+      action = {
+        type: 'contact_tags_update',
+        leadId,
+        addTags,
+        removeTags,
+      };
+    } else if (
+      /send\s+(?:a\s+)?whatsapp|whatsapp\s+(?:message|reminder)|ارسل.{0,20}واتساب/i.test(
+        content,
+      )
+    ) {
+      const messageMatch =
+        /(?:message|saying|text)\s*:\s*([\s\S]+)/i.exec(content) ||
+        /whatsapp(?:\s+message)?\s*:\s*([\s\S]+)/i.exec(content);
+      const message = messageMatch?.[1]?.trim();
+      if (!message) {
+        return {
+          kind: 'follow_up',
+          assistantText:
+            'What WhatsApp message should I prepare for this customer? I will show the exact recipient and message for approval before anything is sent.',
+        };
+      }
+      action = { type: 'whatsapp_send', leadId, message };
+    } else if (/(opportunity|sale|payment|pipeline|stage|meeting|appointment)/i.test(content)) {
+      return {
+        kind: 'follow_up',
+        assistantText:
+          'Open the selected customer action panel and enter the exact pipeline and stage, payment details, or meeting calendar and time. Then choose Ask Stitchi so I can prepare the governed CRM change for approval.',
+      };
+    }
+  }
+
+  if (!action) return null;
+  const actionLabels: Record<GhlOperationAction['type'], string> = {
+    contact_upsert: 'sync this customer with GHL',
+    contact_tags_update: "update this customer's GHL tags",
+    opportunity_upsert: "update this customer's sale and payment record in GHL",
+    appointment_upsert: "create or update this customer's GHL meeting",
+    whatsapp_send: 'send this approved WhatsApp message through GHL',
+  };
+  return {
+    actionType: 'prepare_ghl_operation',
+    inputPayload: {
+      ...(eventId ? { eventId } : {}),
+      ...(textMetadata(metadata, 'commercialPlanId')
+        ? { commercialPlanId: textMetadata(metadata, 'commercialPlanId') }
+        : {}),
+      action,
+      reason: `Stitchi prepared a governed request to ${actionLabels[action.type]}.`,
+    },
+    previewPayload: {
+      title: `Prepare CRM action: ${actionLabels[action.type]}`,
+      customerLeadId: action.leadId,
+      actionType: action.type,
+      details: action,
+      approvalRequired: true,
+      externalExecutionPerformed: false,
+      nextAction:
+        'Approve this preparation, then review the exact GHL command before external execution.',
+    },
+    riskLevel: 'high',
+    reason: `Prepare a governed GHL operation to ${actionLabels[action.type]}`,
+  };
 }
 
 function extractAssessmentDateRange(
@@ -2663,6 +2817,20 @@ function extractUuidAfter(text: string, label: string): string | undefined {
 
 function isExternalExecutionRequest(content: string): boolean {
   return /(publish|schedule|send whatsapp|send telegram|call the lead|write to ghl|crm write|post to instagram|نشر|ارسل|اتصل)/i.test(content);
+}
+
+function isGovernedGhlOperationRequest(content: string): boolean {
+  const containsAnotherExternalCommand =
+    /(publish|schedule|send telegram|call the lead|post to instagram|نشر|اتصل)/i.test(content);
+  if (containsAnotherExternalCommand) return false;
+
+  const crmIntent =
+    /(?:ghl|gohighlevel|crm).{0,50}(?:sync|create|update).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment)|(?:sync|create|update).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment).{0,50}(?:ghl|gohighlevel|crm)|(?:add|remove).{0,20}tag.{0,50}(?:ghl|gohighlevel|crm)|(?:ghl|gohighlevel|crm).{0,50}(?:add|remove).{0,20}tag/i.test(
+      content,
+    );
+  const whatsappSendIntent =
+    /send\s+(?:a\s+)?whatsapp|whatsapp.{0,30}\bsend\b|ارسل.{0,20}واتساب/i.test(content);
+  return crmIntent || whatsappSendIntent;
 }
 
 function inferProblemCategory(lower: string): string {

@@ -1795,4 +1795,84 @@ describe('Stitchi natural-language orchestration', () => {
       }),
     );
   });
+
+  it('asks for a selected customer before preparing a plain-language GHL write', async () => {
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Sync this customer contact with GHL.',
+        eventId: '00000000-0000-0000-0000-000000000001',
+      },
+    );
+
+    expect(result.status).toBe('answered');
+    expect(result.actionRun).toBeNull();
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('Which customer should I update?'),
+      expect.objectContaining({ writesExecuted: false }),
+    );
+  });
+
+  it('prepares a structured sale and payment command for approval without external execution', async () => {
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Prepare this GHL sale and payment update for review.',
+        eventId: '00000000-0000-0000-0000-000000000001',
+        metadata: {
+          leadId: '00000000-0000-0000-0000-000000000010',
+          ghlOperationAction: {
+            type: 'opportunity_upsert',
+            leadId: '00000000-0000-0000-0000-000000000010',
+            pipelineId: 'pipeline-1',
+            stageId: 'stage-sale',
+            name: 'Leadership course sale',
+            status: 'won',
+            monetaryValue: 2000,
+            payment: {
+              totalSaleValue: 2000,
+              amountPaid: 1000,
+              outstandingBalance: 1000,
+              paymentStatus: 'partial',
+              paymentDate: '2026-07-29T12:00:00.000Z',
+              ticketQuantity: 2,
+            },
+          },
+        },
+      },
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(result.safety).toMatchObject({
+      approvalRequired: true,
+      writesExecuted: false,
+      externalExecution: 'blocked',
+    });
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'prepare_ghl_operation',
+        inputPayload: expect.objectContaining({
+          action: expect.objectContaining({
+            type: 'opportunity_upsert',
+            monetaryValue: 2000,
+          }),
+        }),
+      }),
+    );
+  });
 });

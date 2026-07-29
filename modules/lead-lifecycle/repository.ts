@@ -373,6 +373,7 @@ function mapLead(l: Record<string, unknown>): LeadSummary {
     externalSourceProvider: l.external_source_provider as string | null,
     externalSourceId: l.external_source_id as string | null,
     externalOpportunityId: l.external_opportunity_id as string | null,
+    externalAppointmentId: l.external_appointment_id as string | null,
     externalPipelineId: l.external_pipeline_id as string | null,
     externalStageId: l.external_stage_id as string | null,
     externalTags: Array.isArray(l.external_tags) ? (l.external_tags as string[]) : [],

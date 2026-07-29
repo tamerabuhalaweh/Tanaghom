@@ -164,6 +164,7 @@ export interface LeadSummary {
   externalSourceProvider: string | null;
   externalSourceId: string | null;
   externalOpportunityId: string | null;
+  externalAppointmentId: string | null;
   externalPipelineId: string | null;
   externalStageId: string | null;
   externalTags: string[];

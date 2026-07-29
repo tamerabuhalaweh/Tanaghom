@@ -24,6 +24,7 @@ function session(payload: JwtPayload) {
     role: payload.role,
     tenantKey: payload.tenantKey || 'default',
     userId: payload.sub,
+    agentRepId: payload.agentRepId,
   };
 }
 
@@ -206,7 +207,14 @@ stitchiRouter.post('/actions/:id/approve-and-execute', async (req: Request, res:
     const payload = getPayload(req);
     const context = session(payload);
     const input = actionDecisionSchema.parse(req.body);
-    const result = await service.approveAndExecuteActionRun(context.role, context.tenantKey, context.userId, req.params.id as string, input);
+    const result = await service.approveAndExecuteActionRun(
+      context.role,
+      context.tenantKey,
+      context.userId,
+      req.params.id as string,
+      input,
+      context.agentRepId,
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -241,7 +249,13 @@ stitchiRouter.post('/actions/:id/execute', async (req: Request, res: Response, n
   try {
     const payload = getPayload(req);
     const context = session(payload);
-    const result = await service.executeApprovedActionRun(context.role, context.tenantKey, context.userId, req.params.id as string);
+    const result = await service.executeApprovedActionRun(
+      context.role,
+      context.tenantKey,
+      context.userId,
+      req.params.id as string,
+      context.agentRepId,
+    );
     res.json(result);
   } catch (err) {
     next(err);

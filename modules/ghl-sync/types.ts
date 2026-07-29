@@ -89,6 +89,7 @@ export interface GhlMappingSet {
 export interface GhlMappedLead {
   ghlContactId: string;
   ghlOpportunityId: string | null;
+  ghlAppointmentId: string | null;
   leadName: string | null;
   leadEmail: string | null;
   leadPhone: string | null;
