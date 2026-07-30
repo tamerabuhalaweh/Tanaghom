@@ -252,7 +252,7 @@ async function respondNode(state: typeof orchestrationState.State) {
     });
     return {
       status: 'answered' as const,
-      assistantText: response.text,
+      assistantText: enforceReadOnlyAssistantBoundary(response.text),
       providerType: response.provider,
       providerModel: response.model,
       providerName: providerStatus.name,
@@ -477,7 +477,10 @@ async function deriveActionProposal(
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
   const hasStructuredGhlAction = Boolean(objectMetadata(metadata, 'ghlOperationAction'));
-  if (isReadOnlyInformationRequest(content) && !hasStructuredGhlAction) return null;
+  const hasGovernedGhlIntent = isGovernedGhlOperationRequest(content);
+  if (isReadOnlyInformationRequest(content) && !hasStructuredGhlAction && !hasGovernedGhlIntent) {
+    return null;
+  }
   const ghlProposal = await deriveGhlOperationActionProposal(
     content,
     userId,
@@ -3197,7 +3200,7 @@ function isGovernedGhlOperationRequest(content: string): boolean {
   if (containsAnotherExternalCommand) return false;
 
   const crmIntent =
-    /(?:ghl|gohighlevel|crm).{0,50}(?:sync|create|update|record|prepare|book|mark|set).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment)|(?:sync|create|update|record|prepare|book|mark|set).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment).{0,50}(?:ghl|gohighlevel|crm)|(?:add|remove).{0,20}tag.{0,50}(?:ghl|gohighlevel|crm)|(?:ghl|gohighlevel|crm).{0,50}(?:add|remove).{0,20}tag/i.test(
+    /(?:ghl|gohighlevel|crm).{0,50}\b(?:sync|create|update|record|prepare|book|mark|set)\b.{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment)|\b(?:sync|create|update|record|prepare|book|mark|set)\b.{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment).{0,50}(?:ghl|gohighlevel|crm)|\b(?:add|remove)\b.{0,20}tag.{0,50}(?:ghl|gohighlevel|crm)|(?:ghl|gohighlevel|crm).{0,50}\b(?:add|remove)\b.{0,20}tag/i.test(
       content,
     );
   const whatsappSendIntent =
@@ -3307,6 +3310,27 @@ function normalizeText(value?: string): string {
   return trimmed || 'I could not complete this request. No system data was changed.';
 }
 
+function enforceReadOnlyAssistantBoundary(value?: string): string {
+  const normalized = normalizeText(value);
+  const inventsChatApproval =
+    /(?:reply|respond|type|say)\b[\s\S]{0,40}\bapprove\b[\s\S]{0,120}\b(?:execute|update|change|send|write)\b/i.test(
+      normalized,
+    )
+    || /\bpending approval\b[\s\S]{0,220}\b(?:reply|respond|type|say)\b[\s\S]{0,40}\bapprove\b/i.test(
+      normalized,
+    )
+    || /\bprovide explicit authorization\b[\s\S]{0,120}\bexecute\b/i.test(normalized);
+
+  if (!inventsChatApproval) return normalized;
+
+  return [
+    'I did not create a governed action card from that response, so no CRM action is pending.',
+    'Replying "Approve" in ordinary chat cannot execute or authorize a GoHighLevel change.',
+    'Open the selected customer workflow and use Prepare with Stitchi, or state the CRM change again. Tanaghum will show a structured action card before any approval.',
+    'No Tanaghum or external-system data was changed.',
+  ].join('\n');
+}
+
 async function persistOrchestrationWorkflow(input: {
   threadId: string;
   tenantKey: string;
@@ -3345,6 +3369,9 @@ const ORCHESTRATOR_READ_ONLY_PROMPT = [
   'Answer in business language for sales and marketing users.',
   'Use only supplied context. If data or credentials are missing, say what is needed.',
   'Do not claim external execution. Do not claim you changed data unless an approved action was executed by backend.',
+  'Never claim an action is pending approval unless the backend supplied a real structured action card.',
+  'Never tell the user that replying Approve, authorizing in chat, or providing a customer identifier will execute an external action.',
+  'Ordinary chat is advisory only. Governed actions require a backend-created action card and the product approval workflow.',
   'Give concise next steps.',
 ].join('\n');
 
