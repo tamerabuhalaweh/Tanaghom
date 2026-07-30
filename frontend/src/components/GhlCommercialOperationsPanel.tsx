@@ -434,15 +434,21 @@ export function GhlCommercialOperationsPanel({
   }
 
   function askStitchi() {
-    if (!visibleOperation || status !== 'previewed' || blockers.length) return;
+    if (busy) return;
+    const reviewedDraftReady =
+      Boolean(visibleOperation) && status === 'previewed' && blockers.length === 0;
     const query = new URLSearchParams({
       mode: 'prepare',
       eventId,
       leadId,
-      ghlOperationId: text(visibleOperation.id),
-      prompt: `Submit the reviewed GHL ${task} action for manager approval. Do not change or execute it.`,
+      prompt: reviewedDraftReady
+        ? `Submit the reviewed GHL ${task} action for manager approval. Do not change or execute it.`
+        : `Help me prepare a GHL ${task} action for the selected customer. Ask for any missing required details before proposing the governed CRM operation. Do not execute it.`,
       returnTo: `/events/${eventId}`,
     });
+    if (reviewedDraftReady) {
+      query.set('ghlOperationId', text(visibleOperation?.id, ''));
+    }
     window.location.assign(`/stitchi?${query}`);
   }
 
@@ -772,11 +778,12 @@ export function GhlCommercialOperationsPanel({
                 className="ops-button is-secondary"
                 type="button"
                 onClick={askStitchi}
-                disabled={
-                  !operation || status !== 'previewed' || blockers.length > 0 || Boolean(busy)
-                }
+                disabled={Boolean(busy)}
               >
-                <Sparkles size={16} /> Continue with Stitchi
+                <Sparkles size={16} />{' '}
+                {operation && status === 'previewed' && blockers.length === 0
+                  ? 'Continue with Stitchi'
+                  : 'Prepare with Stitchi'}
               </button>
             </div>
           ) : null}

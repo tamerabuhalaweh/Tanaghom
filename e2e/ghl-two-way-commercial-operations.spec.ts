@@ -291,6 +291,25 @@ async function openLeadsTab(page: Page) {
 }
 
 test.describe('GHL two-way commercial operations', () => {
+  test('opens Stitchi directly for the selected customer before a form preview exists', async ({
+    page,
+  }) => {
+    await installMocks(page, 'sales_manager');
+    await openLeadsTab(page);
+
+    const button = page.getByRole('button', { name: 'Prepare with Stitchi' });
+    await expect(button).toBeEnabled();
+    await button.click();
+    await expect(page).toHaveURL(/\/stitchi\?/);
+
+    const url = new URL(page.url());
+    expect(url.searchParams.get('mode')).toBe('prepare');
+    expect(url.searchParams.get('eventId')).toBe(eventId);
+    expect(url.searchParams.get('leadId')).toBe(leadId);
+    expect(url.searchParams.get('ghlOperationId')).toBeNull();
+    expect(url.searchParams.get('prompt')).toContain('Ask for any missing required details');
+  });
+
   test('sales manager prepares a governed payment update without leaking action data', async ({
     page,
   }) => {
