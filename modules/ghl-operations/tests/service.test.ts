@@ -9,11 +9,19 @@ const repoMocks = vi.hoisted(() => ({
   executeOperation: vi.fn(),
   reconcileOperation: vi.fn(),
   reconcileFromWebhook: vi.fn(),
+  getWebhookReadiness: vi.fn(),
   recoverStaleExecutions: vi.fn(),
   listApprovedOperationIds: vi.fn(),
 }));
 
+const syncMocks = vi.hoisted(() => ({
+  resolveGhlSyncRuntimeConfig: vi.fn(),
+}));
+
 vi.mock('../repository', () => repoMocks);
+vi.mock('../../ghl-sync/repository', () => ({
+  resolveGhlSyncRuntimeConfig: syncMocks.resolveGhlSyncRuntimeConfig,
+}));
 
 import type { SessionContext } from '@shared/auth';
 import * as service from '../service';
@@ -61,10 +69,21 @@ describe('GHL operations service boundaries', () => {
     vi.clearAllMocks();
     repoMocks.recoverStaleExecutions.mockResolvedValue(0);
     repoMocks.listApprovedOperationIds.mockResolvedValue([]);
+    repoMocks.getWebhookReadiness.mockResolvedValue({
+      verifiedEventCount: 0,
+      lastVerifiedAt: null,
+    });
+    syncMocks.resolveGhlSyncRuntimeConfig.mockResolvedValue({
+      baseUrl: 'https://services.leadconnectorhq.com',
+      apiKey: null,
+      locationId: null,
+      source: 'not_configured',
+    });
   });
 
   afterEach(() => {
     delete process.env.GHL_BREAK_GLASS_EXECUTION_ENABLED;
+    delete process.env.GHL_WEBHOOK_ENABLED;
   });
 
   it('returns read-only capability data without making provider calls or throwing 403', async () => {
@@ -78,6 +97,14 @@ describe('GHL operations service boundaries', () => {
         approve: false,
         execute: false,
         sendWhatsApp: false,
+      },
+      executionReadiness: {
+        workerEnabled: false,
+        webhook: {
+          enabled: false,
+          liveVerified: false,
+          state: 'setup_required',
+        },
       },
       tags: [],
       pipelines: [],
@@ -161,6 +188,56 @@ describe('GHL operations service boundaries', () => {
       'operation-1',
       { expectedVersion: 4 },
       expect.any(Function),
+    );
+  });
+
+  it('classifies a signed appointment callback for tenant-scoped reconciliation', async () => {
+    syncMocks.resolveGhlSyncRuntimeConfig.mockResolvedValue({
+      baseUrl: 'https://services.leadconnectorhq.com',
+      apiKey: 'tenant-secret',
+      locationId: 'location-1',
+      source: 'tenant_vault',
+    });
+    repoMocks.reconcileFromWebhook.mockResolvedValue({
+      duplicate: false,
+      operation: operation({
+        operationType: 'appointment_upsert',
+        status: 'reconciled',
+      }),
+    });
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        type: 'AppointmentUpdate',
+        locationId: 'location-1',
+        webhookId: 'delivery-1',
+        appointment: {
+          id: 'appointment-1',
+          appointmentStatus: 'confirmed',
+          dateUpdated: new Date().toISOString(),
+        },
+      }),
+    );
+
+    await expect(
+      service.processWebhook({ tenantKey: 'tenant-a', rawBody }),
+    ).resolves.toMatchObject({
+      duplicate: false,
+      operation: { operationType: 'appointment_upsert' },
+    });
+    expect(repoMocks.reconcileFromWebhook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantKey: 'tenant-a',
+        providerEventId: 'delivery-1',
+        eventType: 'AppointmentUpdate',
+        providerObjectId: 'appointment-1',
+        operationTypes: ['appointment_upsert'],
+        providerField: 'provider_appointment_id',
+        locationId: 'location-1',
+        summary: expect.objectContaining({
+          signatureVerified: true,
+          rawPayloadStored: false,
+        }),
+      }),
     );
   });
 });

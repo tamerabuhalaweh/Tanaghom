@@ -14,6 +14,12 @@ import { Notice, ProductCard, ProductStatus } from './ProductUI';
 
 type RecordMap = Record<string, unknown>;
 type Task = 'customer' | 'tags' | 'sale' | 'meeting' | 'whatsapp';
+type OperationType =
+  | 'contact_upsert'
+  | 'contact_tags_update'
+  | 'opportunity_upsert'
+  | 'appointment_upsert'
+  | 'whatsapp_send';
 
 const TASKS: Array<{ id: Task; label: string; helper: string }> = [
   { id: 'customer', label: 'Customer', helper: 'Create or refresh the CRM contact' },
@@ -22,6 +28,26 @@ const TASKS: Array<{ id: Task; label: string; helper: string }> = [
   { id: 'meeting', label: 'Meeting', helper: 'Book or update an appointment' },
   { id: 'whatsapp', label: 'WhatsApp', helper: 'Prepare an approved customer message' },
 ];
+
+const TASK_OPERATIONS: Record<Task, OperationType> = {
+  customer: 'contact_upsert',
+  tags: 'contact_tags_update',
+  sale: 'opportunity_upsert',
+  meeting: 'appointment_upsert',
+  whatsapp: 'whatsapp_send',
+};
+
+const APPROVAL_ONLY_MESSAGES: Record<Task, string> = {
+  customer:
+    'You can prepare and approve this customer update. It will remain queued until live CRM execution is available.',
+  tags: 'You can prepare and approve tag changes. They will remain queued until live CRM execution is available.',
+  sale:
+    'You can prepare and approve this sale or payment update. It will remain queued until live CRM execution is available.',
+  meeting:
+    'You can prepare and approve this meeting update. It will remain queued until live CRM execution is available.',
+  whatsapp:
+    'WhatsApp sending is not available yet. You can prepare and approve a message, but it will not be sent.',
+};
 
 const APPROVER_ROLES = ['admin', 'cco', 'department_head'];
 const PREPARER_ROLES = [
@@ -158,6 +184,16 @@ export function GhlCommercialOperationsPanel({
       ? capabilities.approve
       : APPROVER_ROLES.includes(role);
   const setupStatus = text(referenceData.status, 'loading');
+  const executionReadiness = record(referenceData.executionReadiness);
+  const operationReadiness = record(executionReadiness.operations);
+  const workerEnabled = executionReadiness.workerEnabled === true;
+  const taskStatus = (taskId: Task) => {
+    const readiness = record(operationReadiness[TASK_OPERATIONS[taskId]]);
+    return workerEnabled && readiness.enabled === true && readiness.state === 'live'
+      ? 'Live after approval'
+      : 'Approval only';
+  };
+  const selectedTaskStatus = taskStatus(task);
 
   const action = useMemo(() => {
     if (!leadId) return null;
@@ -419,10 +455,22 @@ export function GhlCommercialOperationsPanel({
               }}
             >
               <strong>{item.label}</strong>
-              <span>{item.helper}</span>
+              <span>
+                {item.helper}
+                <br />
+                {taskStatus(item.id)}
+              </span>
             </button>
           ))}
         </div>
+
+        {selectedTaskStatus === 'Approval only' &&
+        setupStatus !== 'loading' &&
+        setupStatus !== 'setup_required' ? (
+          <Notice tone={task === 'whatsapp' ? 'warn' : 'info'}>
+            <strong>Approval only.</strong> {APPROVAL_ONLY_MESSAGES[task]}
+          </Notice>
+        ) : null}
 
         {!canPrepare ? (
           <Notice tone="info">

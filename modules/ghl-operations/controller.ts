@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { resolveSessionContext, verifyToken, type JwtPayload } from '@shared/auth';
-import { UnauthorizedError } from '@shared/errors';
+import { ForbiddenError, UnauthorizedError } from '@shared/errors';
 import { validateOrThrow } from '@shared/validation';
 import {
   decideGhlOperationSchema,
@@ -111,6 +111,9 @@ ghlOperationsRouter.post(
   '/webhooks/:tenantKey',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (process.env.GHL_WEBHOOK_ENABLED !== 'true') {
+        throw new ForbiddenError('GoHighLevel webhook ingestion is not enabled');
+      }
       const signature = req.header('X-GHL-Signature');
       const legacySignature = req.header('X-WH-Signature');
       if (!signature && !legacySignature) {

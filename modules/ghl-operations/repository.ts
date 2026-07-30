@@ -12,6 +12,7 @@ import type {
   GhlOpportunityFieldReference,
 } from './client';
 import { extractProviderIds, isGhlWhatsAppDnd, summarizeGhlProviderError } from './client';
+import { operationRuntimeBlocker } from './runtime';
 import { assertGhlOperationTransition } from './state-machine';
 import { ghlOperationActionSchema, paidSaleRequiresWon } from './types';
 import type {
@@ -59,6 +60,26 @@ export async function listOperations(
 
 export async function getOperation(tenantKey: string, id: string): Promise<GhlOperationSummary> {
   return serialize(await getRecord(tenantKey, id));
+}
+
+export async function getWebhookReadiness(tenantKey: string): Promise<{
+  verifiedEventCount: number;
+  lastVerifiedAt: Date | null;
+}> {
+  const [verifiedEventCount, latest] = await Promise.all([
+    prisma.ghlWebhookEvent.count({
+      where: { tenant_key: tenantKey, signature_verified: true },
+    }),
+    prisma.ghlWebhookEvent.findFirst({
+      where: { tenant_key: tenantKey, signature_verified: true },
+      orderBy: { received_at: 'desc' },
+      select: { received_at: true },
+    }),
+  ]);
+  return {
+    verifiedEventCount,
+    lastVerifiedAt: latest?.received_at ?? null,
+  };
 }
 
 export async function prepareOperation(
@@ -620,7 +641,9 @@ export async function reconcileFromWebhook(input: {
             where: {
               tenant_key: input.tenantKey,
               operation_type: { in: input.operationTypes },
-              status: { in: ['executing', 'provider_accepted', 'reconciliation_failed'] },
+              status: {
+                in: ['executing', 'provider_accepted', 'reconciliation_failed', 'reconciled'],
+              },
               ...providerFilter,
             },
             orderBy: { created_at: 'desc' },
@@ -632,7 +655,7 @@ export async function reconcileFromWebhook(input: {
       const messageConfirmed =
         command.operation_type === 'whatsapp_send' &&
         ['delivered', 'read'].includes(providerStatus);
-      if (messageConfirmed) {
+      if (messageConfirmed && command.status !== 'reconciled') {
         operation = await tx.ghlOperationCommand.update({
           where: { id: command.id },
           data: {
@@ -658,6 +681,19 @@ export async function reconcileFromWebhook(input: {
         );
       } else {
         operation = command;
+        await audit(
+          tx,
+          command.requested_by_user_id,
+          'ghl_operation_webhook_confirmed',
+          command.id,
+          'success',
+          {
+            eventType: input.eventType,
+            providerEventId: input.providerEventId,
+            providerStatus,
+            operationAlreadyReconciled: command.status === 'reconciled',
+          },
+        );
       }
     }
     await tx.ghlWebhookEvent.update({
@@ -666,6 +702,15 @@ export async function reconcileFromWebhook(input: {
         processing_status: command ? 'processed' : 'received',
         processed_at: command ? new Date() : null,
         error_summary: command ? null : 'No matching governed operation yet',
+        summary: {
+          ...input.summary,
+          matchedOperationId: command?.id ?? null,
+          processingOutcome: command
+            ? operation?.status === 'reconciled'
+              ? 'provider_confirmation_recorded'
+              : 'matched_for_read_back'
+            : 'no_matching_governed_operation',
+        } as Prisma.InputJsonValue,
       },
     });
     return { duplicate: false, operation: operation ? serialize(operation) : null };
@@ -1103,6 +1148,8 @@ async function buildExecutionGate(
   if (process.env.GHL_WRITE_BACK_ENABLED !== 'true') {
     reasons.push('GHL_WRITE_BACK_ENABLED is not true');
   }
+  const operationBlocker = operationRuntimeBlocker(record.operation_type);
+  if (operationBlocker) reasons.push(operationBlocker);
   const rawAction = asRecord(record.input_payload);
   const rawPayment = asRecord(rawAction.payment);
   if (
@@ -1126,12 +1173,6 @@ async function buildExecutionGate(
     if (providerPayload.status !== parsedAction.data.status) {
       reasons.push('Stored GHL opportunity preview no longer matches the approved action');
     }
-  }
-  if (
-    record.operation_type === 'whatsapp_send' &&
-    process.env.GHL_WHATSAPP_SEND_ENABLED !== 'true'
-  ) {
-    reasons.push('GHL_WHATSAPP_SEND_ENABLED is not true');
   }
   if (
     !record.approval_id ||
