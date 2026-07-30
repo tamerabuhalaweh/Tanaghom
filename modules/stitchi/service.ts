@@ -401,8 +401,9 @@ export async function orchestrateUserMessage(
   userId: string,
   conversationId: string,
   input: ReadOnlyAssistantRequestInput,
+  agentRepId?: string,
 ) {
-  return orchestrateStitchiMessage(role, tenantKey, userId, conversationId, input);
+  return orchestrateStitchiMessage(role, tenantKey, userId, conversationId, input, agentRepId);
 }
 
 export async function listActionRuns(

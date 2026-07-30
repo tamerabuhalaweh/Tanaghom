@@ -8,6 +8,7 @@ import { resolveUserLLMProvider } from '@modules/ai-provider/controller';
 import type { CommercialCurrency, CommercialRevenueLineType } from '@modules/commercial-command-center/types';
 import * as historicalAssessmentService from '@modules/commercial-historical-assessment/service';
 import { assessmentScopeSchema } from '@modules/commercial-historical-assessment/types';
+import * as ghlOperationsService from '@modules/ghl-operations/service';
 import { ghlOperationActionSchema, type GhlOperationAction } from '@modules/ghl-operations/types';
 import { formatReadOnlyContextForPrompt, loadReadOnlyContext, type StitchiReadOnlyContext } from './context';
 import { checkStitchiPermission } from './policy';
@@ -66,6 +67,37 @@ const annualPlanAiEnrichmentSchema = z.object({
   assumptions: z.array(z.string().trim().min(2).max(320)).max(10).default([]),
 });
 
+const ghlAiOpportunityActionSchema = z.object({
+  type: z.literal('opportunity_upsert'),
+  pipelineName: z.string().trim().min(1).max(220),
+  stageName: z.string().trim().min(1).max(220),
+  name: z.string().trim().min(1).max(500),
+  status: z.enum(['open', 'won', 'lost', 'abandoned']),
+  monetaryValue: z.number().finite().min(0).max(1_000_000_000).optional(),
+  totalSaleValue: z.number().finite().min(0).max(1_000_000_000).optional(),
+  amountPaid: z.number().finite().min(0).max(1_000_000_000).optional(),
+  paymentStatus: z
+    .enum(['unknown', 'partial', 'paid_in_full', 'refunded', 'cancelled'])
+    .optional(),
+  paymentDate: z.string().datetime({ offset: true }).optional(),
+  ticketQuantity: z.number().int().min(0).max(100_000).optional(),
+});
+
+const ghlAiAppointmentActionSchema = z.object({
+  type: z.literal('appointment_upsert'),
+  calendarName: z.string().trim().min(1).max(220),
+  title: z.string().trim().min(1).max(500),
+  startTime: z.string().datetime({ offset: true }),
+  endTime: z.string().datetime({ offset: true }),
+  status: z.enum(['new', 'confirmed', 'cancelled', 'showed', 'noshow', 'invalid']),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+const ghlAiActionSchema = z.discriminatedUnion('type', [
+  ghlAiOpportunityActionSchema,
+  ghlAiAppointmentActionSchema,
+]);
+
 type CommercialPlanAiEnrichment = z.infer<typeof commercialPlanAiEnrichmentSchema> & {
   providerType: string;
   providerModel: string | null;
@@ -93,6 +125,7 @@ const orchestrationState = Annotation.Root({
   role: Annotation<string>,
   tenantKey: Annotation<string>,
   userId: Annotation<string>,
+  agentRepId: Annotation<string | undefined>,
   conversationId: Annotation<string>,
   content: Annotation<string>,
   effectiveContent: Annotation<string | undefined>,
@@ -141,6 +174,7 @@ async function classifyNode(state: typeof orchestrationState.State): Promise<Par
     state.userId,
     state.role,
     state.tenantKey,
+    state.agentRepId,
     state.eventId,
     state.context,
     state.metadata,
@@ -293,6 +327,7 @@ export async function orchestrateStitchiMessage(
   userId: string,
   conversationId: string,
   input: ReadOnlyAssistantRequestInput,
+  agentRepId?: string,
 ): Promise<StitchiOrchestrationResult> {
   checkStitchiPermission(role, 'stitchi:create_message');
   checkStitchiPermission(role, 'stitchi:create_action');
@@ -310,6 +345,7 @@ export async function orchestrateStitchiMessage(
     role,
     tenantKey,
     userId,
+    agentRepId,
     conversationId,
     content: input.content,
     eventId: input.eventId,
@@ -330,6 +366,7 @@ export async function orchestrateStitchiMessage(
       userId,
       role,
       tenantKey,
+      agentRepId,
       fallbackEventId,
       context,
       input.metadata,
@@ -434,13 +471,22 @@ async function deriveActionProposal(
   userId: string,
   role: string,
   tenantKey: string,
+  agentRepId?: string,
   eventId?: string,
   context?: StitchiReadOnlyContext,
   metadata?: Record<string, unknown>,
 ): Promise<ActionProposal | FollowUpResponse | null> {
   const hasStructuredGhlAction = Boolean(objectMetadata(metadata, 'ghlOperationAction'));
   if (isReadOnlyInformationRequest(content) && !hasStructuredGhlAction) return null;
-  const ghlProposal = deriveGhlOperationActionProposal(content, eventId, metadata);
+  const ghlProposal = await deriveGhlOperationActionProposal(
+    content,
+    userId,
+    role,
+    tenantKey,
+    agentRepId,
+    eventId,
+    metadata,
+  );
   if (ghlProposal) return ghlProposal;
   const executiveReportProposal = deriveExecutiveReportActionProposal(content);
   if (executiveReportProposal) return executiveReportProposal;
@@ -2060,11 +2106,15 @@ function stringArrayMetadata(metadata: Record<string, unknown> | undefined, key:
     : [];
 }
 
-function deriveGhlOperationActionProposal(
+async function deriveGhlOperationActionProposal(
   content: string,
+  userId: string,
+  role: string,
+  tenantKey: string,
+  agentRepId?: string,
   eventId?: string,
   metadata?: Record<string, unknown>,
-): ActionProposal | FollowUpResponse | null {
+): Promise<ActionProposal | FollowUpResponse | null> {
   const preparedOperationId = textMetadata(metadata, 'ghlOperationId');
   if (preparedOperationId) {
     return {
@@ -2090,6 +2140,8 @@ function deriveGhlOperationActionProposal(
   const structuredAction = objectMetadata(metadata, 'ghlOperationAction');
   if (!structuredAction && !isGovernedGhlOperationRequest(content)) return null;
   let action: GhlOperationAction | null = null;
+  let providerType: string | undefined;
+  let providerModel: string | undefined;
 
   if (structuredAction) {
     const parsed = ghlOperationActionSchema.safeParse(structuredAction);
@@ -2114,13 +2166,7 @@ function deriveGhlOperationActionProposal(
       };
     }
 
-    if (
-      /(sync|create|update).{0,30}(customer|contact).{0,30}(ghl|crm)|(?:ghl|crm).{0,30}(customer|contact)/i.test(
-        content,
-      )
-    ) {
-      action = { type: 'contact_upsert', leadId, source: 'Tanaghum via Stitchi' };
-    } else if (/(add|remove).{0,20}tag/i.test(content)) {
+    if (/(add|remove).{0,20}tag/i.test(content)) {
       const addMatch = /add\s+tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
       const removeMatch = /remove\s+tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
       const addTags = addMatch?.[1]?.trim() ? [addMatch[1].trim()] : [];
@@ -2156,11 +2202,24 @@ function deriveGhlOperationActionProposal(
       }
       action = { type: 'whatsapp_send', leadId, message };
     } else if (/(opportunity|sale|payment|pipeline|stage|meeting|appointment)/i.test(content)) {
-      return {
-        kind: 'follow_up',
-        assistantText:
-          'Open the selected customer action panel and enter the exact pipeline and stage, payment details, or meeting calendar and time. Then choose Ask Stitchi so I can prepare the governed CRM change for approval.',
-      };
+      const resolved = await deriveGhlAiAction({
+        content,
+        userId,
+        role,
+        tenantKey,
+        agentRepId,
+        leadId,
+      });
+      if (isFollowUpResponse(resolved)) return resolved;
+      action = resolved.action;
+      providerType = resolved.providerType;
+      providerModel = resolved.providerModel;
+    } else if (
+      /(sync|create|update).{0,30}(customer|contact).{0,30}(ghl|crm)|(?:ghl|crm).{0,30}(customer|contact)/i.test(
+        content,
+      )
+    ) {
+      action = { type: 'contact_upsert', leadId, source: 'Tanaghum via Stitchi' };
     }
   }
 
@@ -2194,7 +2253,320 @@ function deriveGhlOperationActionProposal(
     },
     riskLevel: 'high',
     reason: `Prepare a governed GHL operation to ${actionLabels[action.type]}`,
+    providerType,
+    providerModel,
   };
+}
+
+interface GhlAiActionResolution {
+  action: GhlOperationAction;
+  providerType: string;
+  providerModel?: string;
+}
+
+interface GhlReferencePipeline {
+  id: string;
+  name: string;
+  approved?: boolean;
+  stages: Array<{ id: string; name: string; approved?: boolean }>;
+}
+
+async function deriveGhlAiAction(input: {
+  content: string;
+  userId: string;
+  role: string;
+  tenantKey: string;
+  agentRepId?: string;
+  leadId: string;
+}): Promise<GhlAiActionResolution | FollowUpResponse> {
+  const lead = await prisma.leadCaptureRecord.findFirst({
+    where: { id: input.leadId, tenant_key: input.tenantKey },
+    select: {
+      external_opportunity_id: true,
+      external_appointment_id: true,
+    },
+  });
+  if (!lead) {
+    return {
+      kind: 'follow_up',
+      assistantText:
+        'I could not find that customer in this workspace. Select a current customer in Sales & Leads and try again. No CRM data was changed.',
+    };
+  }
+
+  let referenceData: {
+    status?: string;
+    pipelines?: GhlReferencePipeline[];
+    calendars?: Array<{ id: string; name: string; approved?: boolean }>;
+    warnings?: string[];
+  };
+  try {
+    referenceData = await ghlOperationsService.referenceData({
+      role: input.role,
+      tenantKey: input.tenantKey,
+      humanUserId: input.userId,
+      agentRepId: input.agentRepId || 'stitchi-read-only-context',
+    });
+  } catch {
+    return {
+      kind: 'follow_up',
+      assistantText:
+        'I could not load the approved GHL pipelines, stages, or calendars. Check the GHL connection in Integrations, then try again. No CRM data was changed.',
+    };
+  }
+
+  const pipelines = (referenceData.pipelines || [])
+    .map((pipeline) => ({
+      ...pipeline,
+      stages: (pipeline.stages || []).filter((stage) => stage.approved === true),
+    }))
+    .filter((pipeline) => pipeline.approved === true && pipeline.stages.length > 0);
+  const calendars = (referenceData.calendars || []).filter(
+    (calendar) => calendar.approved !== false,
+  );
+  const wantsAppointment = /(meeting|appointment)/i.test(input.content);
+
+  if (wantsAppointment && calendars.length === 0) {
+    return {
+      kind: 'follow_up',
+      assistantText:
+        'No approved GHL calendar is available for this workspace. Ask an administrator to validate the calendar mapping, then try again. No meeting was created.',
+    };
+  }
+  if (!wantsAppointment && pipelines.length === 0) {
+    return {
+      kind: 'follow_up',
+      assistantText:
+        'No approved GHL pipeline and stage mapping is available for this workspace. Complete the GHL mapping first, then try again. No sale or payment record was changed.',
+    };
+  }
+
+  let provider;
+  try {
+    provider = await resolveUserLLMProvider(input.userId);
+  } catch (error) {
+    if (isProviderRequiredError(error)) {
+      return {
+        kind: 'follow_up',
+        providerType: 'none',
+        providerStatus: 'required',
+        assistantText:
+          'Connect Gemma or another approved AI model before Stitchi prepares a sale, payment, or meeting from natural language. No CRM data was changed.',
+      };
+    }
+    throw error;
+  }
+  const providerStatus = provider.getStatus();
+  if (providerStatus.type === 'mock') {
+    return {
+      kind: 'follow_up',
+      providerType: 'none',
+      providerStatus: 'required',
+      assistantText:
+        'A real AI model is required for natural-language CRM actions. Connect Gemma or another approved provider and try again. No CRM data was changed.',
+    };
+  }
+
+  let response;
+  let extracted: z.infer<typeof ghlAiActionSchema>;
+  try {
+    response = await provider.generate(
+      buildGhlAiActionPrompt({
+        content: input.content,
+        pipelines,
+        calendars,
+        wantsAppointment,
+      }),
+      {
+        systemPrompt:
+          'You structure a requested CRM action for approval. Return JSON only. Never invent pipeline, stage, calendar, money, ticket, payment, or time values.',
+        maxTokens: 700,
+        temperature: 0.1,
+        timeoutMs: 30000,
+      },
+    );
+    const json = extractJsonObject(response.text);
+    if (!json) throw new Error('missing JSON');
+    extracted = ghlAiActionSchema.parse(JSON.parse(json));
+  } catch (error) {
+    if (classifyStitchiProviderFailure(error) === 'unavailable') {
+      return {
+        kind: 'follow_up',
+        providerType: providerStatus.type,
+        providerModel: providerStatus.model,
+        providerStatus: 'unavailable',
+        assistantText: stitchiProviderUnavailableMessage(),
+      };
+    }
+    return {
+      kind: 'follow_up',
+      providerType: providerStatus.type,
+      providerModel: providerStatus.model,
+      assistantText:
+        'I could not safely structure that CRM request. Include the exact pipeline and stage plus payment details, or the exact calendar and meeting time. No CRM data was changed.',
+    };
+  }
+
+  const action =
+    extracted.type === 'appointment_upsert'
+      ? resolveAiAppointmentAction(extracted, calendars, input.leadId, lead.external_appointment_id)
+      : resolveAiOpportunityAction(extracted, pipelines, input.leadId, lead.external_opportunity_id);
+  if (!action) {
+    return {
+      kind: 'follow_up',
+      providerType: response.provider || providerStatus.type,
+      providerModel: response.model || providerStatus.model,
+      assistantText:
+        'The requested pipeline, stage, or calendar is not an approved GHL mapping. Use the exact mapped name shown in Sales & Leads. No CRM data was changed.',
+    };
+  }
+
+  const parsed = ghlOperationActionSchema.safeParse(action);
+  if (!parsed.success) {
+    const missing = parsed.error.issues[0]?.message || 'required CRM details are missing';
+    return {
+      kind: 'follow_up',
+      providerType: response.provider || providerStatus.type,
+      providerModel: response.model || providerStatus.model,
+      assistantText: `I still need a correction before I can prepare this CRM action: ${missing}. No CRM data was changed.`,
+    };
+  }
+  return {
+    action: parsed.data,
+    providerType: response.provider || providerStatus.type,
+    providerModel: response.model || providerStatus.model || undefined,
+  };
+}
+
+function buildGhlAiActionPrompt(input: {
+  content: string;
+  pipelines: GhlReferencePipeline[];
+  calendars: Array<{ id: string; name: string; approved?: boolean }>;
+  wantsAppointment: boolean;
+}): string {
+  const requiredShape = input.wantsAppointment
+    ? {
+        type: 'appointment_upsert',
+        calendarName: 'exact approved calendar name',
+        title: 'meeting title',
+        startTime: 'ISO-8601 timestamp with offset',
+        endTime: 'ISO-8601 timestamp with offset',
+        status: 'confirmed',
+        notes: 'optional notes',
+      }
+    : {
+        type: 'opportunity_upsert',
+        pipelineName: 'exact approved pipeline name',
+        stageName: 'exact approved stage name',
+        name: 'opportunity name',
+        status: 'open or won or lost or abandoned',
+        monetaryValue: 0,
+        totalSaleValue: 0,
+        amountPaid: 0,
+        paymentStatus: 'unknown or partial or paid_in_full or refunded or cancelled',
+        paymentDate: 'ISO-8601 timestamp with offset when money was received',
+        ticketQuantity: 0,
+      };
+  return [
+    'Convert the user request into one governed GoHighLevel action for backend validation.',
+    'Return JSON only. Do not wrap it in markdown.',
+    `Required JSON shape: ${JSON.stringify(requiredShape)}`,
+    'Rules:',
+    '- Use only an exact approved pipeline, stage, or calendar name listed below.',
+    '- Never invent money, payment dates, ticket quantities, provider IDs, or missing times.',
+    '- A partial or fully paid purchase must use status "won".',
+    '- Use paymentStatus "partial" only when amountPaid is above zero and below totalSaleValue.',
+    '- Use paymentStatus "paid_in_full" only when amountPaid equals totalSaleValue.',
+    '- Preserve explicit dates and timezone offsets from the user. Do not guess a timezone.',
+    '- If a required value is missing, omit it; backend validation will ask the user.',
+    `Approved pipelines and stages: ${JSON.stringify(
+      input.pipelines.map((pipeline) => ({
+        pipeline: pipeline.name,
+        stages: pipeline.stages.map((stage) => stage.name),
+      })),
+    )}`,
+    `Approved calendars: ${JSON.stringify(input.calendars.map((calendar) => calendar.name))}`,
+    `User request: ${input.content}`,
+  ].join('\n');
+}
+
+function resolveAiOpportunityAction(
+  extracted: z.infer<typeof ghlAiOpportunityActionSchema>,
+  pipelines: GhlReferencePipeline[],
+  leadId: string,
+  opportunityId: string | null,
+): GhlOperationAction | null {
+  const pipeline = findNamedReference(pipelines, extracted.pipelineName);
+  const stage = pipeline ? findNamedReference(pipeline.stages, extracted.stageName) : undefined;
+  if (!pipeline || !stage) return null;
+  const hasPayment = [
+    extracted.totalSaleValue,
+    extracted.amountPaid,
+    extracted.paymentStatus,
+    extracted.paymentDate,
+    extracted.ticketQuantity,
+  ].some((value) => value !== undefined);
+  const outstandingBalance =
+    extracted.totalSaleValue !== undefined && extracted.amountPaid !== undefined
+      ? Math.max(0, extracted.totalSaleValue - extracted.amountPaid)
+      : undefined;
+  return {
+    type: 'opportunity_upsert',
+    leadId,
+    ...(opportunityId ? { opportunityId } : {}),
+    pipelineId: pipeline.id,
+    stageId: stage.id,
+    name: extracted.name,
+    status: extracted.status,
+    ...(extracted.monetaryValue !== undefined
+      ? { monetaryValue: extracted.monetaryValue }
+      : extracted.totalSaleValue !== undefined
+        ? { monetaryValue: extracted.totalSaleValue }
+        : {}),
+    ...(hasPayment
+      ? {
+          payment: {
+            ...(extracted.totalSaleValue !== undefined
+              ? { totalSaleValue: extracted.totalSaleValue }
+              : {}),
+            ...(extracted.amountPaid !== undefined ? { amountPaid: extracted.amountPaid } : {}),
+            ...(outstandingBalance !== undefined ? { outstandingBalance } : {}),
+            ...(extracted.paymentStatus ? { paymentStatus: extracted.paymentStatus } : {}),
+            ...(extracted.paymentDate ? { paymentDate: extracted.paymentDate } : {}),
+            ...(extracted.ticketQuantity !== undefined
+              ? { ticketQuantity: extracted.ticketQuantity }
+              : {}),
+          },
+        }
+      : {}),
+    customFields: {},
+  };
+}
+
+function resolveAiAppointmentAction(
+  extracted: z.infer<typeof ghlAiAppointmentActionSchema>,
+  calendars: Array<{ id: string; name: string }>,
+  leadId: string,
+  appointmentId: string | null,
+): GhlOperationAction | null {
+  const calendar = findNamedReference(calendars, extracted.calendarName);
+  if (!calendar) return null;
+  return {
+    type: 'appointment_upsert',
+    leadId,
+    ...(appointmentId ? { appointmentId } : {}),
+    calendarId: calendar.id,
+    title: extracted.title,
+    startTime: extracted.startTime,
+    endTime: extracted.endTime,
+    status: extracted.status,
+    ...(extracted.notes ? { notes: extracted.notes } : {}),
+  };
+}
+
+function findNamedReference<T extends { name: string }>(rows: T[], requestedName: string): T | undefined {
+  const normalized = requestedName.trim().toLocaleLowerCase();
+  return rows.find((row) => row.name.trim().toLocaleLowerCase() === normalized);
 }
 
 function extractAssessmentDateRange(
@@ -2825,7 +3197,7 @@ function isGovernedGhlOperationRequest(content: string): boolean {
   if (containsAnotherExternalCommand) return false;
 
   const crmIntent =
-    /(?:ghl|gohighlevel|crm).{0,50}(?:sync|create|update).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment)|(?:sync|create|update).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment).{0,50}(?:ghl|gohighlevel|crm)|(?:add|remove).{0,20}tag.{0,50}(?:ghl|gohighlevel|crm)|(?:ghl|gohighlevel|crm).{0,50}(?:add|remove).{0,20}tag/i.test(
+    /(?:ghl|gohighlevel|crm).{0,50}(?:sync|create|update|record|prepare|book|mark|set).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment)|(?:sync|create|update|record|prepare|book|mark|set).{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment).{0,50}(?:ghl|gohighlevel|crm)|(?:add|remove).{0,20}tag.{0,50}(?:ghl|gohighlevel|crm)|(?:ghl|gohighlevel|crm).{0,50}(?:add|remove).{0,20}tag/i.test(
       content,
     );
   const whatsappSendIntent =

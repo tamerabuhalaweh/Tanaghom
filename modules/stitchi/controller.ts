@@ -160,6 +160,7 @@ stitchiRouter.post('/conversations/:id/orchestrate', async (req: Request, res: R
       context.userId,
       req.params.id as string,
       input,
+      context.agentRepId,
     );
     res.status(201).json(response);
   } catch (err) {

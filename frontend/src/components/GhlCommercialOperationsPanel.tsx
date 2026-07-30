@@ -5,6 +5,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
 } from 'react';
@@ -127,12 +128,14 @@ export function GhlCommercialOperationsPanel({
   role,
   eventId,
   lead,
+  initialOperationId = '',
   onRefresh,
 }: {
   token: string;
   role: string;
   eventId: string;
   lead: RecordMap;
+  initialOperationId?: string;
   onRefresh: () => void;
 }) {
   const leadId = text(lead.id);
@@ -144,6 +147,7 @@ export function GhlCommercialOperationsPanel({
   const [history, setHistory] = useState<RecordMap[]>([]);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
+  const handledInitialOperationId = useRef('');
   const [pipelineId, setPipelineId] = useState(text(lead.externalPipelineId));
   const [stageId, setStageId] = useState(text(lead.externalStageId));
   const [opportunityName, setOpportunityName] = useState(
@@ -297,7 +301,23 @@ export function GhlCommercialOperationsPanel({
       setReferenceData(record(references.value));
     }
     if (operations.status === 'fulfilled') {
-      setHistory(records(operations.value));
+      const rows = records(operations.value);
+      setHistory(rows);
+      if (
+        initialOperationId &&
+        handledInitialOperationId.current !== initialOperationId
+      ) {
+        const requestedOperation = rows.find(
+          item => text(item.id) === initialOperationId,
+        );
+        if (requestedOperation) {
+          setTask(taskForOperation(requestedOperation.operationType));
+          setOperation(requestedOperation);
+          setHistorySelectionId(initialOperationId);
+          setPreviewActionSignature('');
+          handledInitialOperationId.current = initialOperationId;
+        }
+      }
     }
     const failure =
       references.status === 'rejected'
@@ -308,7 +328,7 @@ export function GhlCommercialOperationsPanel({
     if (failure) {
       setMessage(failure instanceof Error ? failure.message : 'CRM actions could not be loaded.');
     }
-  }, [eventId, leadId, token]);
+  }, [eventId, initialOperationId, leadId, token]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

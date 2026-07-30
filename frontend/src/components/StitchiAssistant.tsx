@@ -57,6 +57,10 @@ function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
+function objectValue(value: unknown): RecordMap {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as RecordMap : {};
+}
+
 function customerLabel(value: unknown, fallback = ''): string {
   const raw = Array.isArray(value)
     ? value.map(item => String(item)).filter(Boolean).join('; ')
@@ -209,7 +213,18 @@ function actionResultLink(action: ActionRun): { to: string; label: string } | nu
     return { to: '/events', label: 'Open Events' };
   }
   if (result.objectType === 'ghl_operation_command') {
-    return { to: '/events', label: 'Open Sales & Leads' };
+    const payload = objectValue(action.resultPayload);
+    const operation = objectValue(payload.result);
+    const eventId = text(operation.eventId);
+    const leadId = text(operation.leadId);
+    const params = new URLSearchParams({
+      ...(leadId ? { leadId } : {}),
+      ghlOperationId: result.objectId,
+    });
+    return {
+      to: eventId ? `/events/${eventId}?${params}` : '/events',
+      label: 'Review CRM approval',
+    };
   }
   return null;
 }
@@ -649,11 +664,7 @@ function InlineActionCard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white">{actionTitle(action.actionType)}</div>
-            <div className="mt-1 text-xs leading-5 text-white/55">
-              {action.status === 'completed'
-                ? 'Saved to Tanaghum. External systems were not called.'
-                : 'Review this prepared work, then approve it to save internally.'}
-            </div>
+            <ActionSafetyCopy action={action} />
           </div>
           <AieroStatusPill accent={statusAccent(action.status)}>{actionStatusLabel(action.status)}</AieroStatusPill>
         </div>
@@ -697,7 +708,7 @@ function ActionList({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-white">{actionTitle(action.actionType)}</div>
-              <div className="mt-1 text-xs leading-5 text-white/45">Prepared by Stitchi. No external execution.</div>
+              <ActionSafetyCopy action={action} />
             </div>
             <AieroStatusPill accent={statusAccent(action.status)}>{actionStatusLabel(action.status)}</AieroStatusPill>
           </div>
@@ -710,6 +721,18 @@ function ActionList({
 
   if (compact) return content;
   return <AieroPanel title="Prepared work" subtitle="Approve and save safe internal changes from here.">{content}</AieroPanel>;
+}
+
+function ActionSafetyCopy({ action }: { action: ActionRun }) {
+  const copy =
+    action.actionType === 'prepare_ghl_operation'
+      ? action.status === 'completed'
+        ? 'CRM command prepared. An authorized manager must approve it before GHL changes.'
+        : 'Review the CRM command. This step prepares it; it does not change GHL.'
+      : action.status === 'completed'
+        ? 'Saved to Tanaghum. External systems were not called.'
+        : 'Review this prepared work, then approve it to save internally.';
+  return <div className="mt-1 text-xs leading-5 text-white/55">{copy}</div>;
 }
 
 function ActionControls({
