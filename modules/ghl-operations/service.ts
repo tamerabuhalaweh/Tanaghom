@@ -4,6 +4,7 @@ import type { GhlRuntimeConfig } from '../ghl-sync/repository';
 import { HighLevelOperationsClient, type GhlOperationsReferenceData } from './client';
 import { checkGhlOperationPermission, hasGhlOperationPermission } from './policy';
 import * as repo from './repository';
+import { buildGhlExecutionReadiness } from './runtime';
 import { sha256 } from './signature';
 import type {
   DecideGhlOperationInput,
@@ -37,10 +38,23 @@ export async function get(session: SessionContext, id: string) {
 export async function referenceData(session: SessionContext) {
   checkGhlOperationPermission(session.role, 'ghl-operations:read');
   const canPrepare = hasGhlOperationPermission(session.role, 'ghl-operations:prepare');
+  const { resolveGhlSyncRuntimeConfig } = await import('../ghl-sync/repository');
+  const [config, webhookReadiness] = await Promise.all([
+    resolveGhlSyncRuntimeConfig(session.tenantKey),
+    repo.getWebhookReadiness(session.tenantKey),
+  ]);
+  const credentialsReady = Boolean(
+    config.apiKey && config.locationId && config.source === 'tenant_vault',
+  );
+  const executionReadiness = buildGhlExecutionReadiness({
+    credentialsReady,
+    webhookLastVerifiedAt: webhookReadiness.lastVerifiedAt,
+  });
   if (!canPrepare) {
     return {
       status: 'read_only',
       capabilities: capabilities(session.role),
+      executionReadiness,
       tags: [],
       pipelines: [],
       calendars: [],
@@ -50,12 +64,11 @@ export async function referenceData(session: SessionContext) {
       rawPayloadReturned: false,
     };
   }
-  const { resolveGhlSyncRuntimeConfig } = await import('../ghl-sync/repository');
-  const config = await resolveGhlSyncRuntimeConfig(session.tenantKey);
   if (!config.apiKey || !config.locationId || config.source !== 'tenant_vault') {
     return {
       status: 'setup_required',
       capabilities: capabilities(session.role),
+      executionReadiness,
       tags: [],
       pipelines: [],
       calendars: [],
@@ -84,6 +97,7 @@ export async function referenceData(session: SessionContext) {
   return {
     status: result.warnings.length ? 'partial' : 'ready',
     capabilities: capabilities(session.role),
+    executionReadiness,
     ...result,
     tags: result.tags.map((tag) => ({
       ...tag,

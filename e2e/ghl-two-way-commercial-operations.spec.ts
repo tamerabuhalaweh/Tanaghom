@@ -209,6 +209,21 @@ async function installMocks(page: Page, role: Role) {
           prepare: role !== 'viewer',
           approve: role === 'cco',
         },
+        executionReadiness: {
+          workerEnabled: true,
+          operations: {
+            contact_upsert: { enabled: true, state: 'live' },
+            contact_tags_update: { enabled: true, state: 'live' },
+            opportunity_upsert: { enabled: true, state: 'live' },
+            appointment_upsert: { enabled: true, state: 'live' },
+            whatsapp_send: { enabled: false, state: 'approval_only' },
+          },
+          webhook: {
+            enabled: false,
+            liveVerified: false,
+            state: 'setup_required',
+          },
+        },
         pipelines: [
           {
             id: 'pipeline-1',
@@ -299,6 +314,27 @@ test.describe('GHL two-way commercial operations', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(1);
+    monitor.assertClean();
+  });
+
+  test('shows selectively enabled CRM work while WhatsApp remains approval-only', async ({
+    page,
+  }) => {
+    const monitor = await installMocks(page, 'cco');
+    await openLeadsTab(page);
+
+    await expect(
+      page.getByRole('tab', { name: /Customer.*Live after approval/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('tab', { name: /Sale & payment.*Live after approval/ }),
+    ).toBeVisible();
+    await page.getByRole('tab', { name: /WhatsApp.*Approval only/ }).click();
+    await expect(
+      page.getByText(
+        'WhatsApp sending is not available yet. You can prepare and approve a message, but it will not be sent.',
+      ),
+    ).toBeVisible();
     monitor.assertClean();
   });
 

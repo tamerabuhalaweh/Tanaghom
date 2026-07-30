@@ -16,6 +16,11 @@ export const EXECUTION_KILL_SWITCHES = [
   'CRM_LIVE_ENABLED',
   'GHL_SANDBOX_WRITE_ENABLED',
   'GHL_WRITE_BACK_ENABLED',
+  'GHL_OPERATION_WORKER_ENABLED',
+  'GHL_CONTACT_UPSERT_ENABLED',
+  'GHL_CONTACT_TAGS_UPDATE_ENABLED',
+  'GHL_OPPORTUNITY_UPSERT_ENABLED',
+  'GHL_APPOINTMENT_UPSERT_ENABLED',
   'GHL_WHATSAPP_SEND_ENABLED',
   'WHATSAPP_LIVE_ENABLED',
   'TELEGRAM_LIVE_ENABLED',
@@ -78,6 +83,13 @@ export function validateEnvironment(): EnvValidationResult {
         errors.push(`${varName} is required when EMAIL_DELIVERY_ENABLED=true`);
       }
     }
+  }
+
+  if (
+    process.env.GHL_WEBHOOK_ENABLED === 'true' &&
+    (!process.env.APP_BASE_URL || !process.env.APP_BASE_URL.startsWith('https://'))
+  ) {
+    errors.push('APP_BASE_URL must use HTTPS when GHL_WEBHOOK_ENABLED=true');
   }
 
   // Validate execution kill switches — hard failures in demo mode
