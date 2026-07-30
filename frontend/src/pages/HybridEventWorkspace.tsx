@@ -1085,8 +1085,8 @@ function CloseoutTab({
 export default function HybridEventWorkspace() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const requestedLeadId = text(searchParams.get('leadId'));
-  const requestedOperationId = text(searchParams.get('ghlOperationId'));
+  const requestedLeadId = text(searchParams.get('leadId'), '');
+  const requestedOperationId = text(searchParams.get('ghlOperationId'), '');
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(
     requestedLeadId || requestedOperationId ? 'leads' : 'overview',
   );
