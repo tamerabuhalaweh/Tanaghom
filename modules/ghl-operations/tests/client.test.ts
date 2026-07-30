@@ -168,6 +168,40 @@ describe('HighLevel governed operations client', () => {
     });
   });
 
+  it('treats a root response id as the appointment id for appointment operations', () => {
+    expect(
+      extractProviderIds(
+        {
+          id: 'appointment-1',
+          contactId: 'contact-1',
+          calendarId: 'calendar-1',
+        },
+        'appointment_upsert',
+      ),
+    ).toEqual({
+      objectId: 'appointment-1',
+      contactId: 'contact-1',
+      opportunityId: null,
+      appointmentId: 'appointment-1',
+      messageId: null,
+    });
+  });
+
+  it('does not misclassify a root response id when the operation type is known', () => {
+    expect(extractProviderIds({ id: 'contact-1' }, 'contact_upsert')).toMatchObject({
+      objectId: 'contact-1',
+      contactId: 'contact-1',
+      opportunityId: null,
+      appointmentId: null,
+    });
+    expect(extractProviderIds({ id: 'opportunity-1' }, 'opportunity_upsert')).toMatchObject({
+      objectId: 'opportunity-1',
+      contactId: null,
+      opportunityId: 'opportunity-1',
+      appointmentId: null,
+    });
+  });
+
   it('reduces provider errors to a bounded safe message', () => {
     expect(
       summarizeGhlProviderError({

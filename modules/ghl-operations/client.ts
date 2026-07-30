@@ -259,7 +259,17 @@ export function validateGhlBaseUrl(value: string): string {
   return 'https://services.leadconnectorhq.com';
 }
 
-export function extractProviderIds(body: unknown): {
+type GhlProviderOperationType =
+  | 'contact_upsert'
+  | 'contact_tags_update'
+  | 'opportunity_upsert'
+  | 'appointment_upsert'
+  | 'whatsapp_send';
+
+export function extractProviderIds(
+  body: unknown,
+  operationType?: GhlProviderOperationType,
+): {
   objectId: string | null;
   contactId: string | null;
   opportunityId: string | null;
@@ -270,17 +280,30 @@ export function extractProviderIds(body: unknown): {
   const contact = asRecord(root.contact);
   const opportunity = asRecord(root.opportunity);
   const appointment = asRecord(root.appointment || root.event);
-  const contactId = firstString([contact.id, root.contactId]);
-  const opportunityId = firstString([opportunity.id, root.opportunityId]);
+  const rootId = firstString([root.id]);
+  const contactId = firstString([
+    contact.id,
+    root.contactId,
+    operationType === 'contact_upsert' || operationType === 'contact_tags_update' ? rootId : null,
+  ]);
+  const opportunityId = firstString([
+    opportunity.id,
+    root.opportunityId,
+    operationType === 'opportunity_upsert' ? rootId : null,
+  ]);
   const appointmentId = firstString([
     appointment.id,
     appointment.appointmentId,
     root.appointmentId,
     root.eventId,
+    operationType === 'appointment_upsert' ? rootId : null,
   ]);
-  const messageId = firstString([root.messageId]);
+  const messageId = firstString([
+    root.messageId,
+    operationType === 'whatsapp_send' ? rootId : null,
+  ]);
   return {
-    objectId: opportunityId || appointmentId || messageId || contactId || firstString([root.id]),
+    objectId: opportunityId || appointmentId || messageId || contactId || rootId,
     contactId,
     opportunityId,
     appointmentId,

@@ -352,7 +352,7 @@ export async function executeOperation(
       );
       return serialize(failed);
     }
-    const ids = extractProviderIds(response.body);
+    const ids = extractProviderIds(response.body, action.type);
     const accepted = await prisma.$transaction(async (tx) => {
       const updated = await tx.ghlOperationCommand.update({
         where: { id },
@@ -561,7 +561,12 @@ export async function reconcileOperation(
     { method: 'read_back', providerStatus: response.status },
   );
   await prisma.$transaction(async (tx) => {
-    await updateLeadAfterConfirmedOperation(tx, record, action, extractProviderIds(response.body));
+    await updateLeadAfterConfirmedOperation(
+      tx,
+      record,
+      action,
+      extractProviderIds(response.body, action.type),
+    );
     await audit(tx, userId, 'ghl_operation_local_mirror_updated', record.id, 'success', {
       providerConfirmed: true,
     });
