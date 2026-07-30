@@ -127,7 +127,11 @@ function publicOperation(
   };
 }
 
-async function installMocks(page: Page, role: Role) {
+async function installMocks(
+  page: Page,
+  role: Role,
+  options: { existingOperation?: boolean } = {},
+) {
   const unexpected: string[] = [];
   const failures: string[] = [];
   const browserProblems: string[] = [];
@@ -237,7 +241,13 @@ async function installMocks(page: Page, role: Role) {
       });
     }
     if (path === '/ghl-operations' && method === 'GET') {
-      return json(role === 'viewer' ? [publicOperation(role, 'approved')] : []);
+      return json(
+        role === 'viewer'
+          ? [publicOperation(role, 'approved')]
+          : options.existingOperation
+            ? [publicOperation(role, 'previewed')]
+            : [],
+      );
     }
     if (path === '/ghl-operations/preview' && method === 'POST') {
       previewCalls += 1;
@@ -442,6 +452,28 @@ test.describe('GHL two-way commercial operations', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(1);
+    monitor.assertClean();
+  });
+
+  test('opens the exact customer and CRM command returned by Stitchi', async ({ page }) => {
+    const monitor = await installMocks(page, 'cco', { existingOperation: true });
+    await page.goto(
+      `/events/${eventId}?leadId=${leadId}&ghlOperationId=operation-1`,
+    );
+
+    await expect(
+      page.getByRole('navigation', { name: 'Event workspace views' })
+        .getByRole('button', { name: 'Leads' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(
+      page.getByRole('tab', { name: /Sale & payment/ }),
+    ).toHaveAttribute('aria-selected', 'true');
+    await expect(
+      page.getByRole('heading', { name: 'Update sale and payment' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Review Opportunity Upsert action' }),
+    ).toHaveClass(/is-selected/);
     monitor.assertClean();
   });
 });

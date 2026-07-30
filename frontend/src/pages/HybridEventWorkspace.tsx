@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   BarChart3,
   CalendarDays,
@@ -818,6 +818,8 @@ function LeadsTab({
   salesLeads,
   leadTemperature,
   ghlStatus,
+  initialLeadId,
+  initialOperationId,
   navigate,
   onRefresh,
 }: {
@@ -827,10 +829,12 @@ function LeadsTab({
   salesLeads: RecordMap[];
   leadTemperature: RecordMap[];
   ghlStatus: RecordMap | null;
+  initialLeadId?: string;
+  initialOperationId?: string;
   navigate: (path: string) => void;
   onRefresh: () => void;
 }) {
-  const [selectedLeadId, setSelectedLeadId] = useState('');
+  const [selectedLeadId, setSelectedLeadId] = useState(initialLeadId || '');
   const [leadSearch, setLeadSearch] = useState('');
   const statusCounts = salesLeads.reduce<Record<string, number>>((acc, lead) => {
     const status = text(lead.leadStatus || lead.status, 'new_lead');
@@ -943,6 +947,7 @@ function LeadsTab({
           role={role}
           eventId={eventId}
           lead={selectedLead}
+          initialOperationId={initialOperationId}
           onRefresh={onRefresh}
         />
       ) : null}
@@ -1079,7 +1084,12 @@ function CloseoutTab({
 
 export default function HybridEventWorkspace() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
+  const [searchParams] = useSearchParams();
+  const requestedLeadId = text(searchParams.get('leadId'));
+  const requestedOperationId = text(searchParams.get('ghlOperationId'));
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(
+    requestedLeadId || requestedOperationId ? 'leads' : 'overview',
+  );
   const {
     token,
     role,
@@ -1159,7 +1169,7 @@ export default function HybridEventWorkspace() {
           {activeTab === 'overview' ? <OverviewTab kpis={kpis} nextActions={nextActions} sourceStatus={sourceStatus} problemDashboard={problemDashboard} onNavigate={setActiveTab} /> : null}
           {activeTab === 'strategy' ? <StrategyTab event={event} emailPlans={emailPlans} whatsappPlans={whatsappPlans} upsellPlans={upsellPlans} contentRequirements={contentRequirements} salesTasks={salesTasks} navigate={navigate} /> : null}
           {activeTab === 'kpis' ? <KpisTab kpis={kpis} sourceStatus={sourceStatus} channelPerformance={channelPerformance} kpiRecords={kpiRecords} governedTargets={governedTargets} eventCapacity={eventCapacity} kpiEvaluation={kpiEvaluation} eventId={selectedEventId} token={token} canManage={role === 'cco'} onRefresh={() => load(selectedEventId, { background: true })} navigate={navigate} /> : null}
-          {activeTab === 'leads' ? <LeadsTab token={token || ''} role={role} eventId={selectedEventId || ''} salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} navigate={navigate} onRefresh={() => load(selectedEventId || '', { background: true })} /> : null}
+          {activeTab === 'leads' ? <LeadsTab token={token || ''} role={role} eventId={selectedEventId || ''} salesLeads={salesLeads} leadTemperature={leadTemperature} ghlStatus={ghlStatus} initialLeadId={requestedLeadId} initialOperationId={requestedOperationId} navigate={navigate} onRefresh={() => load(selectedEventId || '', { background: true })} /> : null}
           {activeTab === 'blockers' ? <BlockersTab problemDashboard={problemDashboard} eventProblems={eventProblems} /> : null}
           {activeTab === 'closeout' ? <CloseoutTab closeoutReport={closeoutReport} learningSummary={learningSummary} channelPerformance={closeoutChannels} sourcePerformance={closeoutSources} /> : null}
         </>

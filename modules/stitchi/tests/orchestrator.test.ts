@@ -6,6 +6,9 @@ const prismaMocks = vi.hoisted(() => ({
   langGraphWorkflow: {
     upsert: vi.fn(),
   },
+  leadCaptureRecord: {
+    findFirst: vi.fn(),
+  },
 }));
 
 vi.mock('@shared/database', () => ({ prisma: prismaMocks }));
@@ -25,6 +28,12 @@ const historicalAssessmentMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@modules/commercial-historical-assessment/service', () => historicalAssessmentMocks);
+
+const ghlOperationsMocks = vi.hoisted(() => ({
+  referenceData: vi.fn(),
+}));
+
+vi.mock('@modules/ghl-operations/service', () => ghlOperationsMocks);
 
 vi.mock('../context', () => ({
   loadReadOnlyContext: vi.fn().mockResolvedValue({
@@ -164,6 +173,28 @@ describe('Stitchi natural-language orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMocks.langGraphWorkflow.upsert.mockResolvedValue({});
+    prismaMocks.leadCaptureRecord.findFirst.mockResolvedValue({
+      external_opportunity_id: 'ghl-opportunity-1',
+      external_appointment_id: 'ghl-appointment-1',
+    });
+    ghlOperationsMocks.referenceData.mockResolvedValue({
+      status: 'ready',
+      pipelines: [
+        {
+          id: 'pipeline-marketing',
+          name: 'Marketing Pipeline',
+          approved: true,
+          stages: [
+            { id: 'stage-sale', name: 'Sale', approved: true },
+            { id: 'stage-unapproved', name: 'Internal Review', approved: false },
+          ],
+        },
+      ],
+      calendars: [
+        { id: 'calendar-sales', name: 'Sales Calendar', approved: true },
+      ],
+      warnings: [],
+    });
     providerMocks.getStatus.mockReturnValue({
       name: 'Gemma',
       type: 'gemma',
@@ -1874,5 +1905,250 @@ describe('Stitchi natural-language orchestration', () => {
         }),
       }),
     );
+  });
+
+  it('uses Gemma to prepare a natural-language GHL sale with approved provider mappings', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'opportunity_upsert',
+        pipelineName: 'Marketing Pipeline',
+        stageName: 'Sale',
+        name: 'Leadership course purchase',
+        status: 'won',
+        monetaryValue: 2000,
+        totalSaleValue: 2000,
+        amountPaid: 1000,
+        paymentStatus: 'partial',
+        paymentDate: '2026-07-30T12:00:00.000Z',
+        ticketQuantity: 2,
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Update the selected customer sale in GHL. Use Marketing Pipeline, Sale stage, total 2000, paid 1000 on 2026-07-30T12:00:00.000Z, two tickets.',
+        eventId: '00000000-0000-0000-0000-000000000001',
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(ghlOperationsMocks.referenceData).toHaveBeenCalledWith({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      humanUserId: 'user-1',
+      agentRepId: 'agent-rep-1',
+    });
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'prepare_ghl_operation',
+        inputPayload: expect.objectContaining({
+          action: {
+            type: 'opportunity_upsert',
+            leadId: '00000000-0000-0000-0000-000000000010',
+            opportunityId: 'ghl-opportunity-1',
+            pipelineId: 'pipeline-marketing',
+            stageId: 'stage-sale',
+            name: 'Leadership course purchase',
+            status: 'won',
+            monetaryValue: 2000,
+            payment: {
+              totalSaleValue: 2000,
+              amountPaid: 1000,
+              outstandingBalance: 1000,
+              paymentStatus: 'partial',
+              paymentDate: '2026-07-30T12:00:00.000Z',
+              ticketQuantity: 2,
+            },
+            customFields: {},
+          },
+        }),
+        previewPayload: expect.objectContaining({
+          approvalRequired: true,
+          externalExecutionPerformed: false,
+        }),
+      }),
+    );
+    expect(result.safety).toMatchObject({
+      approvalRequired: true,
+      writesExecuted: false,
+      externalExecution: 'blocked',
+    });
+  });
+
+  it('uses Gemma to prepare a meeting update with an approved calendar and existing appointment', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'appointment_upsert',
+        calendarName: 'Sales Calendar',
+        title: 'Leadership consultation',
+        startTime: '2026-08-02T14:30:00.000+04:00',
+        endTime: '2026-08-02T15:30:00.000+04:00',
+        status: 'confirmed',
+        notes: 'Customer confirmed the consultation.',
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Update the selected customer meeting in GHL using Sales Calendar from 2026-08-02T14:30:00.000+04:00 to 2026-08-02T15:30:00.000+04:00 and keep it confirmed.',
+        eventId: '00000000-0000-0000-0000-000000000001',
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        inputPayload: expect.objectContaining({
+          action: expect.objectContaining({
+            type: 'appointment_upsert',
+            leadId: '00000000-0000-0000-0000-000000000010',
+            appointmentId: 'ghl-appointment-1',
+            calendarId: 'calendar-sales',
+            startTime: '2026-08-02T14:30:00.000+04:00',
+            endTime: '2026-08-02T15:30:00.000+04:00',
+            status: 'confirmed',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects an AI-selected pipeline stage that is not approved', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'opportunity_upsert',
+        pipelineName: 'Marketing Pipeline',
+        stageName: 'Internal Review',
+        name: 'Unsafe stage request',
+        status: 'open',
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Update this customer opportunity in GHL using Marketing Pipeline and Internal Review stage.',
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('answered');
+    expect(result.actionRun).toBeNull();
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('not an approved GHL mapping'),
+      expect.objectContaining({ writesExecuted: false }),
+    );
+  });
+
+  it('asks for missing payment evidence instead of preparing an invalid won sale', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'opportunity_upsert',
+        pipelineName: 'Marketing Pipeline',
+        stageName: 'Sale',
+        name: 'Incomplete purchase',
+        status: 'won',
+        totalSaleValue: 2000,
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Record the selected customer as a won GHL sale in Marketing Pipeline, Sale stage, total value 2000.',
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('answered');
+    expect(result.actionRun).toBeNull();
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('requires an explicit payment status'),
+      expect.objectContaining({ writesExecuted: false }),
+    );
+  });
+
+  it('does not place selected customer identifiers in the Gemma CRM prompt', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'appointment_upsert',
+        calendarName: 'Sales Calendar',
+        title: 'Customer consultation',
+        startTime: '2026-08-02T14:30:00.000+04:00',
+        endTime: '2026-08-02T15:30:00.000+04:00',
+        status: 'confirmed',
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Update the selected customer meeting in GHL using Sales Calendar from 2026-08-02T14:30:00.000+04:00 to 2026-08-02T15:30:00.000+04:00.',
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    const prompt = providerMocks.generate.mock.calls.at(-1)?.[0] as string;
+    expect(prompt).not.toContain('00000000-0000-0000-0000-000000000010');
+    expect(prompt).not.toContain('manager@example.com');
+    expect(prompt).not.toContain('ghl-opportunity-1');
+    expect(prompt).not.toContain('ghl-appointment-1');
   });
 });
