@@ -1988,6 +1988,122 @@ describe('Stitchi natural-language orchestration', () => {
     });
   });
 
+  it('prepares the selected customer sale when the user explicitly says not to execute before approval', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'opportunity_upsert',
+        pipelineName: 'Marketing Pipeline',
+        stageName: 'Sale',
+        name: 'Selected customer sale',
+        status: 'won',
+        monetaryValue: 1000,
+        totalSaleValue: 1000,
+        amountPaid: 400,
+        paymentStatus: 'partial',
+        paymentDate: '2026-07-27T00:00:00.000Z',
+        ticketQuantity: 1,
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: [
+          "Update this customer's GHL sale and payment record.",
+          'Use Marketing Pipeline and Sale stage.',
+          'Set status to Won.',
+          'Total sale value: 1000.',
+          'Amount paid: 400.',
+          'Payment status: partial.',
+          'Payment date: 2026-07-27.',
+          'Ticket quantity: 1.',
+          'Prepare it for approval. Do not execute without my approval.',
+        ].join('\n'),
+        eventId: '00000000-0000-0000-0000-000000000001',
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(result.actionRun).not.toBeNull();
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'prepare_ghl_operation',
+        inputPayload: expect.objectContaining({
+          action: expect.objectContaining({
+            type: 'opportunity_upsert',
+            leadId: '00000000-0000-0000-0000-000000000010',
+            pipelineId: 'pipeline-marketing',
+            stageId: 'stage-sale',
+            status: 'won',
+            monetaryValue: 1000,
+            payment: expect.objectContaining({
+              totalSaleValue: 1000,
+              amountPaid: 400,
+              outstandingBalance: 600,
+              paymentStatus: 'partial',
+              ticketQuantity: 1,
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(result.safety).toMatchObject({
+      approvalRequired: true,
+      writesExecuted: false,
+      externalExecution: 'blocked',
+    });
+  });
+
+  it('blocks an ordinary AI answer from inventing chat-based CRM approval or execution', async () => {
+    providerMocks.generate.mockResolvedValueOnce({
+      text: [
+        'This action is currently in a pending approval state.',
+        'Reply with "Approve" to execute this update to the GHL CRM.',
+      ].join('\n'),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Explain how CRM approval works.',
+        eventId: '00000000-0000-0000-0000-000000000001',
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('answered');
+    expect(result.actionRun).toBeNull();
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('Replying "Approve" in ordinary chat cannot execute'),
+      expect.objectContaining({
+        actionRunId: null,
+        writesExecuted: false,
+        externalExecution: 'blocked',
+      }),
+    );
+  });
+
   it('uses Gemma to prepare a meeting update with an approved calendar and existing appointment', async () => {
     providerMocks.generate.mockResolvedValueOnce({
       text: JSON.stringify({
