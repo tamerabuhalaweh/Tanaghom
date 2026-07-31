@@ -2499,6 +2499,8 @@ function buildGhlAiActionPrompt(input: {
     '- Never invent money, payment dates, ticket quantities, provider IDs, or missing times.',
     '- The opportunity name is optional. Omit it when the user did not provide one.',
     '- A partial or fully paid purchase must use status "won".',
+    '- When totalSaleValue is supplied, it is also the GHL opportunity value.',
+    '- Omit monetaryValue unless the user explicitly supplied a distinct opportunity value.',
     '- Use paymentStatus "partial" only when amountPaid is above zero and below totalSaleValue.',
     '- Use paymentStatus "paid_in_full" only when amountPaid equals totalSaleValue.',
     '- Preserve an explicit YYYY-MM-DD payment date as a calendar date. Do not invent a time or timezone.',
@@ -2549,10 +2551,10 @@ function resolveAiOpportunityAction(
     stageId: stage.id,
     name: extracted.name || deriveOpportunityName(leadName),
     status: extracted.status,
-    ...(extracted.monetaryValue !== undefined
-      ? { monetaryValue: extracted.monetaryValue }
-      : extracted.totalSaleValue !== undefined
-        ? { monetaryValue: extracted.totalSaleValue }
+    ...(extracted.totalSaleValue !== undefined
+      ? { monetaryValue: extracted.totalSaleValue }
+      : extracted.monetaryValue !== undefined
+        ? { monetaryValue: extracted.monetaryValue }
         : {}),
     ...(hasPayment
       ? {
