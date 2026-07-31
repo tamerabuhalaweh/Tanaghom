@@ -444,7 +444,7 @@ export function GhlCommercialOperationsPanel({
       prompt: reviewedDraftReady
         ? `Submit the reviewed GHL ${task} action for manager approval. Do not change or execute it.`
         : `Help me prepare a GHL ${task} action for the selected customer. Ask for any missing required details before proposing the governed CRM operation. Do not execute it.`,
-      returnTo: `/events/${eventId}`,
+      returnTo: `/events/${eventId}?view=leads`,
     });
     if (reviewedDraftReady) {
       query.set('ghlOperationId', text(visibleOperation?.id, ''));

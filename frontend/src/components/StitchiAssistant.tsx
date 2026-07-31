@@ -8,11 +8,12 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  UserRound,
   WandSparkles,
   X,
   XCircle,
 } from 'lucide-react';
-import { ApiError, stitchiApi } from '../api';
+import { ApiError, leadsApi, stitchiApi } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import { AieroPanel, AieroStatusPill } from './AieroUX';
 
@@ -41,6 +42,20 @@ interface ActionRun {
   requiresApproval?: boolean;
   previewPayload?: unknown;
   resultPayload?: unknown;
+}
+
+interface SelectedCustomer {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  source: string;
+}
+
+interface CustomerContextState {
+  leadId: string;
+  customer: SelectedCustomer | null;
+  error: string;
 }
 
 const STARTER_PROMPTS = [
@@ -125,6 +140,22 @@ function mapAction(value: unknown): ActionRun | null {
     requiresApproval: record.requiresApproval === true || record.requires_approval === true,
     previewPayload: record.previewPayload || record.preview_payload,
     resultPayload: record.resultPayload || record.result_payload,
+  };
+}
+
+function mapSelectedCustomer(value: unknown): SelectedCustomer | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as RecordMap;
+  const id = text(record.id);
+  if (!id) return null;
+  return {
+    id,
+    name: text(record.leadName || record.name, 'Selected customer'),
+    email: text(record.leadEmail || record.email, ''),
+    status: text(record.leadStatus || record.status, 'customer'),
+    source:
+      text(record.sourceOfTruth || record.externalSourceProvider, 'Tanaghum')
+        .replace(/^gohighlevel$/i, 'GoHighLevel'),
   };
 }
 
@@ -297,6 +328,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
       budgetCurrency: text(params.get('budgetCurrency')),
       leadId: text(params.get('leadId')),
       ghlOperationId: text(params.get('ghlOperationId')),
+      returnTo: text(params.get('returnTo')),
       prompt: text(params.get('prompt')),
       mode: text(params.get('mode')),
     };
@@ -305,6 +337,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [actions, setActions] = useState<ActionRun[]>([]);
+  const [customerContext, setCustomerContext] = useState<CustomerContextState | null>(null);
   const [input, setInput] = useState(() => searchContext.prompt || '');
   const [mode, setMode] = useState<ChatMode>(() => searchContext.mode === 'prepare' ? 'prepare' : 'ask');
   const [loading, setLoading] = useState(false);
@@ -347,6 +380,37 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadConversation]);
+
+  useEffect(() => {
+    let active = true;
+    if (!token || !searchContext.leadId) {
+      return () => {
+        active = false;
+      };
+    }
+    const leadId = searchContext.leadId;
+    void leadsApi.get(searchContext.leadId, token)
+      .then((value) => {
+        if (!active) return;
+        const customer = mapSelectedCustomer(value);
+        setCustomerContext({
+          leadId,
+          customer,
+          error: customer ? '' : 'The selected customer could not be loaded.',
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustomerContext({
+          leadId,
+          customer: null,
+          error: 'The selected customer could not be loaded. Return to Sales & Leads and select the customer again.',
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [searchContext.leadId, token]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -505,6 +569,44 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
               <ModeButton active={mode === 'prepare'} onClick={() => setMode('prepare')}>Prepare work</ModeButton>
             </div>
           </div>
+          {searchContext.leadId ? (
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[#70f5df]/20 bg-[#70f5df]/[0.08] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#70f5df] text-[#080813]">
+                  <UserRound className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#70f5df]">
+                    Working with selected customer
+                  </div>
+                  {customerContext?.leadId === searchContext.leadId && customerContext.customer ? (
+                    <>
+                      <div className="mt-1 truncate text-sm font-semibold text-white">
+                        {customerContext.customer.name}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-white/55">
+                        {customerContext.customer.email ? <span>{customerContext.customer.email}</span> : null}
+                        <span>{customerLabel(customerContext.customer.status)}</span>
+                        <span>{customerContext.customer.source}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-1 text-sm text-white/55">
+                      {customerContext?.leadId === searchContext.leadId
+                        ? customerContext.error
+                        : 'Loading customer context...'}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Link
+                to={searchContext.returnTo || (eventId ? `/events/${eventId}` : '/events')}
+                className="shrink-0 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/[0.1]"
+              >
+                Change customer
+              </Link>
+            </div>
+          ) : null}
         </div>
 
         <div className={compact ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4' : 'h-[520px] overflow-y-auto px-5 py-5'}>
