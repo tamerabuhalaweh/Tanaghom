@@ -174,8 +174,10 @@ describe('Stitchi natural-language orchestration', () => {
     vi.clearAllMocks();
     prismaMocks.langGraphWorkflow.upsert.mockResolvedValue({});
     prismaMocks.leadCaptureRecord.findFirst.mockResolvedValue({
+      lead_name_placeholder: 'Tanaghum UAT Customer',
       external_opportunity_id: 'ghl-opportunity-1',
       external_appointment_id: 'ghl-appointment-1',
+      external_pipeline_id: 'pipeline-marketing',
     });
     ghlOperationsMocks.referenceData.mockResolvedValue({
       status: 'ready',
@@ -1994,7 +1996,6 @@ describe('Stitchi natural-language orchestration', () => {
         type: 'opportunity_upsert',
         pipelineName: 'Marketing Pipeline',
         stageName: 'Sale',
-        name: 'Selected customer sale',
         status: 'won',
         monetaryValue: 1000,
         totalSaleValue: 1000,
@@ -2045,6 +2046,7 @@ describe('Stitchi natural-language orchestration', () => {
             leadId: '00000000-0000-0000-0000-000000000010',
             pipelineId: 'pipeline-marketing',
             stageId: 'stage-sale',
+            name: 'Tanaghum UAT Customer opportunity',
             status: 'won',
             monetaryValue: 1000,
             payment: expect.objectContaining({
@@ -2064,6 +2066,79 @@ describe('Stitchi natural-language orchestration', () => {
       writesExecuted: false,
       externalExecution: 'blocked',
     });
+  });
+
+  it('uses the selected customer pipeline when approved pipelines share a display name', async () => {
+    prismaMocks.leadCaptureRecord.findFirst.mockResolvedValueOnce({
+      lead_name_placeholder: 'Tanaghum UAT Customer',
+      external_opportunity_id: 'ghl-opportunity-1',
+      external_appointment_id: null,
+      external_pipeline_id: 'pipeline-secondary',
+    });
+    ghlOperationsMocks.referenceData.mockResolvedValueOnce({
+      status: 'ready',
+      pipelines: [
+        {
+          id: 'pipeline-primary',
+          name: 'Marketing Pipeline',
+          approved: true,
+          stages: [{ id: 'stage-primary-sale', name: 'Sale', approved: true }],
+        },
+        {
+          id: 'pipeline-secondary',
+          name: 'Marketing Pipeline',
+          approved: true,
+          stages: [{ id: 'stage-secondary-sale', name: 'Sale', approved: true }],
+        },
+      ],
+      calendars: [],
+      warnings: [],
+    });
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'opportunity_upsert',
+        pipelineName: 'Marketing Pipeline',
+        stageName: 'Sale',
+        status: 'won',
+        totalSaleValue: 1000,
+        amountPaid: 400,
+        paymentStatus: 'partial',
+        paymentDate: '2026-07-27',
+        ticketQuantity: 1,
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content:
+          'Update this customer in GHL using Marketing Pipeline, Sale stage, with total 1000 and 400 paid on 2026-07-27.',
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        inputPayload: expect.objectContaining({
+          action: expect.objectContaining({
+            pipelineId: 'pipeline-secondary',
+            stageId: 'stage-secondary-sale',
+            name: 'Tanaghum UAT Customer opportunity',
+          }),
+        }),
+      }),
+    );
   });
 
   it('blocks an ordinary AI answer from inventing chat-based CRM approval or execution', async () => {
