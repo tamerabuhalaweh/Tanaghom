@@ -82,7 +82,7 @@ const ghlAiOpportunityActionSchema = z.object({
   type: z.literal('opportunity_upsert'),
   pipelineName: z.string().trim().min(1).max(220),
   stageName: z.string().trim().min(1).max(220),
-  name: z.string().trim().min(1).max(500),
+  name: z.string().trim().min(1).max(500).optional(),
   status: z.enum(['open', 'won', 'lost', 'abandoned']),
   monetaryValue: z.number().finite().min(0).max(1_000_000_000).optional(),
   totalSaleValue: z.number().finite().min(0).max(1_000_000_000).optional(),
@@ -2296,8 +2296,10 @@ async function deriveGhlAiAction(input: {
   const lead = await prisma.leadCaptureRecord.findFirst({
     where: { id: input.leadId, tenant_key: input.tenantKey },
     select: {
+      lead_name_placeholder: true,
       external_opportunity_id: true,
       external_appointment_id: true,
+      external_pipeline_id: true,
     },
   });
   if (!lead) {
@@ -2424,7 +2426,14 @@ async function deriveGhlAiAction(input: {
   const action =
     extracted.type === 'appointment_upsert'
       ? resolveAiAppointmentAction(extracted, calendars, input.leadId, lead.external_appointment_id)
-      : resolveAiOpportunityAction(extracted, pipelines, input.leadId, lead.external_opportunity_id);
+      : resolveAiOpportunityAction(
+          extracted,
+          pipelines,
+          input.leadId,
+          lead.external_opportunity_id,
+          lead.lead_name_placeholder,
+          lead.external_pipeline_id,
+        );
   if (!action) {
     return {
       kind: 'follow_up',
@@ -2472,7 +2481,7 @@ function buildGhlAiActionPrompt(input: {
         type: 'opportunity_upsert',
         pipelineName: 'exact approved pipeline name',
         stageName: 'exact approved stage name',
-        name: 'opportunity name',
+        name: 'optional opportunity name',
         status: 'open or won or lost or abandoned',
         monetaryValue: 0,
         totalSaleValue: 0,
@@ -2488,6 +2497,7 @@ function buildGhlAiActionPrompt(input: {
     'Rules:',
     '- Use only an exact approved pipeline, stage, or calendar name listed below.',
     '- Never invent money, payment dates, ticket quantities, provider IDs, or missing times.',
+    '- The opportunity name is optional. Omit it when the user did not provide one.',
     '- A partial or fully paid purchase must use status "won".',
     '- Use paymentStatus "partial" only when amountPaid is above zero and below totalSaleValue.',
     '- Use paymentStatus "paid_in_full" only when amountPaid equals totalSaleValue.',
@@ -2510,8 +2520,14 @@ function resolveAiOpportunityAction(
   pipelines: GhlReferencePipeline[],
   leadId: string,
   opportunityId: string | null,
+  leadName: string | null,
+  preferredPipelineId: string | null,
 ): GhlOperationAction | null {
-  const pipeline = findNamedReference(pipelines, extracted.pipelineName);
+  const pipeline = findNamedReference(
+    pipelines,
+    extracted.pipelineName,
+    preferredPipelineId,
+  );
   const stage = pipeline ? findNamedReference(pipeline.stages, extracted.stageName) : undefined;
   if (!pipeline || !stage) return null;
   const hasPayment = [
@@ -2531,7 +2547,7 @@ function resolveAiOpportunityAction(
     ...(opportunityId ? { opportunityId } : {}),
     pipelineId: pipeline.id,
     stageId: stage.id,
-    name: extracted.name,
+    name: extracted.name || deriveOpportunityName(leadName),
     status: extracted.status,
     ...(extracted.monetaryValue !== undefined
       ? { monetaryValue: extracted.monetaryValue }
@@ -2579,9 +2595,23 @@ function resolveAiAppointmentAction(
   };
 }
 
-function findNamedReference<T extends { name: string }>(rows: T[], requestedName: string): T | undefined {
+function findNamedReference<T extends { id?: string; name: string }>(
+  rows: T[],
+  requestedName: string,
+  preferredId?: string | null,
+): T | undefined {
   const normalized = requestedName.trim().toLocaleLowerCase();
-  return rows.find((row) => row.name.trim().toLocaleLowerCase() === normalized);
+  const matches = rows.filter(
+    (row) => row.name.trim().toLocaleLowerCase() === normalized,
+  );
+  if (matches.length === 1) return matches[0];
+  if (preferredId) return matches.find((row) => row.id === preferredId);
+  return undefined;
+}
+
+function deriveOpportunityName(leadName: string | null): string {
+  const customerName = leadName?.trim() || 'Selected customer';
+  return `${customerName} opportunity`.slice(0, 500);
 }
 
 function extractAssessmentDateRange(
