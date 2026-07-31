@@ -1997,7 +1997,7 @@ describe('Stitchi natural-language orchestration', () => {
         pipelineName: 'Marketing Pipeline',
         stageName: 'Sale',
         status: 'won',
-        monetaryValue: 1000,
+        monetaryValue: 0,
         totalSaleValue: 1000,
         amountPaid: 400,
         paymentStatus: 'partial',
