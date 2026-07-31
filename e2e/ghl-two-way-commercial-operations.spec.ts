@@ -172,6 +172,7 @@ async function installMocks(
       '/planner/',
       '/ghl-sync/',
       '/ghl-operations',
+      '/stitchi/',
       '/closeout/',
       '/learning-recommendations/',
       '/commercial-kpis',
@@ -189,6 +190,14 @@ async function installMocks(
     if (path === '/events') return json([eventRecord]);
     if (path === `/events/${eventId}/dashboard`) return json(dashboardBody());
     if (path === '/leads') return json([lead]);
+    if (path === `/leads/${leadId}`) return json(lead);
+    if (path === '/stitchi/conversations') {
+      return method === 'POST'
+        ? json({ id: 'conversation-1', title: 'Event work with Stitchi', eventId }, 201)
+        : json([{ id: 'conversation-1', title: 'Event work with Stitchi', eventId }]);
+    }
+    if (path === '/stitchi/conversations/conversation-1/messages') return json([]);
+    if (path === '/stitchi/conversations/conversation-1/actions') return json([]);
     if (path === `/event-problems/dashboard/${eventId}`) {
       return json({ openProblems: 0, criticalOpen: 0, totalProblems: 0 });
     }
@@ -307,7 +316,15 @@ test.describe('GHL two-way commercial operations', () => {
     expect(url.searchParams.get('eventId')).toBe(eventId);
     expect(url.searchParams.get('leadId')).toBe(leadId);
     expect(url.searchParams.get('ghlOperationId')).toBeNull();
+    expect(url.searchParams.get('returnTo')).toBe(`/events/${eventId}?view=leads`);
     expect(url.searchParams.get('prompt')).toContain('Ask for any missing required details');
+    await expect(page.getByText('Working with selected customer')).toBeVisible();
+    await expect(page.getByText('Nadia Hassan')).toBeVisible();
+    await expect(page.getByText('nadia@customer.test')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Change customer' })).toHaveAttribute(
+      'href',
+      `/events/${eventId}?view=leads`,
+    );
   });
 
   test('sales manager prepares a governed payment update without leaking action data', async ({

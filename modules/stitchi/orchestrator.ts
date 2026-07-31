@@ -67,6 +67,17 @@ const annualPlanAiEnrichmentSchema = z.object({
   assumptions: z.array(z.string().trim().min(2).max(320)).max(10).default([]),
 });
 
+const ghlAiPaymentDateSchema = z
+  .union([
+    z.string().date(),
+    z.string().datetime({ offset: true }),
+  ])
+  .transform((value) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? `${value}T00:00:00.000Z`
+      : value,
+  );
+
 const ghlAiOpportunityActionSchema = z.object({
   type: z.literal('opportunity_upsert'),
   pipelineName: z.string().trim().min(1).max(220),
@@ -79,7 +90,7 @@ const ghlAiOpportunityActionSchema = z.object({
   paymentStatus: z
     .enum(['unknown', 'partial', 'paid_in_full', 'refunded', 'cancelled'])
     .optional(),
-  paymentDate: z.string().datetime({ offset: true }).optional(),
+  paymentDate: ghlAiPaymentDateSchema.optional(),
   ticketQuantity: z.number().int().min(0).max(100_000).optional(),
 });
 
@@ -2467,7 +2478,7 @@ function buildGhlAiActionPrompt(input: {
         totalSaleValue: 0,
         amountPaid: 0,
         paymentStatus: 'unknown or partial or paid_in_full or refunded or cancelled',
-        paymentDate: 'ISO-8601 timestamp with offset when money was received',
+        paymentDate: 'YYYY-MM-DD or ISO-8601 timestamp with offset when money was received',
         ticketQuantity: 0,
       };
   return [
@@ -2480,7 +2491,8 @@ function buildGhlAiActionPrompt(input: {
     '- A partial or fully paid purchase must use status "won".',
     '- Use paymentStatus "partial" only when amountPaid is above zero and below totalSaleValue.',
     '- Use paymentStatus "paid_in_full" only when amountPaid equals totalSaleValue.',
-    '- Preserve explicit dates and timezone offsets from the user. Do not guess a timezone.',
+    '- Preserve an explicit YYYY-MM-DD payment date as a calendar date. Do not invent a time or timezone.',
+    '- Preserve explicit timezone offsets when the user supplies a full timestamp.',
     '- If a required value is missing, omit it; backend validation will ask the user.',
     `Approved pipelines and stages: ${JSON.stringify(
       input.pipelines.map((pipeline) => ({

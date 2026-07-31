@@ -1087,8 +1087,9 @@ export default function HybridEventWorkspace() {
   const [searchParams] = useSearchParams();
   const requestedLeadId = text(searchParams.get('leadId'), '');
   const requestedOperationId = text(searchParams.get('ghlOperationId'), '');
+  const requestedView = text(searchParams.get('view'), '');
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(
-    requestedLeadId || requestedOperationId ? 'leads' : 'overview',
+    requestedLeadId || requestedOperationId || requestedView === 'leads' ? 'leads' : 'overview',
   );
   const {
     token,
