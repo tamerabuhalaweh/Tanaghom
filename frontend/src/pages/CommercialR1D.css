@@ -1806,6 +1806,15 @@
     gap: 16px;
   }
 
+  .commercial-r1d-page .ops-section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .commercial-r1d-page .ops-section-header > .ops-button {
+    width: 100%;
+  }
+
   .commercial-r1d-loading,
   .commercial-plan-overview,
   .commercial-plan-workspace,

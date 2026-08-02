@@ -155,7 +155,14 @@ const orchestrationState = Annotation.Root({
 async function loadContextNode(state: typeof orchestrationState.State) {
   const conversation = await repo.getConversation(state.tenantKey, state.userId, state.role, state.conversationId);
   const [context, messages] = await Promise.all([
-    loadReadOnlyContext(state.tenantKey, conversation, state.eventId, state.role),
+    loadReadOnlyContext(
+      state.tenantKey,
+      conversation,
+      state.eventId,
+      state.role,
+      textMetadata(state.metadata, 'commercialPlanId') || undefined,
+      textMetadata(state.metadata, 'weekStartDate') || undefined,
+    ),
     repo.listMessages(state.tenantKey, state.userId, state.role, state.conversationId),
   ]);
   return {
@@ -377,7 +384,14 @@ export async function orchestrateStitchiMessage(
 
   if (!result.actionRun && !result.assistantText) {
     const conversation = await repo.getConversation(tenantKey, userId, role, conversationId);
-    const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
+    const context = await loadReadOnlyContext(
+      tenantKey,
+      conversation,
+      input.eventId,
+      role,
+      textMetadata(input.metadata, 'commercialPlanId') || undefined,
+      textMetadata(input.metadata, 'weekStartDate') || undefined,
+    );
     const fallbackEventId = input.eventId || conversation.eventId || context.selectedEvent?.id || undefined;
     const messages = await repo.listMessages(tenantKey, userId, role, conversationId);
     const fallbackContent = buildEffectiveFollowUpRequest(input.content, messages);
@@ -529,6 +543,8 @@ async function deriveActionProposal(
     metadata,
   );
   if (executionPlanProposal) return executionPlanProposal;
+  const weeklyOperationsProposal = deriveWeeklyOperationsActionProposal(content, context, metadata);
+  if (weeklyOperationsProposal) return weeklyOperationsProposal;
   const annualPortfolioProposal = deriveAnnualPortfolioActionProposal(content, context, metadata);
   if (annualPortfolioProposal) return annualPortfolioProposal;
   const budgetProposal = deriveCommercialBudgetActionProposal(content, context, metadata);
@@ -1545,6 +1561,223 @@ function deriveDisciplineActionProposal(
     riskLevel: 'medium',
     reason: `create a ${disciplineLabel(discipline)} workspace record`,
   };
+}
+
+function deriveWeeklyOperationsActionProposal(
+  content: string,
+  context?: StitchiReadOnlyContext,
+  metadata?: Record<string, unknown>,
+): ActionProposal | FollowUpResponse | null {
+  const weekly = context?.weeklyOperations;
+  const commercialPlanId = textMetadata(metadata, 'commercialPlanId') || weekly?.commercialPlanId || '';
+  const lower = content.toLowerCase();
+  const explicitIntent = textMetadata(metadata, 'weeklyWorkIntent');
+  const hasWeeklyIntent = Boolean(explicitIntent) || /(?:weekly work|weekly priority|week plan|this week|work item|weekly task)/i.test(lower);
+  if (!commercialPlanId || !weekly || !hasWeeklyIntent) return null;
+
+  const requestedItemId = textMetadata(metadata, 'weeklyWorkItemId')
+    || extractUuidAfter(lower, 'weekly work')
+    || extractUuidAfter(lower, 'work item');
+  const selectedItem = weekly.items.find((item) => item.id === requestedItemId)
+    || weekly.items.find((item) => lower.includes(item.title.toLowerCase()));
+  const targetStatus = inferWeeklyTargetStatus(lower, explicitIntent);
+
+  if (targetStatus) {
+    if (!selectedItem) {
+      return {
+        kind: 'follow_up',
+        assistantText: 'Which weekly work item should I update? Open it from the execution plan, then ask me again so I can keep the exact item and revision in context.',
+      };
+    }
+    const blockerReason = extractLabelValue(content, ['blocker reason', 'blocked because', 'reason']);
+    const completionEvidence = extractLabelValue(content, ['completion evidence', 'evidence', 'completed because', 'result']);
+    if (targetStatus === 'blocked' && !blockerReason) {
+      return {
+        kind: 'follow_up',
+        assistantText: `What is blocking “${selectedItem.title}”? Give me the blocker reason so the owner and manager can act on it.`,
+      };
+    }
+    if (targetStatus === 'completed' && !completionEvidence) {
+      return {
+        kind: 'follow_up',
+        assistantText: `What completion evidence should I record for “${selectedItem.title}”? Include the result, link, or measurable outcome.`,
+      };
+    }
+    return {
+      actionType: 'transition_weekly_work_item',
+      inputPayload: {
+        commercialPlanId,
+        itemId: selectedItem.id,
+        transition: {
+          expectedRevision: selectedItem.revision,
+          targetStatus,
+          reason: `Prepared by Stitchi for ${weekly.planTitle}.`,
+          ...(blockerReason ? { blockerReason } : {}),
+          ...(completionEvidence ? { completionEvidence } : {}),
+        },
+      },
+      previewPayload: {
+        title: selectedItem.title,
+        plan: weekly.planTitle,
+        week: weekly.selectedWeek.label,
+        currentStatus: selectedItem.status,
+        targetStatus,
+        blockerReason: blockerReason || null,
+        completionEvidence: completionEvidence || null,
+        approvalRequired: true,
+        externalExecution: 'blocked',
+      },
+      riskLevel: 'medium',
+      reason: `move weekly work to ${targetStatus.replaceAll('_', ' ')}`,
+    };
+  }
+
+  if (selectedItem && /(?:update|change|edit|reassign|owner|priority|due date|business outcome)/i.test(lower)) {
+    const owner = resolveWeeklyOwner(content, weekly.owners, metadata);
+    const dueDate = extractDateValue(content, ['due date', 'due', 'deadline']);
+    const businessOutcome = extractLabelValue(content, ['business outcome', 'outcome']);
+    const title = extractLabelValue(content, ['title', 'work item', 'task']);
+    const priority = inferWeeklyPriority(lower);
+    const changes = {
+      expectedRevision: selectedItem.revision,
+      ...(owner ? { ownerUserId: owner.id, ownerRole: owner.role } : {}),
+      ...(dueDate ? { dueDate } : {}),
+      ...(businessOutcome ? { businessOutcome } : {}),
+      ...(title ? { title } : {}),
+      ...(priority ? { priority } : {}),
+    };
+    if (Object.keys(changes).length === 1) {
+      return {
+        kind: 'follow_up',
+        assistantText: `What should I change on “${selectedItem.title}”? You can provide a new owner, due date, priority, title, or business outcome.`,
+      };
+    }
+    return {
+      actionType: 'update_weekly_work_item',
+      inputPayload: { commercialPlanId, itemId: selectedItem.id, changes },
+      previewPayload: {
+        title: selectedItem.title,
+        plan: weekly.planTitle,
+        week: weekly.selectedWeek.label,
+        changes,
+        approvalRequired: true,
+        externalExecution: 'blocked',
+      },
+      riskLevel: 'medium',
+      reason: 'update weekly operating work',
+    };
+  }
+
+  const owner = resolveWeeklyOwner(content, weekly.owners, metadata);
+  const dueDate = extractDateValue(content, ['due date', 'due', 'deadline']);
+  const businessOutcome = extractLabelValue(content, ['business outcome', 'outcome']);
+  const title = extractLabelValue(content, ['title', 'work item', 'task'])
+    || firstSentence(content, 'Weekly operating priority');
+  const missing = [
+    !businessOutcome ? 'the business outcome' : null,
+    !owner ? 'the owner' : null,
+    !dueDate ? 'the due date (YYYY-MM-DD)' : null,
+  ].filter(Boolean);
+  if (missing.length) {
+    return {
+      kind: 'follow_up',
+      assistantText: `Before I prepare this weekly work item, tell me ${missing.join(', ')}. The item will stay inside “${weekly.planTitle}” for ${weekly.selectedWeek.label}.`,
+    };
+  }
+
+  const budgetGuardrail = extractMoneyValue(content, ['budget guardrail', 'weekly budget', 'budget']);
+  const priority = inferWeeklyPriority(lower) || 'medium';
+  return {
+    actionType: 'create_weekly_work_item',
+    inputPayload: {
+      commercialPlanId,
+      item: {
+        weekStartDate: textMetadata(metadata, 'weekStartDate') || weekly.selectedWeek.startDate,
+        title,
+        businessOutcome,
+        ownerUserId: owner!.id,
+        ownerRole: owner!.role,
+        dueDate,
+        status: 'planned',
+        priority,
+        ...(budgetGuardrail != null ? { budgetGuardrail } : {}),
+      },
+    },
+    previewPayload: {
+      title,
+      plan: weekly.planTitle,
+      week: weekly.selectedWeek.label,
+      businessOutcome,
+      owner: owner!.name,
+      dueDate,
+      priority,
+      budgetGuardrail,
+      approvalRequired: true,
+      externalExecution: 'blocked',
+    },
+    riskLevel: 'medium',
+    reason: 'create weekly operating work inside the selected execution plan',
+  };
+}
+
+function inferWeeklyTargetStatus(lower: string, explicitIntent: string):
+  | 'planned'
+  | 'ready'
+  | 'in_progress'
+  | 'blocked'
+  | 'awaiting_approval'
+  | 'completed'
+  | 'cancelled'
+  | null {
+  const normalizedIntent = explicitIntent.toLowerCase().replaceAll('-', '_').trim();
+  if (['block', 'blocked'].includes(normalizedIntent)) return 'blocked';
+  if (['complete', 'completed', 'done'].includes(normalizedIntent)) return 'completed';
+  if (['submit', 'submit_for_approval', 'awaiting_approval'].includes(normalizedIntent)) return 'awaiting_approval';
+  if (['start', 'in_progress'].includes(normalizedIntent)) return 'in_progress';
+  if (['approve', 'ready'].includes(normalizedIntent)) return 'ready';
+  if (['cancel', 'cancelled'].includes(normalizedIntent)) return 'cancelled';
+  if (normalizedIntent === 'planned') return 'planned';
+  const value = `${explicitIntent} ${lower}`;
+  if (/(?:mark|move|set|is|now).{0,20}(?:blocked)|block this/i.test(value)) return 'blocked';
+  if (/(?:mark|move|set).{0,20}(?:complete|completed|done|finish)/i.test(value)) return 'completed';
+  if (/(?:submit|send).{0,20}(?:approval|review)|awaiting approval/i.test(value)) return 'awaiting_approval';
+  if (/(?:start|begin|move).{0,20}(?:progress)|in progress/i.test(value)) return 'in_progress';
+  if (/(?:approve|mark|move|set).{0,20}(?:ready)/i.test(value)) return 'ready';
+  if (/(?:cancel|discard)/i.test(value)) return 'cancelled';
+  if (/(?:return|move|set).{0,20}(?:planned|planning)/i.test(value)) return 'planned';
+  return null;
+}
+
+function inferWeeklyPriority(lower: string): 'low' | 'medium' | 'high' | 'critical' | null {
+  if (/\bcritical\b/i.test(lower)) return 'critical';
+  if (/\bhigh priority\b|\bpriority:\s*high\b/i.test(lower)) return 'high';
+  if (/\blow priority\b|\bpriority:\s*low\b/i.test(lower)) return 'low';
+  if (/\bmedium priority\b|\bpriority:\s*medium\b/i.test(lower)) return 'medium';
+  return null;
+}
+
+function resolveWeeklyOwner(
+  content: string,
+  owners: Array<{ id: string; name: string; role: string }>,
+  metadata?: Record<string, unknown>,
+): { id: string; name: string; role: string } | null {
+  const ownerId = textMetadata(metadata, 'weeklyOwnerUserId');
+  if (ownerId) return owners.find((owner) => owner.id === ownerId) || null;
+  const ownerName = extractLabelValue(content, ['owner', 'assigned to']);
+  if (ownerName) {
+    const normalized = ownerName.toLowerCase();
+    return owners.find((owner) => owner.name.toLowerCase() === normalized)
+      || owners.find((owner) => normalized.includes(owner.name.toLowerCase()))
+      || null;
+  }
+  const lower = content.toLowerCase();
+  return owners.find((owner) => lower.includes(owner.name.toLowerCase())) || null;
+}
+
+function extractDateValue(content: string, labels: string[]): string | null {
+  const labelled = extractLabelValue(content, labels);
+  const candidate = labelled || content;
+  return /\b(20\d{2}-\d{2}-\d{2})\b/.exec(candidate)?.[1] || null;
 }
 
 async function deriveCommercialCenterActionProposalV2(

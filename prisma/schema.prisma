@@ -98,6 +98,7 @@ model Tenant {
   name        String
   status      TenantStatus @default(active)
   default_currency CommercialCurrency @default(AED)
+  timezone         String             @default("Asia/Dubai")
   privacy_policy Json         @default("{}")
   privacy_review_status String @default("pending_customer_legal_review")
   privacy_review_updated_at DateTime?
@@ -137,6 +138,7 @@ model Tenant {
   commercial_plan_event_links               CommercialPlanEventLink[]
   commercial_plan_campaign_links            CommercialPlanCampaignLink[]
   commercial_plan_learning_influences       CommercialPlanLearningInfluence[]
+  commercial_weekly_work_items              CommercialWeeklyWorkItem[]
   commercial_budget_allocations             CommercialBudgetAllocation[]
   commercial_budget_ledger_entries          CommercialBudgetLedgerEntry[]
   commercial_assessment_signals CommercialAssessmentSignal[]
@@ -334,6 +336,9 @@ model User {
   commercial_campaign_links_created                 CommercialPlanCampaignLink[]            @relation("CommercialPlanCampaignLinkCreatedBy")
   commercial_campaign_link_exceptions_approved      CommercialPlanCampaignLink[]            @relation("CommercialPlanCampaignLinkExceptionApprovedBy")
   commercial_learning_influences_created            CommercialPlanLearningInfluence[]       @relation("CommercialPlanLearningInfluenceCreatedBy")
+  commercial_weekly_work_items_owned                 CommercialWeeklyWorkItem[]              @relation("CommercialWeeklyWorkItemOwner")
+  commercial_weekly_work_items_created               CommercialWeeklyWorkItem[]              @relation("CommercialWeeklyWorkItemCreatedBy")
+  commercial_weekly_work_items_approved              CommercialWeeklyWorkItem[]              @relation("CommercialWeeklyWorkItemApprovedBy")
   commercial_assessment_signals_created CommercialAssessmentSignal[] @relation("CommercialAssessmentSignalCreatedBy")
   commercial_historical_assessment_runs_requested CommercialHistoricalAssessmentRun[] @relation("CommercialHistoricalAssessmentRunRequestedBy")
   commercial_historical_assessment_findings_decided CommercialHistoricalAssessmentFinding[] @relation("CommercialHistoricalAssessmentFindingDecidedBy")
@@ -3903,6 +3908,32 @@ enum CommercialPlanOrigin {
   legacy_unclassified
 }
 
+enum CommercialWeeklyWorkStatus {
+  planned
+  ready
+  in_progress
+  blocked
+  awaiting_approval
+  completed
+  cancelled
+}
+
+enum CommercialWeeklyWorkPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum CommercialWeeklyWorkLinkType {
+  content_item
+  campaign
+  event
+  lead
+  discipline_record
+  connector_evidence
+}
+
 enum AnnualCommercialPlanStatus {
   draft
   pending_approval
@@ -4223,6 +4254,7 @@ model CommercialPlan {
   ghl_attribution_mappings GhlPlanAttributionMapping[]
   ghl_leads                LeadCaptureRecord[]                @relation("GhlLeadCommercialPlan")
   ghl_operations           GhlOperationCommand[]
+  weekly_work_items        CommercialWeeklyWorkItem[]
 
   @@index([tenant_key])
   @@index([revenue_line_id])
@@ -4234,6 +4266,51 @@ model CommercialPlan {
   @@index([owner_user_id])
   @@index([superseded_by_plan_id])
   @@map("commercial_plans")
+}
+
+model CommercialWeeklyWorkItem {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  tenant_key            String
+  commercial_plan_id    String                       @db.Uuid
+  week_start_date       DateTime                     @db.Date
+  title                 String
+  business_outcome      String                       @db.Text
+  owner_user_id         String?                      @db.Uuid
+  owner_role            String?
+  start_date            DateTime?                    @db.Date
+  due_date              DateTime?                    @db.Date
+  status                CommercialWeeklyWorkStatus   @default(planned)
+  priority              CommercialWeeklyWorkPriority @default(medium)
+  budget_guardrail      Decimal?                     @db.Decimal(12, 2)
+  currency              CommercialCurrency           @default(AED)
+  link_type             CommercialWeeklyWorkLinkType?
+  link_object_id        String?
+  link_label            String?
+  blocker_reason        String?                      @db.Text
+  completion_evidence   String?                      @db.Text
+  revision              Int                          @default(1)
+  created_by_user_id    String                       @db.Uuid
+  approved_by_user_id   String?                      @db.Uuid
+  approved_at           DateTime?
+  completed_at          DateTime?
+  cancelled_at          DateTime?
+  created_at            DateTime                     @default(now())
+  updated_at            DateTime                     @updatedAt
+
+  tenant          Tenant         @relation(fields: [tenant_key], references: [tenant_key])
+  commercial_plan CommercialPlan @relation(fields: [commercial_plan_id], references: [id], onDelete: Cascade)
+  owner           User?          @relation("CommercialWeeklyWorkItemOwner", fields: [owner_user_id], references: [id], onDelete: SetNull)
+  created_by      User           @relation("CommercialWeeklyWorkItemCreatedBy", fields: [created_by_user_id], references: [id])
+  approved_by     User?          @relation("CommercialWeeklyWorkItemApprovedBy", fields: [approved_by_user_id], references: [id], onDelete: SetNull)
+
+  @@index([tenant_key])
+  @@index([commercial_plan_id, week_start_date])
+  @@index([owner_user_id])
+  @@index([status])
+  @@index([priority])
+  @@index([due_date])
+  @@index([link_type, link_object_id])
+  @@map("commercial_weekly_work_items")
 }
 
 model CommercialAssessmentSignal {

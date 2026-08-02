@@ -60,6 +60,12 @@ import {
 } from '@modules/commercial-kpi-governance/types';
 import * as ghlOperationsService from '@modules/ghl-operations/service';
 import { ghlOperationActionSchema } from '@modules/ghl-operations/types';
+import * as commercialWeeklyOperationsService from '@modules/commercial-weekly-operations/service';
+import {
+  createWeeklyWorkItemSchema,
+  transitionWeeklyWorkItemSchema,
+  updateWeeklyWorkItemSchema,
+} from '@modules/commercial-weekly-operations/types';
 
 const SUPPORTED_ACTIONS = [
   'create_event_problem',
@@ -98,6 +104,9 @@ const SUPPORTED_ACTIONS = [
   'review_commercial_spend_evidence',
   'create_governed_event_kpi_target',
   'set_event_capacity',
+  'create_weekly_work_item',
+  'update_weekly_work_item',
+  'transition_weekly_work_item',
   'prepare_ghl_operation',
 ] as const;
 
@@ -174,6 +183,23 @@ const transitionCommercialBudgetActionSchema = z.object({
 const reviewCommercialSpendEvidenceActionSchema = z.object({
   kpiId: z.string().uuid(),
   review: verifyKpiEvidenceSchema,
+});
+
+const createWeeklyWorkItemActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+  item: createWeeklyWorkItemSchema,
+});
+
+const updateWeeklyWorkItemActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  changes: updateWeeklyWorkItemSchema,
+});
+
+const transitionWeeklyWorkItemActionSchema = z.object({
+  commercialPlanId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  transition: transitionWeeklyWorkItemSchema,
 });
 
 const decideHistoricalAssessmentFindingActionSchema = z.object({
@@ -347,6 +373,41 @@ export async function executeStitchiAction(input: {
       const payload = updateCommercialPlanActionSchema.parse(input.inputPayload);
       const result = await commercialCenterService.updatePlan(input.role, input.tenantKey, input.userId, payload.commercialPlanId, payload.plan);
       return { objectType: 'commercial_plan', objectId: result.id, result };
+    }
+    case 'create_weekly_work_item': {
+      const payload = createWeeklyWorkItemActionSchema.parse(input.inputPayload);
+      const result = await commercialWeeklyOperationsService.createWeeklyWorkItem(
+        input.role,
+        input.tenantKey,
+        input.requestingUserId || input.userId,
+        payload.commercialPlanId,
+        payload.item,
+      );
+      return { objectType: 'commercial_weekly_work_item', objectId: result.id, result };
+    }
+    case 'update_weekly_work_item': {
+      const payload = updateWeeklyWorkItemActionSchema.parse(input.inputPayload);
+      const result = await commercialWeeklyOperationsService.updateWeeklyWorkItem(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.commercialPlanId,
+        payload.itemId,
+        payload.changes,
+      );
+      return { objectType: 'commercial_weekly_work_item', objectId: result.id, result };
+    }
+    case 'transition_weekly_work_item': {
+      const payload = transitionWeeklyWorkItemActionSchema.parse(input.inputPayload);
+      const result = await commercialWeeklyOperationsService.transitionWeeklyWorkItem(
+        input.role,
+        input.tenantKey,
+        input.userId,
+        payload.commercialPlanId,
+        payload.itemId,
+        payload.transition,
+      );
+      return { objectType: 'commercial_weekly_work_item', objectId: result.id, result };
     }
     case 'create_commercial_assessment_signal': {
       const payload = createAssessmentSignalSchema.parse(input.inputPayload);

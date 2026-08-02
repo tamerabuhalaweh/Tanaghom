@@ -714,6 +714,31 @@ export const commercialCommandCenterApi = {
     apiFetch<unknown>('/commercial-command-center/assessment-signals', { method: 'POST', body: data, token }),
 };
 
+export const commercialWeeklyOperationsApi = {
+  workspace: (commercialPlanId: string, token: string, weekOf?: string) => {
+    const params = weekOf ? `?${new URLSearchParams({ weekOf }).toString()}` : '';
+    return apiFetch<unknown>(
+      `/commercial-plans/${encodeURIComponent(commercialPlanId)}/weeks${params}`,
+      { token },
+    );
+  },
+  createItem: (commercialPlanId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(
+      `/commercial-plans/${encodeURIComponent(commercialPlanId)}/weeks/items`,
+      { method: 'POST', body: data, token },
+    ),
+  updateItem: (commercialPlanId: string, itemId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(
+      `/commercial-plans/${encodeURIComponent(commercialPlanId)}/weeks/items/${encodeURIComponent(itemId)}`,
+      { method: 'PUT', body: data, token },
+    ),
+  transitionItem: (commercialPlanId: string, itemId: string, data: unknown, token: string) =>
+    apiFetch<unknown>(
+      `/commercial-plans/${encodeURIComponent(commercialPlanId)}/weeks/items/${encodeURIComponent(itemId)}/transition`,
+      { method: 'POST', body: data, token },
+    ),
+};
+
 export const commercialAssessmentApi = {
   preview: (data: unknown, token: string) =>
     apiFetch<unknown>('/commercial-assessments/preview', { method: 'POST', body: data, token }),

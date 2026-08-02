@@ -169,6 +169,34 @@ function annualOperatorContext(monthlyItems: Array<Record<string, unknown>> = []
   } as never;
 }
 
+function weeklyOperatorContext(items: Array<Record<string, unknown>> = []) {
+  return {
+    ...annualOperatorContext(),
+    weeklyOperations: {
+      commercialPlanId: '00000000-0000-0000-0000-000000000940',
+      planTitle: 'Leadership course execution plan',
+      timezone: 'Asia/Dubai',
+      selectedWeek: {
+        startDate: '2026-08-03',
+        endDate: '2026-08-09',
+        label: '3-9 August 2026',
+      },
+      rollup: {
+        itemCount: items.length,
+        completedCount: 0,
+        blockedCount: 0,
+        awaitingApprovalCount: 0,
+        budgetGuardrail: 0,
+        remainingPlanBudget: 50000,
+      },
+      owners: [
+        { id: '00000000-0000-0000-0000-000000000942', name: 'Sara Manager', role: 'social_media_manager' },
+      ],
+      items,
+    },
+  } as never;
+}
+
 describe('Stitchi natural-language orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -514,6 +542,123 @@ describe('Stitchi natural-language orchestration', () => {
             status: 'active',
           }),
         }),
+      }),
+    );
+  });
+
+  it('prepares complete weekly work inside the selected execution plan', async () => {
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce(weeklyOperatorContext());
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: [
+        'Create this weekly work item.',
+        'Title: Approve campaign brief',
+        'Business outcome: Release the campaign before media booking closes.',
+        'Owner: Sara Manager',
+        'Due date: 2026-08-05',
+        'Priority: high',
+        'Budget guardrail: 3000',
+      ].join('\n'),
+      metadata: {
+        commercialPlanId: '00000000-0000-0000-0000-000000000940',
+        weekStartDate: '2026-08-03',
+        weeklyWorkIntent: 'create',
+      },
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'create_weekly_work_item',
+        inputPayload: {
+          commercialPlanId: '00000000-0000-0000-0000-000000000940',
+          item: expect.objectContaining({
+            weekStartDate: '2026-08-03',
+            title: 'Approve campaign brief',
+            ownerUserId: '00000000-0000-0000-0000-000000000942',
+            dueDate: '2026-08-05',
+            priority: 'high',
+            budgetGuardrail: 3000,
+          }),
+        },
+        previewPayload: expect.objectContaining({
+          plan: 'Leadership course execution plan',
+          owner: 'Sara Manager',
+          approvalRequired: true,
+          externalExecution: 'blocked',
+        }),
+      }),
+    );
+  });
+
+  it('asks for missing weekly owner, outcome, and due date instead of guessing', async () => {
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce(weeklyOperatorContext());
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Create a weekly work item for the campaign brief.',
+      metadata: {
+        commercialPlanId: '00000000-0000-0000-0000-000000000940',
+        weeklyWorkIntent: 'create',
+      },
+    });
+
+    expect(result.status).toBe('answered');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('the business outcome, the owner, the due date'),
+      expect.objectContaining({ writesExecuted: false }),
+    );
+  });
+
+  it('prepares completion with current revision and evidence', async () => {
+    const itemId = '00000000-0000-0000-0000-000000000941';
+    vi.mocked(loadReadOnlyContext).mockResolvedValueOnce(weeklyOperatorContext([{
+      id: itemId,
+      title: 'Approve campaign brief',
+      businessOutcome: 'Release the campaign.',
+      ownerUserId: '00000000-0000-0000-0000-000000000942',
+      ownerName: 'Sara Manager',
+      dueDate: '2026-08-05',
+      status: 'in_progress',
+      priority: 'high',
+      blockerReason: null,
+      revision: 4,
+    }]));
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Mark this weekly work item completed. Completion evidence: Campaign brief approved in the content workspace.',
+      metadata: {
+        commercialPlanId: '00000000-0000-0000-0000-000000000940',
+        weeklyWorkItemId: itemId,
+        weeklyWorkIntent: 'complete',
+      },
+    });
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'transition_weekly_work_item',
+        inputPayload: {
+          commercialPlanId: '00000000-0000-0000-0000-000000000940',
+          itemId,
+          transition: expect.objectContaining({
+            expectedRevision: 4,
+            targetStatus: 'completed',
+            completionEvidence: 'Campaign brief approved in the content workspace.',
+          }),
+        },
       }),
     );
   });

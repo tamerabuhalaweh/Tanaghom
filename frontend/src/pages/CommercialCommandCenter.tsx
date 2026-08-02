@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { commercialCommandCenterApi } from '../api';
 import { CommercialWorkspaceNav } from '../components/CommercialWorkspaceNav';
+import { WeeklyOperatingWorkspace } from '../components/WeeklyOperatingWorkspace';
 import {
   OpsEmpty,
   OpsNotice,
@@ -180,12 +181,19 @@ function normalizeRoleFromUser(user: unknown): string {
     : 'unknown';
 }
 
+function userIdFromUser(user: unknown): string {
+  if (!user || typeof user !== 'object') return '';
+  const record = user as RecordMap;
+  return text(record.id || record.userId || record.sub);
+}
+
 export default function CommercialCommandCenter() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedPlanId = searchParams.get('planId');
   const userRole = normalizeRoleFromUser(user);
+  const currentUserId = userIdFromUser(user);
   const canManagePlans = ['admin', 'cco', 'department_head'].includes(userRole);
   const [dashboard, setDashboard] = useState<RecordMap | null>(null);
   const [selectedType, setSelectedType] = useState(searchParams.get('revenueLineType') || 'live_event');
@@ -267,10 +275,12 @@ export default function CommercialCommandCenter() {
     return () => window.removeEventListener('tanaghum:commercial-data-changed', refresh);
   }, [load, token]);
 
-  function stitchiPath(prompt?: string): string {
+  function stitchiPath(prompt?: string, context?: { commercialPlanId?: string; weekStartDate?: string }): string {
     const params = new URLSearchParams();
     if (text(selectedLine.id)) params.set('revenueLineId', text(selectedLine.id));
     if (text(selectedLine.revenueLineType, selectedType)) params.set('revenueLineType', text(selectedLine.revenueLineType, selectedType));
+    if (context?.commercialPlanId) params.set('commercialPlanId', context.commercialPlanId);
+    if (context?.weekStartDate) params.set('weekStartDate', context.weekStartDate);
     if (prompt) {
       params.set('prompt', prompt);
       params.set('mode', 'prepare');
@@ -304,10 +314,11 @@ export default function CommercialCommandCenter() {
   }
 
   function editPlan(plan: RecordMap) {
-    if (!canManagePlans) return;
     setPlanDraft(planDraftFrom(plan, defaultCurrency));
-    setShowStandaloneForm(true);
-    document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (canManagePlans) {
+      setShowStandaloneForm(true);
+      document.getElementById('commercial-plan-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   async function savePlan() {
@@ -512,11 +523,11 @@ export default function CommercialCommandCenter() {
               )}
             </OpsSection>
 
-            <OpsSection title="Execution plan records" subtitle={canManagePlans ? 'Choose a plan to review its hierarchy or edit its operating details.' : 'Review active plans and ask Stitchi to prepare changes.'}>
+            <OpsSection title="Execution plan records" subtitle={canManagePlans ? 'Choose a plan to edit it and manage the weekly work below.' : 'Choose a plan to review its weekly work and update items assigned to you.'}>
               {plans.length ? (
                 <div className="commercial-plan-list">
                   {plans.map(plan => (
-                    <button key={text(plan.id)} type="button" onClick={() => editPlan(plan)} disabled={!canManagePlans} className={text(plan.id) === planDraft.id ? 'is-selected' : ''}>
+                    <button key={text(plan.id)} type="button" onClick={() => editPlan(plan)} className={text(plan.id) === planDraft.id ? 'is-selected' : ''} aria-pressed={text(plan.id) === planDraft.id}>
                       <div><strong>{customerLabel(plan.title, 'Untitled plan')}</strong><small>{text(plan.annualPlanTitle) ? `${numberValue(plan.annualPlanYear)} Annual Plan / ${MONTH_LABELS[numberValue(plan.monthlyPortfolioMonth) - 1] || 'Monthly initiative'}` : text(plan.origin) === 'standalone_exception' ? 'Standalone exception' : 'Legacy record - parent not classified'}</small></div>
                       <OpsStatus tone={statusTone(text(plan.status))}>{titleCase(text(plan.status))}</OpsStatus>
                       <dl><div><dt>Budget</dt><dd>{formatMoney(plan.budgetTarget, text(plan.currency, defaultCurrency))}</dd></div><div><dt>Target</dt><dd>{formatMoney(plan.revenueTarget, text(plan.currency, defaultCurrency))}</dd></div></dl>
@@ -527,6 +538,18 @@ export default function CommercialCommandCenter() {
               ) : <OpsEmpty title="No execution plans yet" message="Open the annual plan, choose a monthly initiative, and create its execution plan from there." />}
             </OpsSection>
           </div>
+
+          <WeeklyOperatingWorkspace
+            key={planDraft.id || 'no-selected-plan'}
+            commercialPlanId={planDraft.id || undefined}
+            token={token || ''}
+            currentUserId={currentUserId || undefined}
+            currentUserRole={userRole}
+            onAskStitchi={(weekStart) => navigate(stitchiPath(
+              `Prepare the weekly work for ${planDraft.title || 'this execution plan'} for the week starting ${weekStart}. Ask for any missing owner, due date, business outcome, or evidence before preparing an approval card.`,
+              { commercialPlanId: planDraft.id, weekStartDate: weekStart },
+            ))}
+          />
 
           <OpsSection
             title="Approved historical learning"
