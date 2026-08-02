@@ -94,17 +94,36 @@ function dashboardBody() {
 
 function publicOperation(
   role: Role,
-  status: 'previewed' | 'pending_approval' | 'approved' = 'previewed',
+  status:
+    | 'previewed'
+    | 'pending_approval'
+    | 'approved'
+    | 'executing'
+    | 'provider_accepted'
+    | 'reconciled'
+    | 'failed' = 'previewed',
 ) {
   const restricted = role === 'viewer';
+  const versions = {
+    previewed: 1,
+    pending_approval: 2,
+    approved: 3,
+    executing: 4,
+    provider_accepted: 5,
+    reconciled: 6,
+    failed: 5,
+  };
   return {
     id: 'operation-1',
     eventId,
     leadId,
     operationType: restricted ? 'restricted' : 'opportunity_upsert',
     status,
-    reconciliationStatus: 'not_started',
-    version: status === 'previewed' ? 1 : status === 'pending_approval' ? 2 : 3,
+    reconciliationStatus:
+      status === 'reconciled' ? 'confirmed' : status === 'failed' ? 'failed' : 'pending',
+    version: versions[status],
+    failureReason:
+      status === 'failed' ? 'GoHighLevel rejected the controlled customer update.' : undefined,
     previewHash: restricted ? undefined : 'preview-hash',
     preview: restricted
       ? undefined
@@ -130,13 +149,23 @@ function publicOperation(
 async function installMocks(
   page: Page,
   role: Role,
-  options: { existingOperation?: boolean } = {},
+  options: {
+    existingOperation?: boolean;
+    pollOutcome?: 'reconciled' | 'failed' | 'pending';
+  } = {},
 ) {
   const unexpected: string[] = [];
   const failures: string[] = [];
   const browserProblems: string[] = [];
   let previewCalls = 0;
-  let operationStatus: 'previewed' | 'pending_approval' | 'approved' = 'previewed';
+  let pollCalls = 0;
+  let operationStatus:
+    | 'previewed'
+    | 'pending_approval'
+    | 'approved'
+    | 'executing'
+    | 'reconciled'
+    | 'failed' = 'previewed';
 
   await page.addInitScript(() => window.localStorage.setItem('token', 'ghl-operations-token'));
   page.on('console', (message) => {
@@ -271,6 +300,15 @@ async function installMocks(
       operationStatus = 'approved';
       return json(publicOperation(role, operationStatus));
     }
+    if (path === '/ghl-operations/operation-1' && method === 'GET') {
+      pollCalls += 1;
+      if (operationStatus === 'approved' && options.pollOutcome !== 'pending') {
+        operationStatus = 'executing';
+      } else if (operationStatus === 'executing') {
+        operationStatus = options.pollOutcome === 'failed' ? 'failed' : 'reconciled';
+      }
+      return json(publicOperation(role, operationStatus));
+    }
 
     unexpected.push(`${method} ${path}${url.search}`);
     return json({ error: `Unexpected GHL operations request: ${method} ${path}` }, 500);
@@ -286,6 +324,9 @@ async function installMocks(
     },
     previewCalls() {
       return previewCalls;
+    },
+    pollCalls() {
+      return pollCalls;
     },
   };
 }
@@ -384,7 +425,7 @@ test.describe('GHL two-way commercial operations', () => {
     monitor.assertClean();
   });
 
-  test('CCO sees consequential details and approves without executing in the browser', async ({
+  test('CCO sees the governed worker progress and provider-confirmed result', async ({
     page,
   }) => {
     const monitor = await installMocks(page, 'cco');
@@ -407,8 +448,51 @@ test.describe('GHL two-way commercial operations', () => {
     await page.getByRole('button', { name: 'Send for approval' }).click();
     await page.getByRole('button', { name: 'Approve' }).click();
 
-    await expect(page.getByText('Approved and queued.')).toBeVisible();
+    await expect(
+      page.getByText('Approved. Tanaghum is sending this change to GoHighLevel and checking the result.'),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        'Confirmed in GoHighLevel. Tanaghum read the saved record back and updated the audit trail.',
+      ),
+    ).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('button', { name: /Execute|Reconcile/ })).toHaveCount(0);
+    const completedPollCalls = monitor.pollCalls();
+    expect(completedPollCalls).toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(2_000);
+    expect(monitor.pollCalls(), 'polling must stop after reconciliation').toBe(completedPollCalls);
+    monitor.assertClean();
+  });
+
+  test('shows a provider failure and stops automatic status checks', async ({ page }) => {
+    const monitor = await installMocks(page, 'cco', { pollOutcome: 'failed' });
+    await openLeadsTab(page);
+
+    await page.getByRole('tab', { name: /Sale & payment/ }).click();
+    const form = page.getByRole('tabpanel', { name: /Sale & payment/ });
+    await form.getByRole('combobox', { name: 'Pipeline', exact: true }).selectOption('pipeline-1');
+    await form.getByRole('combobox', { name: 'Stage', exact: true }).selectOption('stage-sale');
+    await form.getByRole('combobox', { name: 'Status', exact: true }).selectOption('won');
+    await form.getByRole('spinbutton', { name: 'Total sale value' }).fill('2000');
+    await form.getByRole('spinbutton', { name: 'Amount paid' }).fill('2000');
+    await form.getByRole('spinbutton', { name: 'Ticket quantity' }).fill('2');
+    await form
+      .getByRole('combobox', { name: 'Payment status', exact: true })
+      .selectOption('paid_in_full');
+    await form.getByLabel('Payment date').fill('2026-07-29');
+    await page.getByRole('button', { name: 'Review change' }).click();
+    await page.getByRole('button', { name: 'Send for approval' }).click();
+    await page.getByRole('button', { name: 'Approve' }).click();
+
+    await expect(
+      page.getByText('GoHighLevel rejected the controlled customer update.'),
+    ).toBeVisible({ timeout: 8_000 });
+    const completedPollCalls = monitor.pollCalls();
+    expect(completedPollCalls).toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(2_000);
+    expect(monitor.pollCalls(), 'polling must stop after provider failure').toBe(
+      completedPollCalls,
+    );
     monitor.assertClean();
   });
 

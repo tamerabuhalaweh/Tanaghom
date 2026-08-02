@@ -1583,6 +1583,14 @@
   gap: 0.7rem;
 }
 
+.ghl-operation-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .ghl-review {
   display: grid;
   gap: 1rem;

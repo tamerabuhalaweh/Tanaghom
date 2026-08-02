@@ -60,6 +60,11 @@ const PREPARER_ROLES = [
   'lead_qualification_manager',
 ];
 
+const POLLABLE_OPERATION_STATUSES = new Set(['approved', 'executing', 'provider_accepted']);
+const FAILED_OPERATION_STATUSES = new Set(['blocked', 'failed', 'reconciliation_failed', 'expired']);
+const OPERATION_POLL_INTERVAL_MS = 1_500;
+const OPERATION_POLL_TIMEOUT_MS = 90_000;
+
 function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
@@ -148,6 +153,10 @@ export function GhlCommercialOperationsPanel({
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const handledInitialOperationId = useRef('');
+  const pollWindowRef = useRef<{ operationId: string; deadline: number } | null>(null);
+  const terminalNoticeRef = useRef('');
+  const [pollingTimedOutOperationId, setPollingTimedOutOperationId] = useState('');
+  const [pollRetry, setPollRetry] = useState(0);
   const [pipelineId, setPipelineId] = useState(text(lead.externalPipelineId));
   const [stageId, setStageId] = useState(text(lead.externalStageId));
   const [opportunityName, setOpportunityName] = useState(
@@ -290,6 +299,19 @@ export function GhlCommercialOperationsPanel({
     ? preview.blockers.filter((item): item is string => typeof item === 'string')
     : [];
   const status = text(visibleOperation?.status, '');
+  const visibleOperationId = text(visibleOperation?.id);
+  const visibleOperationType = text(visibleOperation?.operationType) as OperationType;
+  const visibleOperationReadiness = record(operationReadiness[visibleOperationType]);
+  const liveExecutionAvailable =
+    workerEnabled &&
+    visibleOperationReadiness.enabled === true &&
+    visibleOperationReadiness.state === 'live';
+  const pollingTimedOut = pollingTimedOutOperationId === visibleOperationId;
+  const pollingOperation =
+    Boolean(visibleOperationId) &&
+    POLLABLE_OPERATION_STATUSES.has(status) &&
+    liveExecutionAvailable &&
+    !pollingTimedOut;
 
   const load = useCallback(async () => {
     if (!leadId) return;
@@ -336,6 +358,107 @@ export function GhlCommercialOperationsPanel({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (
+      !visibleOperationId ||
+      !POLLABLE_OPERATION_STATUSES.has(status) ||
+      (status === 'approved' && !liveExecutionAvailable)
+    ) {
+      if (!POLLABLE_OPERATION_STATUSES.has(status)) {
+        pollWindowRef.current = null;
+      }
+      return;
+    }
+
+    if (pollWindowRef.current?.operationId !== visibleOperationId) {
+      pollWindowRef.current = {
+        operationId: visibleOperationId,
+        deadline: Date.now() + OPERATION_POLL_TIMEOUT_MS,
+      };
+    }
+
+    let cancelled = false;
+    let timer = 0;
+    const poll = async () => {
+      try {
+        const nextOperation = record(
+          await ghlOperationsApi.get(visibleOperationId, token),
+        );
+        if (cancelled) return;
+
+        const nextStatus = text(nextOperation.status);
+        setOperation(nextOperation);
+        setHistory((current) => {
+          const found = current.some((item) => text(item.id) === visibleOperationId);
+          return found
+            ? current.map((item) =>
+                text(item.id) === visibleOperationId ? nextOperation : item,
+              )
+            : [nextOperation, ...current];
+        });
+
+        if (!POLLABLE_OPERATION_STATUSES.has(nextStatus)) {
+          pollWindowRef.current = null;
+          if (terminalNoticeRef.current !== `${visibleOperationId}:${nextStatus}`) {
+            terminalNoticeRef.current = `${visibleOperationId}:${nextStatus}`;
+            onRefresh();
+          }
+          return;
+        }
+
+        if (Date.now() >= (pollWindowRef.current?.deadline ?? 0)) {
+          setPollingTimedOutOperationId(visibleOperationId);
+          return;
+        }
+
+        timer = window.setTimeout(() => void poll(), OPERATION_POLL_INTERVAL_MS);
+      } catch (error) {
+        if (cancelled) return;
+        setPollingTimedOutOperationId(visibleOperationId);
+        setMessage(
+          error instanceof Error
+            ? `Automatic CRM status checking paused: ${error.message}`
+            : 'Automatic CRM status checking paused. Use Refresh to try again.',
+        );
+      }
+    };
+
+    timer = window.setTimeout(() => void poll(), OPERATION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [liveExecutionAvailable, onRefresh, pollRetry, status, token, visibleOperationId]);
+
+  async function refresh() {
+    setBusy('refresh');
+    setMessage('');
+    try {
+      await load();
+      if (visibleOperationId) {
+        const refreshedOperation = record(
+          await ghlOperationsApi.get(visibleOperationId, token),
+        );
+        setOperation(refreshedOperation);
+        setHistory((current) =>
+          current.map((item) =>
+            text(item.id) === visibleOperationId ? refreshedOperation : item,
+          ),
+        );
+      }
+      pollWindowRef.current = null;
+      setPollingTimedOutOperationId('');
+      setPollRetry((current) => current + 1);
+      onRefresh();
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'CRM actions could not be refreshed.',
+      );
+    } finally {
+      setBusy('');
+    }
+  }
 
   async function prepare() {
     if (!action || !canPrepare) return;
@@ -457,8 +580,18 @@ export function GhlCommercialOperationsPanel({
       title="Take action in GoHighLevel"
       subtitle="Work from Tanaghum. Every CRM change is reviewed, approved and checked against GHL."
       action={
-        <button type="button" className="ops-text-button" onClick={() => void load()}>
-          <RefreshCw size={15} aria-hidden="true" /> Refresh
+        <button
+          type="button"
+          className="ops-text-button"
+          onClick={() => void refresh()}
+          disabled={Boolean(busy)}
+        >
+          <RefreshCw
+            size={15}
+            className={busy === 'refresh' ? 'animate-spin' : ''}
+            aria-hidden="true"
+          />{' '}
+          Refresh
         </button>
       }
     >
@@ -854,14 +987,48 @@ export function GhlCommercialOperationsPanel({
             </div>
             {status === 'approved' ? (
               <Notice tone="info">
-                Approved and queued. Tanaghum will execute it through the governed CRM worker when
-                live GHL writes are enabled.
+                {liveExecutionAvailable ? (
+                  <span className="ghl-operation-progress" role="status" aria-live="polite">
+                    {pollingOperation ? (
+                      <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                    ) : null}
+                    {pollingTimedOut
+                      ? 'Approved and still waiting for GoHighLevel. Automatic checking paused; use Refresh to check again.'
+                      : 'Approved. Tanaghum is sending this change to GoHighLevel and checking the result.'}
+                  </span>
+                ) : (
+                  'Approved and saved. Live execution is not enabled for this operation.'
+                )}
               </Notice>
             ) : null}
-            {status === 'provider_accepted' || status === 'reconciliation_pending' ? (
+            {status === 'executing' || status === 'provider_accepted' ? (
               <Notice tone="info">
-                GoHighLevel accepted the request. Tanaghum is waiting for verified read-back or
-                webhook confirmation.
+                <span className="ghl-operation-progress" role="status" aria-live="polite">
+                  {pollingOperation ? (
+                    <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                  ) : null}
+                  {status === 'executing'
+                    ? 'Sending the approved change to GoHighLevel.'
+                    : pollingTimedOut
+                      ? 'GoHighLevel accepted the change, but confirmation is taking longer than expected. Use Refresh to check again.'
+                      : 'GoHighLevel accepted the change. Tanaghum is checking the saved CRM record.'}
+                </span>
+              </Notice>
+            ) : null}
+            {status === 'reconciled' ? (
+              <Notice tone="good">
+                <span className="ghl-operation-progress" role="status" aria-live="polite">
+                  <CheckCircle2 size={16} aria-hidden="true" />
+                  Confirmed in GoHighLevel. Tanaghum read the saved record back and updated the audit trail.
+                </span>
+              </Notice>
+            ) : null}
+            {FAILED_OPERATION_STATUSES.has(status) ? (
+              <Notice tone="danger">
+                {text(
+                  visibleOperation?.failureReason,
+                  'GoHighLevel could not confirm this change. Review the action and try again.',
+                )}
               </Notice>
             ) : null}
           </section>
