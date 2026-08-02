@@ -16,13 +16,13 @@ The GHL scope is **conditionally accepted**, not fully closed:
 
 - WhatsApp remains unavailable because the customer has not connected and approved a GHL WhatsApp channel, consented test contact, and messaging policy.
 - Signed webhook delivery remains unavailable because a Private Integration Token does not register Marketplace/OAuth webhooks. Accepted non-message operations currently use bounded provider read-back.
-- A fresh Stitchi-originated contact-upsert run has not been separately recorded. The governed UI contact path is live-accepted, and Stitchi-originated tag, sale/payment, and meeting paths are live-accepted.
+- Contact, tag, sale/payment, and meeting operations now each have a fresh Stitchi-originated live acceptance record.
 
 ## Operation Matrix
 
 | Customer workflow | Adapter and governance | Live GHL write | Provider read-back | Tanaghum mirror and audit | Stitchi live acceptance | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| Customer | Preview, approval, idempotent worker command, tenant checks, sanitized result | HTTP 201, provider contact `iLVURdJaWPl0fRBygAdF` | Confirmed | Reconciled; ordered audit evidence recorded | Supported in code; separate fresh Stitchi contact run not yet evidenced | **Live accepted through UI** |
+| Customer | Preview, approval, idempotent worker command, tenant checks, sanitized result | Provider contact `iLVURdJaWPl0fRBygAdF` accepted | Confirmed | Command `90f0b3e2-de4a-40bd-8ed5-40444511b361` reconciled; local mirror and seven ordered audit records written | Action `2df55c76-89b8-4976-a077-4d70b355b603` | **Live accepted through Stitchi** |
 | Tags | Mapped-tag validation, selected-customer binding, approval, idempotent worker command | HTTP 201; added `tanaghum-moaaskar-uat` | HTTP 200 confirmed exact tag present | Command `117d8860-9146-404f-9dce-3219889b8c55` reconciled; local mirror and audit updated | Action `def2e518-eb23-4801-b41e-1dfb55428aea` | **Live accepted through Stitchi** |
 | Sale and payment | Approved pipeline/stage validation, payment rules, immutable preview, approval, idempotent worker command | HTTP 200; provider opportunity `tAl8XDryikbogYgIS9Am` | Confirmed pipeline, stage, Won status, value, and mapped payment fields | Command `0c4adbd5-faed-4e0f-ace5-abc07dea9e2f` reconciled; purchased/buyer mirror updated | Action `50ac5dce-a301-4232-b192-f96a9d8fe7f8` | **Live accepted through Stitchi** |
 | Meeting | Approved calendar validation, time/status validation, approval, idempotent create/update | HTTP 200; provider appointment `IH32pT2lA3LI1KUrQ74f` | Confirmed | Command `a4bc5e9e-8ffd-43cc-9b06-8582eefa554e` reconciled; mirror and audit updated | Action `b7b8a07c-e59e-48ef-badd-e2c066d4e572` | **Live accepted through Stitchi** |
@@ -53,6 +53,39 @@ Audit actions recorded:
 - `ghl_operation_provider_accepted`
 - `ghl_operation_reconciled`
 - `ghl_operation_local_mirror_updated`
+
+## Confirmed Customer Acceptance Chain
+
+The final parity run proves Customer Upsert through Stitchi, not only through
+the form-based Sales & Leads workflow:
+
+1. The selected Tanaghum lead was passed to Stitchi as governed page context.
+2. Stitchi prepared `contact_upsert` and created an approval-gated action run.
+3. An MFA-enrolled CCO QA identity approved and executed the internal Stitchi action.
+4. Tanaghum created an immutable GHL command preview; no provider write occurred during preparation.
+5. The CCO submitted and approved the exact CRM command.
+6. The server worker sent the contact upsert to GHL.
+7. Provider read-back confirmed contact `iLVURdJaWPl0fRBygAdF`.
+8. Tanaghum reconciled the operation, updated the local mirror, and wrote the
+   ordered audit chain.
+9. The temporary QA identity was disabled immediately after acceptance.
+
+Evidence identifiers:
+
+- Conversation: `1da6dac2-ab1b-472b-a293-9c6582b867a8`
+- Stitchi action: `2df55c76-89b8-4976-a077-4d70b355b603`
+- GHL command: `90f0b3e2-de4a-40bd-8ed5-40444511b361`
+- Provider contact: `iLVURdJaWPl0fRBygAdF`
+- Final command state: `reconciled`
+- Final reconciliation state: `confirmed`
+- Raw secrets returned: `false`
+
+The first attempt in this acceptance window reached
+`reconciliation_failed` because of a transient provider transport failure.
+The terminal failure was preserved as evidence, no provider object was
+claimed, and a new idempotent command was prepared and approved after
+connectivity was rechecked. The retry then reconciled successfully. This
+confirms both honest failure handling and the recovery path.
 
 ## UI Status Behavior
 
