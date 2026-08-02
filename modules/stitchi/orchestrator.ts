@@ -303,19 +303,24 @@ async function createActionRunFromProposal(
     riskLevel: proposal.riskLevel,
     langGraphThreadId: threadId,
   });
-  await startStitchiActionApprovalWorkflow({
-    threadId,
-    tenantKey: state.tenantKey,
-    userId: state.userId,
-    conversationId: state.conversationId,
-    actionRunId: actionRun.id,
-    actionType: actionRun.actionType,
-    inputSummary: proposal.previewPayload,
-  });
+  const reusedActiveProposal = actionRun.langGraphThreadId !== threadId;
+  if (!reusedActiveProposal) {
+    await startStitchiActionApprovalWorkflow({
+      threadId,
+      tenantKey: state.tenantKey,
+      userId: state.userId,
+      conversationId: state.conversationId,
+      actionRunId: actionRun.id,
+      actionType: actionRun.actionType,
+      inputSummary: proposal.previewPayload,
+    });
+  }
   return {
     actionRun,
     assistantText: [
-      `I prepared this for review: ${proposal.reason}.`,
+      reusedActiveProposal
+        ? `This work is already prepared for review: ${proposal.reason}.`
+        : `I prepared this for review: ${proposal.reason}.`,
       'No data has been changed yet.',
       'An Admin or CCO must approve it before Tanaghum executes the internal update.',
     ].join('\n'),

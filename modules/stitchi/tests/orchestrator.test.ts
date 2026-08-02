@@ -339,6 +339,43 @@ describe('Stitchi natural-language orchestration', () => {
     }));
   });
 
+  it('reuses an identical active proposal without starting a second approval workflow', async () => {
+    vi.mocked(repo.createActionRun).mockImplementation(async (_tenantKey, _userId, _role, _conversationId, input) => ({
+      id: 'existing-action',
+      tenantKey: 'tenant-a',
+      conversationId: 'conversation-1',
+      userId: 'user-1',
+      actionType: input.actionType,
+      status: 'awaiting_approval',
+      inputPayload: input.inputPayload,
+      previewPayload: input.previewPayload,
+      resultPayload: null,
+      requiresApproval: true,
+      riskLevel: input.riskLevel,
+      auditRecordId: null,
+      langGraphThreadId: 'existing-thread',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: null,
+    }));
+
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'There is a WhatsApp follow-up delay problem that risks sales conversion.',
+      eventId: '00000000-0000-0000-0000-000000000001',
+    });
+
+    expect(result.actionRun?.id).toBe('existing-action');
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('already prepared for review'),
+      expect.any(Object),
+    );
+    expect(workflowMocks.startStitchiActionApprovalWorkflow).not.toHaveBeenCalled();
+  });
+
   it('blocks direct external execution requests from chat', async () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: 'Publish this to Instagram and send WhatsApp messages now.',

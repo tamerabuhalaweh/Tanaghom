@@ -345,6 +345,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
   const [message, setMessage] = useState('');
   const endRef = useRef<HTMLDivElement | null>(null);
   const consumedGhlOperationRef = useRef(false);
+  const requestInFlightRef = useRef(false);
 
   const loadConversation = useCallback(async () => {
     if (!token) return;
@@ -451,9 +452,10 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
   }
 
   async function sendMessage(nextMode = mode, prompt = input) {
-    if (!token || !conversation || sending) return;
+    if (!token || !conversation || sending || requestInFlightRef.current) return;
     const content = prompt.trim();
     if (!content) return;
+    requestInFlightRef.current = true;
     setInput('');
     setSending(true);
     setMessage('');
@@ -509,12 +511,14 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
         : err instanceof Error ? err.message : 'Stitchi could not complete the request.';
       setMessage(detail);
     } finally {
+      requestInFlightRef.current = false;
       setSending(false);
     }
   }
 
   async function decide(actionId: string, decision: 'approve' | 'reject') {
-    if (!token) return;
+    if (!token || requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
     setMessage('');
     setSending(true);
     try {
@@ -540,12 +544,14 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Decision failed.');
     } finally {
+      requestInFlightRef.current = false;
       setSending(false);
     }
   }
 
   async function execute(actionId: string) {
-    if (!token) return;
+    if (!token || requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
     setMessage('');
     setSending(true);
     try {
@@ -555,6 +561,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Save failed.');
     } finally {
+      requestInFlightRef.current = false;
       setSending(false);
     }
   }

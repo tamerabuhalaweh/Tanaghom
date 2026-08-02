@@ -237,11 +237,53 @@ describe('Stitchi repository foundation', () => {
       data: expect.objectContaining({
         status: 'awaiting_approval',
         input_payload: expect.objectContaining({ objective: 'launch event', apiKey: '[redacted]' }),
+        proposal_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       }),
     }));
     expect(prismaMocks.auditRecord.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ action: 'stitchi_action_run_created' }),
     }));
+  });
+
+  it('reuses an identical active action proposal instead of creating a duplicate approval card', async () => {
+    prismaMocks.stitchiConversation.findFirst.mockResolvedValue(conversation());
+    prismaMocks.stitchiActionRun.findFirst.mockResolvedValue(actionRun({
+      id: 'existing-action',
+      langgraph_thread_id: 'existing-thread',
+    }));
+
+    const run = await repo.createActionRun('tenant-a', 'user-1', 'marketing_manager', 'conversation-1', {
+      actionType: 'prepare_ghl_operation',
+      inputPayload: { action: { type: 'appointment_upsert', leadId: 'lead-1' } },
+      requiresApproval: true,
+      riskLevel: 'high',
+      langGraphThreadId: 'new-thread',
+    });
+
+    expect(run.id).toBe('existing-action');
+    expect(run.langGraphThreadId).toBe('existing-thread');
+    expect(prismaMocks.stitchiActionRun.create).not.toHaveBeenCalled();
+    expect(prismaMocks.auditRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('recovers from a concurrent duplicate insert by returning the winning active proposal', async () => {
+    prismaMocks.stitchiConversation.findFirst.mockResolvedValue(conversation());
+    prismaMocks.stitchiActionRun.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(actionRun({ id: 'winning-action', langgraph_thread_id: 'winning-thread' }));
+    prismaMocks.stitchiActionRun.create.mockRejectedValue({ code: 'P2002' });
+
+    const run = await repo.createActionRun('tenant-a', 'user-1', 'marketing_manager', 'conversation-1', {
+      actionType: 'prepare_ghl_operation',
+      inputPayload: { action: { type: 'appointment_upsert', leadId: 'lead-1' } },
+      requiresApproval: true,
+      riskLevel: 'high',
+      langGraphThreadId: 'losing-thread',
+    });
+
+    expect(run.id).toBe('winning-action');
+    expect(run.langGraphThreadId).toBe('winning-thread');
+    expect(prismaMocks.auditRecord.create).not.toHaveBeenCalled();
   });
 
   it('approves only proposed or awaiting-approval actions', async () => {

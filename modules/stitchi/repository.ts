@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database';
 import { NotFoundError, ValidationError } from '@shared/errors';
@@ -51,10 +52,35 @@ type ActionRunRow = {
   risk_level: string;
   audit_record_id: string | null;
   langgraph_thread_id: string | null;
+  proposal_fingerprint?: string | null;
   created_at: Date;
   updated_at: Date;
   completed_at: Date | null;
 };
+
+const ACTIVE_PROPOSAL_STATUSES = ['proposed', 'awaiting_approval', 'approved', 'running'] as const;
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return 'null';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+    .join(',')}}`;
+}
+
+function proposalFingerprint(actionType: string, inputPayload: unknown): string {
+  return createHash('sha256')
+    .update(canonicalJson({ actionType, inputPayload }))
+    .digest('hex');
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    ? error.code === 'P2002'
+    : Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'P2002');
+}
 
 type ApprovalRow = {
   id: string;
@@ -257,20 +283,47 @@ export async function createActionRun(
 ): Promise<StitchiActionRunSummary> {
   await getConversation(tenantKey, userId, role, conversationId);
   const status = input.requiresApproval ? 'awaiting_approval' : 'proposed';
-  const run = await prisma.stitchiActionRun.create({
-    data: {
-      tenant_key: tenantKey,
-      conversation_id: conversationId,
-      user_id: userId,
-      action_type: input.actionType,
-      status,
-      input_payload: toStoredJson(input.inputPayload) as Prisma.InputJsonValue,
-      preview_payload: input.previewPayload ? toStoredJson(input.previewPayload) as Prisma.InputJsonValue : undefined,
-      requires_approval: input.requiresApproval,
-      risk_level: input.riskLevel,
-      langgraph_thread_id: input.langGraphThreadId,
-    },
+  const storedInput = toStoredJson(input.inputPayload);
+  const fingerprint = proposalFingerprint(input.actionType, storedInput);
+  const activeWhere: Prisma.StitchiActionRunWhereInput = {
+    tenant_key: tenantKey,
+    conversation_id: conversationId,
+    user_id: userId,
+    proposal_fingerprint: fingerprint,
+    status: { in: [...ACTIVE_PROPOSAL_STATUSES] },
+  };
+  const existing = await prisma.stitchiActionRun.findFirst({
+    where: activeWhere,
+    orderBy: { created_at: 'desc' },
   });
+  if (existing) return mapActionRun(existing);
+
+  let run: ActionRunRow;
+  try {
+    run = await prisma.stitchiActionRun.create({
+      data: {
+        tenant_key: tenantKey,
+        conversation_id: conversationId,
+        user_id: userId,
+        action_type: input.actionType,
+        status,
+        input_payload: storedInput as Prisma.InputJsonValue,
+        preview_payload: input.previewPayload ? toStoredJson(input.previewPayload) as Prisma.InputJsonValue : undefined,
+        requires_approval: input.requiresApproval,
+        risk_level: input.riskLevel,
+        langgraph_thread_id: input.langGraphThreadId,
+        proposal_fingerprint: fingerprint,
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+    const concurrent = await prisma.stitchiActionRun.findFirst({
+      where: activeWhere,
+      orderBy: { created_at: 'desc' },
+    });
+    if (!concurrent) throw error;
+    return mapActionRun(concurrent);
+  }
 
   await createAudit({
     auditType: 'stitchi',

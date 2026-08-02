@@ -428,7 +428,12 @@ export async function createActionRun(
     ? { ...input, requiresApproval: requiresApprovalForAction(input.actionType), langGraphThreadId: input.langGraphThreadId || `stitchi-action-${randomUUID()}` }
     : input;
   const actionRun = await repo.createActionRun(tenantKey, userId, role, conversationId, normalizedInput);
-  if (isExecutableStitchiAction(actionRun.actionType) && actionRun.requiresApproval && actionRun.langGraphThreadId) {
+  if (
+    isExecutableStitchiAction(actionRun.actionType)
+    && actionRun.requiresApproval
+    && actionRun.langGraphThreadId
+    && actionRun.langGraphThreadId === normalizedInput.langGraphThreadId
+  ) {
     await startStitchiActionApprovalWorkflow({
       threadId: actionRun.langGraphThreadId,
       tenantKey,
