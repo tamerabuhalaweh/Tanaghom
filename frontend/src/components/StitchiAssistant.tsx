@@ -565,6 +565,7 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
       }
       await refreshActions();
     } catch (err) {
+      await refreshActions().catch(() => undefined);
       setMessage(err instanceof Error ? err.message : 'Decision failed.');
     } finally {
       requestInFlightRef.current = false;

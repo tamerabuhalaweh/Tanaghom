@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const prismaMocks = vi.hoisted(() => ({
   langGraphWorkflow: {
+    findFirst: vi.fn(),
     upsert: vi.fn(),
-    updateMany: vi.fn(),
   },
 }));
 
@@ -17,8 +17,8 @@ import {
 describe('Stitchi LangGraph action approval workflow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMocks.langGraphWorkflow.findFirst.mockResolvedValue(null);
     prismaMocks.langGraphWorkflow.upsert.mockResolvedValue({});
-    prismaMocks.langGraphWorkflow.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it('starts with a human approval interrupt and stores a durable snapshot', async () => {
@@ -72,9 +72,57 @@ describe('Stitchi LangGraph action approval workflow', () => {
       status: 'approved',
       reviewerNotes: 'Approved by manager',
     });
-    expect(prismaMocks.langGraphWorkflow.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { thread_id: 'thread-stitchi-action-2', tenant_key: 'tenant-a' },
-      data: expect.objectContaining({ status: 'completed' }),
+    expect(prismaMocks.langGraphWorkflow.upsert).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: { thread_id: 'thread-stitchi-action-2' },
+      update: expect.objectContaining({ status: 'completed' }),
     }));
+  });
+
+  it('recovers approval from the durable decision when the in-memory checkpoint is unavailable', async () => {
+    const result = await resumeStitchiActionApprovalWorkflow({
+      threadId: 'thread-without-memory-checkpoint',
+      tenantKey: 'tenant-a',
+      userId: 'manager-1',
+      decision: 'approved',
+      notes: 'Approved after backend restart',
+    });
+
+    expect(result).toEqual({
+      threadId: 'thread-without-memory-checkpoint',
+      status: 'approved',
+      reviewerNotes: 'Approved after backend restart',
+    });
+    expect(prismaMocks.langGraphWorkflow.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { thread_id: 'thread-without-memory-checkpoint' },
+      create: expect.objectContaining({
+        status: 'completed',
+        checkpoint_strategy: 'database_state_snapshot_recovery',
+      }),
+      update: expect.objectContaining({ status: 'completed' }),
+    }));
+  });
+
+  it('reuses a durable pending workflow instead of starting a second interrupt', async () => {
+    prismaMocks.langGraphWorkflow.findFirst.mockResolvedValue({
+      status: 'interrupted',
+      interrupt_payload: { action: 'review_stitchi_action', actionRunId: 'action-3' },
+    });
+
+    const result = await startStitchiActionApprovalWorkflow({
+      threadId: 'thread-stitchi-action-3',
+      tenantKey: 'tenant-a',
+      userId: 'user-1',
+      conversationId: 'conversation-1',
+      actionRunId: 'action-3',
+      actionType: 'prepare_ghl_operation',
+      inputSummary: { type: 'contact_tags_update' },
+    });
+
+    expect(result).toEqual({
+      threadId: 'thread-stitchi-action-3',
+      status: 'awaiting_human_approval',
+      interrupt: { action: 'review_stitchi_action', actionRunId: 'action-3' },
+    });
+    expect(prismaMocks.langGraphWorkflow.upsert).not.toHaveBeenCalled();
   });
 });

@@ -55,6 +55,18 @@ export async function startStitchiActionApprovalWorkflow(input: {
   actionType: string;
   inputSummary: Record<string, unknown>;
 }): Promise<{ threadId: string; status: 'awaiting_human_approval'; interrupt: unknown }> {
+  const existing = await prisma.langGraphWorkflow.findFirst({
+    where: { thread_id: input.threadId, tenant_key: input.tenantKey },
+    select: { status: true, interrupt_payload: true },
+  });
+  if (existing?.status === 'interrupted') {
+    return {
+      threadId: input.threadId,
+      status: 'awaiting_human_approval',
+      interrupt: existing.interrupt_payload,
+    };
+  }
+
   const result = await stitchiActionApprovalGraph.invoke({
     tenantKey: input.tenantKey,
     conversationId: input.conversationId,
@@ -94,27 +106,55 @@ export async function resumeStitchiActionApprovalWorkflow(input: {
   decision: 'approved' | 'rejected';
   notes?: string;
 }): Promise<{ threadId: string; status: 'approved' | 'rejected'; reviewerNotes?: string }> {
-  const result = await stitchiActionApprovalGraph.invoke(new Command({
-    resume: {
-      decision: input.decision,
-      notes: input.notes,
-    },
-  }), {
-    configurable: { thread_id: input.threadId },
-  });
+  let result: Record<string, unknown> | null = null;
+  try {
+    result = await stitchiActionApprovalGraph.invoke(new Command({
+      resume: {
+        decision: input.decision,
+        notes: input.notes,
+      },
+    }), {
+      configurable: { thread_id: input.threadId },
+    }) as Record<string, unknown>;
+  } catch {
+    result = null;
+  }
 
-  const status = z.enum(['approved', 'rejected']).parse(result.status);
+  const parsedStatus = z.enum(['approved', 'rejected']).safeParse(result?.status);
+  const status = parsedStatus.success ? parsedStatus.data : input.decision;
   const output = {
     threadId: input.threadId,
     status,
-    reviewerNotes: result.reviewerNotes,
+    reviewerNotes: typeof result?.reviewerNotes === 'string' ? result.reviewerNotes : input.notes,
   };
 
-  await prisma.langGraphWorkflow.updateMany({
-    where: { thread_id: input.threadId, tenant_key: input.tenantKey },
-    data: {
+  await prisma.langGraphWorkflow.upsert({
+    where: { thread_id: input.threadId },
+    create: {
+      thread_id: input.threadId,
+      tenant_key: input.tenantKey,
+      workflow_type: 'stitchi_action_approval',
       status: 'completed',
-      result_payload: toJsonObject(output),
+      human_user_id: input.userId,
+      checkpoint_strategy: parsedStatus.success
+        ? 'langgraph_interrupt_with_database_state_snapshot'
+        : 'database_state_snapshot_recovery',
+      state_snapshot: toJsonObject({
+        status,
+        reviewerNotes: output.reviewerNotes,
+      }),
+      result_payload: toJsonObject({
+        ...output,
+        checkpointRecovered: !parsedStatus.success,
+      }),
+      completed_at: new Date(),
+    },
+    update: {
+      status: 'completed',
+      result_payload: toJsonObject({
+        ...output,
+        checkpointRecovered: !parsedStatus.success,
+      }),
       completed_at: new Date(),
     },
   });

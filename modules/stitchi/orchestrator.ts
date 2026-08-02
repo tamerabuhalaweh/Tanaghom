@@ -304,9 +304,9 @@ async function createActionRunFromProposal(
     langGraphThreadId: threadId,
   });
   const reusedActiveProposal = actionRun.langGraphThreadId !== threadId;
-  if (!reusedActiveProposal) {
+  if (actionRun.status === 'awaiting_approval' && actionRun.langGraphThreadId) {
     await startStitchiActionApprovalWorkflow({
-      threadId,
+      threadId: actionRun.langGraphThreadId,
       tenantKey: state.tenantKey,
       userId: state.userId,
       conversationId: state.conversationId,
@@ -321,8 +321,12 @@ async function createActionRunFromProposal(
       reusedActiveProposal
         ? `This work is already prepared for review: ${proposal.reason}.`
         : `I prepared this for review: ${proposal.reason}.`,
-      'No data has been changed yet.',
-      'An Admin or CCO must approve it before Tanaghum executes the internal update.',
+      actionRun.status === 'approved'
+        ? 'Approval is already recorded. The requested internal update has not been executed yet.'
+        : 'No data has been changed yet.',
+      actionRun.status === 'approved'
+        ? 'Select Save approved work to continue through the governed internal workflow.'
+        : 'An Admin or CCO must approve it before Tanaghum executes the internal update.',
     ].join('\n'),
   };
 }

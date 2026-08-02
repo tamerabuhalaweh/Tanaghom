@@ -583,7 +583,18 @@ export async function approveAndExecuteActionRun(
       };
     }
   }
-  const approval = await approveActionRun(role, tenantKey, userId, actionRunId, input);
+  const approval = existing.status === 'approved'
+    ? null
+    : await approveActionRun(role, tenantKey, userId, actionRunId, input);
+  if (existing.status === 'approved' && existing.langGraphThreadId) {
+    await resumeStitchiActionApprovalWorkflow({
+      threadId: existing.langGraphThreadId,
+      tenantKey,
+      userId,
+      decision: 'approved',
+      notes: input.notes,
+    });
+  }
   const execution = await executeApprovedActionRun(
     role,
     tenantKey,

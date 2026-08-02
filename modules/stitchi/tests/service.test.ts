@@ -465,6 +465,62 @@ describe('Stitchi service RBAC', () => {
     expect(result.idempotent).toBe(false);
   });
 
+  it('resumes execution when approval was saved before workflow metadata failed', async () => {
+    const approvedRun = {
+      id: 'action-1',
+      tenantKey: 'tenant-a',
+      conversationId: 'conversation-1',
+      userId: 'user-1',
+      actionType: 'prepare_ghl_operation',
+      status: 'approved' as const,
+      inputPayload: { action: { type: 'contact_tags_update', leadId: 'lead-1', addTags: ['uat-tag'] } },
+      previewPayload: null,
+      resultPayload: null,
+      requiresApproval: true,
+      riskLevel: 'medium' as const,
+      auditRecordId: null,
+      langGraphThreadId: 'missing-memory-thread',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: null,
+    };
+    actionMocks.isExecutableStitchiAction.mockReturnValue(true);
+    vi.mocked(repo.getActionRun).mockResolvedValue(approvedRun);
+    vi.mocked(repo.markActionRunRunning).mockResolvedValue({} as never);
+    actionMocks.executeStitchiAction.mockResolvedValue({
+      objectType: 'ghl_operation_command',
+      objectId: 'command-1',
+      result: { id: 'command-1', status: 'previewed' },
+    });
+    vi.mocked(repo.completeActionRun).mockResolvedValue({
+      ...approvedRun,
+      status: 'completed',
+      resultPayload: { objectType: 'ghl_operation_command', objectId: 'command-1' },
+      completedAt: new Date(),
+    });
+
+    const result = await service.approveAndExecuteActionRun(
+      'cco',
+      'tenant-a',
+      'manager-1',
+      'action-1',
+      { notes: 'Retry after approval metadata failure' },
+    );
+
+    expect(repo.decideActionRun).not.toHaveBeenCalled();
+    expect(workflowMocks.resumeStitchiActionApprovalWorkflow).toHaveBeenCalledWith({
+      threadId: 'missing-memory-thread',
+      tenantKey: 'tenant-a',
+      userId: 'manager-1',
+      decision: 'approved',
+      notes: 'Retry after approval metadata failure',
+    });
+    expect(actionMocks.executeStitchiAction).toHaveBeenCalledTimes(1);
+    expect(result.approval).toBeNull();
+    expect(result.actionRun.status).toBe('completed');
+    expect(result.idempotent).toBe(false);
+  });
+
   it('returns a completed action without executing it twice', async () => {
     vi.mocked(repo.getActionRun).mockResolvedValue({
       id: 'action-1',
