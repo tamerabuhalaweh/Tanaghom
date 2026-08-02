@@ -72,6 +72,7 @@ import { commercialAnnualPlanningRouter } from '../modules/commercial-annual-pla
 import { commercialKpiGovernanceRouter } from '../modules/commercial-kpi-governance/controller';
 import { commercialPlanHierarchyRouter } from '../modules/commercial-plan-hierarchy/controller';
 import { commercialBudgetReconciliationRouter } from '../modules/commercial-budget-reconciliation/controller';
+import { commercialWeeklyOperationsRouter } from '../modules/commercial-weekly-operations/controller';
 
 const envValidation = validateEnvironment();
 if (!envValidation.valid) {
@@ -330,6 +331,7 @@ app.use('/annual-commercial-plans', commercialAnnualPlanningRouter);
 app.use('/commercial-kpis', commercialKpiGovernanceRouter);
 app.use('/commercial-hierarchy', commercialPlanHierarchyRouter);
 app.use('/commercial-budget-reconciliation', commercialBudgetReconciliationRouter);
+app.use('/commercial-plans', commercialWeeklyOperationsRouter);
 app.use('/commercial-disciplines', commercialDisciplinesRouter);
 app.use('/commercial-executive', commercialExecutiveReportingRouter);
 app.use('/kajabi', kajabiConnectorRouter);

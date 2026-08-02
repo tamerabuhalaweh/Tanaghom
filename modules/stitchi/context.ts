@@ -7,6 +7,7 @@ import {
 } from '../commercial-kpi-governance/repository';
 import { getGhlSyncStatus } from '../ghl-sync/repository';
 import { listMappings as listGhlAttributionMappings } from '../ghl-plan-attribution/repository';
+import { getWeeklyWorkspace } from '../commercial-weekly-operations/repository';
 import type { StitchiConversationSummary } from './types';
 
 export interface StitchiReadOnlyContext {
@@ -172,6 +173,33 @@ export interface StitchiReadOnlyContext {
       linkedEventId: string | null;
     }>;
   };
+  weeklyOperations: {
+    commercialPlanId: string;
+    planTitle: string;
+    timezone: string;
+    selectedWeek: { startDate: string; endDate: string; label: string };
+    rollup: {
+      itemCount: number;
+      completedCount: number;
+      blockedCount: number;
+      awaitingApprovalCount: number;
+      budgetGuardrail: number;
+      remainingPlanBudget: number | null;
+    };
+    owners: Array<{ id: string; name: string; role: string }>;
+    items: Array<{
+      id: string;
+      title: string;
+      businessOutcome: string;
+      ownerUserId: string | null;
+      ownerName: string | null;
+      dueDate: string | null;
+      status: string;
+      priority: string;
+      blockerReason: string | null;
+      revision: number;
+    }>;
+  } | null;
   annualPlanning: {
     currentPlan: {
       id: string;
@@ -290,6 +318,8 @@ export async function loadReadOnlyContext(
   conversation: StitchiConversationSummary,
   requestedEventId?: string,
   currentUserRole = 'unknown',
+  requestedCommercialPlanId?: string,
+  requestedWeekOf?: string,
 ): Promise<StitchiReadOnlyContext> {
   const eventId = requestedEventId || conversation.eventId || undefined;
   const commercialClients = prisma as unknown as {
@@ -707,6 +737,9 @@ export async function loadReadOnlyContext(
     eventId && selectedEvent
       ? await loadGovernedPerformanceContext(tenantKey, eventId)
       : emptyGovernedPerformanceContext();
+  const weeklyOperations = requestedCommercialPlanId
+    ? await loadWeeklyOperationsContext(tenantKey, requestedCommercialPlanId, requestedWeekOf)
+    : null;
 
   return {
     currentUser: {
@@ -758,6 +791,7 @@ export async function loadReadOnlyContext(
         linkedEventId: plan.linked_event_id,
       })),
     },
+    weeklyOperations,
     annualPlanning: summarizeAnnualPlanning(annualPlans, learningSets),
     commercialHierarchy: summarizeCommercialHierarchy(commercialPlans, hierarchyAssignments),
     commercialExecutive: summarizeExecutiveReporting(executiveReports, executiveSchedules),
@@ -810,6 +844,38 @@ export async function loadReadOnlyContext(
       secretsReturned: false,
     },
   };
+}
+
+async function loadWeeklyOperationsContext(
+  tenantKey: string,
+  commercialPlanId: string,
+  weekOf?: string,
+): Promise<StitchiReadOnlyContext['weeklyOperations']> {
+  try {
+    const workspace = await getWeeklyWorkspace(tenantKey, commercialPlanId, weekOf ? { weekOf } : {});
+    return {
+      commercialPlanId,
+      planTitle: workspace.plan.title,
+      timezone: workspace.timezone,
+      selectedWeek: workspace.selectedWeek,
+      rollup: workspace.rollup,
+      owners: workspace.owners,
+      items: workspace.items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        businessOutcome: item.businessOutcome,
+        ownerUserId: item.ownerUserId,
+        ownerName: item.ownerName,
+        dueDate: item.dueDate,
+        status: item.status,
+        priority: item.priority,
+        blockerReason: item.blockerReason,
+        revision: item.revision,
+      })),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function summarizeAnnualPlanning(

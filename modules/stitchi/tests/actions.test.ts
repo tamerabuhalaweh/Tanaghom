@@ -56,6 +56,11 @@ const ghlOperationsMocks = vi.hoisted(() => ({
   get: vi.fn(),
   submit: vi.fn(),
 }));
+const commercialWeeklyOperationsMocks = vi.hoisted(() => ({
+  createWeeklyWorkItem: vi.fn(),
+  updateWeeklyWorkItem: vi.fn(),
+  transitionWeeklyWorkItem: vi.fn(),
+}));
 
 vi.mock('@modules/event-problem-log/service', () => problemServiceMocks);
 vi.mock('@modules/commercial-events/service', () => eventServiceMocks);
@@ -70,6 +75,7 @@ vi.mock('@modules/commercial-plan-hierarchy/service', () => commercialHierarchyM
 vi.mock('@modules/commercial-budget-reconciliation/service', () => commercialBudgetMocks);
 vi.mock('@modules/commercial-kpi-governance/service', () => commercialKpiMocks);
 vi.mock('@modules/ghl-operations/service', () => ghlOperationsMocks);
+vi.mock('@modules/commercial-weekly-operations/service', () => commercialWeeklyOperationsMocks);
 
 import { executeStitchiAction, supportedStitchiActions } from '../actions';
 
@@ -132,6 +138,18 @@ describe('Stitchi action registry', () => {
       venueCapacity: 500,
       sellableTicketCapacity: 480,
     });
+    commercialWeeklyOperationsMocks.createWeeklyWorkItem.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000941',
+      title: 'Approve campaign brief',
+    });
+    commercialWeeklyOperationsMocks.updateWeeklyWorkItem.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000941',
+      title: 'Approve campaign brief',
+    });
+    commercialWeeklyOperationsMocks.transitionWeeklyWorkItem.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000941',
+      status: 'completed',
+    });
   });
 
   it('lists only production-supported internal actions', () => {
@@ -172,8 +190,80 @@ describe('Stitchi action registry', () => {
       'review_commercial_spend_evidence',
       'create_governed_event_kpi_target',
       'set_event_capacity',
+      'create_weekly_work_item',
+      'update_weekly_work_item',
+      'transition_weekly_work_item',
       'prepare_ghl_operation',
     ]);
+  });
+
+  it('executes weekly operating work only through the governed weekly service', async () => {
+    const commercialPlanId = '00000000-0000-0000-0000-000000000940';
+    const itemId = '00000000-0000-0000-0000-000000000941';
+
+    const created = await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'approver-1',
+      requestingUserId: 'requester-1',
+      actionType: 'create_weekly_work_item',
+      inputPayload: {
+        commercialPlanId,
+        item: {
+          weekStartDate: '2026-08-03',
+          title: 'Approve campaign brief',
+          businessOutcome: 'Release the campaign before media booking closes.',
+          ownerUserId: '00000000-0000-0000-0000-000000000942',
+          ownerRole: 'social_media_manager',
+          dueDate: '2026-08-05',
+          status: 'planned',
+          priority: 'high',
+        },
+      },
+    });
+    await executeStitchiAction({
+      role: 'marketing_manager',
+      tenantKey: 'tenant-a',
+      userId: 'approver-1',
+      actionType: 'update_weekly_work_item',
+      inputPayload: {
+        commercialPlanId,
+        itemId,
+        changes: { expectedRevision: 1, dueDate: '2026-08-06' },
+      },
+    });
+    await executeStitchiAction({
+      role: 'cco',
+      tenantKey: 'tenant-a',
+      userId: 'cco-1',
+      actionType: 'transition_weekly_work_item',
+      inputPayload: {
+        commercialPlanId,
+        itemId,
+        transition: {
+          expectedRevision: 2,
+          targetStatus: 'completed',
+          completionEvidence: 'Campaign brief approved in the content workspace.',
+        },
+      },
+    });
+
+    expect(commercialWeeklyOperationsMocks.createWeeklyWorkItem).toHaveBeenCalledWith(
+      'marketing_manager',
+      'tenant-a',
+      'requester-1',
+      commercialPlanId,
+      expect.objectContaining({ title: 'Approve campaign brief', dueDate: '2026-08-05' }),
+    );
+    expect(commercialWeeklyOperationsMocks.updateWeeklyWorkItem).toHaveBeenCalledWith(
+      'marketing_manager', 'tenant-a', 'approver-1', commercialPlanId, itemId,
+      { expectedRevision: 1, dueDate: '2026-08-06' },
+    );
+    expect(commercialWeeklyOperationsMocks.transitionWeeklyWorkItem).toHaveBeenCalledWith(
+      'cco', 'tenant-a', 'cco-1', commercialPlanId, itemId,
+      expect.objectContaining({ targetStatus: 'completed' }),
+    );
+    expect(created).toMatchObject({ objectType: 'commercial_weekly_work_item', objectId: itemId });
   });
 
   it('creates a governed event KPI target through the CCO policy service', async () => {

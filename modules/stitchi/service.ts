@@ -118,7 +118,14 @@ export async function generateReadOnlyAssistantResponse(
       requestedEventId: input.eventId,
     },
   });
-  const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
+  const context = await loadReadOnlyContext(
+    tenantKey,
+    conversation,
+    input.eventId,
+    role,
+    typeof input.metadata?.commercialPlanId === 'string' ? input.metadata.commercialPlanId : undefined,
+    typeof input.metadata?.weekStartDate === 'string' ? input.metadata.weekStartDate : undefined,
+  );
 
   try {
     const provider = await resolveUserLLMProvider(userId);
@@ -248,7 +255,14 @@ export async function* streamReadOnlyAssistantResponse(
   });
   yield { type: 'user_message_saved', message: userMessage };
 
-  const context = await loadReadOnlyContext(tenantKey, conversation, input.eventId, role);
+  const context = await loadReadOnlyContext(
+    tenantKey,
+    conversation,
+    input.eventId,
+    role,
+    typeof input.metadata?.commercialPlanId === 'string' ? input.metadata.commercialPlanId : undefined,
+    typeof input.metadata?.weekStartDate === 'string' ? input.metadata.weekStartDate : undefined,
+  );
   const contextShape = summarizeContextShape(context);
   yield {
     type: 'context_loaded',
