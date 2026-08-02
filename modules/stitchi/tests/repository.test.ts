@@ -16,6 +16,7 @@ const prismaMocks = vi.hoisted(() => ({
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   stitchiActionApproval: {
     create: vi.fn(),
@@ -140,6 +141,32 @@ describe('Stitchi repository foundation', () => {
     expect(prismaMocks.auditRecord.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ action: 'stitchi_conversation_created', target_object_id: 'conversation-1' }),
     }));
+  });
+
+  it('cancels unexecuted actions when archiving a conversation', async () => {
+    prismaMocks.stitchiConversation.findFirst.mockResolvedValue(conversation());
+    prismaMocks.stitchiActionRun.updateMany.mockResolvedValue({ count: 2 });
+    prismaMocks.stitchiConversation.update.mockResolvedValue(conversation({ status: 'archived' }));
+
+    const result = await repo.archiveConversation(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+    );
+
+    expect(result.status).toBe('archived');
+    expect(prismaMocks.stitchiActionRun.updateMany).toHaveBeenCalledWith({
+      where: {
+        tenant_key: 'tenant-a',
+        conversation_id: 'conversation-1',
+        status: { in: ['proposed', 'awaiting_approval', 'approved'] },
+      },
+      data: {
+        status: 'cancelled',
+        completed_at: expect.any(Date),
+      },
+    });
   });
 
   it('hides conversations from other users inside the same tenant for non-admin roles', async () => {
