@@ -527,6 +527,8 @@ export const ghlOperationsApi = {
     if (filters?.limit) query.set('limit', String(filters.limit));
     return apiFetch<unknown>(`/ghl-operations${query.size ? `?${query}` : ''}`, { token });
   },
+  get: (id: string, token: string) =>
+    apiFetch<unknown>(`/ghl-operations/${encodeURIComponent(id)}`, { token }),
   referenceData: (token: string) =>
     apiFetch<unknown>('/ghl-operations/reference-data', { token }),
   preview: (data: unknown, token: string) =>
