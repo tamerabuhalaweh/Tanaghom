@@ -2186,8 +2186,8 @@ async function deriveGhlOperationActionProposal(
     }
 
     if (/(add|remove).{0,20}tag/i.test(content)) {
-      const addMatch = /add\s+tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
-      const removeMatch = /remove\s+tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
+      const addMatch = /add\s+(?:(?:the|a)\s+)?tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
+      const removeMatch = /remove\s+(?:(?:the|a)\s+)?tag\s+["']?([^"',.;\n]+)["']?/i.exec(content);
       const addTags = addMatch?.[1]?.trim() ? [addMatch[1].trim()] : [];
       const removeTags = removeMatch?.[1]?.trim() ? [removeMatch[1].trim()] : [];
       if (!addTags.length && !removeTags.length) {
@@ -3252,10 +3252,12 @@ function isGovernedGhlOperationRequest(content: string): boolean {
     /(publish|schedule|send telegram|call the lead|post to instagram|نشر|اتصل)/i.test(externalCommandText);
   if (containsAnotherExternalCommand) return false;
 
+  const providerMention = /\b(?:ghl|gohighlevel|crm)\b/i.test(content);
+  const tagIntent = /\b(?:add|remove)\b[\s\S]{0,30}\btag\b/i.test(content);
   const crmIntent =
     /(?:ghl|gohighlevel|crm).{0,50}\b(?:sync|create|update|record|prepare|book|mark|set)\b.{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment)|\b(?:sync|create|update|record|prepare|book|mark|set)\b.{0,30}(?:customer|contact|opportunity|\bsale\b|payment|meeting|appointment).{0,50}(?:ghl|gohighlevel|crm)|\b(?:add|remove)\b.{0,20}tag.{0,50}(?:ghl|gohighlevel|crm)|(?:ghl|gohighlevel|crm).{0,50}\b(?:add|remove)\b.{0,20}tag/i.test(
       content,
-    );
+    ) || (providerMention && tagIntent);
   const whatsappSendIntent =
     /send\s+(?:a\s+)?whatsapp|whatsapp.{0,30}\bsend\b|ارسل.{0,20}واتساب/i.test(content);
   return crmIntent || whatsappSendIntent;

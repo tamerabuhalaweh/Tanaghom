@@ -31,6 +31,7 @@ interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt?: string;
+  actionRunId?: string | null;
   pending?: boolean;
 }
 
@@ -42,6 +43,7 @@ interface ActionRun {
   requiresApproval?: boolean;
   previewPayload?: unknown;
   resultPayload?: unknown;
+  createdAt?: string;
 }
 
 interface SelectedCustomer {
@@ -118,12 +120,14 @@ function mapMessage(value: unknown): Message | null {
   const id = text(record.id);
   const role = text(record.role, 'assistant') as Message['role'];
   const content = text(record.content);
+  const metadata = objectValue(record.metadata);
   if (!id || !content) return null;
   return {
     id,
     role,
     content,
     createdAt: text(record.createdAt || record.created_at),
+    actionRunId: text(metadata.actionRunId || metadata.action_run_id) || null,
   };
 }
 
@@ -140,7 +144,20 @@ function mapAction(value: unknown): ActionRun | null {
     requiresApproval: record.requiresApproval === true || record.requires_approval === true,
     previewPayload: record.previewPayload || record.preview_payload,
     resultPayload: record.resultPayload || record.result_payload,
+    createdAt: text(record.createdAt || record.created_at),
   };
+}
+
+function actionTime(value?: string): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
 }
 
 function mapSelectedCustomer(value: unknown): SelectedCustomer | null {
@@ -346,6 +363,12 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const consumedGhlOperationRef = useRef(false);
   const requestInFlightRef = useRef(false);
+  const latestAssistantActionRunId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'assistant') return messages[index].actionRunId || null;
+    }
+    return null;
+  }, [messages]);
 
   const loadConversation = useCallback(async () => {
     if (!token) return;
@@ -629,7 +652,14 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
           ) : messages.length ? (
             <div className="space-y-4">
               {messages.map(item => <ChatBubble key={item.id} message={item} />)}
-              <InlineActionCard actions={actions} canApprove={canApprove} sending={sending} onDecision={decide} onExecute={execute} />
+              <InlineActionCard
+                actions={actions}
+                actionId={latestAssistantActionRunId}
+                canApprove={canApprove}
+                sending={sending}
+                onDecision={decide}
+                onExecute={execute}
+              />
               <div ref={endRef} />
             </div>
           ) : (
@@ -758,18 +788,20 @@ function ChatBubble({ message }: { message: Message }) {
 
 function InlineActionCard({
   actions,
+  actionId,
   canApprove,
   sending,
   onDecision,
   onExecute,
 }: {
   actions: ActionRun[];
+  actionId: string | null;
   canApprove: boolean;
   sending: boolean;
   onDecision: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
   onExecute: (actionId: string) => Promise<void>;
 }) {
-  const action = actions.find(item => ['awaiting_approval', 'approved', 'completed', 'failed'].includes(item.status));
+  const action = actionId ? actions.find(item => item.id === actionId) : null;
   if (!action) return null;
   return (
     <div className="flex justify-start">
@@ -778,6 +810,7 @@ function InlineActionCard({
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white">{actionTitle(action.actionType)}</div>
             <ActionSafetyCopy action={action} />
+            {actionTime(action.createdAt) ? <div className="mt-1 text-[11px] text-white/38">Prepared {actionTime(action.createdAt)}</div> : null}
           </div>
           <AieroStatusPill accent={statusAccent(action.status)}>{actionStatusLabel(action.status)}</AieroStatusPill>
         </div>
@@ -806,7 +839,7 @@ function ActionList({
   const latestActions = actions.slice(0, compact ? 2 : 5);
   if (!latestActions.length) {
     return compact ? null : (
-      <AieroPanel title="Prepared work" subtitle="Action cards will appear here when Stitchi prepares work for approval.">
+      <AieroPanel title="Action history" subtitle="Prepared actions will appear here with their current status.">
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/50">
           No prepared actions yet.
         </div>
@@ -822,6 +855,7 @@ function ActionList({
             <div className="min-w-0">
               <div className="text-sm font-semibold text-white">{actionTitle(action.actionType)}</div>
               <ActionSafetyCopy action={action} />
+              {actionTime(action.createdAt) ? <div className="mt-1 text-[11px] text-white/38">History · {actionTime(action.createdAt)}</div> : null}
             </div>
             <AieroStatusPill accent={statusAccent(action.status)}>{actionStatusLabel(action.status)}</AieroStatusPill>
           </div>
@@ -833,7 +867,7 @@ function ActionList({
   );
 
   if (compact) return content;
-  return <AieroPanel title="Prepared work" subtitle="Approve and save safe internal changes from here.">{content}</AieroPanel>;
+  return <AieroPanel title="Action history" subtitle="Previous prepared actions and their current status.">{content}</AieroPanel>;
 }
 
 function ActionSafetyCopy({ action }: { action: ActionRun }) {

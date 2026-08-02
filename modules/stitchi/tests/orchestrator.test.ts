@@ -1903,6 +1903,64 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('uses the selected customer for the exact governed GHL add-tag UAT request', async () => {
+    const leadId = '00000000-0000-0000-0000-000000000010';
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: [
+          'Prepare a governed GoHighLevel action for the selected customer.',
+          'Add the tag tanaghum-moaaskar-uat.',
+          'Do not execute it yet. Show me the action for approval.',
+        ].join('\n'),
+        eventId: '00000000-0000-0000-0000-000000000001',
+        metadata: { leadId },
+      },
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(result.actionRun).not.toBeNull();
+    expect(providerMocks.generate).not.toHaveBeenCalled();
+    expect(repo.createActionRun).toHaveBeenCalledTimes(1);
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'prepare_ghl_operation',
+        inputPayload: expect.objectContaining({
+          action: {
+            type: 'contact_tags_update',
+            leadId,
+            addTags: ['tanaghum-moaaskar-uat'],
+            removeTags: [],
+          },
+        }),
+        previewPayload: expect.objectContaining({
+          actionType: 'contact_tags_update',
+          customerLeadId: leadId,
+          approvalRequired: true,
+          externalExecutionPerformed: false,
+        }),
+      }),
+    );
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining("update this customer's GHL tags"),
+      expect.objectContaining({
+        status: 'action_proposed',
+        writesExecuted: false,
+      }),
+    );
+  });
+
   it('prepares a structured sale and payment command for approval without external execution', async () => {
     const result = await orchestrateStitchiMessage(
       'marketing_manager',
