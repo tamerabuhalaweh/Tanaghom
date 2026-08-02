@@ -339,7 +339,7 @@ describe('Stitchi natural-language orchestration', () => {
     }));
   });
 
-  it('reuses an identical active proposal without starting a second approval workflow', async () => {
+  it('reuses an identical active proposal and ensures its durable approval workflow exists', async () => {
     vi.mocked(repo.createActionRun).mockImplementation(async (_tenantKey, _userId, _role, _conversationId, input) => ({
       id: 'existing-action',
       tenantKey: 'tenant-a',
@@ -371,6 +371,45 @@ describe('Stitchi natural-language orchestration', () => {
       'marketing_manager',
       'conversation-1',
       expect.stringContaining('already prepared for review'),
+      expect.any(Object),
+    );
+    expect(workflowMocks.startStitchiActionApprovalWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: 'existing-thread',
+      actionRunId: 'existing-action',
+    }));
+  });
+
+  it('describes a reused approved proposal as ready to save instead of awaiting approval', async () => {
+    vi.mocked(repo.createActionRun).mockImplementation(async (_tenantKey, _userId, _role, _conversationId, input) => ({
+      id: 'approved-action',
+      tenantKey: 'tenant-a',
+      conversationId: 'conversation-1',
+      userId: 'user-1',
+      actionType: input.actionType,
+      status: 'approved',
+      inputPayload: input.inputPayload,
+      previewPayload: input.previewPayload,
+      resultPayload: null,
+      requiresApproval: true,
+      riskLevel: input.riskLevel,
+      auditRecordId: null,
+      langGraphThreadId: 'approved-thread',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: null,
+    }));
+
+    await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'There is a WhatsApp follow-up delay problem that risks sales conversion.',
+      eventId: '00000000-0000-0000-0000-000000000001',
+    });
+
+    expect(repo.createAssistantMessage).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.stringContaining('Select Save approved work'),
       expect.any(Object),
     );
     expect(workflowMocks.startStitchiActionApprovalWorkflow).not.toHaveBeenCalled();
