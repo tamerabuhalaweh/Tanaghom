@@ -147,10 +147,21 @@ export async function archiveConversation(
   conversationId: string,
 ): Promise<StitchiConversationSummary> {
   await getConversation(tenantKey, userId, role, conversationId);
-  const conversation = await prisma.stitchiConversation.update({
-    where: { id: conversationId },
-    data: { status: 'archived' },
-  });
+  const completedAt = new Date();
+  const [, conversation] = await prisma.$transaction([
+    prisma.stitchiActionRun.updateMany({
+      where: {
+        tenant_key: tenantKey,
+        conversation_id: conversationId,
+        status: { in: ['proposed', 'awaiting_approval', 'approved'] },
+      },
+      data: { status: 'cancelled', completed_at: completedAt },
+    }),
+    prisma.stitchiConversation.update({
+      where: { id: conversationId },
+      data: { status: 'archived' },
+    }),
+  ]);
 
   await createAudit({
     auditType: 'stitchi',

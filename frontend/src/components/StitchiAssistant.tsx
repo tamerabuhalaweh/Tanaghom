@@ -522,9 +522,13 @@ export function StitchiChatPanel({ compact = false }: { compact?: boolean }) {
         const result = await stitchiApi.approveAndExecuteAction(actionId, { notes: 'Approved and saved from Stitchi assistant' }, token) as RecordMap;
         const actionRun = mapAction(result.actionRun);
         if (actionRun) setActions(prev => [actionRun, ...prev.filter(item => item.id !== actionRun.id)]);
+        const operation = objectValue(objectValue(actionRun?.resultPayload).result);
+        const operationStatus = text(operation.status);
         setMessage(
           actionRun?.actionType === 'prepare_ghl_operation'
-            ? 'CRM draft submitted. It is now awaiting manager approval; GHL has not changed yet.'
+            ? operationStatus === 'pending_approval'
+              ? 'CRM command submitted and awaiting manager approval. GHL has not changed yet.'
+              : 'CRM draft prepared. Open CRM approval, review it, and send it for manager approval. GHL has not changed yet.'
             : 'Saved to Tanaghum. The workspace has been refreshed.',
         );
         window.dispatchEvent(new CustomEvent('tanaghum:commercial-data-changed', { detail: { source: 'stitchi' } }));
