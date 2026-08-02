@@ -3239,8 +3239,12 @@ function isExternalExecutionRequest(content: string): boolean {
 }
 
 function isGovernedGhlOperationRequest(content: string): boolean {
+  const externalCommandText = content.replace(
+    /\bschedule\s+(?:an?\s+|the\s+)?(?:appointment|meeting|consultation|call)\b/gi,
+    'appointment',
+  );
   const containsAnotherExternalCommand =
-    /(publish|schedule|send telegram|call the lead|post to instagram|نشر|اتصل)/i.test(content);
+    /(publish|schedule|send telegram|call the lead|post to instagram|نشر|اتصل)/i.test(externalCommandText);
   if (containsAnotherExternalCommand) return false;
 
   const crmIntent =
