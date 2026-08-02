@@ -421,6 +421,44 @@ async function installMocks(
     if (path === '/commercial-command-center/plans') return json([detailedPlan]);
     if (path === '/events') return json([linkedEvent]);
     if (path === '/campaigns') return json([]);
+    if (path === `/commercial-plans/${detailedPlanId}/weeks` && method === 'GET') {
+      return json({
+        timezone: 'Asia/Dubai',
+        selectedWeek: {
+          startDate: '2026-08-03',
+          endDate: '2026-08-09',
+          label: 'Aug 3 - Aug 9, 2026',
+        },
+        plan: {
+          id: detailedPlanId,
+          title: detailedPlan.title,
+          status: detailedPlan.status,
+          currency: 'AED',
+          budgetTarget: 50000,
+          revenueTarget: 250000,
+          revenueLineName: 'Online Courses',
+          annualPlanId,
+          annualPlanTitle: '2026 Commercial Plan',
+          annualPlanYear: 2026,
+          monthlyPortfolioItemId: itemId,
+          monthlyPortfolioTitle: 'Ramadan Leadership Course',
+          monthlyPortfolioMonth: 3,
+          periodStartDate: '2026-03-01',
+          periodEndDate: '2026-03-31',
+        },
+        rollup: {
+          itemCount: 0,
+          completedCount: 0,
+          blockedCount: 0,
+          awaitingApprovalCount: 0,
+          budgetGuardrail: 0,
+          remainingPlanBudget: 50000,
+        },
+        owners: [],
+        linkOptions: [],
+        items: [],
+      });
+    }
     if (path === `/commercial-hierarchy/plans/${detailedPlanId}` && method === 'GET')
       return json(makeHierarchy(learningLinked));
     if (path === `/commercial-hierarchy/plans/${detailedPlanId}/learning` && method === 'POST') {
