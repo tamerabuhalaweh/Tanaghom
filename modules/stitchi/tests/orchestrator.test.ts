@@ -361,6 +361,18 @@ describe('Stitchi natural-language orchestration', () => {
     );
   });
 
+  it('blocks social scheduling even when the request also mentions a governed GHL meeting', async () => {
+    const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      content: 'Update the selected customer GHL meeting and schedule this Instagram post now.',
+      eventId: '00000000-0000-0000-0000-000000000001',
+      metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+    });
+
+    expect(result.status).toBe('blocked');
+    expect(repo.createActionRun).not.toHaveBeenCalled();
+    expect(providerMocks.generate).not.toHaveBeenCalled();
+  });
+
   it('turns an email planning request into an approval-gated planner action', async () => {
     const result = await orchestrateStitchiMessage('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       content: 'Prepare a 4 email sequence for existing customers before the event.',
@@ -2224,6 +2236,71 @@ describe('Stitchi natural-language orchestration', () => {
             calendarId: 'calendar-sales',
             startTime: '2026-08-02T14:30:00.000+04:00',
             endTime: '2026-08-02T15:30:00.000+04:00',
+            status: 'confirmed',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('treats the approved Schedule an Appointment calendar as a GHL meeting, not social scheduling', async () => {
+    ghlOperationsMocks.referenceData.mockResolvedValueOnce({
+      status: 'ready',
+      pipelines: [],
+      calendars: [
+        { id: 'calendar-schedule', name: 'Schedule an Appointment', approved: true },
+      ],
+      warnings: [],
+    });
+    providerMocks.generate.mockResolvedValueOnce({
+      text: JSON.stringify({
+        type: 'appointment_upsert',
+        calendarName: 'Schedule an Appointment',
+        title: 'Tanaghum UAT Stitchi Meeting',
+        startTime: '2026-08-04T10:00:00+04:00',
+        endTime: '2026-08-04T10:30:00+04:00',
+        status: 'confirmed',
+      }),
+      provider: 'gemma',
+      model: 'gemma4-26b-a4b-canary',
+    });
+
+    const result = await orchestrateStitchiMessage(
+      'marketing_manager',
+      'tenant-a',
+      'user-1',
+      'conversation-1',
+      {
+        content: [
+          "Update the selected customer's existing GHL meeting.",
+          'Calendar: Schedule an Appointment',
+          'Meeting title: Tanaghum UAT Stitchi Meeting',
+          'Start: 2026-08-04T10:00:00+04:00',
+          'End: 2026-08-04T10:30:00+04:00',
+          'Status: confirmed',
+          'Update the existing appointment. Do not create a duplicate appointment.',
+        ].join('\n'),
+        metadata: { leadId: '00000000-0000-0000-0000-000000000010' },
+      },
+      'agent-rep-1',
+    );
+
+    expect(result.status).toBe('action_proposed');
+    expect(repo.createActionRun).toHaveBeenCalledWith(
+      'tenant-a',
+      'user-1',
+      'marketing_manager',
+      'conversation-1',
+      expect.objectContaining({
+        actionType: 'prepare_ghl_operation',
+        inputPayload: expect.objectContaining({
+          action: expect.objectContaining({
+            type: 'appointment_upsert',
+            leadId: '00000000-0000-0000-0000-000000000010',
+            appointmentId: 'ghl-appointment-1',
+            calendarId: 'calendar-schedule',
+            startTime: '2026-08-04T10:00:00+04:00',
+            endTime: '2026-08-04T10:30:00+04:00',
             status: 'confirmed',
           }),
         }),
