@@ -23,8 +23,8 @@ jobs:
       UPTIME_CHECK_EVIDENCE_PATH: ops/evidence/hybrid-uptime-latest.json
       ALERT_EVIDENCE_PATH: ops/evidence/hybrid-alert-latest.json
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Verify public endpoint availability
@@ -130,7 +130,7 @@ jobs:
           fi
       - name: Upload external uptime evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hybrid-external-uptime-evidence
           path: ops/evidence
