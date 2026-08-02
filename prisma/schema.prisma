@@ -647,6 +647,7 @@ model StitchiActionRun {
   risk_level          StitchiActionRiskLevel @default(low)
   audit_record_id     String?                @db.Uuid
   langgraph_thread_id String?
+  proposal_fingerprint String?
   created_at          DateTime               @default(now())
   updated_at          DateTime               @updatedAt
   completed_at        DateTime?

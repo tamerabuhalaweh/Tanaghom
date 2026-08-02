@@ -199,7 +199,7 @@ describe('Stitchi service RBAC', () => {
 
   it('starts a LangGraph approval workflow for executable action proposals', async () => {
     actionMocks.isExecutableStitchiAction.mockReturnValue(true);
-    vi.mocked(repo.createActionRun).mockResolvedValue({
+    vi.mocked(repo.createActionRun).mockImplementation(async (_tenantKey, _userId, _role, _conversationId, input) => ({
       id: 'action-1',
       tenantKey: 'tenant-a',
       conversationId: 'conversation-1',
@@ -212,11 +212,11 @@ describe('Stitchi service RBAC', () => {
       requiresApproval: true,
       riskLevel: 'medium',
       auditRecordId: null,
-      langGraphThreadId: 'thread-1',
+      langGraphThreadId: input.langGraphThreadId || null,
       createdAt: new Date(),
       updatedAt: new Date(),
       completedAt: null,
-    });
+    }));
 
     const run = await service.createActionRun('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
       actionType: 'create_event_problem',
@@ -237,6 +237,38 @@ describe('Stitchi service RBAC', () => {
       actionRunId: 'action-1',
       actionType: 'create_event_problem',
     }));
+  });
+
+  it('does not start another LangGraph workflow when the repository reuses an active proposal', async () => {
+    actionMocks.isExecutableStitchiAction.mockReturnValue(true);
+    vi.mocked(repo.createActionRun).mockResolvedValue({
+      id: 'existing-action',
+      tenantKey: 'tenant-a',
+      conversationId: 'conversation-1',
+      userId: 'user-1',
+      actionType: 'create_event_problem',
+      status: 'awaiting_approval',
+      inputPayload: { eventId: 'event-1', title: 'Follow-up delay', category: 'sales' },
+      previewPayload: null,
+      resultPayload: null,
+      requiresApproval: true,
+      riskLevel: 'medium',
+      auditRecordId: null,
+      langGraphThreadId: 'existing-thread',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: null,
+    });
+
+    const run = await service.createActionRun('marketing_manager', 'tenant-a', 'user-1', 'conversation-1', {
+      actionType: 'create_event_problem',
+      inputPayload: { eventId: 'event-1', title: 'Follow-up delay', category: 'sales' },
+      requiresApproval: true,
+      riskLevel: 'medium',
+    });
+
+    expect(run.id).toBe('existing-action');
+    expect(workflowMocks.startStitchiActionApprovalWorkflow).not.toHaveBeenCalled();
   });
 
   it('executes an approved internal action through the action registry and completes the run', async () => {
